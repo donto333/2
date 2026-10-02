@@ -113,11 +113,18 @@ try {
   await page.click('[data-action="section"][data-section="formation"]')
   await page.waitForSelector('.formation-slots')
   if (await page.locator('.formation-slot--filled').count() !== 3) throw new Error('formation screen does not show three active slots')
+  if (await page.locator('.formation-unequip').count() < 1) throw new Error('formation equipment unequip controls missing')
+  await page.locator('.formation-unequip').first().click()
+  await page.waitForTimeout(100)
   if (await page.locator('.formation-bench-card').count() > 0) {
     await page.click('.formation-bench-card [data-action="formation"]')
     if (await page.locator('.formation-slot--filled').count() !== 3) throw new Error('formation reserve selection did not preserve three slots')
   }
   if (await page.locator('.result-modal.is-visible').count()) await page.click('[data-action="close-result"]')
+  await page.click('[data-action="section"][data-section="equipment"]')
+  await page.waitForSelector('select[data-action="equipment-sort"]')
+  await page.locator('select[data-action="equipment-sort"]').selectOption('grade')
+  await page.click('[data-action="equipment-sort-direction"]')
   await page.click('[data-action="section"][data-section="recruit"]')
   await page.click('[data-action="summon-tab"][data-summon-tab="equipment"]')
   await page.waitForSelector('.summon-tab.is-active[data-summon-tab="equipment"]')

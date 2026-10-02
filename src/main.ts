@@ -12,6 +12,7 @@ import {
   enhanceEquipment,
   ensureEquipmentState,
   equipEquipment,
+  unequipEquipment,
   ensureCityRoster,
   ensureResearchRoster,
   findGeneral,
@@ -106,6 +107,12 @@ const ui = new StrategyUI(root, {
   },
   onEquipmentEquip: (generalId, itemId) => {
     const result = equipEquipment(state, generalId, itemId)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onEquipmentUnequip: (generalId, type) => {
+    const result = unequipEquipment(state, generalId, type)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()

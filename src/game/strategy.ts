@@ -521,6 +521,20 @@ export function equipEquipment(state: StrategyState, generalId: string, itemId: 
   return { ok: true, message: state.lastNotice }
 }
 
+export function unequipEquipment(state: StrategyState, generalId: string, type: EquipmentType): UpgradeResult {
+  ensureEquipmentState(state)
+  const general = findGeneral(state, generalId)
+  if (!general) return { ok: false, message: '장착 해제할 무장을 찾을 수 없습니다.' }
+  const loadout = state.equipmentLoadouts[generalId] ?? {}
+  const itemId = loadout[type]
+  if (!itemId) return { ok: false, message: `${EQUIPMENT_TYPE_META[type].label} 슬롯이 비어 있습니다.` }
+  const item = state.equipmentInventory.find(candidate => candidate.id === itemId)
+  delete loadout[type]
+  state.equipmentLoadouts[generalId] = loadout
+  state.lastNotice = item ? `${general.name}에게서 ${item.name}을(를) 장착 해제했습니다.` : `${general.name}의 ${EQUIPMENT_TYPE_META[type].label}을(를) 장착 해제했습니다.`
+  return { ok: true, message: state.lastNotice }
+}
+
 function rollEquipmentGrade(): EquipmentGrade {
   const roll = Math.random() * 100
   if (roll < 5) return 'legendary'

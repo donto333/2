@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -154,5 +154,13 @@ describe('commander attributes', () => {
     expect(equipEquipment(state, guanYu.id, third.id).ok).toBe(true)
     expect(equipmentSetCounts(state, guanYu.id).command).toBe(3)
     expect(equipmentBonus(state, guanYu.id).leadership).toBe(54)
+  })
+
+  it('unequips a selected slot and removes its contribution from the general', () => {
+    const state = createInitialState()
+    expect(state.equipmentLoadouts['guan-yu'].weapon).toBe('starter-weapon')
+    expect(unequipEquipment(state, 'guan-yu', 'weapon').ok).toBe(true)
+    expect(state.equipmentLoadouts['guan-yu'].weapon).toBeUndefined()
+    expect(unequipEquipment(state, 'guan-yu', 'weapon').ok).toBe(false)
   })
 })
