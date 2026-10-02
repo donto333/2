@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allGenerals, combatPower, createInitialState, ensureResearchRoster, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { EQUIPMENT_GRADE_META, MYTHIC_EVENT_EQUIPMENT, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -101,5 +101,40 @@ describe('commander attributes', () => {
     expect(unlockResearch(state, 'granary').ok).toBe(true)
     expect(unlockResearch(state, 'agri-1').ok).toBe(true)
     expect(unlockResearch(state, 'agri-2').ok).toBe(true)
+  })
+
+  it('starts with three equipment slots and applies equipped stats to formation power', () => {
+    const state = createInitialState()
+    expect(state.equipmentInventory).toHaveLength(3)
+    expect(state.equipmentLoadouts['guan-yu'].weapon).toBe('starter-weapon')
+    const before = state.equipmentInventory[0].baseValue
+    const powerBefore = combatPower(findGeneral(state, 'guan-yu')!)
+    expect(state.equipmentInventory[0].mainStat).toBe('martial')
+    expect(powerBefore).toBeGreaterThan(0)
+    expect(state.equipmentInventory[0].baseValue).toBe(before)
+  })
+
+  it('allows equipment draws only through legendary and never mythic', () => {
+    const state = createInitialState()
+    const result = drawEquipment(state, 10)
+    expect(result.ok).toBe(true)
+    expect(result.rewards).toHaveLength(10)
+    expect(result.rewards.every(item => item.grade !== 'mythic')).toBe(true)
+    expect(EQUIPMENT_GRADE_META.mythic.drawWeight).toBe(0)
+    expect(MYTHIC_EVENT_EQUIPMENT.mythicEventOnly).toBe(true)
+    expect(MYTHIC_EVENT_EQUIPMENT.grade).toBe('mythic')
+  })
+
+  it('equips an item to a general, replaces the same slot, and enhances with silver and iron', () => {
+    const state = createInitialState()
+    const draw = drawEquipment(state, 1)
+    const item = draw.rewards[0]
+    const beforeSilver = state.silver
+    const beforeLevel = item.level
+    expect(equipEquipment(state, 'guan-yu', item.id).ok).toBe(true)
+    expect(state.equipmentLoadouts['guan-yu'][item.type]).toBe(item.id)
+    expect(enhanceEquipment(state, item.id).ok).toBe(true)
+    expect(item.level).toBe(beforeLevel + 1)
+    expect(state.silver).toBeLessThan(beforeSilver)
   })
 })

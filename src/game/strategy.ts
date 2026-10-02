@@ -1,9 +1,13 @@
-export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'territory' | 'research' | 'battle' | 'rank' | 'account' | 'admin'
+export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'rank' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
 export type ResourceKey = 'grain' | 'silver' | 'wood' | 'iron' | 'influence'
 export type CityOwner = '촉한' | '위나라' | '오나라' | '중립'
 export type BuildingKind = 'agriculture' | 'commerce' | 'barracks' | 'workshop' | 'academy'
+export type EquipmentType = 'weapon' | 'armor' | 'accessory'
+export type EquipmentGrade = 'normal' | 'rare' | 'unique' | 'legendary' | 'mythic'
+export type EquipmentSet = 'command' | 'martial' | 'stratagem' | 'speed'
+export type EquipmentStat = 'leadership' | 'martial' | 'stratagem' | 'speed'
 
 export interface Resources {
   grain: number
@@ -44,6 +48,20 @@ export interface ResearchNode {
   cost: Partial<Record<ResourceKey, number>>
   prerequisite?: string
   unlocked: boolean
+}
+
+export interface Equipment {
+  id: string
+  name: string
+  type: EquipmentType
+  set: EquipmentSet
+  grade: EquipmentGrade
+  level: number
+  mainStat: EquipmentStat
+  baseValue: number
+  skillName: string
+  skillDescription: string
+  mythicEventOnly?: boolean
 }
 
 export interface General {
@@ -92,6 +110,10 @@ export interface StrategyState {
   lastDefenseAt?: number
   lastFactionBattleAt?: number
   factionWarScore: number
+  equipmentInventory: Equipment[]
+  equipmentLoadouts: Record<string, Partial<Record<EquipmentType, string>>>
+  selectedEquipmentGeneralId: string
+  lastEquipmentDraw: Equipment[]
 }
 
 export const INCOME_COOLDOWN_MS = 24 * 60 * 60 * 1000
@@ -350,14 +372,49 @@ function copyGeneral(general: General): General {
   return { ...general }
 }
 
+export const EQUIPMENT_TYPE_META: Record<EquipmentType, { label: string; icon: string }> = {
+  weapon: { label: '무기', icon: '⚔' },
+  armor: { label: '갑옷', icon: '◈' },
+  accessory: { label: '장신구', icon: '✦' },
+}
+
+export const EQUIPMENT_GRADE_META: Record<EquipmentGrade, { label: string; color: string; base: number; drawWeight: number }> = {
+  normal: { label: '노멀', color: '#a9b1b8', base: 6, drawWeight: 55 },
+  rare: { label: '레어', color: '#6eb8ff', base: 12, drawWeight: 28 },
+  unique: { label: '유니크', color: '#c59bf5', base: 21, drawWeight: 12 },
+  legendary: { label: '전설', color: '#f6c56d', base: 34, drawWeight: 5 },
+  mythic: { label: '신화', color: '#ff8066', base: 52, drawWeight: 0 },
+}
+
+export const EQUIPMENT_SET_META: Record<EquipmentSet, { label: string; stat: EquipmentStat; skillName: string; skillDescription: string }> = {
+  command: { label: '천군 세트', stat: 'leadership', skillName: '군령의 깃발', skillDescription: '통솔 기반 편성 전투력 보정' },
+  martial: { label: '패왕 세트', stat: 'martial', skillName: '파천의 일격', skillDescription: '무력 기반 공격 효율 보정' },
+  stratagem: { label: '천책 세트', stat: 'stratagem', skillName: '귀모의 진', skillDescription: '모략 기반 전술 게이지 보정' },
+  speed: { label: '질풍 세트', stat: 'speed', skillName: '유성 보법', skillDescription: '속도 기반 행동 순환 보정' },
+}
+
+function starterEquipment(): Equipment[] {
+  return [
+    { id: 'starter-weapon', name: '청동 장검', type: 'weapon', set: 'martial', grade: 'normal', level: 1, mainStat: 'martial', baseValue: 6, skillName: '파천의 일격', skillDescription: '무력 기반 공격 효율 보정' },
+    { id: 'starter-armor', name: '철린 갑주', type: 'armor', set: 'command', grade: 'normal', level: 1, mainStat: 'leadership', baseValue: 6, skillName: '군령의 깃발', skillDescription: '통솔 기반 편성 전투력 보정' },
+    { id: 'starter-accessory', name: '옥패 부적', type: 'accessory', set: 'stratagem', grade: 'normal', level: 1, mainStat: 'stratagem', baseValue: 6, skillName: '귀모의 진', skillDescription: '모략 기반 전술 게이지 보정' },
+  ]
+}
+
+export const MYTHIC_EVENT_EQUIPMENT: Equipment = {
+  id: 'event-mythic-heavenblade', name: '천명·용천검', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: EQUIPMENT_GRADE_META.mythic.base, skillName: '용천 개벽', skillDescription: '이벤트 지급 전용 신화 무기 · 전투 개시 시 아군의 무력을 크게 끌어올립니다.', mythicEventOnly: true,
+}
+
 export function createInitialState(): StrategyState {
   const starterIds = ['guan-yu', 'zhao-yun', 'zhuge-liang']
   const generals = starterIds.map(id => copyGeneral(LIBRARY.find(general => general.id === id)!))
+  const equipmentInventory = starterEquipment()
   return {
     section: 'overview', honor: 2480, silver: 12500, manuals: 180, generals,
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
+    equipmentInventory, equipmentLoadouts: { 'guan-yu': { weapon: 'starter-weapon' }, 'zhao-yun': { armor: 'starter-armor' }, 'zhuge-liang': { accessory: 'starter-accessory' } }, selectedEquipmentGeneralId: 'guan-yu', lastEquipmentDraw: [],
   }
 }
 
@@ -386,7 +443,97 @@ export function skillPower(general: General): number {
 }
 
 export function totalPower(state: StrategyState): number {
-  return state.formation.reduce((sum, id) => sum + (findGeneral(state, id) ? combatPower(findGeneral(state, id)!) : 0), 0)
+  return state.formation.reduce((sum, id) => sum + (findGeneral(state, id) ? combatPower(findGeneral(state, id)!) + equipmentPower(state, id) : 0), 0)
+}
+
+export function ensureEquipmentState(state: StrategyState): void {
+  if (!Array.isArray(state.equipmentInventory)) state.equipmentInventory = starterEquipment()
+  if (!state.equipmentLoadouts || typeof state.equipmentLoadouts !== 'object') state.equipmentLoadouts = {}
+  if (!state.selectedEquipmentGeneralId || !state.generals.some(general => general.id === state.selectedEquipmentGeneralId)) state.selectedEquipmentGeneralId = state.generals[0]?.id ?? ''
+  if (!Array.isArray(state.lastEquipmentDraw)) state.lastEquipmentDraw = []
+}
+
+export function equipmentValue(item: Equipment): number {
+  return Math.round(item.baseValue * (1 + (item.level - 1) * 0.14))
+}
+
+export function equipmentBonus(state: StrategyState, generalId: string): Record<EquipmentStat, number> {
+  ensureEquipmentState(state)
+  const bonus: Record<EquipmentStat, number> = { leadership: 0, martial: 0, stratagem: 0, speed: 0 }
+  const loadout = state.equipmentLoadouts[generalId] ?? {}
+  Object.values(loadout).forEach(itemId => {
+    const item = state.equipmentInventory.find(candidate => candidate.id === itemId)
+    if (item) bonus[item.mainStat] += equipmentValue(item)
+  })
+  return bonus
+}
+
+export function equipmentPower(state: StrategyState, generalId: string): number {
+  const bonus = equipmentBonus(state, generalId)
+  return Math.round(bonus.leadership * 1.15 + bonus.martial * 1.25 + bonus.stratagem * 0.9 + bonus.speed * 0.65)
+}
+
+function equipmentCost(item: Equipment): Partial<Record<ResourceKey, number>> {
+  return { silver: 420 + item.level * 260, iron: 100 + item.level * 75 }
+}
+
+export function enhanceEquipment(state: StrategyState, id: string): UpgradeResult {
+  ensureEquipmentState(state)
+  const item = state.equipmentInventory.find(candidate => candidate.id === id)
+  if (!item) return { ok: false, message: '장비를 찾을 수 없습니다.' }
+  if (item.level >= 20) return { ok: false, message: '장비가 이미 최고 강화 레벨입니다.' }
+  const cost = equipmentCost(item)
+  if (!spendResources(state, cost)) return { ok: false, message: `강화 재화가 부족합니다. 은전 ${formatNumber(cost.silver ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요` }
+  item.level += 1
+  state.lastNotice = `${item.name} 강화 완료 · Lv.${item.level} · ${item.mainStat} +${equipmentValue(item)}`
+  return { ok: true, message: state.lastNotice }
+}
+
+export function equipEquipment(state: StrategyState, generalId: string, itemId: string): UpgradeResult {
+  ensureEquipmentState(state)
+  if (!findGeneral(state, generalId)) return { ok: false, message: '장착할 무장을 찾을 수 없습니다.' }
+  const item = state.equipmentInventory.find(candidate => candidate.id === itemId)
+  if (!item) return { ok: false, message: '장비를 찾을 수 없습니다.' }
+  Object.values(state.equipmentLoadouts).forEach(loadout => {
+    Object.keys(loadout).forEach(type => { if (loadout[type as EquipmentType] === itemId) delete loadout[type as EquipmentType] })
+  })
+  state.equipmentLoadouts[generalId] = { ...(state.equipmentLoadouts[generalId] ?? {}), [item.type]: item.id }
+  state.selectedEquipmentGeneralId = generalId
+  state.lastNotice = `${findGeneral(state, generalId)?.name}에게 ${item.name}을(를) 장착했습니다.`
+  return { ok: true, message: state.lastNotice }
+}
+
+function rollEquipmentGrade(): EquipmentGrade {
+  const roll = Math.random() * 100
+  if (roll < 5) return 'legendary'
+  if (roll < 17) return 'unique'
+  if (roll < 45) return 'rare'
+  return 'normal'
+}
+
+function createDrawnEquipment(index: number): Equipment {
+  const type = (['weapon', 'armor', 'accessory'] as EquipmentType[])[Math.floor(Math.random() * 3)]
+  const sets = Object.keys(EQUIPMENT_SET_META) as EquipmentSet[]
+  const set = sets[Math.floor(Math.random() * sets.length)]
+  const grade = rollEquipmentGrade()
+  const meta = EQUIPMENT_GRADE_META[grade]
+  const setMeta = EQUIPMENT_SET_META[set]
+  const names: Record<EquipmentType, string[]> = { weapon: ['청룡 장도', '패왕 철극', '유성 비수'], armor: ['현무 중갑', '백린 갑주', '천군 전포'], accessory: ['옥패 부적', '군령 인장', '천책 죽간'] }
+  return { id: `equipment-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`, name: names[type][Math.floor(Math.random() * names[type].length)], type, set, grade, level: 1, mainStat: setMeta.stat, baseValue: meta.base, skillName: setMeta.skillName, skillDescription: setMeta.skillDescription }
+}
+
+export interface EquipmentDrawResult { ok: boolean; message: string; rewards: Equipment[] }
+
+export function drawEquipment(state: StrategyState, count = 1): EquipmentDrawResult {
+  ensureEquipmentState(state)
+  const cost = count === 10 ? 2200 : 240
+  if (state.honor < cost) return { ok: false, message: `명망이 부족합니다. 장비 뽑기에는 ${formatNumber(cost)} 명망이 필요합니다.`, rewards: [] }
+  state.honor -= cost
+  const rewards = Array.from({ length: count }, (_, index) => createDrawnEquipment(index))
+  state.equipmentInventory.push(...rewards)
+  state.lastEquipmentDraw = rewards
+  state.lastNotice = `${count}회 장비 뽑기 완료 · ${rewards.map(item => `${EQUIPMENT_GRADE_META[item.grade].label} ${item.name}`).join(', ')}`
+  return { ok: true, message: state.lastNotice, rewards }
 }
 
 function weightedGrade(): Grade {

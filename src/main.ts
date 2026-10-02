@@ -8,6 +8,10 @@ import {
   launchConquest,
   defendCity,
   launchFactionBattle,
+  drawEquipment,
+  enhanceEquipment,
+  ensureEquipmentState,
+  equipEquipment,
   ensureCityRoster,
   ensureResearchRoster,
   findGeneral,
@@ -29,6 +33,7 @@ const canvas = document.querySelector<HTMLCanvasElement>('#game')
 if (!root || !canvas) throw new Error('Strategy game shell is incomplete')
 
 const state: StrategyState = createInitialState()
+ensureEquipmentState(state)
 let arena: Arena
 let pendingTicket: RunTicket | null = null
 let authView: AuthView = { status: 'logged_out', name: null }
@@ -83,6 +88,28 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(state.lastNotice)
     queueAccountSave()
+  },
+  onEquipmentDraw: count => {
+    const result = drawEquipment(state, count)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onEquipmentEnhance: id => {
+    const result = enhanceEquipment(state, id)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onEquipmentEquip: (generalId, itemId) => {
+    const result = equipEquipment(state, generalId, itemId)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onEquipmentSelectGeneral: id => {
+    state.selectedEquipmentGeneralId = id
+    ui.render(state)
   },
   onCitySelect: id => {
     const result = selectCity(state, id)
@@ -265,7 +292,7 @@ async function refreshAccount(): Promise<void> {
   }
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
     Object.assign(state, { honor: game.honor, silver: game.silver, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
     state.resources = { ...state.resources, grain: game.grain, silver: game.silver, wood: game.wood, iron: game.iron, influence: game.influence }
     if (Array.isArray(game.generals)) state.generals = game.generals
@@ -278,6 +305,10 @@ async function refreshAccount(): Promise<void> {
     state.lastIncomeCollectedAt = game.lastIncomeCollectedAt
     state.lastConquestAt = game.lastConquestAt
     state.factionWarScore = game.factionWarScore ?? 0
+    if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
+    if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
+    if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
+    ensureEquipmentState(state)
     accountView = account
     ui.setAccount(accountView)
     ui.render(state)
@@ -305,6 +336,9 @@ function accountStatePayload() {
     incomeCollectedAt: state.lastIncomeCollectedAt === undefined ? null : String(state.lastIncomeCollectedAt),
     conquestAt: state.lastConquestAt === undefined ? null : String(state.lastConquestAt),
     factionWarScore: Math.trunc(state.factionWarScore),
+    equipmentData: JSON.stringify(state.equipmentInventory),
+    equipmentLoadoutsData: JSON.stringify(state.equipmentLoadouts),
+    selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
   }
 }
 
