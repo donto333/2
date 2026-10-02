@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import mysql from 'mysql2/promise'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const files = ['0000_initial_users.sql', '005_game_account_states.sql', '006_game_strategy_state.sql', '007_action_cooldowns.sql', '008_faction_war_score.sql']
+
+async function readMigrations() {
+  return Promise.all(files.map(async name => {
+    const sql = await readFile(join(here, name), 'utf8')
+    return { name, sql, sha256: createHash('sha256').update(sql).digest('hex') }
+  }))
+}
+
+async function applyMigrations(connection, migrations) {
+  await connection.query(`CREATE TABLE IF NOT EXISTS game_app_schema_migrations (
+    name VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+    sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+  )`)
+  const [rows] = await connection.query('SELECT name,sha256 FROM game_app_schema_migrations')
+  const applied = new Map(rows.map(row => [row.name, row.sha256]))
+  for (const migration of migrations) {
+    const previous = applied.get(migration.name)
+    if (previous && previous !== migration.sha256) throw new Error(`Migration ${migration.name} changed after it was applied`)
+    if (previous) continue
+    await connection.query(migration.sql)
+    await connection.execute('INSERT INTO game_app_schema_migrations (name,sha256) VALUES (?,?)', [migration.name, migration.sha256])
+  }
+}
+
+if (!process.env.DATABASE_URL) throw new Error('Project DATABASE_URL is required')
+const connection = await mysql.createConnection({ uri: process.env.DATABASE_URL, multipleStatements: true, connectTimeout: 5000 })
+try {
+  await applyMigrations(connection, await readMigrations())
+  console.log('Account database migrations are current')
+} finally {
+  await connection.end()
+}
