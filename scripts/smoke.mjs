@@ -98,6 +98,7 @@ try {
   await page.click('[data-action="battle-skill"]')
   await page.waitForTimeout(250)
   await page.screenshot({ path: `${out}/03-battle.png` })
+  await page.evaluate(() => window.__strategy.arena.dispose())
   if (await page.locator('.result-modal.is-visible').count()) await page.click('[data-action="close-result"]')
 
   await page.click('[data-action="section"][data-section="rank"]')
@@ -119,6 +120,8 @@ try {
   if (await page.locator('.result-modal.is-visible').count()) await page.click('[data-action="close-result"]')
   await page.click('[data-action="section"][data-section="territory"]')
   await page.waitForSelector('.territory-map')
+  await page.locator('.map-canvas').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: `${out}/03-territory.png` })
   await page.click('[data-action="section"][data-section="admin"]')
   await page.waitForSelector('.page-section--admin')
   if ((await page.locator('.admin-kpi').count()) !== 4) throw new Error('admin overview KPIs missing')

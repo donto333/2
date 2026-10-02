@@ -55,3 +55,15 @@
 @media (max-width:760px){.codex-summary,.formation-screen-head{display:block}.codex-progress{width:100%;margin-top:18px}.codex-grid{grid-template-columns:repeat(2,1fr)}.formation-slots{grid-template-columns:1fr}.formation-bench{grid-template-columns:1fr}.roster-toolbar--expanded{display:block}.filter-tabs{margin-bottom:12px}.roster-sort-controls{flex-wrap:wrap}.roster-summary{font-size:9px}}
 
 .sidebar{overflow-y:auto;overflow-x:hidden}
+
+/* Castle territory map treatment */
+.map-canvas{height:420px;background-image:linear-gradient(180deg,rgba(8,21,24,.28),rgba(8,21,24,.52)),url('/assets/territory-castle.webp');background-size:cover;background-position:center center;box-shadow:inset 0 0 90px rgba(5,14,16,.42)}
+.map-canvas:before{opacity:.14;background-size:180px 160px,220px 180px,48px 42px}
+.map-canvas:after{color:rgba(238,234,202,.46);text-shadow:0 2px 12px rgba(0,0,0,.45)}
+.city-marker{min-width:66px;padding:5px 6px;border-color:rgba(231,220,171,.4);background:rgba(7,20,22,.78);backdrop-filter:blur(5px);box-shadow:0 8px 18px rgba(0,0,0,.36),inset 0 0 16px rgba(82,224,196,.05)}
+.city-marker strong{font-size:10px;text-shadow:0 1px 7px rgba(0,0,0,.7)}
+.city-marker small{font-size:8px}
+.city-marker span{width:17px;height:17px}
+.city-marker:hover,.city-marker.is-selected{transform:translate(-50%,-50%) scale(1.12)}
+.map-legend{padding-top:2px}
+@media (max-width:760px){.map-canvas{height:350px;background-position:center center}.city-marker{min-width:58px;padding:4px 5px}.city-marker strong{font-size:9px}.city-marker small{font-size:7px}.city-marker span{width:15px;height:15px;font-size:8px}.map-label{font-size:10px}}
