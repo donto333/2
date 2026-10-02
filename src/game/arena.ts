@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { skillPower, skillRank, type General } from './strategy'
+import { allGenerals, skillPower, skillRank, type General } from './strategy'
 import { BATTLE_PATTERNS, phaseName, resolveBattleTactic, resolveTactic, type BattleTactic } from './battle-rules'
 import { effectDefinition, effectLoadout, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId } from './battle-effects'
 
@@ -26,7 +26,20 @@ export interface BattleSnapshot {
   skillReady: boolean
   skillCooldown: number
   activeEffects: ActiveBattleEffect[]
+  opponentDeck: BattleOpponent[]
+  difficulty: string
+  difficultyMultiplier: number
+  enemyPower: number
   status: string
+}
+
+export interface BattleOpponent {
+  id: string
+  name: string
+  role: General['role']
+  level: number
+  grade: General['grade']
+  portraitPath?: string
 }
 
 export interface ArenaCallbacks {
@@ -59,7 +72,7 @@ export class Arena {
   private readonly clock = new THREE.Timer()
   private readonly callbacks: ArenaCallbacks
   private readonly playerUnits: BattleUnit[] = []
-  private readonly enemyUnits: THREE.Group[] = []
+  private readonly enemyUnits: BattleUnit[] = []
   private selectionRing: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial> | null = null
   private commandMarker: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial> | null = null
   private battleActive = false
@@ -80,6 +93,8 @@ export class Arena {
   private lastVolley = -1
   private disposed = false
   private generals: General[] = []
+  private enemyDeck: General[] = []
+  private difficultyMultiplier = 0.86
   private readonly effects: ArenaEffect[] = []
   private readonly activeBuffs: ActiveBattleEffect[] = []
   private readonly activeDebuffs: ActiveBattleEffect[] = []
@@ -399,7 +414,7 @@ export class Arena {
 
   private clearUnits(): void {
     this.playerUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
-    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit))
+    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
     if (this.selectionRing) this.scene.remove(this.selectionRing)
     if (this.commandMarker) this.scene.remove(this.commandMarker)
     this.clearEffects()
@@ -619,17 +634,29 @@ export class Arena {
     this.skillCooldown = 0
     this.lastPulse = 0
     this.lastVolley = -1
+    this.difficultyMultiplier = 0.86
     this.activeBuffs.splice(0)
     this.activeDebuffs.splice(0)
-    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit))
-    const enemyGenerals = this.generals.length ? this.generals : []
-    enemyGenerals.forEach((general, index) => {
-      const enemy = this.createUnit(general, ember, new THREE.Vector3(-4.4 + index * 4.4, 0, -8 - index * 0.9))
-      enemy.rotation.y = Math.PI
-      this.enemyUnits.push(enemy)
-      this.scene.add(enemy)
+    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
+    const playerIds = new Set(this.generals.map(general => general.id))
+    const pool = allGenerals().filter(general => !playerIds.has(general.id))
+    const shuffled = pool.sort(() => Math.random() - 0.5)
+    const chosen: General[] = []
+    for (const general of shuffled) {
+      if (chosen.length === 3) break
+      if (chosen.length < 2 && chosen.some(item => item.role === general.role)) continue
+      chosen.push(general)
+    }
+    this.enemyDeck = chosen.length === 3 ? chosen : shuffled.slice(0, 3)
+    this.enemyDeck.forEach((general, index) => {
+      const position = new THREE.Vector3(-4.4 + index * 4.4, 0, -8 - index * 0.9)
+      const group = this.createUnit(general, ember, position)
+      group.rotation.y = Math.PI
+      const model = group.userData.model as THREE.Group
+      this.enemyUnits.push({ group, model, general, target: position.clone() })
+      this.scene.add(group)
     })
-    this.callbacks.onEvent(`작전 개시 · ${BATTLE_PATTERNS[0].warning}`)
+    this.callbacks.onEvent(`작전 개시 · 무장 덱 ${this.enemyDeck.map(general => general.name).join(' · ')} · ${BATTLE_PATTERNS[0].warning}`)
   }
 
   commandMove(index: number): void {
@@ -796,6 +823,10 @@ export class Arena {
     this.callbacks.onEvent(`적 전술 예고 · ${pattern.warning}`)
   }
 
+  private difficultyLabel(): string {
+    return ['초급', '중급', '고급'][this.battlePhase] ?? '고급'
+  }
+
   getSnapshot(): BattleSnapshot {
     const unit = this.playerUnits[this.selectedUnit]
     const general = unit?.general
@@ -823,6 +854,10 @@ export class Arena {
       skillReady: Boolean(general?.skillUnlocked && this.skillCooldown <= 0),
       skillCooldown: Math.max(0, this.skillCooldown),
       activeEffects: [...this.activeBuffs, ...this.activeDebuffs].map(effect => ({ ...effect })),
+      opponentDeck: this.enemyDeck.map(general => ({ id: general.id, name: general.name, role: general.role, level: general.level, grade: general.grade, portraitPath: general.portraitPath })),
+      difficulty: this.difficultyLabel(),
+      difficultyMultiplier: this.difficultyMultiplier,
+      enemyPower: this.enemyDeck.reduce((sum, enemy) => sum + enemy.leadership + enemy.martial + enemy.stratagem + enemy.speed + enemy.level * 4, 0),
       status: this.battleActive ? '전투 중' : '대기 중',
     }
   }
@@ -842,9 +877,8 @@ export class Arena {
       this.selectionRing.scale.setScalar(1 + Math.sin(this.clock.getElapsed() * 3) * 0.04)
     }
     this.enemyUnits.forEach((unit, index) => {
-      unit.position.y = Math.sin(this.clock.getElapsed() * 1.8 + index) * 0.035
-      const model = unit.userData.model as THREE.Group | undefined
-      if (model) this.animateModel(model, this.generals[index] ?? this.generals[0], this.clock.getElapsed() + index * 0.4)
+      unit.group.position.y = Math.sin(this.clock.getElapsed() * 1.8 + index) * 0.035
+      this.animateModel(unit.model, unit.general, this.clock.getElapsed() + index * 0.4)
     })
     if (!this.battleActive) return
     this.skillCooldown = Math.max(0, this.skillCooldown - delta)
@@ -857,12 +891,13 @@ export class Arena {
     const nextPhase = Math.min(2, Math.floor(this.battleElapsed / 7))
     if (nextPhase !== this.battlePhase) {
       this.battlePhase = nextPhase
+      this.difficultyMultiplier = [0.86, 1.08, 1.34][this.battlePhase] ?? 1.34
       const phaseRecovery = hasBattleEffect(this.activeDebuffs, 'fracture') || hasBattleEffect(this.activeDebuffs, 'silence') ? 18 : 100
       this.enemyMorale = Math.min(100, Math.max(this.enemyMorale, phaseRecovery))
       this.combo = 0
       this.comboTimer = 0
       this.threat = Math.max(0, this.threat - 22)
-      this.callbacks.onEvent(`${phaseName(this.battlePhase)} · 적 지휘관이 전열을 재편합니다.`)
+      this.callbacks.onEvent(`${phaseName(this.battlePhase)} · ${this.difficultyLabel()} · 적 덱의 압박이 강화됩니다.`)
     }
     if (this.battleElapsed - this.lastVolley > 1.85) {
       this.lastVolley = this.battleElapsed
@@ -880,6 +915,8 @@ export class Arena {
     this.enemyMorale = Math.max(0, this.enemyMorale - naturalMoraleDrain - effectMoraleDrain)
     const threatDecay = this.guardTimer > 0 ? 5.4 : 1.8
     this.threat = Math.max(0, this.threat - delta * (threatDecay + (hasBattleEffect(this.activeBuffs, 'iron-wall') ? 4 : 0)))
+    const enemyPressure = delta * (0.72 * this.difficultyMultiplier)
+    this.threat = Math.min(100, this.threat + (this.guardTimer > 0 ? enemyPressure * 0.28 : enemyPressure))
     if (hasBattleEffect(this.activeDebuffs, 'slow')) this.nextPatternAt += delta * 0.12
     this.tickBattleEffects(delta)
     if (this.battleElapsed - this.lastPulse > 5) {
