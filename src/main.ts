@@ -34,7 +34,71 @@ const canvas = document.querySelector<HTMLCanvasElement>('#game')
 
 if (!root || !canvas) throw new Error('Strategy game shell is incomplete')
 
+const LOCAL_GAME_SAVE_KEY = 'cheonharo.strategy.save.v2'
 const state: StrategyState = createInitialState()
+let localSaveDirty = false
+
+function persistLocalGame(): void {
+  try {
+    window.localStorage.setItem(LOCAL_GAME_SAVE_KEY, JSON.stringify({
+      version: 2,
+      savedAt: Date.now(),
+      honor: state.honor,
+      silver: state.silver,
+      manuals: state.manuals,
+      wins: state.wins,
+      battleScore: state.battleScore,
+      resources: state.resources,
+      generals: state.generals,
+      formation: state.formation,
+      cities: state.cities,
+      research: state.research,
+      selectedCityId: state.selectedCityId,
+      lastIncomeCollectedAt: state.lastIncomeCollectedAt,
+      lastConquestAt: state.lastConquestAt,
+      factionWarScore: state.factionWarScore,
+      equipmentInventory: state.equipmentInventory,
+      equipmentLoadouts: state.equipmentLoadouts,
+      selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
+    }))
+  } catch {
+    // Private browsing and quota restrictions should not stop gameplay.
+  }
+}
+
+function restoreLocalGame(): void {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_GAME_SAVE_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw) as Partial<StrategyState> & { version?: number; resources?: StrategyState['resources']; savedAt?: number }
+    if (saved.version !== undefined && saved.version !== 2) return
+    Object.assign(state, {
+      honor: saved.honor,
+      silver: saved.silver,
+      manuals: saved.manuals,
+      wins: saved.wins,
+      battleScore: saved.battleScore,
+      resources: saved.resources,
+      generals: saved.generals,
+      formation: saved.formation,
+      cities: saved.cities,
+      research: saved.research,
+      selectedCityId: saved.selectedCityId,
+      lastIncomeCollectedAt: saved.lastIncomeCollectedAt,
+      lastConquestAt: saved.lastConquestAt,
+      factionWarScore: saved.factionWarScore,
+      equipmentInventory: saved.equipmentInventory,
+      equipmentLoadouts: saved.equipmentLoadouts,
+      selectedEquipmentGeneralId: saved.selectedEquipmentGeneralId,
+    })
+  } catch {
+    // Corrupt local data is ignored and replaced by the normal starter state.
+  }
+}
+
+restoreLocalGame()
+ensureCityRoster(state)
+ensureResearchRoster(state)
 ensureEquipmentState(state)
 let arena: Arena
 let pendingTicket: RunTicket | null = null
@@ -43,6 +107,7 @@ let accountView: AccountView | null = null
 let saveTimer: number | null = null
 let saveInFlight = false
 let saveQueued = false
+let saveRetryCount = 0
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
   return state.formation.map(id => {
@@ -321,25 +386,29 @@ async function refreshAccount(): Promise<void> {
   try {
     const account = await ManusAuth.query('account.me') as AccountView
     const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
-    Object.assign(state, { honor: game.honor, silver: game.silver, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
-    state.resources = { ...state.resources, grain: game.grain, silver: game.silver, wood: game.wood, iron: game.iron, influence: game.influence }
-    if (Array.isArray(game.generals)) state.generals = game.generals
-    if (Array.isArray(game.formation)) state.formation = game.formation
-    if (Array.isArray(game.cities)) state.cities = game.cities
-    ensureCityRoster(state)
-    if (Array.isArray(game.research)) state.research = game.research
-    ensureResearchRoster(state)
-    if (typeof game.selectedCityId === 'string') state.selectedCityId = game.selectedCityId
-    state.lastIncomeCollectedAt = game.lastIncomeCollectedAt
-    state.lastConquestAt = game.lastConquestAt
-    state.factionWarScore = game.factionWarScore ?? 0
-    if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
-    if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
-    if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
-    ensureEquipmentState(state)
+    if (!localSaveDirty) {
+      Object.assign(state, { honor: game.honor, silver: game.silver, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
+      state.resources = { ...state.resources, grain: game.grain, silver: game.silver, wood: game.wood, iron: game.iron, influence: game.influence }
+      if (Array.isArray(game.generals)) state.generals = game.generals
+      if (Array.isArray(game.formation)) state.formation = game.formation
+      if (Array.isArray(game.cities)) state.cities = game.cities
+      ensureCityRoster(state)
+      if (Array.isArray(game.research)) state.research = game.research
+      ensureResearchRoster(state)
+      if (typeof game.selectedCityId === 'string') state.selectedCityId = game.selectedCityId
+      state.lastIncomeCollectedAt = game.lastIncomeCollectedAt
+      state.lastConquestAt = game.lastConquestAt
+      state.factionWarScore = game.factionWarScore ?? 0
+      if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
+      if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
+      if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
+      ensureEquipmentState(state)
+      persistLocalGame()
+    }
     accountView = account
     ui.setAccount(accountView)
     ui.render(state)
+    if (localSaveDirty) void flushAccountSave()
   } catch {
     ui.notify('계정 정보를 불러오지 못했습니다. 로그인 상태를 확인해 주세요.', 'ember')
   }
@@ -371,16 +440,19 @@ function accountStatePayload() {
 }
 
 function queueAccountSave(): void {
+  persistLocalGame()
+  localSaveDirty = true
   if (authView.status !== 'authenticated') return
   if (saveInFlight) {
     saveQueued = true
     return
   }
   if (saveTimer !== null) window.clearTimeout(saveTimer)
+  const delay = saveRetryCount ? Math.min(10_000, 650 * (2 ** Math.min(saveRetryCount - 1, 4))) : 650
   saveTimer = window.setTimeout(() => {
     saveTimer = null
     void flushAccountSave()
-  }, 650)
+  }, delay)
 }
 
 async function flushAccountSave(): Promise<void> {
@@ -388,8 +460,12 @@ async function flushAccountSave(): Promise<void> {
   saveInFlight = true
   try {
     await ManusAuth.mutate('account.saveGameState', accountStatePayload())
+    saveRetryCount = 0
+    localSaveDirty = false
   } catch {
-    ui.notify('계정 진행 상황을 저장하지 못했습니다. 로컬 플레이는 계속됩니다.', 'ember')
+    saveRetryCount += 1
+    saveQueued = true
+    if (saveRetryCount >= 3) ui.notify('온라인 저장이 지연되고 있습니다. 로컬 저장 후 자동 재시도합니다.', 'ember')
   } finally {
     saveInFlight = false
     if (saveQueued) {
@@ -398,6 +474,21 @@ async function flushAccountSave(): Promise<void> {
     }
   }
 }
+
+function flushPendingSaveOnHide(): void {
+  if (!localSaveDirty) return
+  persistLocalGame()
+  if (saveTimer !== null) {
+    window.clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  void flushAccountSave()
+}
+
+window.addEventListener('pagehide', flushPendingSaveOnHide)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushPendingSaveOnHide()
+})
 
 async function saveAccountName(name: string): Promise<void> {
   const normalized = name.trim()
