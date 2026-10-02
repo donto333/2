@@ -386,11 +386,11 @@ export const EQUIPMENT_GRADE_META: Record<EquipmentGrade, { label: string; color
   mythic: { label: '신화', color: '#ff8066', base: 52, drawWeight: 0 },
 }
 
-export const EQUIPMENT_SET_META: Record<EquipmentSet, { label: string; stat: EquipmentStat; skillName: string; skillDescription: string }> = {
-  command: { label: '천군 세트', stat: 'leadership', skillName: '군령의 깃발', skillDescription: '통솔 기반 편성 전투력 보정' },
-  martial: { label: '패왕 세트', stat: 'martial', skillName: '파천의 일격', skillDescription: '무력 기반 공격 효율 보정' },
-  stratagem: { label: '천책 세트', stat: 'stratagem', skillName: '귀모의 진', skillDescription: '모략 기반 전술 게이지 보정' },
-  speed: { label: '질풍 세트', stat: 'speed', skillName: '유성 보법', skillDescription: '속도 기반 행동 순환 보정' },
+export const EQUIPMENT_SET_META: Record<EquipmentSet, { label: string; stat: EquipmentStat; skillName: string; skillDescription: string; twoPiece: string; threePiece: string }> = {
+  command: { label: '천군 세트', stat: 'leadership', skillName: '군령의 깃발', skillDescription: '통솔 기반 편성 전투력 보정', twoPiece: '통솔 +10', threePiece: '전투 시작 시 아군 방어 +8%' },
+  martial: { label: '패왕 세트', stat: 'martial', skillName: '파천의 일격', skillDescription: '무력 기반 공격 효율 보정', twoPiece: '무력 +10', threePiece: '전투 시작 시 공격 피해 +8%' },
+  stratagem: { label: '천책 세트', stat: 'stratagem', skillName: '귀모의 진', skillDescription: '모략 기반 전술 게이지 보정', twoPiece: '모략 +10', threePiece: '전술 게이지 충전 +12%' },
+  speed: { label: '질풍 세트', stat: 'speed', skillName: '유성 보법', skillDescription: '속도 기반 행동 순환 보정', twoPiece: '속도 +10', threePiece: '행동 순환 속도 +8%' },
 }
 
 function starterEquipment(): Equipment[] {
@@ -461,11 +461,29 @@ export function equipmentBonus(state: StrategyState, generalId: string): Record<
   ensureEquipmentState(state)
   const bonus: Record<EquipmentStat, number> = { leadership: 0, martial: 0, stratagem: 0, speed: 0 }
   const loadout = state.equipmentLoadouts[generalId] ?? {}
+  const setCounts: Partial<Record<EquipmentSet, number>> = {}
   Object.values(loadout).forEach(itemId => {
     const item = state.equipmentInventory.find(candidate => candidate.id === itemId)
-    if (item) bonus[item.mainStat] += equipmentValue(item)
+    if (item) {
+      bonus[item.mainStat] += equipmentValue(item)
+      setCounts[item.set] = (setCounts[item.set] ?? 0) + 1
+    }
+  })
+  ;(Object.entries(setCounts) as Array<[EquipmentSet, number]>).forEach(([set, count]) => {
+    if (count >= 2) bonus[EQUIPMENT_SET_META[set].stat] += 10
+    if (count >= 3) bonus[EQUIPMENT_SET_META[set].stat] += 8
   })
   return bonus
+}
+
+export function equipmentSetCounts(state: StrategyState, generalId: string): Partial<Record<EquipmentSet, number>> {
+  ensureEquipmentState(state)
+  const counts: Partial<Record<EquipmentSet, number>> = {}
+  Object.values(state.equipmentLoadouts[generalId] ?? {}).forEach(itemId => {
+    const item = state.equipmentInventory.find(candidate => candidate.id === itemId)
+    if (item) counts[item.set] = (counts[item.set] ?? 0) + 1
+  })
+  return counts
 }
 
 export function equipmentPower(state: StrategyState, generalId: string): number {

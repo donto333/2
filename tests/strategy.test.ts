@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_GRADE_META, MYTHIC_EVENT_EQUIPMENT, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -136,5 +136,23 @@ describe('commander attributes', () => {
     expect(enhanceEquipment(state, item.id).ok).toBe(true)
     expect(item.level).toBe(beforeLevel + 1)
     expect(state.silver).toBeLessThan(beforeSilver)
+  })
+
+  it('activates two-piece and three-piece set abilities for a general', () => {
+    const state = createInitialState()
+    const guanYu = findGeneral(state, 'guan-yu')!
+    const commandItems = ['set-command-armor', 'set-command-accessory'].map((id, index) => ({
+      id, name: `천군 테스트 ${index}`, type: index === 0 ? 'armor' as const : 'accessory' as const, set: 'command' as const, grade: 'rare' as const, level: 1, mainStat: 'leadership' as const, baseValue: 12, skillName: EQUIPMENT_SET_META.command.skillName, skillDescription: EQUIPMENT_SET_META.command.skillDescription,
+    }))
+    state.equipmentInventory.push(...commandItems)
+    expect(equipEquipment(state, guanYu.id, commandItems[0].id).ok).toBe(true)
+    expect(equipEquipment(state, guanYu.id, commandItems[1].id).ok).toBe(true)
+    expect(equipmentSetCounts(state, guanYu.id).command).toBe(2)
+    expect(equipmentBonus(state, guanYu.id).leadership).toBe(34)
+    const third = { ...commandItems[0], id: 'set-command-weapon', type: 'weapon' as const }
+    state.equipmentInventory.push(third)
+    expect(equipEquipment(state, guanYu.id, third.id).ok).toBe(true)
+    expect(equipmentSetCounts(state, guanYu.id).command).toBe(3)
+    expect(equipmentBonus(state, guanYu.id).leadership).toBe(54)
   })
 })
