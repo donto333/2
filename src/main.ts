@@ -10,6 +10,7 @@ import {
   launchFactionBattle,
   drawEquipment,
   enhanceEquipment,
+  equipmentBonus,
   ensureEquipmentState,
   equipEquipment,
   unequipEquipment,
@@ -43,6 +44,23 @@ let saveTimer: number | null = null
 let saveInFlight = false
 let saveQueued = false
 
+function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
+  return state.formation.map(id => {
+    const general = findGeneral(state, id)
+    if (!general) return null
+    const bonus = equipmentBonus(state, id)
+    return {
+      ...general,
+      leadership: general.leadership + bonus.leadership,
+      martial: general.martial + bonus.martial,
+      stratagem: general.stratagem + bonus.stratagem,
+      speed: general.speed + bonus.speed,
+      attack: general.attack + Math.round(bonus.martial * 0.45),
+      defense: general.defense + Math.round(bonus.leadership * 0.35),
+    }
+  }).filter((general): general is NonNullable<typeof general> => Boolean(general))
+}
+
 const leaderboard = createLeaderboardClient({
   identity: 'account',
   boardId: 'war-score-v1',
@@ -54,7 +72,7 @@ const leaderboard = createLeaderboardClient({
 const ui = new StrategyUI(root, {
   onSection: (section: Section) => {
     state.section = section
-    if (section === 'battle') arena.setGenerals(state.formation.map(id => findGeneral(state, id)).filter((general): general is NonNullable<typeof general> => Boolean(general)))
+    if (section === 'battle') arena.setGenerals(battleGenerals())
     ui.render(state)
     if (section === 'account') void refreshAccount()
     if (section === 'admin') {
@@ -85,7 +103,7 @@ const ui = new StrategyUI(root, {
   },
   onFormation: id => {
     toggleFormation(state, id)
-    arena.setGenerals(state.formation.map(item => findGeneral(state, item)).filter((general): general is NonNullable<typeof general> => Boolean(general)))
+    arena.setGenerals(battleGenerals())
     ui.render(state)
     ui.notify(state.lastNotice)
     queueAccountSave()
@@ -165,7 +183,7 @@ const ui = new StrategyUI(root, {
   },
   onBattleStart: () => {
     state.section = 'battle'
-    arena.setGenerals(state.formation.map(id => findGeneral(state, id)).filter((general): general is NonNullable<typeof general> => Boolean(general)))
+    arena.setGenerals(battleGenerals())
     arena.startBattle()
     pendingTicket = null
     void leaderboard.beginRun().then(result => {
