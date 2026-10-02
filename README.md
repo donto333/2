@@ -1,59 +1,148 @@
-# game-3d starter (three.js + Rapier)
+# 천하: 패왕의 시대
 
-A complete, small 3D game — **Sky Cores**: run, jump and dash across floating islands to collect
-every energy core before the clock runs out, avoiding patrol drones. It exists to be *changed*:
-the engine layer is fixed scaffolding, the game layer is the part you rewrite.
+Three.js와 Rapier 기반의 한국어 3D 전술 전략 게임입니다. 옥패의 부름으로 무장을 모집하고 성장시키며, 장수 스킬과 진형을 운용해 실시간 전장 **황혼의 관문**을 돌파하세요.
+
+## 주요 기능
+
+- **대장전**: 오늘의 작전과 현재 출전 진형을 확인합니다.
+- **무장 모집·성장**: 게임 내 재화로 1회 또는 10회 모집을 진행하고, 중복 무장은 성급으로 전환합니다. 총 65명의 삼국지 장수 모집 풀을 제공합니다.
+- **장수 관리**: 장수의 능력치와 스킬을 확인하고 레벨 강화, 스킬 해금, 출전 편성을 관리합니다.
+- **영토·내정**: 25개 도시에서 자원을 수확하고 건물을 강화합니다. 방어전, 세력전, 공성 출정을 통해 영토를 확장합니다.
+- **기술 연구**: 농정·상업·군제·학술 4개 분야의 58개 기술을 선행 조건에 따라 해금합니다.
+- **전장 출정**: 좌·중앙·우 기동, 장수 스킬, 전술 게이지를 조합해 3막 전투를 지휘합니다.
+- **온라인 계정·랭킹**: Manus OAuth로 로그인하면 진행도와 전적을 저장하고 공유 랭킹에 작전 점수를 기록할 수 있습니다. 로그인 없이도 로컬 플레이가 가능합니다.
+- **관리자 센터**: 운영 상태, 장수 콘텐츠, 시즌 게시 미리보기, 변경 기록과 계정·게임 상태를 관리자 권한으로 확인합니다.
+
+## 빠른 시작
+
+### 요구 사항
+
+- Node.js 20 이상
+- pnpm 10 이상
+
+### 설치 및 실행
 
 ```bash
 pnpm install
-pnpm dev      # http://localhost:5173
-pnpm build    # typecheck + production build + bundle budget
-pnpm test     # unit tests (rules, save, i18n, level)
-pnpm smoke    # after build: headless browser playthrough + screenshots in shots/
+pnpm dev
 ```
 
-## Layout
+`pnpm dev`는 Vite 게임 클라이언트와 온라인 API 서버를 함께 실행합니다.
 
-| Path | Role | Change it? |
-| --- | --- | --- |
-| `src/engine/loop.ts` | Fixed 60 Hz simulation + interpolated rendering | Rarely |
-| `src/engine/input.ts` | Keyboard/mouse, gamepad, touch → one action state | Add actions here |
-| `src/engine/physics.ts` | Rapier world, collider helpers, render interpolation | Rarely |
-| `src/engine/renderer.ts` | WebGL renderer, quality presets, bloom | Rarely |
-| `src/engine/audio.ts` | Music/SFX buses, synthesized SFX, `load()` for files | Add sounds |
-| `src/engine/save.ts` | Versioned localStorage save + leaderboard | Add fields + parsing |
-| `src/engine/i18n.ts` | en / zh-CN, browser detection, saved choice wins | Rarely |
-| `src/engine/assets.ts` | Cached GLTF/texture loading with progress | Use it for models |
-| `src/game/config.ts` | **All tuning numbers** | Yes |
-| `src/game/rules.ts` | Pure score/lives/clock/win rules (unit tested) | Yes |
-| `src/game/world.ts` | Level layout, sky, lights, islands, stones, lifts | Yes |
-| `src/game/player.ts` | Character controller + game feel + procedural model | Yes |
-| `src/game/*.ts` | Camera, cores, drones, particles, scene orchestration | Yes |
-| `src/ui/`, `src/styles/main.css` | HTML/CSS title, HUD, pause, settings, results | Yes |
-| `src/i18n/*.json` | All player-facing text (both files, same keys) | Yes |
+- 게임 클라이언트: `http://localhost:3000`
+- 온라인 API: `http://localhost:3001`
 
-## Rules for changes
+개발 서버의 포트와 호스트는 환경 변수로 변경할 수 있습니다.
 
-- **Simulation in `step()`, visuals in `render()`/`animate()`.** Gameplay state only changes in
-  fixed steps; read presses there with `input.consume(action)`, never `pressed()`.
-- **Rules stay pure.** Scoring, win/lose and progression go in `rules.ts` with tests; scene code
-  reports events and reads state.
-- **Every visible string is an i18n key** in both `en.json` and `zh-CN.json` (a test enforces
-  matching keys and placeholders). Chinese glyphs come from the subset font in `public/fonts/`;
-  if you add new Chinese text, check it renders (missing glyphs fall back to system fonts).
-- **UI is HTML/CSS**, not canvas. Keep the game look: display font, outlined text, hard offset
-  shadows, skewed buttons, notched panels. Menus must stay keyboard/gamepad navigable
-  (`data-nav` on focusable controls).
-- **Colliders come from the helpers** in `physics.ts` with the same sizes as the meshes.
-- Keep `npm run build` within budget (`scripts/check-size.mjs`) and `npm run smoke` green.
+```bash
+PORT=3000 API_PORT=3001 HOST=0.0.0.0 pnpm dev
+```
 
-## Controls
+## 실행 모드
 
-Keyboard/mouse: WASD move, mouse look (click to capture), Space jump (hold = higher), Shift
-sprint, F or left click dash, Esc pause. Gamepad: left stick, right stick, A jump, X/RB dash,
-LB sprint, Start pause. Touch: left-side stick, right-side drag to look, JUMP / DASH buttons.
+### 로컬 오프라인 플레이
 
-## Credits
+게임 로직과 진행도는 브라우저에서 실행되며, 로그인하지 않아도 플레이할 수 있습니다.
 
-Fonts: Sora, Figtree, Noto Sans SC — SIL Open Font License 1.1 (see `public/fonts/*-OFL.txt`).
-Libraries: three.js (MIT), Rapier (Apache-2.0).
+```bash
+pnpm dev
+```
+
+### 온라인 계정·랭킹 기능
+
+온라인 기능을 사용하려면 `.env.example`을 `.env`로 복사한 뒤 WebDev/Manus 런타임 값을 입력하세요. 실제 비밀키는 저장소에 커밋하지 마세요.
+
+```bash
+cp .env.example .env
+# .env에 실제 런타임 값 입력
+pnpm dev
+```
+
+온라인 서버는 Manus OAuth 세션과 데이터베이스를 사용해 계정 진행도, 저장 데이터, 랭킹 기록을 관리합니다. 온라인 기능에 필요한 환경 변수는 다음과 같습니다.
+
+| 변수 | 용도 |
+| --- | --- |
+| `MANUS_PROJECT_ID` | Manus 프로젝트 식별자 |
+| `MANUS_JWT_SECRET` | 서버 세션·토큰 검증용 비밀키 |
+| `MANUS_OAUTH_API_URL` | OAuth API 주소 |
+| `MANUS_OAUTH_PORTAL_URL` | 로그인 포털 주소 |
+| `DATABASE_URL` | 계정·랭킹 데이터베이스 연결 문자열 |
+| `PORT` | Vite 개발 서버 포트 (기본값 `3000`) |
+| `API_PORT` | API 서버 포트 (기본값 `3001`) |
+| `HOST` | Vite 바인딩 호스트 (기본값 `0.0.0.0`) |
+
+## 검증 및 빌드
+
+```bash
+pnpm typecheck       # TypeScript 타입 검사
+pnpm test            # Vitest 테스트 실행
+pnpm build           # dist/ 정적 게임 빌드
+pnpm smoke           # 빌드 결과 스모크 테스트
+pnpm manus:build-source
+```
+
+`pnpm build`는 `dist/`에 정적 게임 페이지를 생성하며, 게임 공유 메타데이터·파비콘·라우트 매니페스트도 함께 만듭니다.
+
+프로덕션 빌드 미리보기:
+
+```bash
+pnpm preview --host 0.0.0.0 --port 4173
+```
+
+## 게임 흐름
+
+1. **무장 모집**에서 장수를 확보합니다.
+2. **무장 관리**에서 장수의 레벨·스킬·출전 진형을 준비합니다.
+3. **영토·내정**에서 자원을 수확하고 도시와 건물을 성장시킵니다.
+4. **기술 연구**로 농업·교역·전투·방어·세력전 효과를 해금합니다.
+5. **황혼의 관문**에서 적의 공격 패턴을 읽고 좌·중앙·우 기동으로 대응합니다.
+6. 전투 결과를 저장하고 **천하 랭킹**에서 작전 점수를 확인합니다.
+
+전투는 서막·협곡 포위·결전의 3막으로 진행됩니다. 적의 좌익 포위, 중앙 돌파, 우익 유인 패턴에 맞는 명령을 선택하고, 연계와 전술 게이지를 활용하세요. 잘못된 명령은 위협도를 높여 패배로 이어질 수 있습니다.
+
+## 조작
+
+전투 화면에서 장수 선택, 좌·중앙·우 기동, 장수 스킬과 전술을 클릭 또는 터치로 조작합니다. 화면 왼쪽의 사령부 메뉴에서 모집, 장수, 영토, 연구, 계정 등 각 시스템으로 이동할 수 있습니다.
+
+## 프로젝트 구조
+
+| 경로 | 역할 |
+| --- | --- |
+| `src/engine/` | 고정 시뮬레이션 루프, 렌더러, 입력, 물리, 저장, 오디오 |
+| `src/game/` | 전략 상태·규칙, 3D 전장, 장수·부대 연출 |
+| `src/ui/` | HTML/CSS 기반 지휘 사령부 UI |
+| `src/styles/` | 다크 청록·옥색 중심의 전술 사령부 스타일 |
+| `public/assets/` | 장수·병종·전장 이미지 에셋 |
+| `server/` | Manus 계정·저장·리더보드 연동 API 및 DB 마이그레이션 |
+| `tests/` | 규칙, 저장, 국제화, 전략·영토, 미리보기 테스트 |
+| `scripts/` | 개발 서버, 빌드 보조, 용량 검사, 스모크 테스트 |
+
+## 온라인 아키텍처
+
+- `server: true`, `database: true` 기반의 WebDev 하이브리드 배포를 사용합니다.
+- 로그인은 Manus OAuth와 `webdev_app_session` 세션 쿠키를 사용합니다.
+- 계정 진행도는 보호된 `account.saveGameState` 절차로 저장합니다.
+- 공유 랭킹은 `war-score-v1` 보드와 `v1` 규칙 버전을 사용합니다. 전투 시작 시 티켓을 발급하고 결과 확정 시 한 번만 제출합니다.
+- 실시간 멀티플레이는 권위 서버와 Cloud Computer 연결이 필요한 후속 기능이며, 현재 온라인 계정 기능과는 분리되어 있습니다.
+
+## 독립 실행형 Windows 접속기
+
+`cheonharo-standalone.exe`는 `dist/` 빌드를 포함한 Windows x64 포터블 접속기입니다. 실행 시 로컬 서버를 열고 기본 브라우저에서 게임을 실행합니다.
+
+```bat
+cheonharo-standalone.exe --online
+cheonharo-standalone.exe --offline
+cheonharo-standalone.exe --port=4173
+```
+
+온라인 서버에 연결할 수 없으면 로컬 오프라인 모드로 전환할 수 있습니다. 독립 실행형 모드에서는 Manus OAuth와 관리자 API를 사용할 수 없으며, 해당 기능은 WebDev 배포 환경에서 제공합니다.
+
+## 에셋 및 라이선스
+
+번들 폰트는 Figtree, Sora, Noto Sans SC이며 라이선스 전문은 `public/fonts/`에 있습니다. 게임 이미지와 파비콘은 `assets/` 및 `public/assets/`에 포함된 프로젝트 에셋을 사용합니다.
+
+## 참고 문서
+
+- [설치 패키지 안내](INSTALL.md)
+- [아이디어 및 후속 작업](ideas.md)
+- [게임 공유 메타데이터](game-sharing.json)

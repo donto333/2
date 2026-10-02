@@ -1,0 +1,6 @@
+ALTER TABLE game_account_states
+  ADD COLUMN IF NOT EXISTS `generalData` TEXT NULL,
+  ADD COLUMN IF NOT EXISTS `formationData` TEXT NULL,
+  ADD COLUMN IF NOT EXISTS `citiesData` TEXT NULL,
+  ADD COLUMN IF NOT EXISTS `researchData` TEXT NULL,
+  ADD COLUMN IF NOT EXISTS `selectedCityId` varchar(64) NULL;
