@@ -57,7 +57,7 @@
 .sidebar{overflow-y:auto;overflow-x:hidden}
 
 /* Castle territory map treatment */
-.map-canvas{height:420px;background-image:linear-gradient(180deg,rgba(8,21,24,.28),rgba(8,21,24,.52)),url('/assets/territory-castle.webp');background-size:cover;background-position:center center;box-shadow:inset 0 0 90px rgba(5,14,16,.42)}
+.map-canvas{height:420px;background-image:linear-gradient(180deg,rgba(8,21,24,.28),rgba(8,21,24,.52)),url('/assets/territory/territory-china-map.webp');background-size:cover;background-position:center center;box-shadow:inset 0 0 90px rgba(5,14,16,.42)}
 .map-canvas:before{opacity:.14;background-size:180px 160px,220px 180px,48px 42px}
 .map-canvas:after{color:rgba(238,234,202,.46);text-shadow:0 2px 12px rgba(0,0,0,.45)}
 .city-marker{min-width:66px;padding:5px 6px;border-color:rgba(231,220,171,.4);background:rgba(7,20,22,.78);backdrop-filter:blur(5px);box-shadow:0 8px 18px rgba(0,0,0,.36),inset 0 0 16px rgba(82,224,196,.05)}
@@ -67,3 +67,17 @@
 .city-marker:hover,.city-marker.is-selected{transform:translate(-50%,-50%) scale(1.12)}
 .map-legend{padding-top:2px}
 @media (max-width:760px){.map-canvas{height:350px;background-position:center center}.city-marker{min-width:58px;padding:4px 5px}.city-marker strong{font-size:9px}.city-marker small{font-size:7px}.city-marker span{width:15px;height:15px;font-size:8px}.map-label{font-size:10px}}
+
+/* Chinese strategic map with embedded castle city art */
+.map-canvas{height:460px;background-image:linear-gradient(180deg,rgba(9,20,22,.2),rgba(9,20,22,.42)),url('/assets/territory/territory-china-map.webp');background-size:cover;background-position:center center;border-color:rgba(94,119,103,.42);box-shadow:inset 0 0 90px rgba(32,25,14,.2)}
+.map-canvas:before{opacity:.08}.map-canvas:after{content:'천하 · 삼국 전략 지도';color:rgba(72,60,38,.64);text-shadow:0 1px 4px rgba(245,232,188,.3)}
+.city-marker{min-width:76px;padding:0 7px 7px;border:1px solid rgba(246,197,109,.22);border-radius:10px;background:rgba(9,25,27,.84);box-shadow:0 8px 20px rgba(0,0,0,.32);backdrop-filter:blur(4px)}
+.city-marker-castle{position:relative;display:block;width:72px;height:49px;margin:-4px auto 1px;overflow:visible;pointer-events:none}.city-marker-castle img{position:absolute;left:50%;bottom:-5px;width:100%;height:100%;object-fit:contain;transform:translateX(-50%);filter:drop-shadow(0 5px 4px rgba(0,0,0,.5))}.city-marker-level{position:absolute!important;top:41px;left:50%;z-index:2;width:18px!important;height:18px!important;transform:translateX(-50%);font:650 9px/18px Sora,sans-serif!important;border-radius:50%!important}.city-marker strong{position:relative;z-index:2;margin-top:3px;font-size:10px;text-shadow:0 1px 7px rgba(0,0,0,.8)}.city-marker small{position:relative;z-index:2;font-size:8px;text-shadow:0 1px 5px rgba(0,0,0,.8)}
+.city-marker--lv3{min-width:92px}.city-marker--lv3 .city-marker-castle{width:91px;height:61px}.city-marker--lv3 .city-marker-level{top:52px!important}.city-marker--lv2{min-width:82px}.city-marker--lv2 .city-marker-castle{width:79px;height:54px}.city-marker--lv2 .city-marker-level{top:46px!important}.city-marker--lv1{min-width:68px}.city-marker--lv1 .city-marker-castle{width:62px;height:43px}.city-marker--lv1 .city-marker-level{top:37px!important}
+.city-marker.is-selected{border-color:var(--jade);box-shadow:0 0 0 3px rgba(82,224,196,.15),0 12px 28px rgba(0,0,0,.45)}
+.city-marker.is-ally .city-marker-castle{filter:drop-shadow(0 0 8px rgba(82,224,196,.24))}.city-marker.is-neutral .city-marker-castle{filter:drop-shadow(0 0 8px rgba(246,197,109,.2))}.city-marker.is-enemy .city-marker-castle{filter:drop-shadow(0 0 8px rgba(255,128,102,.16))}
+@media (max-width:760px){.map-canvas{height:390px;background-position:center center}.city-marker{transform:translate(-50%,-50%) scale(.86)}.city-marker:hover,.city-marker.is-selected{transform:translate(-50%,-50%) scale(.96)}.map-label{font-size:10px}}
+
+.city-marker-castle{display:block!important;width:72px;height:49px;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:inherit!important;font:inherit!important}
+.city-marker-castle img{display:block}
+.city-marker--lv3 .city-marker-castle{width:91px;height:61px}.city-marker--lv2 .city-marker-castle{width:79px;height:54px}.city-marker--lv1 .city-marker-castle{width:62px;height:43px}

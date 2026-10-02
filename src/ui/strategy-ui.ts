@@ -378,7 +378,8 @@ export class StrategyUI {
   private cityMarker(city: City, selectedId: string): string {
     const ownerClass = city.owner === '촉한' ? 'is-ally' : city.owner === '중립' ? 'is-neutral' : 'is-enemy'
     const position = { chengdu: 'left:12%;top:76%', hanzhong: 'left:23%;top:52%', fucheng: 'left:31%;top:72%', xindu: 'left:21%;top:84%', tianshui: 'left:37%;top:28%', wuwei: 'left:20%;top:15%', xiangyang: 'left:52%;top:51%', wancheng: 'left:45%;top:61%', jiangling: 'left:55%;top:67%', yiling: 'left:61%;top:73%', changsha: 'left:58%;top:87%', lingling: 'left:48%;top:93%', guiyang: 'left:69%;top:91%', jianye: 'left:88%;top:76%', wujun: 'left:82%;top:62%', kuaiji: 'left:91%;top:91%', poyang: 'left:76%;top:73%', xuchang: 'left:63%;top:23%', luoyang: 'left:53%;top:9%', ye: 'left:67%;top:7%', chenliu: 'left:76%;top:16%', puyang: 'left:84%;top:24%', hefei: 'left:76%;top:43%', shouchun: 'left:84%;top:49%', jiujiang: 'left:72%;top:56%' }[city.id] ?? 'left:50%;top:50%'
-    return `<button class="city-marker ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span>${city.level}</span><strong>${city.name}</strong><small>${city.chineseName}</small></button>`
+    const castle = city.level >= 3 ? 'castle-city-major' : city.level === 2 ? 'castle-city-medium' : 'castle-city-minor'
+    return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="lazy"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong><small>${city.chineseName}</small></button>`
   }
 
   private cityManagementCard(city: City, income: ReturnType<typeof cityIncome>, state: StrategyState): string {

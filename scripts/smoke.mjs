@@ -120,6 +120,8 @@ try {
   if (await page.locator('.result-modal.is-visible').count()) await page.click('[data-action="close-result"]')
   await page.click('[data-action="section"][data-section="territory"]')
   await page.waitForSelector('.territory-map')
+  if (await page.locator('.city-marker-castle img').count() !== 25) throw new Error('territory city castle art is incomplete')
+  if (await page.locator('.city-marker-castle img').evaluateAll(images => images.some(image => !image.complete || image.naturalWidth === 0))) throw new Error('territory castle art failed to load')
   await page.locator('.map-canvas').scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${out}/03-territory.png` })
   await page.click('[data-action="section"][data-section="admin"]')
