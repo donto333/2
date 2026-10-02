@@ -368,15 +368,21 @@ export class StrategyUI {
     return `<article class="research-node ${node.unlocked ? 'is-unlocked' : ''} ${locked ? 'is-locked' : ''}"><div class="research-tier">TIER ${node.tier}</div><div><h4>${node.name}</h4><p>${node.description}</p></div><div class="research-node-footer"><span>${node.unlocked ? '✓ 연구 완료' : locked ? '선행 연구 필요' : researchCost(node)}</span>${node.unlocked ? '<span class="research-check">적용 중</span>' : `<button class="mini-action mini-action--research" data-action="research" data-research="${node.id}" ${locked ? 'disabled' : ''}>연구 시작 <span>→</span></button>`}</div></article>`
   }
 
+  private portraitAsset(general: General): string {
+    return general.portraitPath ?? `/assets/generals/${general.id}.svg`
+  }
+
   private portrait(general: General, className = ''): string {
-    const imageClass = general.portraitPath ? ' has-portrait' : ''
-    const imageStyle = general.portraitPath ? `--portrait:url('${general.portraitPath}');` : ''
+    const portraitPath = this.portraitAsset(general)
+    const imageClass = ' has-portrait'
+    const imageStyle = `--portrait:url('${portraitPath}');`
     return `<div class="general-portrait${className ? ` ${className}` : ''}${imageClass}" style="--accent:${general.accent};${imageStyle}"><span>${general.portrait}</span><i></i></div>`
   }
 
   private ritualPortrait(general: General): string {
-    const imageClass = general.portraitPath ? ' has-portrait' : ''
-    const imageStyle = general.portraitPath ? `--portrait:url('${general.portraitPath}');` : ''
+    const portraitPath = this.portraitAsset(general)
+    const imageClass = ' has-portrait'
+    const imageStyle = `--portrait:url('${portraitPath}');`
     return `<div class="ritual-portrait${imageClass}" style="--accent:${general.accent};${imageStyle}"><span>${general.portrait}</span><i></i></div>`
   }
 
@@ -392,7 +398,8 @@ export class StrategyUI {
 
   private generalCard(general: General, inFormation: boolean): string {
     const meta = GRADE_META[general.grade]
-    return `<article class="general-card ${inFormation ? 'is-deployed' : ''}" style="--accent:${general.accent};--grade:${meta.color}"><div class="card-art"><div class="art-grid"></div><div class="art-spark ${general.portraitPath ? 'has-portrait' : ''}" style="--portrait:url('${general.portraitPath ?? ''}')">${general.portrait}</div><div class="grade-tag"><span>${general.grade}</span><small>${meta.label}</small></div><div class="deploy-tag">${inFormation ? '출전 중' : '대기'}</div></div><div class="general-card-body"><div class="general-line"><div><h3>${general.name}<span class="star-row">${'★'.repeat(general.stars)}${'☆'.repeat(5 - general.stars)}</span></h3><p>${general.epithet}</p></div><span class="role-tag">${general.role}</span></div><div class="level-line"><span>Lv.${general.level}</span><span>전투력 <b>${formatNumber(combatPower(general))}</b></span></div><div class="stat-bars stat-bars--attributes">${this.attributeRows(general)}</div><div class="skill-preview"><span>◈ ${general.skillName} · ${skillRank(general)}단계 · 위력 ${skillPower(general)}</span><small>${general.skillDescription}</small></div><div class="general-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : '출전 편성'}</button><button class="mini-action" data-action="upgrade" data-id="${general.id}">강화 <span>＋</span></button>${general.skillUnlocked ? `<span class="skill-ready">스킬 ${skillRank(general)}단계</span>` : `<button class="mini-action mini-action--skill" data-action="skill" data-id="${general.id}">${general.level >= skillUnlockLevel(general) ? '스킬 해금' : `Lv.${skillUnlockLevel(general)} 해금`} <span>◈</span></button>`}</div></div></article>`
+    const portraitPath = this.portraitAsset(general)
+    return `<article class="general-card ${inFormation ? 'is-deployed' : ''}" style="--accent:${general.accent};--grade:${meta.color}"><div class="card-art"><div class="art-grid"></div><div class="art-spark has-portrait" style="--portrait:url('${portraitPath}')">${general.portrait}</div><div class="grade-tag"><span>${general.grade}</span><small>${meta.label}</small></div><div class="deploy-tag">${inFormation ? '출전 중' : '대기'}</div></div><div class="general-card-body"><div class="general-line"><div><h3>${general.name}<span class="star-row">${'★'.repeat(general.stars)}${'☆'.repeat(5 - general.stars)}</span></h3><p>${general.epithet}</p></div><span class="role-tag">${general.role}</span></div><div class="level-line"><span>Lv.${general.level}</span><span>전투력 <b>${formatNumber(combatPower(general))}</b></span></div><div class="stat-bars stat-bars--attributes">${this.attributeRows(general)}</div><div class="skill-preview"><span>◈ ${general.skillName} · ${skillRank(general)}단계 · 위력 ${skillPower(general)}</span><small>${general.skillDescription}</small></div><div class="general-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : '출전 편성'}</button><button class="mini-action" data-action="upgrade" data-id="${general.id}">강화 <span>＋</span></button>${general.skillUnlocked ? `<span class="skill-ready">스킬 ${skillRank(general)}단계</span>` : `<button class="mini-action mini-action--skill" data-action="skill" data-id="${general.id}">${general.level >= skillUnlockLevel(general) ? '스킬 해금' : `Lv.${skillUnlockLevel(general)} 해금`} <span>◈</span></button>`}</div></div></article>`
   }
 
   private battleSection(state: StrategyState): string {

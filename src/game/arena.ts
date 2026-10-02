@@ -34,6 +34,7 @@ export interface ArenaCallbacks {
 
 interface BattleUnit {
   group: THREE.Group
+  model: THREE.Group
   general: General
   target: THREE.Vector3
 }
@@ -49,13 +50,6 @@ interface ArenaEffect {
 const WORLD_SIZE = 42
 const jade = 0x52e0c4
 const ember = 0xff8066
-const TROOP_ASSETS: Record<General['role'], string> = {
-  보병: '/assets/troops/infantry.webp',
-  기병: '/assets/troops/cavalry.webp',
-  궁병: '/assets/troops/archer.webp',
-  책사: '/assets/troops/infantry.webp',
-}
-
 export class Arena {
   private readonly renderer: THREE.WebGLRenderer
   private readonly scene = new THREE.Scene()
@@ -237,7 +231,8 @@ export class Arena {
     const positions = [new THREE.Vector3(-4.2, 0, 6), new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(4.2, 0, 6)]
     this.generals.forEach((general, index) => {
       const group = this.createUnit(general, jade, positions[index] ?? positions[0])
-      const unit: BattleUnit = { group, general, target: positions[index] ?? positions[0].clone() }
+      const model = group.userData.model as THREE.Group
+      const unit: BattleUnit = { group, model, general, target: positions[index] ?? positions[0].clone() }
       this.playerUnits.push(unit)
       this.scene.add(group)
     })
@@ -248,25 +243,107 @@ export class Arena {
     const group = new THREE.Group()
     group.position.copy(position)
     group.userData.baseY = 0
-    const troopMaterial = new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthTest: true, depthWrite: false, fog: false, toneMapped: false })
-    const troopSprite = new THREE.Sprite(troopMaterial)
     const mounted = general.role === '기병'
-    troopSprite.position.y = mounted ? 1.38 : 1.16
-    troopSprite.scale.set(mounted ? 2.35 : 1.62, mounted ? 2.75 : 2.45, 1)
-    const textureLoader = new THREE.TextureLoader()
-    textureLoader.load(TROOP_ASSETS[general.role], texture => {
-      texture.colorSpace = THREE.SRGBColorSpace
-      texture.anisotropy = Math.min(this.renderer.capabilities.getMaxAnisotropy(), 8)
-      troopMaterial.map = texture
-      troopMaterial.opacity = 0.98
-      troopMaterial.needsUpdate = true
-    })
     const bannerColor = teamColor === ember ? 0x8e3340 : general.accent
     const banner = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.75), new THREE.MeshStandardMaterial({ color: bannerColor, side: THREE.DoubleSide, roughness: 0.8 }))
     banner.position.set(-0.38, mounted ? 2.35 : 2.15, 0)
     banner.rotation.y = Math.PI / 2
-    group.add(this.createSquad(teamColor, mounted), troopSprite, banner)
+    const model = this.createGeneralModel(general, teamColor)
+    group.userData.model = model
+    group.add(this.createSquad(teamColor, mounted), model, banner)
     return group
+  }
+
+  private createGeneralModel(general: General, teamColor: number): THREE.Group {
+    const model = new THREE.Group()
+    model.name = `model-${general.id}`
+    const seed = [...general.id].reduce((sum, character) => sum + character.charCodeAt(0), 0)
+    const accent = new THREE.Color(general.accent)
+    const team = new THREE.Color(teamColor)
+    const armorColor = accent.clone().lerp(team, 0.28)
+    const darkColor = armorColor.clone().multiplyScalar(0.38)
+    const metal = new THREE.MeshStandardMaterial({ color: armorColor, roughness: 0.58, metalness: 0.5 })
+    const darkMetal = new THREE.MeshStandardMaterial({ color: darkColor, roughness: 0.72, metalness: 0.32 })
+    const skin = new THREE.MeshStandardMaterial({ color: 0xc78e74, roughness: 0.9 })
+    const trim = new THREE.MeshStandardMaterial({ color: 0xd8b574, roughness: 0.42, metalness: 0.62 })
+    const weapon = new THREE.Group()
+    weapon.name = 'signature-weapon'
+
+    if (general.role === '기병') {
+      const horse = new THREE.Mesh(new THREE.SphereGeometry(0.64, 12, 8), darkMetal)
+      horse.scale.set(1.35, 0.64, 1.28)
+      horse.position.set(0, 0.55, 0.28)
+      model.add(horse)
+      for (const x of [-0.38, 0.38]) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.62, 6), darkMetal)
+        leg.position.set(x, 0.25, 0.28)
+        model.add(leg)
+      }
+      const mane = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.78, 7), metal)
+      mane.rotation.z = Math.PI / 2
+      mane.position.set(-0.6, 0.86, 0.25)
+      model.add(mane)
+    }
+
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.46, 0.86, 8), metal)
+    torso.position.y = general.role === '기병' ? 1.25 : 0.86
+    torso.scale.x = 0.82 + (seed % 3) * 0.08
+    torso.castShadow = true
+    model.add(torso)
+    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.17, 0.38), darkMetal)
+    shoulder.position.y = torso.position.y + 0.26
+    shoulder.castShadow = true
+    model.add(shoulder)
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.29, 12, 8), skin)
+    head.position.y = torso.position.y + 0.78
+    head.castShadow = true
+    model.add(head)
+    const helmet = new THREE.Mesh(new THREE.ConeGeometry(0.39, 0.34 + (seed % 2) * 0.08, 8), metal)
+    helmet.position.y = head.position.y + 0.29
+    helmet.castShadow = true
+    model.add(helmet)
+    const plume = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.42, 6), trim)
+    plume.position.set((seed % 2 ? 0.08 : -0.08), helmet.position.y + 0.3, 0)
+    plume.rotation.z = seed % 2 ? -0.18 : 0.18
+    model.add(plume)
+    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.64, 6), darkMetal)
+    const armR = armL.clone()
+    armL.position.set(-0.46, torso.position.y + 0.02, 0)
+    armR.position.set(0.46, torso.position.y + 0.02, 0)
+    armL.rotation.z = 0.18
+    armR.rotation.z = -0.18
+    model.add(armL, armR)
+
+    if (general.role === '궁병') {
+      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 6, 18, Math.PI * 1.55), trim)
+      bow.position.set(-0.47, torso.position.y + 0.22, -0.15)
+      bow.rotation.y = Math.PI / 2
+      weapon.add(bow)
+      const string = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.72, 5), trim)
+      string.position.set(-0.47, torso.position.y + 0.22, -0.14)
+      string.rotation.z = Math.PI / 2
+      weapon.add(string)
+    } else if (general.role === '책사') {
+      const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.8, 7), trim)
+      staff.position.set(0.52, torso.position.y - 0.04, 0)
+      staff.rotation.z = -0.08
+      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.14, 1), new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.7, metalness: 0.35, roughness: 0.32 }))
+      orb.position.set(0.45, torso.position.y + 0.86, 0)
+      weapon.add(staff, orb)
+    } else {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(general.role === '기병' ? 0.11 : 0.14, general.role === '기병' ? 1.9 : 1.35, 0.07), trim)
+      blade.position.set(0.58, torso.position.y + 0.18, -0.02)
+      blade.rotation.z = general.role === '기병' ? -0.16 : -0.28
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.1), trim)
+      guard.position.set(0.58, torso.position.y - 0.4, -0.02)
+      guard.rotation.z = blade.rotation.z
+      weapon.add(blade, guard)
+    }
+    weapon.userData.motionPhase = (seed % 17) / 17
+    model.userData.weapon = weapon
+    model.add(weapon)
+    model.scale.setScalar(general.role === '기병' ? 1.1 : 1.02 + (seed % 3) * 0.04)
+    return model
   }
 
   private createSquad(teamColor: number, mounted: boolean): THREE.Group {
@@ -695,6 +772,7 @@ export class Arena {
     this.playerUnits.forEach(unit => {
       unit.group.position.lerp(unit.target, Math.min(delta * (1.15 + unit.general.speed / 75), 1))
       unit.group.position.y = Math.sin((this.clock.getElapsed() + unit.group.position.x) * 1.6) * 0.035
+      this.animateModel(unit.model, unit.general, this.clock.getElapsed())
     })
     if (this.selectionRing && this.playerUnits[this.selectedUnit]) {
       const unit = this.playerUnits[this.selectedUnit]
@@ -705,6 +783,8 @@ export class Arena {
     }
     this.enemyUnits.forEach((unit, index) => {
       unit.position.y = Math.sin(this.clock.getElapsed() * 1.8 + index) * 0.035
+      const model = unit.userData.model as THREE.Group | undefined
+      if (model) this.animateModel(model, this.generals[index] ?? this.generals[0], this.clock.getElapsed() + index * 0.4)
     })
     if (!this.battleActive) return
     this.skillCooldown = Math.max(0, this.skillCooldown - delta)
@@ -742,6 +822,16 @@ export class Arena {
       this.callbacks.onBattleEnd({ won, score, durationMs: Math.round(this.battleElapsed * 1000) })
       this.callbacks.onEvent(won ? '전투 승리 · 세 번의 파도를 모두 넘었습니다.' : '전투 패배 · 위협도가 한계에 도달했습니다.')
     }
+  }
+
+  private animateModel(model: THREE.Group, general: General | undefined, elapsed: number): void {
+    if (!general) return
+    const phase = Number(model.userData.weapon?.userData.motionPhase ?? 0)
+    const motion = elapsed * (1.8 + general.speed / 160) + phase * Math.PI * 2
+    model.rotation.z = Math.sin(motion) * 0.035
+    model.position.y = Math.sin(motion * 1.7) * 0.045
+    const weapon = model.userData.weapon as THREE.Group | undefined
+    if (weapon) weapon.rotation.z = Math.sin(motion * 1.35) * 0.1
   }
 
   private animate = (): void => {
