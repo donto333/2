@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allGenerals, combatPower, createInitialState, ensureResearchRoster, findGeneral, recruit, skillPower, skillUnlockLevel, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { allGenerals, combatPower, createInitialState, ensureResearchRoster, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -66,6 +66,16 @@ describe('commander attributes', () => {
     expect(result.ok).toBe(true)
     expect(result.rewards).toHaveLength(10)
     expect(state.honor).toBe(before - 900)
+  })
+
+  it('keeps formation at three slots and replaces the last slot when full', () => {
+    const state = createInitialState()
+    state.generals.push(findGeneral({ ...state, generals: allGenerals() } as typeof state, 'liu-bei')!)
+    toggleFormation(state, 'liu-bei')
+    expect(state.formation).toEqual(['guan-yu', 'zhao-yun', 'liu-bei'])
+    toggleFormation(state, 'zhuge-liang')
+    expect(state.formation).toHaveLength(3)
+    expect(state.formation[2]).toBe('zhuge-liang')
   })
 
   it('starts with 58 technologies across four branches', () => {

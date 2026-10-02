@@ -2,6 +2,7 @@ import { GRADE_META, RESOURCE_META, allGenerals, type City, type CityBuilding, t
 import type { BattleOpponent, BattleSnapshot, BattleTroopStatus } from '../game/arena'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
+type RosterSort = 'power' | 'level' | 'grade' | 'name' | 'role'
 
 export interface AuthView {
   status: 'authenticated' | 'logged_out' | 'offline'
@@ -88,15 +89,20 @@ export class StrategyUI {
   private adminAccountSearch = ''
   private adminGameAccounts: GameAccountView[] = []
   private adminGameDataError: string | null = null
+  private rosterSort: RosterSort = 'power'
+  private rosterSortDescending = true
+  private renderedState: StrategyState | null = null
 
   constructor(root: HTMLElement, callbacks: StrategyUiCallbacks) {
     this.root = root
     this.callbacks = callbacks
     root.addEventListener('click', this.handleClick)
+    root.addEventListener('change', this.handleChange)
     root.addEventListener('submit', this.handleSubmit)
   }
 
   render(state: StrategyState): void {
+    this.renderedState = state
     this.root.innerHTML = this.shell(state)
     if (this.latestBattle) this.updateBattle(this.latestBattle)
   }
@@ -266,7 +272,9 @@ export class StrategyUI {
           <div class="sidebar-label">본진</div>
           ${this.navButton('overview', '◈', '대장전', state.section)}
           ${this.navButton('recruit', '✦', '무장 모집', state.section, state.lastRecruit ? 'NEW' : '')}
-          ${this.navButton('roster', '◇', '무장 관리', state.section, `${state.generals.length}`)}
+          ${this.navButton('roster', '◇', '보유 무장', state.section, `${state.generals.length}`)}
+          ${this.navButton('codex', '▤', '무장 도감', state.section, `${allGenerals().length}`)}
+          ${this.navButton('formation', '⌘', '출전 편성', state.section, `${state.formation.length}/3`)}
           ${this.navButton('territory', '⌂', '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === '촉한').length}`)}
           ${this.navButton('research', '✧', '기술 연구', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">작전</div>
@@ -293,6 +301,8 @@ export class StrategyUI {
   private renderSection(state: StrategyState): string {
     if (state.section === 'recruit') return this.recruitSection(state)
     if (state.section === 'roster') return this.rosterSection(state)
+    if (state.section === 'codex') return this.codexSection(state)
+    if (state.section === 'formation') return this.formationSection(state)
     if (state.section === 'territory') return this.territorySection(state)
     if (state.section === 'research') return this.researchSection(state)
     if (state.section === 'battle') return this.battleSection(state)
@@ -315,8 +325,40 @@ export class StrategyUI {
   }
 
   private rosterSection(state: StrategyState): string {
-    return `<section class="page-section page-section--roster"><div class="section-heading section-heading--compact"><div><span class="eyebrow">WARLORD ARCHIVE · 03</span><h1>무장 관리</h1><p class="heading-copy">성장시킨 무장을 진형에 배치하십시오.</p></div><div class="section-counter"><span>총 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="roster-toolbar"><div class="filter-tabs"><button class="filter-tab is-active">전체 <b>${state.generals.length}</b></button><button class="filter-tab">천명 <b>${state.generals.filter(g => g.grade === 5).length}</b></button><button class="filter-tab">명장 <b>${state.generals.filter(g => g.grade === 4).length}</b></button></div><span class="toolbar-note">카드를 눌러 출전 여부를 전환 · 최대 3명</span></div><div class="roster-grid">${state.generals.map(general => this.generalCard(general, state.formation.includes(general.id))).join('')}</div></section>`
+    const generals = this.sortedOwnedGenerals(state)
+    const sortOptions: Array<[RosterSort, string]> = [['power', '전투력'], ['level', '레벨'], ['grade', '등급'], ['name', '이름'], ['role', '병과']]
+    return `<section class="page-section page-section--roster"><div class="section-heading section-heading--compact"><div><span class="eyebrow">OWNED GENERALS · 03</span><h1>보유 무장</h1><p class="heading-copy">성장시킨 무장을 정렬하고, 출전 진형에 배치하십시오.</p></div><div class="section-counter"><span>총 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="roster-toolbar roster-toolbar--expanded"><div class="filter-tabs"><button class="filter-tab is-active">전체 <b>${state.generals.length}</b></button><button class="filter-tab">천명 <b>${state.generals.filter(g => g.grade === 5).length}</b></button><button class="filter-tab">명장 <b>${state.generals.filter(g => g.grade === 4).length}</b></button></div><div class="roster-sort-controls"><label>정렬 <select data-action="roster-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.rosterSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="roster-sort-direction" title="정렬 방향">${this.rosterSortDescending ? '↓' : '↑'}</button><button class="ghost-button ghost-button--small" data-action="section" data-section="formation">편성 화면 열기 →</button></div></div><div class="roster-summary"><span>보유 ${state.generals.length}명 · 출전 ${state.formation.length}/3명</span><span>${this.sortLabel()} 기준 ${this.rosterSortDescending ? '높은 순' : '낮은 순'}</span></div><div class="roster-grid">${generals.map(general => this.generalCard(general, state.formation.includes(general.id))).join('')}</div></section>`
   }
+
+  private codexSection(state: StrategyState): string {
+    const catalog = allGenerals()
+    const ownedIds = new Set(state.generals.map(general => general.id))
+    const ownedCount = catalog.filter(general => ownedIds.has(general.id)).length
+    return `<section class="page-section page-section--codex"><div class="section-heading section-heading--compact"><div><span class="eyebrow">GENERAL CODEX · 04</span><h1>무장 도감</h1><p class="heading-copy">천하에 이름을 남긴 65명의 무장과 해금 현황을 확인하십시오.</p></div><div class="section-counter"><span>수집 현황</span><strong>${ownedCount}<small> / ${catalog.length}</small></strong></div></div><div class="codex-summary glass-card"><div><span class="eyebrow">COLLECTION PROGRESS</span><h3>옥패 기록원</h3><p>모집으로 영입한 무장은 상세 정보와 성장 상태가 도감에 기록됩니다.</p></div><div class="codex-progress"><strong>${Math.round((ownedCount / catalog.length) * 100)}%</strong><i><b style="width:${(ownedCount / catalog.length) * 100}%"></b></i><small>${ownedCount}명 영입 · ${catalog.length - ownedCount}명 미영입</small></div></div><div class="codex-grid">${catalog.map(general => this.codexCard(general, ownedIds.has(general.id))).join('')}</div></section>`
+  }
+
+  private formationSection(state: StrategyState): string {
+    const bench = this.sortedOwnedGenerals(state).filter(general => !state.formation.includes(general.id))
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">FORMATION COMMAND · 05</span><h1>출전 편성</h1><p class="heading-copy">세 개의 전열 슬롯에 장수를 배치해 황혼의 관문을 돌파할 진형을 완성하십시오.</p></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">ACTIVE DEPLOYMENT</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>아래 장수를 눌러 편성에 넣거나 해제할 수 있습니다. 세 번째 슬롯은 상황에 맞춰 교체하십시오.</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '슬롯을 채우는 중'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">AVAILABLE RESERVE</span><h3>대기 중인 보유 무장</h3></div><span class="toolbar-note">전투력 순으로 표시</span></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
+  }
+
+  private sortedOwnedGenerals(state: StrategyState): General[] {
+    return [...state.generals].sort((a, b) => {
+      const direction = this.rosterSortDescending ? -1 : 1
+      const values: Record<RosterSort, [string | number, string | number]> = {
+        power: [combatPower(a), combatPower(b)], level: [a.level, b.level], grade: [a.grade, b.grade], name: [a.name, b.name], role: [a.role, b.role],
+      }
+      const [left, right] = values[this.rosterSort]
+      if (left < right) return -1 * direction
+      if (left > right) return 1 * direction
+      return a.name.localeCompare(b.name, 'ko')
+    })
+  }
+
+  private sortLabel(): string {
+    return ({ power: '전투력', level: '레벨', grade: '등급', name: '이름', role: '병과' } as Record<RosterSort, string>)[this.rosterSort]
+  }
+
 
   private resourceTokens(state: StrategyState): string {
     const values = { ...state.resources, silver: state.silver }
@@ -429,6 +471,23 @@ export class StrategyUI {
     return `<article class="general-card ${inFormation ? 'is-deployed' : ''}" style="--accent:${general.accent};--grade:${meta.color}"><div class="card-art"><div class="art-grid"></div><div class="art-spark has-portrait" style="--portrait:url('${portraitPath}')">${general.portrait}</div><div class="grade-tag"><span>${general.grade}</span><small>${meta.label}</small></div><div class="deploy-tag">${inFormation ? '출전 중' : '대기'}</div></div><div class="general-card-body"><div class="general-line"><div><h3>${general.name}<span class="star-row">${'★'.repeat(general.stars)}${'☆'.repeat(5 - general.stars)}</span></h3><p>${general.epithet}</p></div><span class="role-tag">${general.role}</span></div><div class="level-line"><span>Lv.${general.level}</span><span>전투력 <b>${formatNumber(combatPower(general))}</b></span></div><div class="stat-bars stat-bars--attributes">${this.attributeRows(general)}</div><div class="skill-preview"><span>◈ ${general.skillName} · ${skillRank(general)}단계 · 위력 ${skillPower(general)}</span><small>${general.skillDescription}</small></div><div class="general-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : '출전 편성'}</button><button class="mini-action" data-action="upgrade" data-id="${general.id}">강화 <span>＋</span></button>${general.skillUnlocked ? `<span class="skill-ready">스킬 ${skillRank(general)}단계</span>` : `<button class="mini-action mini-action--skill" data-action="skill" data-id="${general.id}">${general.level >= skillUnlockLevel(general) ? '스킬 해금' : `Lv.${skillUnlockLevel(general)} 해금`} <span>◈</span></button>`}</div></div></article>`
   }
 
+  private codexCard(general: General, owned: boolean): string {
+    const meta = GRADE_META[general.grade]
+    const hidden = owned ? '' : ' codex-card--locked'
+    return `<article class="codex-card${hidden}" style="--accent:${general.accent};--grade:${meta.color}"><div class="codex-card-art">${this.portrait(general, 'codex-portrait')}<span class="codex-grade">${general.grade} · ${meta.label}</span><span class="codex-state">${owned ? '영입 완료' : '미영입'}</span></div><div class="codex-card-body"><div class="codex-card-heading"><div><h3>${owned ? general.name : '???'}</h3><p>${owned ? general.epithet : '모집으로 인장을 해금하십시오.'}</p></div><span>${owned ? general.role : '잠김'}</span></div>${owned ? `<div class="codex-stat-line"><span>Lv.${general.level}</span><b>${formatNumber(combatPower(general))}</b><small>${general.skillName}</small></div>` : '<div class="codex-lock-note">옥패의 기록이 아직 닫혀 있습니다.</div>'}</div></article>`
+  }
+
+  private formationSlot(state: StrategyState, index: number): string {
+    const id = state.formation[index]
+    const general = id ? state.generals.find(item => item.id === id) : undefined
+    if (!general) return `<div class="formation-slot formation-slot--empty"><span>${String(index + 1).padStart(2, '0')}</span><strong>빈 슬롯</strong><small>대기 무장을 선택하십시오.</small></div>`
+    return `<button class="formation-slot formation-slot--filled" data-action="formation" data-id="${general.id}" style="--accent:${general.accent}"><span class="formation-slot-index">${String(index + 1).padStart(2, '0')}</span>${this.portrait(general, 'formation-portrait')}<strong>${general.name}</strong><small>${general.role} · Lv.${general.level}</small><b>${formatNumber(combatPower(general))}</b><em>클릭해 편성 해제</em></button>`
+  }
+
+  private formationBenchCard(general: General): string {
+    return `<article class="formation-bench-card" style="--accent:${general.accent}">${this.portrait(general, 'formation-bench-portrait')}<div><strong>${general.name}</strong><small>${general.role} · ${GRADE_META[general.grade].label} · Lv.${general.level}</small></div><b>${formatNumber(combatPower(general))}</b><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">편성</button></article>`
+  }
+
   private battleSection(state: StrategyState): string {
     const battle = this.latestBattle
     const selectedGeneral = state.generals.find(general => general.name === battle?.selectedName) ?? state.generals.find(general => general.id === state.formation[0])
@@ -511,7 +570,7 @@ export class StrategyUI {
     return `<div class="mini-general">${this.portrait(general)}<div><strong>${general.name}</strong><small>Lv.${general.level} · ${general.role}</small></div><b>${general.stars}★</b></div>`
   }
 
-  private handleClick = (event: Event): void => {
+  private handleClick = (event: MouseEvent): void => {
     const target = event.target as HTMLElement
     const button = target.closest<HTMLElement>('[data-action]')
     if (!button) return
@@ -521,6 +580,13 @@ export class StrategyUI {
     else if (action === 'upgrade') this.callbacks.onUpgrade(button.dataset.id ?? '')
     else if (action === 'skill') this.callbacks.onSkill(button.dataset.id ?? '')
     else if (action === 'formation') this.callbacks.onFormation(button.dataset.id ?? '')
+    else if (action === 'roster-sort') {
+      this.rosterSort = (button as HTMLSelectElement).value as RosterSort
+      if (this.renderedState) this.render(this.renderedState)
+    } else if (action === 'roster-sort-direction') {
+      this.rosterSortDescending = !this.rosterSortDescending
+      if (this.renderedState) this.render(this.renderedState)
+    }
     else if (action === 'city-select') this.callbacks.onCitySelect(button.dataset.city ?? '')
     else if (action === 'conquer') this.callbacks.onConquest(button.dataset.city ?? '')
     else if (action === 'defense') this.callbacks.onDefense(button.dataset.city ?? '')
@@ -577,6 +643,12 @@ export class StrategyUI {
       button.closest('.recruit-results')?.remove()
       this.callbacks.onRecruit(10)
     }
+  }
+  private handleChange = (event: Event): void => {
+    const select = event.target as HTMLSelectElement
+    if (!select.matches('[data-action="roster-sort"]')) return
+    this.rosterSort = select.value as RosterSort
+    if (this.renderedState) this.render(this.renderedState)
   }
   private handleSubmit = (event: SubmitEvent): void => {
     const form = event.target as HTMLFormElement

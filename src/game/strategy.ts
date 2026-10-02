@@ -1,4 +1,4 @@
-export type Section = 'overview' | 'recruit' | 'roster' | 'territory' | 'research' | 'battle' | 'rank' | 'account' | 'admin'
+export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'territory' | 'research' | 'battle' | 'rank' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
 export type ResourceKey = 'grain' | 'silver' | 'wood' | 'iron' | 'influence'
