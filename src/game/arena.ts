@@ -27,6 +27,7 @@ export interface BattleSnapshot {
   skillCooldown: number
   activeEffects: ActiveBattleEffect[]
   opponentDeck: BattleOpponent[]
+  troopStatus: BattleTroopStatus[]
   difficulty: string
   difficultyMultiplier: number
   enemyPower: number
@@ -42,6 +43,16 @@ export interface BattleOpponent {
   portraitPath?: string
 }
 
+export interface BattleTroopStatus {
+  side: 'player' | 'enemy'
+  index: number
+  id: string
+  name: string
+  troops: number
+  maxTroops: number
+  alive: boolean
+}
+
 export interface ArenaCallbacks {
   onEvent: (message: string) => void
   onBattleEnd: (result: { won: boolean; score: number; durationMs: number }) => void
@@ -52,6 +63,9 @@ interface BattleUnit {
   model: THREE.Group
   general: General
   target: THREE.Vector3
+  troops: number
+  maxTroops: number
+  attackTimer: number
 }
 
 interface ArenaEffect {
@@ -95,6 +109,7 @@ export class Arena {
   private generals: General[] = []
   private enemyDeck: General[] = []
   private difficultyMultiplier = 0.86
+  private lastCombatPulse = 0
   private readonly effects: ArenaEffect[] = []
   private readonly activeBuffs: ActiveBattleEffect[] = []
   private readonly activeDebuffs: ActiveBattleEffect[] = []
@@ -244,6 +259,10 @@ export class Arena {
     }
   }
 
+  private troopCapacity(general: General): number {
+    return Math.round(620 + general.leadership * 6 + general.defense * 3 + general.level * 24 + general.grade * 70)
+  }
+
   setGenerals(generals: General[]): void {
     this.generals = generals.map(general => ({ ...general }))
     this.clearUnits()
@@ -251,7 +270,8 @@ export class Arena {
     this.generals.forEach((general, index) => {
       const group = this.createUnit(general, jade, positions[index] ?? positions[0])
       const model = group.userData.model as THREE.Group
-      const unit: BattleUnit = { group, model, general, target: positions[index] ?? positions[0].clone() }
+      const maxTroops = this.troopCapacity(general)
+      const unit: BattleUnit = { group, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16 }
       this.playerUnits.push(unit)
       this.scene.add(group)
     })
@@ -634,6 +654,7 @@ export class Arena {
     this.skillCooldown = 0
     this.lastPulse = 0
     this.lastVolley = -1
+    this.lastCombatPulse = 0
     this.difficultyMultiplier = 0.86
     this.activeBuffs.splice(0)
     this.activeDebuffs.splice(0)
@@ -653,7 +674,8 @@ export class Arena {
       const group = this.createUnit(general, ember, position)
       group.rotation.y = Math.PI
       const model = group.userData.model as THREE.Group
-      this.enemyUnits.push({ group, model, general, target: position.clone() })
+      const maxTroops = this.troopCapacity(general)
+      this.enemyUnits.push({ group, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15 })
       this.scene.add(group)
     })
     this.callbacks.onEvent(`작전 개시 · 무장 덱 ${this.enemyDeck.map(general => general.name).join(' · ')} · ${BATTLE_PATTERNS[0].warning}`)
@@ -663,7 +685,7 @@ export class Arena {
     if (!this.battleActive) return
     if (this.battleElapsed < this.nextCommandAt) return
     const unit = this.playerUnits[index]
-    if (!unit) return
+    if (!unit || unit.troops <= 0) return
     const target = new THREE.Vector3(-5 + index * 5, 0, -1 - index * 1.2)
     unit.target.copy(target)
     this.selectUnit(index)
@@ -692,6 +714,7 @@ export class Arena {
     this.comboTimer = result.success ? 4.2 + (hasBattleEffect(this.activeBuffs, 'chain-fury') ? 1.5 : 0) : 0
     if (result.success) {
       this.enemyMorale = Math.max(0, this.enemyMorale - result.moraleDamage)
+      this.dealTroopDamageToEnemy(result.moraleDamage * 2, `${unit.general.name}의 ${pattern.label}`, jade)
       this.spawnImpact(new THREE.Vector3(target.x, 0, target.z - 2), result.moraleDamage, jade)
       this.callbacks.onEvent(`${unit.general.name} · ${pattern.label} 파훼 성공 · 연계 ${this.combo} · 적 사기 -${result.moraleDamage}`)
     } else {
@@ -715,6 +738,7 @@ export class Arena {
       return
     }
     this.enemyMorale = Math.max(0, this.enemyMorale - result.moraleDamage)
+    if (result.moraleDamage > 0) this.dealTroopDamageToEnemy(result.moraleDamage * 2, tactic === 'feint' ? '유인책' : '전군 돌격', tactic === 'feint' ? jade : ember)
     this.spawnImpact(new THREE.Vector3(0, 0, -6), result.moraleDamage, tactic === 'feint' ? jade : ember)
     this.callbacks.onEvent(tactic === 'feint'
       ? `유인책 성공 · 적 전열을 끌어냈습니다 · 연계 ${this.combo} · 적 사기 -${result.moraleDamage}`
@@ -724,7 +748,7 @@ export class Arena {
   castSkill(): void {
     if (!this.battleActive) return
     const unit = this.playerUnits[this.selectedUnit]
-    if (!unit || !unit.general.skillUnlocked) {
+    if (!unit || unit.troops <= 0 || !unit.general.skillUnlocked) {
       this.callbacks.onEvent('아직 해금되지 않은 장수 스킬입니다.')
       return
     }
@@ -745,6 +769,7 @@ export class Arena {
     const amplifiedDamage = Math.round((impact.moraleDamage + flatDamage) * comboBonus * damageMultiplier)
     const consumedCombo = this.combo
     this.enemyMorale = Math.max(0, this.enemyMorale - amplifiedDamage)
+    this.dealTroopDamageToEnemy(amplifiedDamage * 3, unit.general.skillName, jade)
     this.skillCooldown = Math.max(2, impact.cooldown
       * (hasBattleEffect(this.activeBuffs, 'swift-step') ? 0.8 : 1)
       - (hasBattleEffect(this.activeBuffs, 'battle-focus') ? 1.5 : 0))
@@ -823,6 +848,49 @@ export class Arena {
     this.callbacks.onEvent(`적 전술 예고 · ${pattern.warning}`)
   }
 
+  private dealTroopDamage(target: BattleUnit, amount: number, source: string, color: number): void {
+    if (target.troops <= 0) return
+    const damage = Math.max(1, Math.round(amount))
+    target.troops = Math.max(0, target.troops - damage)
+    if (target.troops === 0) {
+      target.group.visible = false
+      this.callbacks.onEvent(`${target.general.name}의 병력이 전멸했습니다.`)
+    }
+    this.spawnImpact(target.group.position.clone(), damage, color)
+    if (this.battleElapsed - this.lastCombatPulse > 1.1) {
+      this.lastCombatPulse = this.battleElapsed
+      this.callbacks.onEvent(`${source} · ${target.general.name} 병력 -${damage} · 잔여 ${target.troops}/${target.maxTroops}`)
+    }
+  }
+
+  private dealTroopDamageToEnemy(amount: number, source: string, color: number): void {
+    const target = this.enemyUnits.find(unit => unit.troops > 0)
+    if (target) this.dealTroopDamage(target, amount, source, color)
+  }
+
+  private autoCombat(delta: number): void {
+    const attack = (attacker: BattleUnit, defenders: BattleUnit[], enemySide: boolean): void => {
+      if (attacker.troops <= 0) return
+      attacker.attackTimer -= delta
+      if (attacker.attackTimer > 0) return
+      const target = defenders.find(unit => unit.troops > 0)
+      if (!target) return
+      const baseDamage = 20 + attacker.general.attack * 0.34 + attacker.general.martial * 0.24 + attacker.general.leadership * 0.1
+      const damage = baseDamage * (enemySide ? this.difficultyMultiplier : 1)
+      attacker.attackTimer = Math.max(0.72, 1.85 - attacker.general.speed * 0.008)
+      this.dealTroopDamage(target, damage, attacker.general.name, enemySide ? ember : jade)
+    }
+    this.playerUnits.forEach(unit => attack(unit, this.enemyUnits, false))
+    this.enemyUnits.forEach(unit => attack(unit, this.playerUnits, true))
+  }
+
+  private troopStatus(): BattleTroopStatus[] {
+    return [
+      ...this.playerUnits.map((unit, index) => ({ side: 'player' as const, index, id: unit.general.id, name: unit.general.name, troops: unit.troops, maxTroops: unit.maxTroops, alive: unit.troops > 0 })),
+      ...this.enemyUnits.map((unit, index) => ({ side: 'enemy' as const, index, id: unit.general.id, name: unit.general.name, troops: unit.troops, maxTroops: unit.maxTroops, alive: unit.troops > 0 })),
+    ]
+  }
+
   private difficultyLabel(): string {
     return ['초급', '중급', '고급'][this.battlePhase] ?? '고급'
   }
@@ -855,6 +923,7 @@ export class Arena {
       skillCooldown: Math.max(0, this.skillCooldown),
       activeEffects: [...this.activeBuffs, ...this.activeDebuffs].map(effect => ({ ...effect })),
       opponentDeck: this.enemyDeck.map(general => ({ id: general.id, name: general.name, role: general.role, level: general.level, grade: general.grade, portraitPath: general.portraitPath })),
+      troopStatus: this.troopStatus(),
       difficulty: this.difficultyLabel(),
       difficultyMultiplier: this.difficultyMultiplier,
       enemyPower: this.enemyDeck.reduce((sum, enemy) => sum + enemy.leadership + enemy.martial + enemy.stratagem + enemy.speed + enemy.level * 4, 0),
@@ -883,6 +952,7 @@ export class Arena {
     if (!this.battleActive) return
     this.skillCooldown = Math.max(0, this.skillCooldown - delta)
     this.battleElapsed += delta
+    this.autoCombat(delta)
     this.tacticGauge = Math.min(100, this.tacticGauge + delta * 0.8 * (hasBattleEffect(this.activeBuffs, 'war-chant') ? 1.25 : 1))
     this.guardTimer = Math.max(0, this.guardTimer - delta)
     this.comboTimer = Math.max(0, this.comboTimer - delta)
@@ -923,10 +993,12 @@ export class Arena {
       this.lastPulse = this.battleElapsed
       this.callbacks.onEvent(`전황 갱신 · 적 사기 ${Math.round(this.enemyMorale)}%`)
     }
-    if (this.battleElapsed > 21 || this.enemyMorale <= 0 || this.threat >= 100) {
+    const playerTroops = this.playerUnits.reduce((sum, unit) => sum + unit.troops, 0)
+    const enemyTroops = this.enemyUnits.reduce((sum, unit) => sum + unit.troops, 0)
+    if (this.battleElapsed > 21 || playerTroops <= 0 || enemyTroops <= 0 || this.threat >= 100) {
       this.battleActive = false
-      const won = this.threat < 100
-      const score = Math.max(0, Math.round(4200 + this.combo * 240 + (100 - this.threat) * 18 + this.generals.reduce((sum, general) => sum + general.level * 41 + general.leadership + general.martial + general.stratagem + general.speed, 0)))
+      const won = enemyTroops <= 0 || (playerTroops > enemyTroops && this.threat < 100 && this.battleElapsed > 21)
+      const score = Math.max(0, Math.round(4200 + this.combo * 240 + (100 - this.threat) * 18 + playerTroops * 1.4 + this.generals.reduce((sum, general) => sum + general.level * 41 + general.leadership + general.martial + general.stratagem + general.speed, 0)))
       this.callbacks.onBattleEnd({ won, score, durationMs: Math.round(this.battleElapsed * 1000) })
       this.callbacks.onEvent(won ? '전투 승리 · 세 번의 파도를 모두 넘었습니다.' : '전투 패배 · 위협도가 한계에 도달했습니다.')
     }
