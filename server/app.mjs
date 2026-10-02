@@ -31,7 +31,7 @@ export function createGameApp(gameRouter, { leaderboard } = {}) {
   // Browser mutations use Webdev's JSON tRPC transport. Do not enable CORS or
   // accept form/text bodies: cross-origin forms must not create a Checkout or
   // mutate a player's save using the SameSite=None session cookie.
-  app.use('/api/trpc', (req, res, next) => {
+  app.use('/api/trpc', express.json({ limit: '2mb' }), (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store')
     if (req.method === 'POST' && !req.is('application/json')) {
       res.status(415).json({ error: 'json_required' })
