@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { skillPower, skillRank, type General } from './strategy'
 import { BATTLE_PATTERNS, phaseName, resolveBattleTactic, resolveTactic, type BattleTactic } from './battle-rules'
+import { effectDefinition, effectLoadout, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId } from './battle-effects'
 
 export interface BattleSnapshot {
   active: boolean
@@ -24,6 +25,7 @@ export interface BattleSnapshot {
   skillUnlocked: boolean
   skillReady: boolean
   skillCooldown: number
+  activeEffects: ActiveBattleEffect[]
   status: string
 }
 
@@ -79,6 +81,8 @@ export class Arena {
   private disposed = false
   private generals: General[] = []
   private readonly effects: ArenaEffect[] = []
+  private readonly activeBuffs: ActiveBattleEffect[] = []
+  private readonly activeDebuffs: ActiveBattleEffect[] = []
 
   constructor(canvas: HTMLCanvasElement, callbacks: ArenaCallbacks) {
     this.callbacks = callbacks
@@ -594,6 +598,8 @@ export class Arena {
     this.skillCooldown = 0
     this.lastPulse = 0
     this.lastVolley = -1
+    this.activeBuffs.splice(0)
+    this.activeDebuffs.splice(0)
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit))
     const enemyGenerals = this.generals.length ? this.generals : []
     enemyGenerals.forEach((general, index) => {
@@ -623,9 +629,19 @@ export class Arena {
     const result = resolveTactic(index, pattern.lane, this.combo, this.threat)
     this.nextCommandAt = this.battleElapsed + 0.42
     this.combo = result.combo
-    this.threat = result.threat
-    if (result.success) this.tacticGauge = Math.min(100, this.tacticGauge + 24)
-    this.comboTimer = result.success ? 4.2 : 0
+    const rawThreatDelta = result.threat - this.threat
+    const threatMultiplier = rawThreatDelta > 0
+      ? (hasBattleEffect(this.activeBuffs, 'jade-command') ? 0.65 : 1)
+        * (hasBattleEffect(this.activeBuffs, 'phoenix-guard') ? 0.75 : 1)
+        * (hasBattleEffect(this.activeDebuffs, 'confusion') ? 0.65 : 1)
+        * (hasBattleEffect(this.activeDebuffs, 'blind') ? 0.8 : 1)
+      : 1
+    this.threat = Math.max(0, Math.min(100, this.threat + rawThreatDelta * threatMultiplier))
+    if (result.success) {
+      const gaugeGain = 24 * (hasBattleEffect(this.activeBuffs, 'war-chant') ? 1.25 : 1)
+      this.tacticGauge = Math.min(100, this.tacticGauge + gaugeGain)
+    }
+    this.comboTimer = result.success ? 4.2 + (hasBattleEffect(this.activeBuffs, 'chain-fury') ? 1.5 : 0) : 0
     if (result.success) {
       this.enemyMorale = Math.max(0, this.enemyMorale - result.moraleDamage)
       this.spawnImpact(new THREE.Vector3(target.x, 0, target.z - 2), result.moraleDamage, jade)
@@ -669,15 +685,37 @@ export class Arena {
       return
     }
     const impact = this.skillImpact(unit.general)
-    const comboBonus = 1 + Math.min(this.combo, 8) * 0.08
-    const amplifiedDamage = Math.round(impact.moraleDamage * comboBonus)
+    const loadout = effectLoadout(unit.general.id, unit.general.role)
+    this.applyEffect('buff', loadout.buff)
+    this.applyEffect('debuff', loadout.debuff)
+    const comboBonus = 1 + Math.min(this.combo, 8) * (hasBattleEffect(this.activeBuffs, 'chain-fury') ? 0.088 : 0.08)
+    const damageMultiplier = (hasBattleEffect(this.activeBuffs, 'dragon-might') ? 1.18 : 1)
+      * (hasBattleEffect(this.activeBuffs, 'chain-fury') ? 1.1 : 1)
+      * (hasBattleEffect(this.activeDebuffs, 'armor-break') ? 1.22 : 1)
+      * (hasBattleEffect(this.activeDebuffs, 'mark') ? 1.12 : 1)
+    const flatDamage = hasBattleEffect(this.activeBuffs, 'hawk-eye') ? 8 : 0
+    const amplifiedDamage = Math.round((impact.moraleDamage + flatDamage) * comboBonus * damageMultiplier)
     const consumedCombo = this.combo
     this.enemyMorale = Math.max(0, this.enemyMorale - amplifiedDamage)
-    this.skillCooldown = impact.cooldown
+    this.skillCooldown = Math.max(2, impact.cooldown
+      * (hasBattleEffect(this.activeBuffs, 'swift-step') ? 0.8 : 1)
+      - (hasBattleEffect(this.activeBuffs, 'battle-focus') ? 1.5 : 0))
     this.combo = 0
     this.comboTimer = 0
     this.spawnSlashWave(unit.general, amplifiedDamage * 10)
-    this.callbacks.onEvent(`${unit.general.name} · ${unit.general.skillName} 발동 · ${impact.message} · ${consumedCombo ? `${consumedCombo}연계 증폭 · ` : ''}적 사기 -${amplifiedDamage}`)
+    this.callbacks.onEvent(`${unit.general.name} · ${unit.general.skillName} 발동 · ${impact.message} · ${effectDefinition(loadout.buff).name} + ${effectDefinition(loadout.debuff).name} · ${consumedCombo ? `${consumedCombo}연계 증폭 · ` : ''}적 사기 -${amplifiedDamage}`)
+  }
+
+  private applyEffect(kind: 'buff' | 'debuff', id: BattleEffectId): void {
+    const collection = kind === 'buff' ? this.activeBuffs : this.activeDebuffs
+    const definition = effectDefinition(id)
+    const existing = collection.find(effect => effect.id === id)
+    if (existing) {
+      existing.remaining = definition.duration
+      existing.stacks = Math.min(2, existing.stacks + 1)
+      return
+    }
+    collection.push({ ...definition, remaining: definition.duration, stacks: 1 })
   }
 
   private skillImpact(general: General): { moraleDamage: number; cooldown: number; message: string } {
@@ -763,6 +801,7 @@ export class Arena {
       skillUnlocked: general?.skillUnlocked ?? false,
       skillReady: Boolean(general?.skillUnlocked && this.skillCooldown <= 0),
       skillCooldown: Math.max(0, this.skillCooldown),
+      activeEffects: [...this.activeBuffs, ...this.activeDebuffs].map(effect => ({ ...effect })),
       status: this.battleActive ? '전투 중' : '대기 중',
     }
   }
@@ -789,7 +828,7 @@ export class Arena {
     if (!this.battleActive) return
     this.skillCooldown = Math.max(0, this.skillCooldown - delta)
     this.battleElapsed += delta
-    this.tacticGauge = Math.min(100, this.tacticGauge + delta * 0.8)
+    this.tacticGauge = Math.min(100, this.tacticGauge + delta * 0.8 * (hasBattleEffect(this.activeBuffs, 'war-chant') ? 1.25 : 1))
     this.guardTimer = Math.max(0, this.guardTimer - delta)
     this.comboTimer = Math.max(0, this.comboTimer - delta)
     if (this.comboTimer === 0) this.combo = 0
@@ -797,7 +836,8 @@ export class Arena {
     const nextPhase = Math.min(2, Math.floor(this.battleElapsed / 7))
     if (nextPhase !== this.battlePhase) {
       this.battlePhase = nextPhase
-      this.enemyMorale = Math.max(this.enemyMorale, 100)
+      const phaseRecovery = hasBattleEffect(this.activeDebuffs, 'fracture') || hasBattleEffect(this.activeDebuffs, 'silence') ? 18 : 100
+      this.enemyMorale = Math.min(100, Math.max(this.enemyMorale, phaseRecovery))
       this.combo = 0
       this.comboTimer = 0
       this.threat = Math.max(0, this.threat - 22)
@@ -809,8 +849,18 @@ export class Arena {
     }
     const leadership = this.playerUnits.length ? this.playerUnits.reduce((sum, unit) => sum + unit.general.leadership, 0) / this.playerUnits.length : 0
     const speed = this.playerUnits.length ? this.playerUnits.reduce((sum, unit) => sum + unit.general.speed, 0) / this.playerUnits.length : 0
-    this.enemyMorale = Math.max(0, this.enemyMorale - delta * (0.42 + leadership * 0.002 + speed * 0.0015))
-    this.threat = Math.max(0, this.threat - delta * (this.guardTimer > 0 ? 5.4 : 1.8))
+    const moraleDrainMultiplier = hasBattleEffect(this.activeBuffs, 'rally-banner') ? 1.35 : 1
+    const naturalMoraleDrain = delta * (0.42 + leadership * 0.002 + speed * 0.0015) * moraleDrainMultiplier
+    const effectMoraleDrain = delta * (
+      (hasBattleEffect(this.activeDebuffs, 'burning') ? 2.2 : 0)
+      + (hasBattleEffect(this.activeDebuffs, 'fear') ? 1.5 : 0)
+      + (hasBattleEffect(this.activeDebuffs, 'bleed') ? 1.3 : 0)
+    )
+    this.enemyMorale = Math.max(0, this.enemyMorale - naturalMoraleDrain - effectMoraleDrain)
+    const threatDecay = this.guardTimer > 0 ? 5.4 : 1.8
+    this.threat = Math.max(0, this.threat - delta * (threatDecay + (hasBattleEffect(this.activeBuffs, 'iron-wall') ? 4 : 0)))
+    if (hasBattleEffect(this.activeDebuffs, 'slow')) this.nextPatternAt += delta * 0.12
+    this.tickBattleEffects(delta)
     if (this.battleElapsed - this.lastPulse > 5) {
       this.lastPulse = this.battleElapsed
       this.callbacks.onEvent(`전황 갱신 · 적 사기 ${Math.round(this.enemyMorale)}%`)
@@ -821,6 +871,19 @@ export class Arena {
       const score = Math.max(0, Math.round(4200 + this.combo * 240 + (100 - this.threat) * 18 + this.generals.reduce((sum, general) => sum + general.level * 41 + general.leadership + general.martial + general.stratagem + general.speed, 0)))
       this.callbacks.onBattleEnd({ won, score, durationMs: Math.round(this.battleElapsed * 1000) })
       this.callbacks.onEvent(won ? '전투 승리 · 세 번의 파도를 모두 넘었습니다.' : '전투 패배 · 위협도가 한계에 도달했습니다.')
+    }
+  }
+
+  private tickBattleEffects(delta: number): void {
+    for (const collection of [this.activeBuffs, this.activeDebuffs]) {
+      for (let index = collection.length - 1; index >= 0; index -= 1) {
+        const effect = collection[index]
+        effect.remaining = Math.max(0, effect.remaining - delta)
+        if (effect.remaining === 0) {
+          this.callbacks.onEvent(`${effect.name} 효과 종료`)
+          collection.splice(index, 1)
+        }
+      }
     }
   }
 
