@@ -191,6 +191,16 @@ export class StrategyUI {
     requestAnimationFrame(() => overlay.classList.add('is-visible'))
   }
 
+  showEquipmentResults(rewards: Equipment[]): void {
+    this.root.querySelector('.recruit-results')?.remove()
+    const overlay = document.createElement('div')
+    overlay.className = 'recruit-results'
+    const cards = rewards.map((item, index) => `<div class="recruit-result-card equipment-result-card" style="--grade:${EQUIPMENT_GRADE_META[item.grade].color}"><span class="recruit-result-index">${String(index + 1).padStart(2, '0')}</span><div class="equipment-result-icon">${EQUIPMENT_TYPE_META[item.type].icon}</div><div><b>${escapeHtml(item.name)}</b><small>${EQUIPMENT_GRADE_META[item.grade].label} · ${EQUIPMENT_TYPE_META[item.type].label} · +${equipmentValue(item)}</small><em>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${escapeHtml(item.skillName)}</em></div></div>`).join('')
+    overlay.innerHTML = `<div class="recruit-results-backdrop"></div><div class="recruit-results-panel"><div class="recruit-results-heading"><div><span class="eyebrow">EQUIPMENT DROP RESULTS</span><h2>${rewards.length}개의 장비를 획득했습니다</h2><p>획득한 장비는 보유 장비에 추가되며, 무장에게 장착하거나 강화할 수 있습니다.</p></div><button class="mini-action" data-action="close-recruit-results">닫기</button></div><div class="recruit-results-grid equipment-results-grid">${cards}</div><div class="recruit-results-actions"><button class="action-button action-button--outline" data-action="extra-equipment-draw" data-count="1"><span>1회 추가 뽑기</span><b>✦ 240</b></button><button class="action-button action-button--outline" data-action="extra-equipment-draw" data-count="10"><span>10회 추가 뽑기</span><b>✦ 2,200</b></button><button class="action-button action-button--primary" data-action="close-recruit-results">결과 확인 완료 <span>→</span></button></div></div>`
+    this.root.appendChild(overlay)
+    requestAnimationFrame(() => overlay.classList.add('is-visible'))
+  }
+
   updateBattle(snapshot: BattleSnapshot): void {
     this.latestBattle = snapshot
     const elapsed = this.root.querySelector<HTMLElement>('[data-battle-time]')
@@ -688,6 +698,10 @@ export class StrategyUI {
     else if (action === 'reroll-recruit') {
       button.closest('.recruit-results')?.remove()
       this.callbacks.onRecruit(10)
+    }
+    else if (action === 'extra-equipment-draw') {
+      button.closest('.recruit-results')?.remove()
+      this.callbacks.onEquipmentDraw(Number(button.dataset.count ?? 1))
     }
   }
   private handleChange = (event: Event): void => {

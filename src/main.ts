@@ -93,7 +93,10 @@ const ui = new StrategyUI(root, {
     const result = drawEquipment(state, count)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
+    if (result.ok) {
+      queueAccountSave()
+      ui.showEquipmentResults(result.rewards)
+    }
   },
   onEquipmentEnhance: id => {
     const result = enhanceEquipment(state, id)
