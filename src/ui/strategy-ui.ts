@@ -371,7 +371,7 @@ export class StrategyUI {
   }
 
   private portraitAsset(general: General): string {
-    return general.portraitPath ?? `/assets/generals/${general.id}.svg`
+    return `/assets/generals-realistic-webp/${general.id}.webp`
   }
 
   private portrait(general: General, className = ''): string {

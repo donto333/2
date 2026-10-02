@@ -261,6 +261,8 @@ export class Arena {
   private createGeneralModel(general: General, teamColor: number): THREE.Group {
     const model = new THREE.Group()
     model.name = `model-${general.id}`
+    const procedural = new THREE.Group()
+    model.add(procedural)
     const seed = [...general.id].reduce((sum, character) => sum + character.charCodeAt(0), 0)
     const accent = new THREE.Color(general.accent)
     const team = new THREE.Color(teamColor)
@@ -277,46 +279,46 @@ export class Arena {
       const horse = new THREE.Mesh(new THREE.SphereGeometry(0.64, 12, 8), darkMetal)
       horse.scale.set(1.35, 0.64, 1.28)
       horse.position.set(0, 0.55, 0.28)
-      model.add(horse)
+      procedural.add(horse)
       for (const x of [-0.38, 0.38]) {
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.62, 6), darkMetal)
         leg.position.set(x, 0.25, 0.28)
-        model.add(leg)
+        procedural.add(leg)
       }
       const mane = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.78, 7), metal)
       mane.rotation.z = Math.PI / 2
       mane.position.set(-0.6, 0.86, 0.25)
-      model.add(mane)
+      procedural.add(mane)
     }
 
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.46, 0.86, 8), metal)
     torso.position.y = general.role === '기병' ? 1.25 : 0.86
     torso.scale.x = 0.82 + (seed % 3) * 0.08
     torso.castShadow = true
-    model.add(torso)
+    procedural.add(torso)
     const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.17, 0.38), darkMetal)
     shoulder.position.y = torso.position.y + 0.26
     shoulder.castShadow = true
-    model.add(shoulder)
+    procedural.add(shoulder)
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.29, 12, 8), skin)
     head.position.y = torso.position.y + 0.78
     head.castShadow = true
-    model.add(head)
+    procedural.add(head)
     const helmet = new THREE.Mesh(new THREE.ConeGeometry(0.39, 0.34 + (seed % 2) * 0.08, 8), metal)
     helmet.position.y = head.position.y + 0.29
     helmet.castShadow = true
-    model.add(helmet)
+    procedural.add(helmet)
     const plume = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.42, 6), trim)
     plume.position.set((seed % 2 ? 0.08 : -0.08), helmet.position.y + 0.3, 0)
     plume.rotation.z = seed % 2 ? -0.18 : 0.18
-    model.add(plume)
+    procedural.add(plume)
     const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.64, 6), darkMetal)
     const armR = armL.clone()
     armL.position.set(-0.46, torso.position.y + 0.02, 0)
     armR.position.set(0.46, torso.position.y + 0.02, 0)
     armL.rotation.z = 0.18
     armR.rotation.z = -0.18
-    model.add(armL, armR)
+    procedural.add(armL, armR)
 
     if (general.role === '궁병') {
       const bow = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 6, 18, Math.PI * 1.55), trim)
@@ -345,8 +347,27 @@ export class Arena {
     }
     weapon.userData.motionPhase = (seed % 17) / 17
     model.userData.weapon = weapon
-    model.add(weapon)
+    procedural.add(weapon)
     model.scale.setScalar(general.role === '기병' ? 1.1 : 1.02 + (seed % 3) * 0.04)
+
+    // Realistic AI portrait rendered as a 3D-facing commander card. The procedural
+    // silhouette remains as a resilient fallback until the optimized WebP arrives.
+    const portraitMaterial = new THREE.MeshBasicMaterial({ color: 0x263b3a, side: THREE.DoubleSide, fog: false })
+    const portrait = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.54), portraitMaterial)
+    portrait.position.set(0, general.role === '기병' ? 1.5 : 1.28, -0.12)
+    portrait.renderOrder = 3
+    portrait.visible = false
+    model.add(portrait)
+    const portraitLoader = new THREE.TextureLoader()
+    portraitLoader.load(`/assets/generals-realistic-webp/${general.id}.webp`, texture => {
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.anisotropy = 1
+      portrait.material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, fog: false, toneMapped: false })
+      portrait.visible = true
+      procedural.visible = false
+    }, undefined, () => {
+      portrait.visible = false
+    })
     return model
   }
 
