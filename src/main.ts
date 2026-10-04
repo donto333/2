@@ -119,6 +119,7 @@ let saveInFlight = false
 let saveQueued = false
 let saveRetryCount = 0
 let duelActive = false
+let gameAccess: 'member' | 'guest' | null = null
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
@@ -363,15 +364,22 @@ const ui = new StrategyUI(root, {
     ui.updateBattle(arena.getSnapshot())
     ui.notify('유저 대련을 시작했습니다. 상대 덱의 전력을 돌파하십시오.')
   },
+  onGuestLogin: () => {
+    gameAccess = 'guest'
+    ui.render(state)
+    ui.notify('게스트 모드로 입장했습니다. 진행 데이터는 이 기기에 저장됩니다.')
+  },
   onLogin: () => {
     void ManusAuth.login().catch(() => ui.notify('로그인은 저장된 체크포인트의 온라인 화면에서 사용할 수 있습니다.', 'ember'))
   },
   onLogout: () => {
     void ManusAuth.logout().then(session => {
+      gameAccess = null
       authView = { status: session.status, name: session.user?.name ?? null }
       accountView = null
       ui.setAccount(null)
       ui.setAuth(authView)
+      ui.showAccessGate()
       ui.notify('로그아웃했습니다.')
     }).catch(() => ui.notify('로그아웃을 완료하지 못했습니다.', 'ember'))
   },
@@ -442,7 +450,7 @@ arena = new Arena(canvas, {
 })
 
 ui.setAuth(authView)
-ui.render(state)
+ui.showAccessGate()
 
 window.setInterval(() => {
   const snapshot = arena.getSnapshot()
@@ -457,13 +465,25 @@ window.addEventListener('manus-auth-change', (event: Event) => {
     ui.setAccount(null)
   }
   ui.setAuth(authView)
-  if (authView.status === 'authenticated') void refreshAccount()
+  if (authView.status === 'authenticated') {
+    gameAccess = 'member'
+    ui.render(state)
+    void refreshAccount()
+  } else if (!gameAccess) {
+    ui.showAccessGate()
+  }
 })
 
 void ManusAuth.prepare().then(session => {
   authView = { status: session.status, name: session.user?.name ?? null }
   ui.setAuth(authView)
-  if (authView.status === 'authenticated') void refreshAccount()
+  if (authView.status === 'authenticated') {
+    gameAccess = 'member'
+    ui.render(state)
+    void refreshAccount()
+  } else {
+    ui.showAccessGate()
+  }
   if (state.section === 'rank') void refreshLeaderboard()
 }).catch(() => {
   authView = { status: 'offline', name: null }

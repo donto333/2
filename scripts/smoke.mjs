@@ -43,6 +43,9 @@ async function openGame(context, errors) {
   page.on('pageerror', error => errors.push(String(error)))
   page.on('response', response => response.status() >= 400 && !response.url().includes('/api') && errors.push(`HTTP ${response.status()} ${response.url()}`))
   await page.goto(url)
+  await page.waitForSelector('.access-gate', { timeout: 30_000 })
+  if (await page.locator('[data-action="guest-login"]').count() !== 1) throw new Error('guest login choice is missing')
+  await page.click('[data-action="guest-login"]')
   await page.waitForSelector('.app-shell', { timeout: 30_000 })
   await page.waitForSelector('[data-action="section"][data-section="battle"]')
   return page

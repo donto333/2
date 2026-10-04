@@ -75,6 +75,7 @@ export interface StrategyUiCallbacks {
   onBattleTactic: (tactic: 'guard' | 'feint' | 'charge') => void
   onDuelRefresh: () => void
   onDuelStart: (opponentId: string) => void
+  onGuestLogin: () => void
   onLogin: () => void
   onLogout: () => void
   onAccountRefresh: () => void
@@ -137,6 +138,11 @@ export class StrategyUI {
     }
     const status = this.root.querySelector<HTMLElement>('[data-auth-status]')
       if (status) status.textContent = auth.status === 'authenticated' ? `${auth.name ?? '장군'} 계정으로 전적을 동기화합니다.` : auth.status === 'offline' ? '독립 실행 중 · 전투와 모집은 로컬에서 이용할 수 있습니다.' : '로그인하면 리더보드와 전적을 이어갑니다.'
+  }
+
+  showAccessGate(): void {
+    this.renderedState = null
+    this.root.innerHTML = this.accessGate()
   }
 
   setAccount(account: AccountView | null): void {
@@ -293,6 +299,11 @@ export class StrategyUI {
     result.innerHTML = `<div class="result-card"><span class="eyebrow">작전 결과</span><div class="result-mark">${won ? '勝' : '敗'}</div><h2>${won ? '전장을 지배했다' : '진형이 무너졌다'}</h2><p>${won ? '부대의 호흡과 무장의 성장이 승리를 만들었습니다.' : '무장의 배치와 성장 상태를 다시 점검하십시오.'}</p><div class="result-score"><span>작전 점수</span><strong>${formatNumber(score)}</strong></div><button class="action-button action-button--primary" data-action="close-result">확인</button></div>`
     this.root.appendChild(result)
     requestAnimationFrame(() => result.classList.add('is-visible'))
+  }
+
+  private accessGate(): string {
+    const offline = this.auth.status === 'offline'
+    return `<section class="access-gate"><div class="access-gate__backdrop"></div><div class="access-gate__panel"><div class="access-gate__seal"><span>天</span></div><span class="eyebrow">CHEONHARO · THE AGE OF THE OVERLORD</span><h1>천하: 패왕의 시대</h1><p class="access-gate__lead">무장을 모으고, 진형을 지휘하고,<br>당신의 이름을 전장에 새기십시오.</p><div class="access-gate__divider"><i></i><span>접속 방식 선택</span><i></i></div><div class="access-gate__actions"><button class="access-choice access-choice--member" data-action="login"><strong>회원 로그인</strong><span>계정·전적·랭킹을 안전하게 저장합니다.</span><b>Manus 계정으로 계속 <em>→</em></b></button><button class="access-choice access-choice--guest" data-action="guest-login"><strong>게스트 로그인</strong><span>회원가입 없이 바로 시작합니다.</span><b>이 기기에서만 로컬 저장 <em>→</em></b></button></div><p class="access-gate__note">${offline ? '현재 회원 인증 서버에 연결할 수 없습니다. 게스트 모드로 플레이할 수 있습니다.' : '회원 로그인 후에도 기존 게스트 진행 데이터는 이 기기에 보존됩니다.'}</p></div></section>`
   }
 
   private shell(state: StrategyState): string {
@@ -721,6 +732,7 @@ export class StrategyUI {
     else if (action === 'battle-tactic') this.callbacks.onBattleTactic((button.dataset.tactic ?? 'guard') as 'guard' | 'feint' | 'charge')
     else if (action === 'duel-refresh') this.callbacks.onDuelRefresh()
     else if (action === 'duel-start') this.callbacks.onDuelStart(button.dataset.opponentId ?? '')
+    else if (action === 'guest-login') this.callbacks.onGuestLogin()
     else if (action === 'login') this.callbacks.onLogin()
     else if (action === 'logout') this.callbacks.onLogout()
     else if (action === 'account-refresh') this.callbacks.onAccountRefresh()
