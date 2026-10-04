@@ -99,3 +99,59 @@
 @media (max-width:620px){.equipment-inventory-toolbar{align-items:flex-start;flex-direction:column}.equipment-sort-controls{width:100%}.equipment-sort-controls label,.equipment-sort-controls select{flex:1}.formation-equipment-chip strong{max-width:125px}}
 
 .equipment-management-hero{align-items:center}.equipment-management-mark{display:grid;place-items:center;width:82px;height:82px;border:1px solid rgba(82,224,196,.35);background:rgba(82,224,196,.08);color:var(--jade);font-size:35px}.equipment-slot-unequip{display:block;margin-top:7px;padding:5px 7px;border:1px solid rgba(255,128,102,.35);background:rgba(255,128,102,.08);color:var(--ember);font-size:8px}
+
+/* Responsive command navigation: two-column layout on desktop/tablet */
+@media (min-width: 761px) {
+  :root {
+    --sidebar-width: clamp(320px, 24vw, 420px);
+  }
+  .sidebar {
+    width: var(--sidebar-width);
+    box-sizing: border-box;
+    padding: clamp(24px, 2.4vw, 38px) clamp(16px, 1.6vw, 28px) 24px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: clamp(5px, .55vw, 10px);
+  }
+  .sidebar-label,
+  .sidebar-rule,
+  .sidebar-spacer,
+  .sidebar-profile {
+    grid-column: 1 / -1;
+  }
+  .sidebar-label {
+    margin: 0 8px 4px;
+    font-size: clamp(9px, .65vw, 12px);
+  }
+  .nav-button {
+    width: 100%;
+    min-height: clamp(54px, 5vw, 72px);
+    box-sizing: border-box;
+    margin: 0;
+    padding: clamp(10px, 1vw, 16px) clamp(9px, .9vw, 15px);
+    gap: clamp(7px, .7vw, 12px);
+    border: 1px solid transparent;
+    border-left-width: 2px;
+    font-size: clamp(12px, .82vw, 15px);
+  }
+  .nav-button.is-active {
+    border-color: rgba(82, 224, 196, .34);
+    border-left-color: var(--jade);
+  }
+  .nav-icon {
+    width: clamp(20px, 1.55vw, 28px);
+    font-size: clamp(17px, 1.35vw, 24px);
+  }
+  .nav-button b {
+    font-size: clamp(9px, .62vw, 11px);
+  }
+  .sidebar-rule {
+    margin: clamp(12px, 1.2vw, 20px) 8px clamp(8px, .8vw, 14px);
+  }
+  .main-content {
+    margin-left: var(--sidebar-width);
+    padding-left: clamp(34px, 4vw, 72px);
+    padding-right: clamp(34px, 4vw, 72px);
+  }
+}
