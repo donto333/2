@@ -124,9 +124,9 @@ export class Arena {
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.05
-    this.scene.background = new THREE.Color(0x0b1518)
-    this.scene.fog = new THREE.FogExp2(0x18262a, 0.019)
+    this.renderer.toneMappingExposure = 1.22
+    this.scene.background = new THREE.Color(0xe7eee5)
+    this.scene.fog = new THREE.FogExp2(0xcbd9d0, 0.015)
     this.camera.position.set(0, 22, 29)
     this.camera.lookAt(0, 0, -3)
     this.buildLighting()
@@ -140,7 +140,7 @@ export class Arena {
   }
 
   private buildLighting(): void {
-    const sky = new THREE.HemisphereLight(0x9bb7b3, 0x151313, 2.15)
+    const sky = new THREE.HemisphereLight(0xe4f4ea, 0x6f8275, 2.8)
     this.scene.add(sky)
     const sun = new THREE.DirectionalLight(0xffd7a0, 5.2)
     sun.position.set(-14, 28, 12)
@@ -177,7 +177,7 @@ export class Arena {
   private buildTerrain(): void {
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 48, 48),
-      new THREE.MeshStandardMaterial({ color: 0x40544d, roughness: 0.96, metalness: 0.01, transparent: true, opacity: 0.76 }),
+      new THREE.MeshStandardMaterial({ color: 0x728b77, roughness: 0.96, metalness: 0.01, transparent: true, opacity: 0.62 }),
     )
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
@@ -202,7 +202,7 @@ export class Arena {
     pathShape.lineTo(3.6, 18)
     const path = new THREE.Mesh(
       new THREE.ShapeGeometry(pathShape),
-      new THREE.MeshStandardMaterial({ color: 0x74604d, roughness: 0.94, metalness: 0, transparent: true, opacity: 0.48 }),
+      new THREE.MeshStandardMaterial({ color: 0xb69b6a, roughness: 0.94, metalness: 0, transparent: true, opacity: 0.42 }),
     )
     path.rotation.x = -Math.PI / 2
     path.rotation.z = 0.08
@@ -212,7 +212,7 @@ export class Arena {
 
     const stones = [[-12, -13, 0.8], [11, -11, 1.05], [-15, -3, 0.7], [14, 1, 1.2], [-12, 10, 1.1], [12, 14, 0.72]] as const
     stones.forEach(([x, z, size], index) => {
-      const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 1), new THREE.MeshStandardMaterial({ color: index % 2 ? 0x34433f : 0x3d4a44, roughness: 0.86, metalness: 0.02 }))
+      const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 1), new THREE.MeshStandardMaterial({ color: index % 2 ? 0x6d8073 : 0x7d8f7d, roughness: 0.86, metalness: 0.02 }))
       stone.position.set(x, size * 0.58, z)
       stone.scale.y = 0.7
       stone.rotation.set(0.1 * index, 0.55 * index, 0.18 * index)
