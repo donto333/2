@@ -284,6 +284,9 @@ export class Arena {
     this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
     this.duelMode = Boolean(this.configuredEnemyDeck?.length)
   }
+  isDuelBattle(): boolean {
+    return this.duelMode
+  }
 
   stopBattle(): void {
     this.battleActive = false

@@ -416,7 +416,7 @@ arena = new Arena(canvas, {
   onEvent: message => ui.notify(message),
   onBattleEnd: result => {
     state.battleScore = Math.max(state.battleScore, result.score)
-    const wasDuel = duelActive
+    const wasDuel = duelActive || arena.isDuelBattle()
     if (result.won) {
       state.wins += 1
       state.honor += wasDuel ? 120 : 180
@@ -505,7 +505,7 @@ async function refreshAccount(): Promise<void> {
       if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
       if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
       if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
-      state.mythicFragments = Math.max(0, Math.trunc(game.mythicFragments ?? state.mythicFragments))
+      state.mythicFragments = Math.max(0, Math.trunc(state.mythicFragments), Math.trunc(game.mythicFragments ?? 0))
       state.duelAttemptsToday = Math.max(0, Math.trunc(game.duelAttemptsToday ?? state.duelAttemptsToday))
       if (typeof game.duelDayKey === 'string') state.duelDayKey = game.duelDayKey
       ensureDuelDailyState(state)
