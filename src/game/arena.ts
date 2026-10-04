@@ -108,6 +108,8 @@ export class Arena {
   private disposed = false
   private generals: General[] = []
   private enemyDeck: General[] = []
+  private configuredEnemyDeck: General[] | null = null
+  private duelMode = false
   private difficultyMultiplier = 0.86
   private lastCombatPulse = 0
   private readonly effects: ArenaEffect[] = []
@@ -276,6 +278,19 @@ export class Arena {
       this.scene.add(group)
     })
     this.selectUnit(0)
+  }
+
+  setOpponentDeck(generals: General[] | null): void {
+    this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
+    this.duelMode = Boolean(this.configuredEnemyDeck?.length)
+  }
+
+  stopBattle(): void {
+    this.battleActive = false
+    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
+    this.enemyDeck = []
+    this.configuredEnemyDeck = null
+    this.duelMode = false
   }
 
   private createUnit(general: General, teamColor: number, position: THREE.Vector3): THREE.Group {
@@ -655,20 +670,24 @@ export class Arena {
     this.lastPulse = 0
     this.lastVolley = -1
     this.lastCombatPulse = 0
-    this.difficultyMultiplier = 0.86
+    this.difficultyMultiplier = this.duelMode ? 1 : 0.86
     this.activeBuffs.splice(0)
     this.activeDebuffs.splice(0)
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
-    const playerIds = new Set(this.generals.map(general => general.id))
-    const pool = allGenerals().filter(general => !playerIds.has(general.id))
-    const shuffled = pool.sort(() => Math.random() - 0.5)
-    const chosen: General[] = []
-    for (const general of shuffled) {
-      if (chosen.length === 3) break
-      if (chosen.length < 2 && chosen.some(item => item.role === general.role)) continue
-      chosen.push(general)
+    if (this.configuredEnemyDeck?.length === 3) {
+      this.enemyDeck = this.configuredEnemyDeck.map(general => ({ ...general }))
+    } else {
+      const playerIds = new Set(this.generals.map(general => general.id))
+      const pool = allGenerals().filter(general => !playerIds.has(general.id))
+      const shuffled = pool.sort(() => Math.random() - 0.5)
+      const chosen: General[] = []
+      for (const general of shuffled) {
+        if (chosen.length === 3) break
+        if (chosen.length < 2 && chosen.some(item => item.role === general.role)) continue
+        chosen.push(general)
+      }
+      this.enemyDeck = chosen.length === 3 ? chosen : shuffled.slice(0, 3)
     }
-    this.enemyDeck = chosen.length === 3 ? chosen : shuffled.slice(0, 3)
     this.enemyDeck.forEach((general, index) => {
       const position = new THREE.Vector3(-4.4 + index * 4.4, 0, -8 - index * 0.9)
       const group = this.createUnit(general, ember, position)
@@ -892,6 +911,7 @@ export class Arena {
   }
 
   private difficultyLabel(): string {
+    if (this.duelMode) return '유저 대련'
     return ['초급', '중급', '고급'][this.battlePhase] ?? '고급'
   }
 

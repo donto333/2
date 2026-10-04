@@ -44,6 +44,13 @@ export interface RankEntry {
   score: number
 }
 
+export interface DuelOpponent {
+  id: string
+  displayName: string
+  score: number
+  isDummy: boolean
+}
+
 export interface StrategyUiCallbacks {
   onSection: (section: Section) => void
   onRecruit: (count: number) => void
@@ -66,6 +73,8 @@ export interface StrategyUiCallbacks {
   onBattleMove: (index: number) => void
   onBattleSkill: () => void
   onBattleTactic: (tactic: 'guard' | 'feint' | 'charge') => void
+  onDuelRefresh: () => void
+  onDuelStart: (opponentId: string) => void
   onLogin: () => void
   onLogout: () => void
   onAccountRefresh: () => void
@@ -83,6 +92,7 @@ export class StrategyUI {
   private readonly root: HTMLElement
   private readonly callbacks: StrategyUiCallbacks
   private ranks: RankEntry[] = []
+  private duelOpponents: DuelOpponent[] = []
   private latestBattle: BattleSnapshot | null = null
   private recruitAnimationActive = false
   private auth: AuthView = { status: 'logged_out', name: null }
@@ -146,6 +156,11 @@ export class StrategyUI {
     this.ranks = ranks
     const panel = this.root.querySelector<HTMLElement>('[data-rank-list]')
     if (panel) panel.innerHTML = this.rankRows()
+  }
+
+  setDuelOpponents(opponents: DuelOpponent[]): void {
+    this.duelOpponents = opponents
+    if (this.renderedState?.section === 'duel') this.render(this.renderedState)
   }
 
   notify(message: string, tone: 'jade' | 'ember' = 'jade'): void {
@@ -299,6 +314,7 @@ export class StrategyUI {
           ${this.navButton('research', '✧', '기술 연구', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">작전</div>
           ${this.navButton('battle', '⚔', '전장 출정', state.section)}
+          ${this.navButton('duel', '⚔', '유저 대련', state.section, this.duelOpponents.length ? `${this.duelOpponents.length}` : 'NEW')}
           ${this.navButton('rank', '≋', '천하 랭킹', state.section)}
           ${this.navButton('account', '◎', '계정 관리', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">운영</div>
@@ -326,6 +342,7 @@ export class StrategyUI {
     if (state.section === 'territory') return this.territorySection(state)
     if (state.section === 'research') return this.researchSection(state)
     if (state.section === 'battle') return this.battleSection(state)
+    if (state.section === 'duel') return this.duelSection(state)
     if (state.section === 'rank') return this.rankSection(state)
     if (state.section === 'account') return this.accountSection()
     if (state.section === 'admin') return this.adminSection(state)
@@ -630,6 +647,12 @@ export class StrategyUI {
     return `<section class="page-section page-section--rank"><div class="section-heading section-heading--compact"><div><span class="eyebrow">THE CELESTIAL LADDER · 05</span><h1>천하 랭킹</h1><p class="heading-copy">가장 높은 곳에 당신의 군기를 세우십시오.</p></div><button class="ghost-button" data-action="rank-refresh">순위 새로고침 ↻</button></div><div class="rank-layout"><div class="glass-card rank-hero"><div class="rank-hero-bg">榜</div><span class="pill pill--jade">ACCOUNT BOARD · WAR-SCORE-V1</span><h2>옥패의 전장</h2><p>로그인 계정으로 기록되는 작전 점수입니다.<br>현재 시즌은 클라이언트 보고형 캐주얼 랭킹으로 운영됩니다.</p><div class="my-record"><span>나의 최고 기록</span><strong>${formatNumber(state.battleScore)}</strong><small>지난 7회 작전 · ${state.wins}승</small></div><div class="auth-status" data-auth-status>로그인하면 리더보드와 전적을 이어갑니다.</div></div><div class="glass-card rank-table"><div class="card-header"><div><span class="eyebrow">TOP COMMANDERS</span><h3>상위 지휘관</h3></div><span class="sync-label">LIVE SYNC</span></div><div data-rank-list>${this.rankRows()}</div><div class="rank-footnote">* 순위 데이터는 저장된 체크포인트 Preview 또는 공개 배포에서 동기화됩니다.</div></div></div><div class="integration-strip"><div><span class="integration-icon">◎</span><div><strong>온라인 기능 준비됨</strong><p>Manus 로그인 · 계정 리더보드 · Stripe 샌드박스</p></div></div><button class="text-button" data-action="store">테스트 상점 보기 →</button></div></section>`
   }
 
+  private duelSection(state: StrategyState): string {
+    const formationReady = state.formation.length >= 3
+    const opponents = this.duelOpponents.length ? this.duelOpponents : [{ id: 'dummy-1', displayName: '훈련용 더미 덱', score: 16800, isDummy: true }]
+    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">USER DUEL · ARENA</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>온라인 유저 목록이 비어 있으면 균형 잡힌 훈련용 더미 덱을 자동으로 제공합니다.</p></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${escapeHtml(opponent.displayName)}</strong><span>${opponent.isDummy ? '훈련용 더미 덱 · 자동 생성' : '온라인 지휘관'} · 전적 점수 ${formatNumber(opponent.score)}</span></div><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
+  }
+
   private rankRows(): string {
     const rows = this.ranks.length ? this.ranks : [
       { rank: 1, displayName: '서릿발의 군기', score: 48220 },
@@ -649,6 +672,10 @@ export class StrategyUI {
     const button = target.closest<HTMLElement>('[data-action]')
     if (!button) return
     const action = button.dataset.action
+    if (button.dataset.opponentId) {
+      this.callbacks.onDuelStart(button.dataset.opponentId)
+      return
+    }
     if (action === 'section') this.callbacks.onSection((button.dataset.section ?? 'overview') as Section)
     else if (action === 'summon-tab') {
       this.summonTab = button.dataset.summonTab === 'equipment' ? 'equipment' : 'generals'
@@ -684,6 +711,8 @@ export class StrategyUI {
     else if (action === 'move') this.callbacks.onBattleMove(Number(button.dataset.index ?? 0))
     else if (action === 'battle-skill') this.callbacks.onBattleSkill()
     else if (action === 'battle-tactic') this.callbacks.onBattleTactic((button.dataset.tactic ?? 'guard') as 'guard' | 'feint' | 'charge')
+    else if (action === 'duel-refresh') this.callbacks.onDuelRefresh()
+    else if (action === 'duel-start') this.callbacks.onDuelStart(button.dataset.opponentId ?? '')
     else if (action === 'login') this.callbacks.onLogin()
     else if (action === 'logout') this.callbacks.onLogout()
     else if (action === 'account-refresh') this.callbacks.onAccountRefresh()

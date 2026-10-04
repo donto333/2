@@ -68,6 +68,13 @@ try {
   if (!(await page.locator('[data-auth-button]').textContent())?.includes('스모크 관리자')) throw new Error('auth button reset after menu navigation')
   await page.click('[data-action="section"][data-section="overview"]')
 
+  await page.click('[data-action="section"][data-section="duel"]')
+  await page.waitForSelector('.duel-list .duel-opponent')
+  if (await page.locator('.duel-opponent').count() < 1) throw new Error('duel opponent list is empty')
+  await page.locator('[data-action="duel-start"]').first().click()
+  await page.waitForFunction(() => window.__strategy.arena.getSnapshot().difficulty === '유저 대련' && window.__strategy.arena.getSnapshot().active, null, { timeout: 5000 })
+  if ((await page.evaluate(() => window.__strategy.arena.getSnapshot().opponentDeck.length)) !== 3) throw new Error('duel opponent deck was not loaded')
+
   await page.click('[data-action="section"][data-section="recruit"]')
   await page.waitForSelector('[data-action="recruit"][data-count="1"]')
   await page.click('[data-action="recruit"][data-count="1"]')

@@ -4,6 +4,7 @@ import { createLeaderboardClient, type Result, type RunTicket } from '../leaderb
 import { Arena } from './game/arena'
 import {
   createInitialState,
+  allGenerals,
   collectIncome,
   launchConquest,
   defendCity,
@@ -27,7 +28,7 @@ import {
   type Section,
   type StrategyState,
 } from './game/strategy'
-import { StrategyUI, type AccountView, type AuthView, type GameAccountView } from './ui/strategy-ui'
+import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -108,6 +109,8 @@ let saveTimer: number | null = null
 let saveInFlight = false
 let saveQueued = false
 let saveRetryCount = 0
+let duelActive = false
+const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
   return state.formation.map(id => {
@@ -134,10 +137,51 @@ const leaderboard = createLeaderboardClient({
   storage: window.localStorage,
 })
 
+function duelDeckFor(opponent: DuelOpponent): ReturnType<typeof allGenerals> {
+  const catalog = allGenerals()
+  const seed = [...opponent.id].reduce((sum, character) => sum + character.charCodeAt(0), opponent.score)
+  const deck = [0, 1, 2].map(index => catalog[(seed + index * 17) % catalog.length])
+  return deck.map(general => ({ ...general, level: Math.max(1, Math.min(30, Math.round(opponent.score / 1800) + (general.grade - 2))), stars: Math.max(1, Math.min(5, general.stars)) }))
+}
+
+function dummyDuelOpponents(): DuelOpponent[] {
+  return [
+    { id: 'dummy-iron-gate', displayName: '철벽 관문의 더미', score: 16800, isDummy: true },
+    { id: 'dummy-jade-banner', displayName: '청람 진형 더미', score: 22100, isDummy: true },
+    { id: 'dummy-wind-tactician', displayName: '질풍 책사 더미', score: 27600, isDummy: true },
+  ]
+}
+
+function installDummyDuelOpponents(): void {
+  const opponents = dummyDuelOpponents()
+  duelDecks.clear()
+  opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
+  ui.setDuelOpponents(opponents)
+}
+
+async function refreshDuelOpponents(): Promise<void> {
+  const result = await leaderboard.list(12)
+  const opponents: DuelOpponent[] = result.ok && result.value.entries.length
+    ? result.value.entries.map((entry, index) => ({ id: `user-${entry.rank}-${entry.displayName}-${index}`, displayName: entry.displayName, score: entry.score, isDummy: false }))
+    : dummyDuelOpponents()
+  duelDecks.clear()
+  opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
+  ui.setDuelOpponents(opponents)
+  ui.notify(result.ok && result.value.entries.length ? '온라인 지휘관 목록을 불러왔습니다.' : '온라인 유저가 없어 훈련용 더미 덱을 준비했습니다.')
+}
+
 const ui = new StrategyUI(root, {
   onSection: (section: Section) => {
+    if (duelActive && section !== 'battle') {
+      duelActive = false
+      arena.stopBattle()
+    }
     state.section = section
-    if (section === 'battle') arena.setGenerals(battleGenerals())
+    if (section === 'battle') { duelActive = false; arena.setOpponentDeck(null); arena.setGenerals(battleGenerals()); ui.updateBattle(arena.getSnapshot()) }
+    if (section === 'duel') {
+      installDummyDuelOpponents()
+      void refreshDuelOpponents()
+    }
     ui.render(state)
     if (section === 'account') void refreshAccount()
     if (section === 'admin') {
@@ -247,11 +291,13 @@ const ui = new StrategyUI(root, {
     if (result.ok) queueAccountSave()
   },
   onBattleStart: () => {
+    duelActive = false
+    arena.setOpponentDeck(null)
     state.section = 'battle'
     arena.setGenerals(battleGenerals())
     arena.startBattle()
     pendingTicket = null
-    void leaderboard.beginRun().then(result => {
+    if (!duelActive) void leaderboard.beginRun().then(result => {
       if (result.ok) pendingTicket = result.value
       else if (authView.status === 'authenticated') ui.notify(`온라인 기록을 시작하지 못했습니다 · ${result.error}`, 'ember')
     })
@@ -269,6 +315,26 @@ const ui = new StrategyUI(root, {
   onBattleTactic: tactic => {
     arena.useTactic(tactic)
     ui.updateBattle(arena.getSnapshot())
+  },
+
+  onDuelRefresh: () => {
+    void refreshDuelOpponents()
+  },
+  onDuelStart: opponentId => {
+    let deck = duelDecks.get(opponentId)
+    if (!deck) {
+      const fallback: DuelOpponent = { id: opponentId || 'dummy-fallback', displayName: '훈련용 더미 덱', score: 18000, isDummy: true }
+      deck = duelDeckFor(fallback)
+      duelDecks.set(opponentId || fallback.id, deck)
+    }
+    duelActive = true
+    state.section = 'battle'
+    arena.setOpponentDeck(deck)
+    arena.setGenerals(battleGenerals())
+    arena.startBattle()
+    ui.render(state)
+    ui.updateBattle(arena.getSnapshot())
+    ui.notify('유저 대련을 시작했습니다. 상대 덱의 전력을 돌파하십시오.')
   },
   onLogin: () => {
     void ManusAuth.login().catch(() => ui.notify('로그인은 저장된 체크포인트의 온라인 화면에서 사용할 수 있습니다.', 'ember'))
@@ -316,13 +382,15 @@ arena = new Arena(canvas, {
   onEvent: message => ui.notify(message),
   onBattleEnd: result => {
     state.battleScore = Math.max(state.battleScore, result.score)
+    const wasDuel = duelActive
     if (result.won) {
       state.wins += 1
-      state.honor += 180
-      state.silver += 1200
+      state.honor += wasDuel ? 120 : 180
+      state.silver += wasDuel ? 600 : 1200
       state.resources.silver = state.silver
-      state.lastNotice = `황혼의 관문을 돌파했습니다. 명망 +180 · 은전 +1,200`
+      state.lastNotice = wasDuel ? '유저 대련에서 승리했습니다. 명망 +120 · 은전 +600' : `황혼의 관문을 돌파했습니다. 명망 +180 · 은전 +1,200`
     }
+    duelActive = false
     ui.render(state)
     ui.showBattleResult(result.won, result.score)
     if (pendingTicket) {
