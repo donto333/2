@@ -47,6 +47,9 @@ async function openGame(context, errors) {
   if (await page.locator('[data-action="guest-login"]').count() !== 1) throw new Error('guest login choice is missing')
   await page.click('[data-action="guest-login"]')
   await page.waitForSelector('.app-shell', { timeout: 30_000 })
+  await page.reload()
+  await page.waitForSelector('.app-shell', { timeout: 30_000 })
+  if (await page.locator('.access-gate').count() !== 0) throw new Error('guest access was lost after reload')
   await page.waitForSelector('[data-action="section"][data-section="battle"]')
   return page
 }

@@ -39,6 +39,7 @@ const canvas = document.querySelector<HTMLCanvasElement>('#game')
 if (!root || !canvas) throw new Error('Strategy game shell is incomplete')
 
 const LOCAL_GAME_SAVE_KEY = 'cheonharo.strategy.save.v2'
+const GUEST_ACCESS_KEY = 'cheonharo.access.guest.v1'
 const state: StrategyState = createInitialState()
 let localSaveDirty = false
 
@@ -119,7 +120,7 @@ let saveInFlight = false
 let saveQueued = false
 let saveRetryCount = 0
 let duelActive = false
-let gameAccess: 'member' | 'guest' | null = null
+let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
@@ -366,6 +367,7 @@ const ui = new StrategyUI(root, {
   },
   onGuestLogin: () => {
     gameAccess = 'guest'
+    window.localStorage.setItem(GUEST_ACCESS_KEY, '1')
     ui.render(state)
     ui.notify('게스트 모드로 입장했습니다. 진행 데이터는 이 기기에 저장됩니다.')
   },
@@ -375,6 +377,7 @@ const ui = new StrategyUI(root, {
   onLogout: () => {
     void ManusAuth.logout().then(session => {
       gameAccess = null
+      window.localStorage.removeItem(GUEST_ACCESS_KEY)
       authView = { status: session.status, name: session.user?.name ?? null }
       accountView = null
       ui.setAccount(null)
@@ -450,7 +453,8 @@ arena = new Arena(canvas, {
 })
 
 ui.setAuth(authView)
-ui.showAccessGate()
+if (gameAccess) ui.render(state)
+else ui.showAccessGate()
 
 window.setInterval(() => {
   const snapshot = arena.getSnapshot()
@@ -467,10 +471,13 @@ window.addEventListener('manus-auth-change', (event: Event) => {
   ui.setAuth(authView)
   if (authView.status === 'authenticated') {
     gameAccess = 'member'
+    window.localStorage.removeItem(GUEST_ACCESS_KEY)
     ui.render(state)
     void refreshAccount()
   } else if (!gameAccess) {
     ui.showAccessGate()
+  } else {
+    ui.render(state)
   }
 })
 
@@ -479,10 +486,13 @@ void ManusAuth.prepare().then(session => {
   ui.setAuth(authView)
   if (authView.status === 'authenticated') {
     gameAccess = 'member'
+    window.localStorage.removeItem(GUEST_ACCESS_KEY)
     ui.render(state)
     void refreshAccount()
-  } else {
+  } else if (!gameAccess) {
     ui.showAccessGate()
+  } else {
+    ui.render(state)
   }
   if (state.section === 'rank') void refreshLeaderboard()
 }).catch(() => {
