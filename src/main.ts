@@ -13,6 +13,9 @@ import {
   enhanceEquipment,
   equipmentBonus,
   ensureEquipmentState,
+  purchaseMythicEquipment,
+  consumeDuelAttempt,
+  ensureDuelDailyState,
   equipEquipment,
   unequipEquipment,
   ensureCityRoster,
@@ -61,6 +64,9 @@ function persistLocalGame(): void {
       equipmentInventory: state.equipmentInventory,
       equipmentLoadouts: state.equipmentLoadouts,
       selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
+      mythicFragments: state.mythicFragments,
+      duelAttemptsToday: state.duelAttemptsToday,
+      duelDayKey: state.duelDayKey,
     }))
   } catch {
     // Private browsing and quota restrictions should not stop gameplay.
@@ -91,6 +97,9 @@ function restoreLocalGame(): void {
       equipmentInventory: saved.equipmentInventory,
       equipmentLoadouts: saved.equipmentLoadouts,
       selectedEquipmentGeneralId: saved.selectedEquipmentGeneralId,
+      mythicFragments: saved.mythicFragments,
+      duelAttemptsToday: saved.duelAttemptsToday,
+      duelDayKey: saved.duelDayKey,
     })
   } catch {
     // Corrupt local data is ignored and replaced by the normal starter state.
@@ -333,6 +342,12 @@ const ui = new StrategyUI(root, {
     void refreshDuelOpponents()
   },
   onDuelStart: opponentId => {
+    ensureDuelDailyState(state)
+    const attempt = consumeDuelAttempt(state)
+    if (!attempt.ok) {
+      ui.notify(attempt.message, 'ember')
+      return
+    }
     let deck = duelDecks.get(opponentId)
     if (!deck) {
       const fallback: DuelOpponent = { id: opponentId || 'dummy-fallback', displayName: '훈련용 더미 덱', score: 18000, isDummy: true }
@@ -370,7 +385,14 @@ const ui = new StrategyUI(root, {
     void refreshLeaderboard()
   },
   onStore: () => {
-    ui.notify('Stripe 샌드박스 연결 준비 완료 · 이 프로토타입은 현금성 모집을 잠금 처리했습니다.')
+    state.section = 'shop'
+    ui.render(state)
+  },
+  onShopPurchase: type => {
+    const result = purchaseMythicEquipment(state, type)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
   },
   onAdminAction: message => {
     ui.render(state)
@@ -400,7 +422,8 @@ arena = new Arena(canvas, {
       state.honor += wasDuel ? 120 : 180
       state.silver += wasDuel ? 600 : 1200
       state.resources.silver = state.silver
-      state.lastNotice = wasDuel ? '유저 대련에서 승리했습니다. 명망 +120 · 은전 +600' : `황혼의 관문을 돌파했습니다. 명망 +180 · 은전 +1,200`
+      if (wasDuel) state.mythicFragments += 1
+      state.lastNotice = wasDuel ? '유저 대련에서 승리했습니다. 명망 +120 · 은전 +600 · 신화장비 조각 +1' : `황혼의 관문을 돌파했습니다. 명망 +180 · 은전 +1,200`
     }
     duelActive = false
     ui.render(state)
@@ -465,7 +488,7 @@ async function refreshAccount(): Promise<void> {
   }
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
     if (!localSaveDirty) {
       Object.assign(state, { honor: game.honor, silver: game.silver, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
       state.resources = { ...state.resources, grain: game.grain, silver: game.silver, wood: game.wood, iron: game.iron, influence: game.influence }
@@ -482,6 +505,10 @@ async function refreshAccount(): Promise<void> {
       if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
       if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
       if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
+      state.mythicFragments = Math.max(0, Math.trunc(game.mythicFragments ?? state.mythicFragments))
+      state.duelAttemptsToday = Math.max(0, Math.trunc(game.duelAttemptsToday ?? state.duelAttemptsToday))
+      if (typeof game.duelDayKey === 'string') state.duelDayKey = game.duelDayKey
+      ensureDuelDailyState(state)
       ensureEquipmentState(state)
       persistLocalGame()
     }
@@ -516,6 +543,9 @@ function accountStatePayload() {
     equipmentData: JSON.stringify(state.equipmentInventory),
     equipmentLoadoutsData: JSON.stringify(state.equipmentLoadouts),
     selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
+    mythicFragments: Math.trunc(state.mythicFragments),
+    duelAttemptsToday: Math.trunc(state.duelAttemptsToday),
+    duelDayKey: state.duelDayKey,
   }
 }
 

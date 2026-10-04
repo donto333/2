@@ -1,4 +1,4 @@
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, GRADE_META, MYTHIC_EVENT_EQUIPMENT, RESOURCE_META, allGenerals, equipmentSetCounts, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentSetCounts, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, BattleTroopStatus } from '../game/arena'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
@@ -81,6 +81,7 @@ export interface StrategyUiCallbacks {
   onAccountSave: (name: string) => void
   onRankRefresh: () => void
   onStore: () => void
+  onShopPurchase: (type: EquipmentType) => void
   onAdminAction: (action: string) => void
   onAdminAccountsRefresh: (search?: string) => void
   onAdminRoleChange: (id: number, role: 'user' | 'admin') => void
@@ -314,7 +315,8 @@ export class StrategyUI {
           ${this.navButton('research', '✧', '기술 연구', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">작전</div>
           ${this.navButton('battle', '⚔', '전장 출정', state.section)}
-          ${this.navButton('duel', '⚔', '유저 대련', state.section, this.duelOpponents.length ? `${this.duelOpponents.length}` : 'NEW')}
+          ${this.navButton('duel', '⚔', '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
+          ${this.navButton('shop', '◈', '신화 상점', state.section, `${state.mythicFragments}조각`)}
           ${this.navButton('rank', '≋', '천하 랭킹', state.section)}
           ${this.navButton('account', '◎', '계정 관리', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">운영</div>
@@ -343,6 +345,7 @@ export class StrategyUI {
     if (state.section === 'research') return this.researchSection(state)
     if (state.section === 'battle') return this.battleSection(state)
     if (state.section === 'duel') return this.duelSection(state)
+    if (state.section === 'shop') return this.shopSection(state)
     if (state.section === 'rank') return this.rankSection(state)
     if (state.section === 'account') return this.accountSection()
     if (state.section === 'admin') return this.adminSection(state)
@@ -643,6 +646,11 @@ export class StrategyUI {
     return `<section class="page-section page-section--admin"><div class="admin-heading"><div><span class="eyebrow">WAR ROOM · ADMIN CONSOLE</span><h1>관리자 센터</h1><p class="heading-copy">게임 콘텐츠와 시즌 운영 상태를 한 화면에서 점검합니다.</p></div><div class="admin-live-badge"><i></i><span>운영 콘솔 · 로컬 상태</span></div></div><div class="admin-tabs">${tabMarkup}</div>${body}</section>`
   }
 
+  private shopSection(state: StrategyState): string {
+    const cards = MYTHIC_SHOP_EQUIPMENT.map(item => `<article class="shop-item glass-card"><div class="shop-item-icon">${EQUIPMENT_TYPE_META[item.type].icon}</div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${escapeHtml(item.skillName)}</small></div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-type="${item.type}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>`).join('')
+    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">MYTHIC ARMORY · SHOP</span><h1>신화 장비 상점</h1><p class="heading-copy">유저 대련 승리로 얻은 신화장비 조각으로 장비를 교환합니다.</p></div><div class="shop-fragments glass-card"><span>보유 신화장비 조각</span><strong>✦ ${state.mythicFragments}</strong><small>신화장비 1개 · 조각 20개</small></div></div><div class="shop-notice glass-card"><strong>대련 승리 보상</strong><span>유저 대련에서 승리할 때마다 신화장비 조각 1개를 획득합니다. 신화 장비 뽑기는 제공하지 않으며 상점에서만 교환할 수 있습니다.</span></div><div class="shop-grid">${cards}</div></section>`
+  }
+
   private rankSection(state: StrategyState): string {
     return `<section class="page-section page-section--rank"><div class="section-heading section-heading--compact"><div><span class="eyebrow">THE CELESTIAL LADDER · 05</span><h1>천하 랭킹</h1><p class="heading-copy">가장 높은 곳에 당신의 군기를 세우십시오.</p></div><button class="ghost-button" data-action="rank-refresh">순위 새로고침 ↻</button></div><div class="rank-layout"><div class="glass-card rank-hero"><div class="rank-hero-bg">榜</div><span class="pill pill--jade">ACCOUNT BOARD · WAR-SCORE-V1</span><h2>옥패의 전장</h2><p>로그인 계정으로 기록되는 작전 점수입니다.<br>현재 시즌은 클라이언트 보고형 캐주얼 랭킹으로 운영됩니다.</p><div class="my-record"><span>나의 최고 기록</span><strong>${formatNumber(state.battleScore)}</strong><small>지난 7회 작전 · ${state.wins}승</small></div><div class="auth-status" data-auth-status>로그인하면 리더보드와 전적을 이어갑니다.</div></div><div class="glass-card rank-table"><div class="card-header"><div><span class="eyebrow">TOP COMMANDERS</span><h3>상위 지휘관</h3></div><span class="sync-label">LIVE SYNC</span></div><div data-rank-list>${this.rankRows()}</div><div class="rank-footnote">* 순위 데이터는 저장된 체크포인트 Preview 또는 공개 배포에서 동기화됩니다.</div></div></div><div class="integration-strip"><div><span class="integration-icon">◎</span><div><strong>온라인 기능 준비됨</strong><p>Manus 로그인 · 계정 리더보드 · Stripe 샌드박스</p></div></div><button class="text-button" data-action="store">테스트 상점 보기 →</button></div></section>`
   }
@@ -650,7 +658,7 @@ export class StrategyUI {
   private duelSection(state: StrategyState): string {
     const formationReady = state.formation.length >= 3
     const opponents = this.duelOpponents.length ? this.duelOpponents : [{ id: 'dummy-1', displayName: '훈련용 더미 덱', score: 16800, isDummy: true }]
-    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">USER DUEL · ARENA</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>온라인 유저 목록이 비어 있으면 균형 잡힌 훈련용 더미 덱을 자동으로 제공합니다.</p></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${escapeHtml(opponent.displayName)}</strong><span>${opponent.isDummy ? '훈련용 더미 덱 · 자동 생성' : '온라인 지휘관'} · 전적 점수 ${formatNumber(opponent.score)}</span></div><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
+    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">USER DUEL · ARENA</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>온라인 유저 목록이 비어 있으면 균형 잡힌 훈련용 더미 덱을 자동으로 제공합니다.</p><div class="duel-daily-limit"><strong>오늘 남은 대련 ${duelAttemptsRemaining(state)}회</strong><span>매일 5회 · 승리 시 신화장비 조각 +1</span></div></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${escapeHtml(opponent.displayName)}</strong><span>${opponent.isDummy ? '훈련용 더미 덱 · 자동 생성' : '온라인 지휘관'} · 전적 점수 ${formatNumber(opponent.score)}</span></div><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
   }
 
   private rankRows(): string {
@@ -718,6 +726,7 @@ export class StrategyUI {
     else if (action === 'account-refresh') this.callbacks.onAccountRefresh()
     else if (action === 'rank-refresh') this.callbacks.onRankRefresh()
     else if (action === 'store') this.callbacks.onStore()
+    else if (action === 'shop-purchase') this.callbacks.onShopPurchase((button.dataset.equipmentType ?? 'weapon') as EquipmentType)
     else if (action === 'admin-tab') {
       this.adminTab = button.dataset.adminTab ?? 'overview'
       this.callbacks.onAdminAction(`관리자 탭을 「${button.textContent?.trim() ?? '운영 개요'}」로 전환했습니다.`)

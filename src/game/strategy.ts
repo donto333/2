@@ -1,4 +1,4 @@
-export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'rank' | 'account' | 'admin'
+export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
 export type ResourceKey = 'grain' | 'silver' | 'wood' | 'iron' | 'influence'
@@ -114,12 +114,43 @@ export interface StrategyState {
   equipmentLoadouts: Record<string, Partial<Record<EquipmentType, string>>>
   selectedEquipmentGeneralId: string
   lastEquipmentDraw: Equipment[]
+  mythicFragments: number
+  duelAttemptsToday: number
+  duelDayKey: string
 }
 
 export const INCOME_COOLDOWN_MS = 24 * 60 * 60 * 1000
 export const CONQUEST_COOLDOWN_MS = 8 * 1000
 export const DEFENSE_COOLDOWN_MS = 10 * 1000
 export const FACTION_BATTLE_COOLDOWN_MS = 12 * 1000
+export const DUEL_DAILY_LIMIT = 5
+export const MYTHIC_FRAGMENT_COST = 20
+
+export function dayKey(now = Date.now()): string {
+  const date = new Date(now)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+export function ensureDuelDailyState(state: StrategyState, now = Date.now()): void {
+  const today = dayKey(now)
+  if (state.duelDayKey !== today) {
+    state.duelDayKey = today
+    state.duelAttemptsToday = 0
+  }
+  state.duelAttemptsToday = Math.max(0, Math.min(DUEL_DAILY_LIMIT, Math.trunc(state.duelAttemptsToday || 0)))
+}
+
+export function duelAttemptsRemaining(state: StrategyState, now = Date.now()): number {
+  ensureDuelDailyState(state, now)
+  return Math.max(0, DUEL_DAILY_LIMIT - state.duelAttemptsToday)
+}
+
+export function consumeDuelAttempt(state: StrategyState, now = Date.now()): UpgradeResult {
+  ensureDuelDailyState(state, now)
+  if (state.duelAttemptsToday >= DUEL_DAILY_LIMIT) return { ok: false, message: '오늘 유저 대련 가능 횟수를 모두 사용했습니다. 내일 다시 도전하십시오.' }
+  state.duelAttemptsToday += 1
+  return { ok: true, message: `오늘 유저 대련 ${DUEL_DAILY_LIMIT - state.duelAttemptsToday}회 남음` }
+}
 
 export function cooldownRemaining(lastAt: number | undefined, cooldownMs: number, now = Date.now()): number {
   return lastAt === undefined ? 0 : Math.max(0, cooldownMs - (now - lastAt))
@@ -405,6 +436,12 @@ export const MYTHIC_EVENT_EQUIPMENT: Equipment = {
   id: 'event-mythic-heavenblade', name: '천명·용천검', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: EQUIPMENT_GRADE_META.mythic.base, skillName: '용천 개벽', skillDescription: '이벤트 지급 전용 신화 무기 · 전투 개시 시 아군의 무력을 크게 끌어올립니다.', mythicEventOnly: true,
 }
 
+export const MYTHIC_SHOP_EQUIPMENT: Equipment[] = [
+  { id: 'shop-mythic-weapon', name: '신화·적룡천극', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, skillName: '적룡 파천', skillDescription: '무력 기반 공격 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-armor', name: '신화·현무성갑', type: 'armor', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, skillName: '현무 철벽', skillDescription: '통솔 기반 방어 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-accessory', name: '신화·천책옥패', type: 'accessory', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, skillName: '천책 귀모', skillDescription: '모략 기반 전술 효율을 크게 높입니다.' },
+]
+
 export function createInitialState(): StrategyState {
   const starterIds = ['guan-yu', 'zhao-yun', 'zhuge-liang']
   const generals = starterIds.map(id => copyGeneral(LIBRARY.find(general => general.id === id)!))
@@ -414,7 +451,7 @@ export function createInitialState(): StrategyState {
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
-    equipmentInventory, equipmentLoadouts: { 'guan-yu': { weapon: 'starter-weapon' }, 'zhao-yun': { armor: 'starter-armor' }, 'zhuge-liang': { accessory: 'starter-accessory' } }, selectedEquipmentGeneralId: 'guan-yu', lastEquipmentDraw: [],
+    equipmentInventory, equipmentLoadouts: { 'guan-yu': { weapon: 'starter-weapon' }, 'zhao-yun': { armor: 'starter-armor' }, 'zhuge-liang': { accessory: 'starter-accessory' } }, selectedEquipmentGeneralId: 'guan-yu', lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(),
   }
 }
 
@@ -451,6 +488,8 @@ export function ensureEquipmentState(state: StrategyState): void {
   if (!state.equipmentLoadouts || typeof state.equipmentLoadouts !== 'object') state.equipmentLoadouts = {}
   if (!state.selectedEquipmentGeneralId || !state.generals.some(general => general.id === state.selectedEquipmentGeneralId)) state.selectedEquipmentGeneralId = state.generals[0]?.id ?? ''
   if (!Array.isArray(state.lastEquipmentDraw)) state.lastEquipmentDraw = []
+  if (typeof state.mythicFragments !== 'number') state.mythicFragments = 0
+  ensureDuelDailyState(state)
 }
 
 export function equipmentValue(item: Equipment): number {
@@ -555,6 +594,19 @@ function createDrawnEquipment(index: number): Equipment {
 }
 
 export interface EquipmentDrawResult { ok: boolean; message: string; rewards: Equipment[] }
+
+export interface MythicShopResult { ok: boolean; message: string; item?: Equipment }
+export function purchaseMythicEquipment(state: StrategyState, type: EquipmentType): MythicShopResult {
+  ensureEquipmentState(state)
+  if (state.mythicFragments < MYTHIC_FRAGMENT_COST) return { ok: false, message: `신화장비 조각이 부족합니다. ${MYTHIC_FRAGMENT_COST}개가 필요합니다.` }
+  const template = MYTHIC_SHOP_EQUIPMENT.find(item => item.type === type)
+  if (!template) return { ok: false, message: '해당 신화장비를 찾을 수 없습니다.' }
+  state.mythicFragments -= MYTHIC_FRAGMENT_COST
+  const item = { ...template, id: `${template.id}-${Date.now()}-${state.equipmentInventory.length}` }
+  state.equipmentInventory.push(item)
+  state.lastNotice = `${item.name}을(를) 구매했습니다. 신화장비 조각 -${MYTHIC_FRAGMENT_COST}`
+  return { ok: true, message: state.lastNotice, item }
+}
 
 export function drawEquipment(state: StrategyState, count = 1): EquipmentDrawResult {
   ensureEquipmentState(state)

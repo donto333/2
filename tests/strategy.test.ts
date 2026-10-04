@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -168,4 +168,23 @@ describe('commander attributes', () => {
     expect(totalPower(state)).toBeLessThan(formationPower)
     expect(unequipEquipment(state, 'guan-yu', 'weapon').ok).toBe(false)
   })
+  it('limits user duels to five per local day and resets on the next day', () => {
+    const state = createInitialState()
+    expect(duelAttemptsRemaining(state, new Date('2026-10-04T09:00:00').getTime())).toBe(5)
+    for (let i = 0; i < 5; i++) expect(consumeDuelAttempt(state, new Date('2026-10-04T09:00:00').getTime()).ok).toBe(true)
+    expect(consumeDuelAttempt(state, new Date('2026-10-04T09:00:00').getTime()).ok).toBe(false)
+    expect(duelAttemptsRemaining(state, new Date('2026-10-05T09:00:00').getTime())).toBe(5)
+  })
+
+  it('awards and spends twenty mythic fragments on each shop item', () => {
+    const state = createInitialState()
+    state.mythicFragments = 20
+    const result = purchaseMythicEquipment(state, 'armor')
+    expect(result.ok).toBe(true)
+    expect(state.mythicFragments).toBe(0)
+    expect(state.equipmentInventory.some(item => item.type === 'armor' && item.grade === 'mythic')).toBe(true)
+    expect(MYTHIC_SHOP_EQUIPMENT).toHaveLength(3)
+    expect(purchaseMythicEquipment(state, 'weapon').ok).toBe(false)
+  })
+
 })

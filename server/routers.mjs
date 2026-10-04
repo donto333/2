@@ -56,6 +56,9 @@ export const gameRouter = router({
       selectedEquipmentGeneralId: z.string().max(64).optional(),
       selectedCityId: z.string().max(64).nullable().optional(),
       factionWarScore: z.number().int().min(0).max(100000000).optional(),
+      mythicFragments: z.number().int().min(0).max(1000000).optional(),
+      duelAttemptsToday: z.number().int().min(0).max(5).optional(),
+      duelDayKey: z.string().max(16).nullable().optional(),
       incomeCollectedAt: z.string().max(32).nullable().optional(),
       conquestAt: z.string().max(32).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
