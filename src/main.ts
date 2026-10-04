@@ -144,12 +144,24 @@ function duelDeckFor(opponent: DuelOpponent): ReturnType<typeof allGenerals> {
   return deck.map(general => ({ ...general, level: Math.max(1, Math.min(30, Math.round(opponent.score / 1800) + (general.grade - 2))), stars: Math.max(1, Math.min(5, general.stars)) }))
 }
 
+const DUMMY_DUEL_STORAGE_KEY = 'cheonharo.duel.dummy-opponents.v1'
+
 function dummyDuelOpponents(): DuelOpponent[] {
-  return [
+  const defaults: DuelOpponent[] = [
     { id: 'dummy-iron-gate', displayName: '철벽 관문의 더미', score: 16800, isDummy: true },
     { id: 'dummy-jade-banner', displayName: '청람 진형 더미', score: 22100, isDummy: true },
     { id: 'dummy-wind-tactician', displayName: '질풍 책사 더미', score: 27600, isDummy: true },
   ]
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(DUMMY_DUEL_STORAGE_KEY) ?? 'null') as unknown
+    if (Array.isArray(saved) && saved.length === defaults.length && saved.every(item => item && typeof item.id === 'string' && typeof item.displayName === 'string' && typeof item.score === 'number' && item.isDummy === true)) {
+      return saved as DuelOpponent[]
+    }
+    window.localStorage.setItem(DUMMY_DUEL_STORAGE_KEY, JSON.stringify(defaults))
+  } catch {
+    // Private browsing or malformed legacy storage: keep the deterministic defaults.
+  }
+  return defaults
 }
 
 function installDummyDuelOpponents(): void {
