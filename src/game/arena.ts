@@ -30,6 +30,7 @@ export interface BattleSnapshot {
   troopStatus: BattleTroopStatus[]
   difficulty: string
   difficultyMultiplier: number
+  duelMode: boolean
   enemyPower: number
   status: string
 }
@@ -1026,6 +1027,7 @@ export class Arena {
       troopStatus: this.troopStatus(),
       difficulty: this.difficultyLabel(),
       difficultyMultiplier: this.difficultyMultiplier,
+      duelMode: this.duelMode,
       enemyPower: this.enemyDeck.reduce((sum, enemy) => sum + enemy.leadership + enemy.martial + enemy.stratagem + enemy.speed + enemy.level * 4, 0),
       status: this.battleActive ? '전투 중' : '대기 중',
     }

@@ -235,6 +235,24 @@ async function listGameStates() {
   const byUser = new Map(states.map(state => [state.userId, state]));
   return accounts.map(user => ({ ...user, ...(byUser.get(user.id) ?? { userId: user.id, ...defaultGameState, updatedAt: new Date() }) }));
 }
+async function listDuelOpponents(viewerId, limit = 12) {
+  const accounts = await listGameStates();
+  return accounts.filter(account => account.id !== viewerId).map(account => {
+    const generals = parseStateJson(account.generalData);
+    const formation = parseStateJson(account.formationData);
+    if (!Array.isArray(generals) || !Array.isArray(formation)) return null;
+    const byId = new Map(generals.filter(general => general && typeof general.id === 'string').map(general => [general.id, general]));
+    const deck = formation.slice(0, 3).map(id => byId.get(id)).filter(Boolean);
+    if (!deck.length) return null;
+    return {
+      id: `user-${account.id}`,
+      displayName: account.name || `지휘관 ${account.id}`,
+      score: Number.isFinite(Number(account.battleScore)) ? Number(account.battleScore) : 0,
+      isDummy: false,
+      deck,
+    };
+  }).filter(Boolean).sort((left, right) => right.score - left.score).slice(0, Math.max(1, Math.min(50, limit)));
+}
 async function updateGameState(userId, values) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -754,6 +772,7 @@ export {
   adminProcedure,
   getDb,
   getGameState,
+  listDuelOpponents,
   listGameStates,
   listUsers,
   protectedProcedure,

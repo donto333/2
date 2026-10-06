@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getGameState, listGameStates, listUsers, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getGameState, listDuelOpponents, listGameStates, listUsers, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -34,6 +34,9 @@ export const gameRouter = router({
     updateGameState: adminProcedure.input(z.object({ userId: z.number().int().positive(), honor: z.number().int().min(0).max(100000000), silver: z.number().int().min(0).max(100000000), manuals: z.number().int().min(0).max(1000000), wins: z.number().int().min(0).max(1000000), battleScore: z.number().int().min(0).max(1000000000), grain: z.number().int().min(0).max(1000000000), wood: z.number().int().min(0).max(1000000000), iron: z.number().int().min(0).max(1000000000), influence: z.number().int().min(0).max(100000000) })).mutation(async ({ input }) => ({ userId: input.userId, game: await updateGameState(input.userId, { honor: input.honor, silver: input.silver, manuals: input.manuals, wins: input.wins, battleScore: input.battleScore, grain: input.grain, wood: input.wood, iron: input.iron, influence: input.influence }) })),
   }),
   leaderboard: createLeaderboardRouter({ router, publicProcedure, protectedProcedure }, leaderboard),
+  duel: router({
+    listOpponents: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(12) }).strict()).query(({ ctx, input }) => listDuelOpponents(ctx.user.id, input.limit)),
+  }),
   account: router({
     me: protectedProcedure.query(({ ctx }) => accountView(ctx.user)),
     gameState: protectedProcedure.query(({ ctx }) => getGameState(ctx.user.id)),

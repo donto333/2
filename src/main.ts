@@ -149,6 +149,7 @@ const leaderboard = createLeaderboardClient({
 })
 
 function duelDeckFor(opponent: DuelOpponent): ReturnType<typeof allGenerals> {
+  if (opponent.deck?.length) return opponent.deck.map(general => ({ ...general }))
   const catalog = allGenerals()
   const seed = [...opponent.id].reduce((sum, character) => sum + character.charCodeAt(0), opponent.score)
   const deck = [0, 1, 2].map(index => catalog[(seed + index * 17) % catalog.length])
@@ -183,14 +184,25 @@ function installDummyDuelOpponents(): void {
 }
 
 async function refreshDuelOpponents(): Promise<void> {
-  const result = await leaderboard.list(12)
-  const opponents: DuelOpponent[] = result.ok && result.value.entries.length
-    ? result.value.entries.map((entry, index) => ({ id: `user-${entry.rank}-${entry.displayName}-${index}`, displayName: entry.displayName, score: entry.score, isDummy: false }))
-    : dummyDuelOpponents()
-  duelDecks.clear()
-  opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
-  ui.setDuelOpponents(opponents)
-  ui.notify(result.ok && result.value.entries.length ? '온라인 지휘관 목록을 불러왔습니다.' : '온라인 유저가 없어 훈련용 더미 덱을 준비했습니다.')
+  if (authView.status === 'authenticated') {
+    try {
+      const opponents = await ManusAuth.query('duel.listOpponents', { limit: 12 }) as DuelOpponent[]
+      if (opponents.length) {
+        duelDecks.clear()
+        opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
+        ui.setDuelOpponents(opponents)
+        ui.notify('저장된 실제 유저 덱을 불러왔습니다.')
+        return
+      }
+    } catch {
+      // An unavailable authenticated endpoint falls through to the safe training roster.
+    }
+    installDummyDuelOpponents()
+    ui.notify('실제 유저 덱이 없어 훈련용 더미 덱을 준비했습니다.')
+    return
+  }
+  installDummyDuelOpponents()
+  ui.notify('게스트 모드에서는 훈련용 더미 덱을 사용합니다.')
 }
 
 const ui = new StrategyUI(root, {
