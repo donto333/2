@@ -66,6 +66,10 @@ interface BattleUnit {
   troops: number
   maxTroops: number
   attackTimer: number
+  statusGroup: THREE.Group
+  statusFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
+  hitFlash: number
+  knockback: THREE.Vector3
 }
 
 interface ArenaEffect {
@@ -115,6 +119,11 @@ export class Arena {
   private readonly effects: ArenaEffect[] = []
   private readonly activeBuffs: ActiveBattleEffect[] = []
   private readonly activeDebuffs: ActiveBattleEffect[] = []
+  private readonly cameraBase = new THREE.Vector3(0, 22, 29)
+  private readonly cameraLookAt = new THREE.Vector3(0, 0, -3)
+  private cameraShake = 0
+  private cameraIntro = 0
+  private cameraVictory = 0
 
   constructor(canvas: HTMLCanvasElement, callbacks: ArenaCallbacks) {
     this.callbacks = callbacks
@@ -127,8 +136,8 @@ export class Arena {
     this.renderer.toneMappingExposure = 1.05
     this.scene.background = new THREE.Color(0x0b1518)
     this.scene.fog = new THREE.FogExp2(0x18262a, 0.019)
-    this.camera.position.set(0, 22, 29)
-    this.camera.lookAt(0, 0, -3)
+    this.camera.position.copy(this.cameraBase)
+    this.camera.lookAt(this.cameraLookAt)
     this.buildLighting()
     this.buildBackdrop()
     this.buildTerrain()
@@ -273,7 +282,9 @@ export class Arena {
       const group = this.createUnit(general, jade, positions[index] ?? positions[0])
       const model = group.userData.model as THREE.Group
       const maxTroops = this.troopCapacity(general)
-      const unit: BattleUnit = { group, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16 }
+      const status = this.createTroopStatus(jade)
+      group.add(status.group)
+      const unit: BattleUnit = { group, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, knockback: new THREE.Vector3() }
       this.playerUnits.push(unit)
       this.scene.add(group)
     })
@@ -460,6 +471,19 @@ export class Arena {
     this.commandMarker = null
   }
 
+  private createTroopStatus(color: number): { group: THREE.Group; fill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> } {
+    const group = new THREE.Group()
+    group.position.set(0, 3.15, 0)
+    group.renderOrder = 8
+    const background = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.11), new THREE.MeshBasicMaterial({ color: 0x101719, transparent: true, opacity: 0.78, depthTest: false, depthWrite: false }))
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.065), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.96, depthTest: false, depthWrite: false }))
+    background.position.z = 0.02
+    fill.position.set(-0.79, 0, 0.03)
+    fill.scale.x = 1
+    group.add(background, fill)
+    return { group, fill }
+  }
+
   private createMarker(color: number): THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial> {
     const marker = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.78, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, side: THREE.DoubleSide }))
     marker.rotation.x = -Math.PI / 2
@@ -577,9 +601,51 @@ export class Arena {
     }
   }
 
-  private spawnSlashWave(general: General, damage: number): void {
+  private skillColor(general: General): number {
+    if (general.id === 'zhou-yu' || general.role === '궁병') return 0xff8a4c
+    if (general.id === 'zhuge-liang' || general.role === '책사') return 0x72c9ff
+    if (general.id === 'lu-bu') return 0xff4f68
+    if (general.id === 'zhao-yun') return 0xf6c56d
+    return 0x4cdfff
+  }
+
+  private spawnSkillBurst(position: THREE.Vector3, color: number): void {
     const group = new THREE.Group()
-    const material = new THREE.MeshBasicMaterial({ color: 0x4cdfff, transparent: true, opacity: 0.88, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+    const particles: THREE.Mesh[] = []
+    for (let index = 0; index < 12; index += 1) {
+      const particle = new THREE.Mesh(new THREE.IcosahedronGeometry(0.055 + (index % 3) * 0.025, 0), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }))
+      particle.userData.velocity = new THREE.Vector3(Math.cos(index * 0.52) * (0.7 + (index % 4) * 0.12), 0.35 + (index % 3) * 0.18, Math.sin(index * 0.52) * (0.7 + (index % 4) * 0.12))
+      group.add(particle)
+      particles.push(particle)
+    }
+    group.position.copy(position)
+    this.addEffect({
+      object: group,
+      age: 0,
+      life: 0.9,
+      tick: effect => {
+        const progress = effect.age / effect.life
+        particles.forEach(particle => {
+          const velocity = particle.userData.velocity as THREE.Vector3
+          particle.position.copy(velocity).multiplyScalar(progress * 2.2)
+          particle.rotation.x += 0.12
+          particle.rotation.y += 0.16
+          ;(particle.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - progress)
+        })
+      },
+      dispose: () => group.traverse(node => {
+        const mesh = node as THREE.Mesh
+        mesh.geometry?.dispose()
+        const material = mesh.material
+        if (material && !Array.isArray(material)) material.dispose()
+      }),
+    })
+  }
+
+  private spawnSlashWave(general: General, damage: number): void {
+    const color = this.skillColor(general)
+    const group = new THREE.Group()
+    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
     for (let index = 0; index < 3; index += 1) {
       const slash = new THREE.Mesh(new THREE.TorusGeometry(1.35 + index * 0.22, 0.12, 8, 32, Math.PI * 0.86), material.clone())
       slash.rotation.set(Math.PI / 2, index * 0.08, index * 0.2 - 0.42)
@@ -601,7 +667,7 @@ export class Arena {
         group.rotation.z += 0.055
         group.scale.setScalar(0.65 + Math.sin(Math.min(progress, 0.5) * Math.PI) * 0.62)
         group.children.forEach(child => ((child as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - Math.max(0, progress - 0.55) / 0.45))
-        if (progress > 0.72 && effect.age - 0.016 <= effect.life * 0.72) this.spawnImpact(end, damage, 0x4cdfff)
+        if (progress > 0.72 && effect.age - 0.016 <= effect.life * 0.72) this.spawnImpact(end, damage, color)
       },
       dispose: () => {
         group.traverse(node => {
@@ -612,7 +678,7 @@ export class Arena {
         })
       },
     })
-    const signature = this.makeTextSprite('강동패왕', '#ff8066', 1.55)
+    const signature = this.makeTextSprite(general.skillName, `#${color.toString(16).padStart(6, '0')}`, 1.55)
     signature.position.set(0, 4.6, -3)
     this.addEffect({
       object: signature,
@@ -673,6 +739,9 @@ export class Arena {
     this.lastPulse = 0
     this.lastVolley = -1
     this.lastCombatPulse = 0
+    this.cameraIntro = 1.35
+    this.cameraVictory = 0
+    this.cameraShake = 0.12
     this.difficultyMultiplier = this.duelMode ? 1 : 0.86
     this.activeBuffs.splice(0)
     this.activeDebuffs.splice(0)
@@ -697,7 +766,9 @@ export class Arena {
       group.rotation.y = Math.PI
       const model = group.userData.model as THREE.Group
       const maxTroops = this.troopCapacity(general)
-      this.enemyUnits.push({ group, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15 })
+      const status = this.createTroopStatus(ember)
+      group.add(status.group)
+      this.enemyUnits.push({ group, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, knockback: new THREE.Vector3() })
       this.scene.add(group)
     })
     this.callbacks.onEvent(`작전 개시 · 무장 덱 ${this.enemyDeck.map(general => general.name).join(' · ')} · ${BATTLE_PATTERNS[0].warning}`)
@@ -798,6 +869,8 @@ export class Arena {
     this.combo = 0
     this.comboTimer = 0
     this.spawnSlashWave(unit.general, amplifiedDamage * 10)
+    this.spawnSkillBurst(new THREE.Vector3(0, 1.1, -5.5), this.skillColor(unit.general))
+    this.cameraShake = Math.min(0.55, this.cameraShake + 0.22)
     this.callbacks.onEvent(`${unit.general.name} · ${unit.general.skillName} 발동 · ${impact.message} · ${effectDefinition(loadout.buff).name} + ${effectDefinition(loadout.debuff).name} · ${consumedCombo ? `${consumedCombo}연계 증폭 · ` : ''}적 사기 -${amplifiedDamage}`)
   }
 
@@ -874,6 +947,10 @@ export class Arena {
     if (target.troops <= 0) return
     const damage = Math.max(1, Math.round(amount))
     target.troops = Math.max(0, target.troops - damage)
+    target.hitFlash = 0.18
+    target.knockback.add(new THREE.Vector3(target.group.position.x > 0 ? 0.08 : -0.08, 0, target.group.position.z > 0 ? 0.18 : -0.18))
+    this.cameraShake = Math.min(0.42, this.cameraShake + (damage >= 80 ? 0.16 : 0.06))
+    target.statusFill.scale.x = Math.max(0.001, target.troops / target.maxTroops)
     if (target.troops === 0) {
       target.group.visible = false
       this.callbacks.onEvent(`${target.general.name}의 병력이 전멸했습니다.`)
@@ -958,7 +1035,11 @@ export class Arena {
     this.updateEffects(delta)
     this.playerUnits.forEach(unit => {
       unit.group.position.lerp(unit.target, Math.min(delta * (1.15 + unit.general.speed / 75), 1))
+      unit.group.position.addScaledVector(unit.knockback, delta * 7)
+      unit.knockback.multiplyScalar(Math.max(0, 1 - delta * 8))
       unit.group.position.y = Math.sin((this.clock.getElapsed() + unit.group.position.x) * 1.6) * 0.035
+      unit.hitFlash = Math.max(0, unit.hitFlash - delta)
+      unit.model.traverse(node => { const mesh = node as THREE.Mesh; if (mesh.material && !Array.isArray(mesh.material) && 'emissiveIntensity' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = unit.hitFlash > 0 ? 0.75 : 0 })
       this.animateModel(unit.model, unit.general, this.clock.getElapsed())
     })
     if (this.selectionRing && this.playerUnits[this.selectedUnit]) {
@@ -970,8 +1051,11 @@ export class Arena {
     }
     this.enemyUnits.forEach((unit, index) => {
       unit.group.position.y = Math.sin(this.clock.getElapsed() * 1.8 + index) * 0.035
+      unit.hitFlash = Math.max(0, unit.hitFlash - delta)
+      unit.model.traverse(node => { const mesh = node as THREE.Mesh; if (mesh.material && !Array.isArray(mesh.material) && 'emissiveIntensity' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = unit.hitFlash > 0 ? 0.75 : 0 })
       this.animateModel(unit.model, unit.general, this.clock.getElapsed() + index * 0.4)
     })
+    this.updateCamera(delta)
     if (!this.battleActive) return
     this.skillCooldown = Math.max(0, this.skillCooldown - delta)
     this.battleElapsed += delta
@@ -1021,10 +1105,27 @@ export class Arena {
     if (this.battleElapsed > 21 || playerTroops <= 0 || enemyTroops <= 0 || this.threat >= 100) {
       this.battleActive = false
       const won = enemyTroops <= 0 || (playerTroops > enemyTroops && this.threat < 100 && this.battleElapsed > 21)
+      this.cameraVictory = won ? 1.5 : 0
+      this.cameraShake = won ? 0.22 : 0.1
       const score = Math.max(0, Math.round(4200 + this.combo * 240 + (100 - this.threat) * 18 + playerTroops * 1.4 + this.generals.reduce((sum, general) => sum + general.level * 41 + general.leadership + general.martial + general.stratagem + general.speed, 0)))
       this.callbacks.onBattleEnd({ won, score, durationMs: Math.round(this.battleElapsed * 1000) })
       this.callbacks.onEvent(won ? '전투 승리 · 세 번의 파도를 모두 넘었습니다.' : '전투 패배 · 위협도가 한계에 도달했습니다.')
     }
+  }
+
+  private updateCamera(delta: number): void {
+    this.cameraIntro = Math.max(0, this.cameraIntro - delta)
+    this.cameraVictory = Math.max(0, this.cameraVictory - delta)
+    this.cameraShake = Math.max(0, this.cameraShake - delta * 1.8)
+    const introOffset = this.cameraIntro > 0 ? (this.cameraIntro / 1.35) * 3.8 : 0
+    const victoryOffset = this.cameraVictory > 0 ? (1 - this.cameraVictory / 1.5) * 2.8 : 0
+    const shake = this.cameraShake
+    this.camera.position.set(
+      this.cameraBase.x + (Math.random() - 0.5) * shake,
+      this.cameraBase.y + (Math.random() - 0.5) * shake * 0.55,
+      this.cameraBase.z + introOffset + victoryOffset,
+    )
+    this.camera.lookAt(this.cameraLookAt.x, this.cameraLookAt.y + (this.cameraVictory > 0 ? 1.2 : 0), this.cameraLookAt.z)
   }
 
   private tickBattleEffects(delta: number): void {
