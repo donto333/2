@@ -120,6 +120,18 @@ try {
   await page.waitForFunction(() => window.__strategy.arena.getSnapshot().elapsed > 0.25, null, { timeout: 5000 })
   const battle = await page.evaluate(() => window.__strategy.arena.getSnapshot())
   if (!battle.active || battle.elapsed <= 0.25) throw new Error(`battle clock did not start (${battle.elapsed.toFixed(2)}s)`)
+  await page.waitForFunction(() => {
+    const scene = window.__strategy.arena.scene
+    let loaded = 0
+    scene.traverse(node => {
+      if (!node.name.startsWith('realistic-squad-')) return
+      node.traverse(child => {
+        const material = child.material
+        if (material && !Array.isArray(material) && material.map) loaded += 1
+      })
+    })
+    return loaded >= 5
+  }, null, { timeout: 5000 })
   await page.click('[data-action="move"][data-index="1"]')
   await page.click('[data-action="battle-skill"]')
   await page.waitForTimeout(250)

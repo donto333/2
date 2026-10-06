@@ -319,7 +319,7 @@ export class Arena {
     banner.rotation.y = Math.PI / 2
     const model = this.createGeneralModel(general, teamColor)
     group.userData.model = model
-    group.add(this.createSquad(teamColor, mounted), model, banner)
+    group.add(this.createSquad(teamColor, mounted, general.role), model, banner)
     return group
   }
 
@@ -436,29 +436,43 @@ export class Arena {
     return model
   }
 
-  private createSquad(teamColor: number, mounted: boolean): THREE.Group {
+  private createSquad(teamColor: number, mounted: boolean, role: General['role']): THREE.Group {
     const squad = new THREE.Group()
-    const body = new THREE.MeshStandardMaterial({ color: teamColor, roughness: 0.78, metalness: 0.08 })
-    const trim = new THREE.MeshStandardMaterial({ color: teamColor === ember ? 0x8e3340 : 0xc8e8d8, roughness: 0.66, metalness: 0.2 })
+    squad.name = `realistic-squad-${role}`
+    const markerColor = teamColor === ember ? 0x9b3448 : 0x45c7a4
+    const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x071218, transparent: true, opacity: 0.38, depthWrite: false })
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(mounted ? 1.55 : 1.2, 28), shadowMaterial)
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.set(0, 0.025, 0.72)
+    squad.add(shadow)
+    const formationMarker = new THREE.Mesh(new THREE.RingGeometry(mounted ? 1.35 : 1.02, mounted ? 1.43 : 1.1, 32), new THREE.MeshBasicMaterial({ color: markerColor, transparent: true, opacity: 0.72, side: THREE.DoubleSide, depthWrite: false }))
+    formationMarker.rotation.x = -Math.PI / 2
+    formationMarker.position.set(0, 0.04, 0.72)
+    squad.add(formationMarker)
+    const imageName = role === '기병' ? 'cavalry' : role === '궁병' ? 'archer' : 'infantry'
+    const textureLoader = new THREE.TextureLoader()
+    const imageMaterial = new THREE.MeshBasicMaterial({ color: teamColor === ember ? 0xffd0d0 : 0xe2fff4, transparent: true, opacity: 0.98, side: THREE.DoubleSide, depthWrite: false, fog: false })
+    const texturePath = `/assets/troops/${imageName}.webp`
     for (let index = 0; index < 5; index += 1) {
       const soldier = new THREE.Group()
       const column = index % 3
       const row = Math.floor(index / 3)
-      soldier.position.set((column - 1) * 0.72, 0, 0.7 + row * 0.7)
-      const torso = new THREE.Mesh(new THREE.CylinderGeometry(mounted ? 0.15 : 0.13, mounted ? 0.19 : 0.16, mounted ? 0.72 : 0.58, 6), body)
-      torso.position.y = mounted ? 0.58 : 0.39
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), trim)
-      head.position.y = mounted ? 1.04 : 0.82
-      soldier.add(torso, head)
-      if (!mounted) {
-        const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.05, 5), trim)
-        spear.position.set(0.2, 0.86, -0.04)
-        spear.rotation.z = -0.2
-        soldier.add(spear)
-      }
+      soldier.position.set((column - 1) * (mounted ? 0.88 : 0.68), 0, 0.7 + row * (mounted ? 0.78 : 0.62))
+      const soldierMaterial = imageMaterial.clone()
+      const soldierMesh = new THREE.Mesh(new THREE.PlaneGeometry(mounted ? 1.18 : 0.86, mounted ? 1.77 : 1.48), soldierMaterial)
+      soldierMesh.position.y = mounted ? 1.02 : 0.82
+      soldierMesh.position.z = -0.06
+      soldierMesh.renderOrder = 4
+      soldier.add(soldierMesh)
+      textureLoader.load(texturePath, texture => {
+        texture.colorSpace = THREE.SRGBColorSpace
+        texture.anisotropy = 2
+        soldierMaterial.map = texture
+        soldierMaterial.needsUpdate = true
+      })
       squad.add(soldier)
     }
-    squad.scale.setScalar(mounted ? 0.86 : 0.92)
+    squad.scale.setScalar(mounted ? 0.8 : 0.86)
     return squad
   }
 
