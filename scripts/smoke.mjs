@@ -51,6 +51,7 @@ async function openGame(context, errors) {
   await page.waitForSelector('.app-shell', { timeout: 30_000 })
   if (await page.locator('.access-gate').count() !== 0) throw new Error('guest access was lost after reload')
   await page.waitForSelector('[data-action="section"][data-section="battle"]')
+  if (await page.locator('[data-action="section"][data-section="admin"]').count() !== 0) throw new Error('admin navigation is visible to a non-admin guest')
   return page
 }
 
@@ -69,7 +70,12 @@ try {
   const title = await page.locator('.brand-title').textContent()
   if (title?.trim() !== '천하') throw new Error(`unexpected title: ${title}`)
   if (await page.locator('canvas#game').count() !== 1) throw new Error('3D battlefield canvas missing')
-  await page.evaluate(() => window.__strategy.ui.setAuth({ status: 'authenticated', name: '스모크 관리자' }))
+  await page.evaluate(() => {
+    window.__strategy.ui.setAuth({ status: 'authenticated', name: '스모크 관리자' })
+    window.__strategy.ui.setAccount({ id: 1, openId: 'smoke-admin', name: '스모크 관리자', email: 'admin@example.com', loginMethod: 'smoke', role: 'admin', createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() })
+    window.__strategy.ui.render(window.__strategy.state)
+  })
+  if (await page.locator('[data-action="section"][data-section="admin"]').count() !== 1) throw new Error('admin navigation is hidden for an admin account')
   await page.click('[data-action="section"][data-section="recruit"]')
   if (!(await page.locator('[data-auth-button]').textContent())?.includes('스모크 관리자')) throw new Error('auth button reset after menu navigation')
   await page.click('[data-action="section"][data-section="overview"]')
@@ -173,12 +179,12 @@ try {
   if (await page.locator('.city-marker-castle img').evaluateAll(images => images.some(image => !image.complete || image.naturalWidth === 0))) throw new Error('territory castle art failed to load')
   await page.locator('.map-canvas').scrollIntoViewIfNeeded()
   await page.screenshot({ path: `${out}/03-territory.png` })
-  await page.click('[data-action="section"][data-section="admin"]')
+  await page.evaluate(() => { window.__strategy.state.section = 'admin'; window.__strategy.ui.render(window.__strategy.state) })
   await page.waitForSelector('.page-section--admin')
   if ((await page.locator('.admin-kpi').count()) !== 4) throw new Error('admin overview KPIs missing')
   await page.click('[data-action="admin-tab"][data-admin-tab="accounts"]')
   await page.waitForSelector('.admin-account-toolbar')
-  if ((await page.locator('.admin-account-gate').count()) !== 1) throw new Error('admin account access gate missing for logged-out preview')
+  if ((await page.locator('.admin-account-toolbar').count()) !== 1) throw new Error('admin account management panel missing for admin preview')
   await page.click('[data-action="admin-tab"][data-admin-tab="generals"]')
   await page.waitForSelector('.admin-general-table')
   await page.click('[data-action="admin-filter"][data-admin-filter="legendary"]')

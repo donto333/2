@@ -195,6 +195,12 @@ async function refreshDuelOpponents(): Promise<void> {
 
 const ui = new StrategyUI(root, {
   onSection: (section: Section) => {
+    if (section === 'admin' && accountView?.role !== 'admin') {
+      state.section = 'overview'
+      ui.render(state)
+      ui.notify('관리자 권한이 있는 계정만 관리자센터를 이용할 수 있습니다.', 'ember')
+      return
+    }
     if (duelActive && section !== 'battle') {
       duelActive = false
       arena.stopBattle()

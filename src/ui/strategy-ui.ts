@@ -148,6 +148,9 @@ export class StrategyUI {
   setAccount(account: AccountView | null): void {
     this.account = account
   }
+  private isAdmin(): boolean {
+    return this.account?.role === 'admin'
+  }
 
   setAdminAccounts(accounts: AccountView[], error: string | null = null): void {
     this.adminAccounts = accounts
@@ -330,8 +333,8 @@ export class StrategyUI {
           ${this.navButton('shop', '◈', '신화 상점', state.section, `${state.mythicFragments}조각`)}
           ${this.navButton('rank', '≋', '천하 랭킹', state.section)}
           ${this.navButton('account', '◎', '계정 관리', state.section)}
-          <div class="sidebar-rule"></div><div class="sidebar-label">운영</div>
-          ${this.navButton('admin', '▣', '관리자 센터', state.section, 'LIVE')}
+          ${this.isAdmin() ? '<div class="sidebar-rule"></div><div class="sidebar-label">운영</div>' : ''}
+          ${this.isAdmin() ? this.navButton('admin', '▣', '관리자 센터', state.section, 'LIVE') : ''}
           <div class="sidebar-spacer"></div>
           <div class="sidebar-profile"><div class="profile-orb">青</div><div><strong>촉한 진영</strong><small>옥패 07 · Lv.12</small></div></div>
         </aside>
@@ -359,7 +362,7 @@ export class StrategyUI {
     if (state.section === 'shop') return this.shopSection(state)
     if (state.section === 'rank') return this.rankSection(state)
     if (state.section === 'account') return this.accountSection()
-    if (state.section === 'admin') return this.adminSection(state)
+    if (state.section === 'admin') return this.isAdmin() ? this.adminSection(state) : this.overviewSection(state)
     return this.overviewSection(state)
   }
 
