@@ -399,8 +399,8 @@ const ui = new StrategyUI(root, {
     state.section = 'shop'
     ui.render(state)
   },
-  onShopPurchase: type => {
-    const result = purchaseMythicEquipment(state, type)
+  onShopPurchase: equipmentId => {
+    const result = purchaseMythicEquipment(state, equipmentId)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()

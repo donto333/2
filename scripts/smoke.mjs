@@ -83,9 +83,9 @@ try {
   if ((await page.evaluate(() => window.__strategy.arena.getSnapshot().opponentDeck.length)) !== 3) throw new Error('duel opponent deck was not loaded')
   await page.click('[data-action="section"][data-section="shop"]')
   await page.waitForSelector('.page-section--shop .shop-item')
-  if (await page.locator('.page-section--shop .shop-item').count() !== 3) throw new Error('mythic shop does not show three equipment types')
+  if (await page.locator('.page-section--shop .shop-item').count() !== 12) throw new Error('mythic shop does not show twelve stat-specific equipment items')
   await page.evaluate(() => { window.__strategy.state.mythicFragments = 20; window.__strategy.ui.render(window.__strategy.state) })
-  await page.click('[data-action="shop-purchase"][data-equipment-type="weapon"]')
+  await page.click('[data-action="shop-purchase"][data-equipment-id="shop-mythic-command-weapon"]')
   if (await page.evaluate(() => window.__strategy.state.mythicFragments) !== 0) throw new Error('mythic fragment purchase did not consume twenty fragments')
 
   await page.click('[data-action="section"][data-section="recruit"]')

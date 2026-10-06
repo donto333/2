@@ -82,7 +82,7 @@ export interface StrategyUiCallbacks {
   onAccountSave: (name: string) => void
   onRankRefresh: () => void
   onStore: () => void
-  onShopPurchase: (type: EquipmentType) => void
+  onShopPurchase: (equipmentId: string) => void
   onAdminAction: (action: string) => void
   onAdminAccountsRefresh: (search?: string) => void
   onAdminRoleChange: (id: number, role: 'user' | 'admin') => void
@@ -658,7 +658,8 @@ export class StrategyUI {
   }
 
   private shopSection(state: StrategyState): string {
-    const cards = MYTHIC_SHOP_EQUIPMENT.map(item => `<article class="shop-item glass-card"><div class="shop-item-icon">${EQUIPMENT_TYPE_META[item.type].icon}</div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${escapeHtml(item.skillName)}</small></div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-type="${item.type}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>`).join('')
+    const statLabels: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
+    const cards = MYTHIC_SHOP_EQUIPMENT.map(item => `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon">${EQUIPMENT_TYPE_META[item.type].icon}</div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small></div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>`).join('')
     return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">MYTHIC ARMORY · SHOP</span><h1>신화 장비 상점</h1><p class="heading-copy">유저 대련 승리로 얻은 신화장비 조각으로 장비를 교환합니다.</p></div><div class="shop-fragments glass-card"><span>보유 신화장비 조각</span><strong>✦ ${state.mythicFragments}</strong><small>신화장비 1개 · 조각 20개</small></div></div><div class="shop-notice glass-card"><strong>대련 승리 보상</strong><span>유저 대련에서 승리할 때마다 신화장비 조각 1개를 획득합니다. 신화 장비 뽑기는 제공하지 않으며 상점에서만 교환할 수 있습니다.</span></div><div class="shop-grid">${cards}</div></section>`
   }
 
@@ -738,7 +739,7 @@ export class StrategyUI {
     else if (action === 'account-refresh') this.callbacks.onAccountRefresh()
     else if (action === 'rank-refresh') this.callbacks.onRankRefresh()
     else if (action === 'store') this.callbacks.onStore()
-    else if (action === 'shop-purchase') this.callbacks.onShopPurchase((button.dataset.equipmentType ?? 'weapon') as EquipmentType)
+    else if (action === 'shop-purchase') this.callbacks.onShopPurchase(button.dataset.equipmentId ?? 'shop-mythic-martial-weapon')
     else if (action === 'admin-tab') {
       this.adminTab = button.dataset.adminTab ?? 'overview'
       this.callbacks.onAdminAction(`관리자 탭을 「${button.textContent?.trim() ?? '운영 개요'}」로 전환했습니다.`)

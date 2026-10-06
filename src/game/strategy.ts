@@ -437,9 +437,18 @@ export const MYTHIC_EVENT_EQUIPMENT: Equipment = {
 }
 
 export const MYTHIC_SHOP_EQUIPMENT: Equipment[] = [
-  { id: 'shop-mythic-weapon', name: '신화·적룡천극', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, skillName: '적룡 파천', skillDescription: '무력 기반 공격 효율을 크게 높입니다.' },
-  { id: 'shop-mythic-armor', name: '신화·현무성갑', type: 'armor', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, skillName: '현무 철벽', skillDescription: '통솔 기반 방어 효율을 크게 높입니다.' },
-  { id: 'shop-mythic-accessory', name: '신화·천책옥패', type: 'accessory', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, skillName: '천책 귀모', skillDescription: '모략 기반 전술 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-command-weapon', name: '신화·천군명검', type: 'weapon', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, skillName: '천군의 칼날', skillDescription: '통솔 기반 지휘 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-command-armor', name: '신화·천군용갑', type: 'armor', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, skillName: '천군 철벽', skillDescription: '통솔 기반 방어 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-command-accessory', name: '신화·군령옥패', type: 'accessory', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, skillName: '군령의 성좌', skillDescription: '통솔 기반 편성 보정을 크게 높입니다.' },
+  { id: 'shop-mythic-martial-weapon', name: '신화·적룡천극', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, skillName: '적룡 파천', skillDescription: '무력 기반 공격 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-martial-armor', name: '신화·패왕철갑', type: 'armor', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, skillName: '패왕 강체', skillDescription: '무력 기반 돌파력을 크게 높입니다.' },
+  { id: 'shop-mythic-martial-accessory', name: '신화·무쌍호패', type: 'accessory', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, skillName: '무쌍의 혼', skillDescription: '무력 기반 연계 피해를 크게 높입니다.' },
+  { id: 'shop-mythic-stratagem-weapon', name: '신화·천책선검', type: 'weapon', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, skillName: '천책 개문', skillDescription: '모략 기반 전술 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-stratagem-armor', name: '신화·귀모도포', type: 'armor', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, skillName: '귀모 환영', skillDescription: '모략 기반 적 약화 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-stratagem-accessory', name: '신화·천책옥패', type: 'accessory', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, skillName: '천책 귀모', skillDescription: '모략 기반 전술 게이지를 크게 높입니다.' },
+  { id: 'shop-mythic-speed-weapon', name: '신화·질풍유성창', type: 'weapon', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, skillName: '유성 관통', skillDescription: '속도 기반 선제 공격 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-speed-armor', name: '신화·질풍경갑', type: 'armor', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, skillName: '질풍 보법', skillDescription: '속도 기반 행동 순환을 크게 높입니다.' },
+  { id: 'shop-mythic-speed-accessory', name: '신화·유성환', type: 'accessory', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, skillName: '유성 잔상', skillDescription: '속도 기반 회피와 연계 효율을 크게 높입니다.' },
 ]
 
 export function createInitialState(): StrategyState {
@@ -596,10 +605,12 @@ function createDrawnEquipment(index: number): Equipment {
 export interface EquipmentDrawResult { ok: boolean; message: string; rewards: Equipment[] }
 
 export interface MythicShopResult { ok: boolean; message: string; item?: Equipment }
-export function purchaseMythicEquipment(state: StrategyState, type: EquipmentType): MythicShopResult {
+export function purchaseMythicEquipment(state: StrategyState, equipmentId: string): MythicShopResult {
   ensureEquipmentState(state)
   if (state.mythicFragments < MYTHIC_FRAGMENT_COST) return { ok: false, message: `신화장비 조각이 부족합니다. ${MYTHIC_FRAGMENT_COST}개가 필요합니다.` }
-  const template = MYTHIC_SHOP_EQUIPMENT.find(item => item.type === type)
+  // Legacy callers may still provide a slot type; new shop cards always use the unique template id.
+  const template = MYTHIC_SHOP_EQUIPMENT.find(item => item.id === equipmentId)
+    ?? MYTHIC_SHOP_EQUIPMENT.find(item => item.type === equipmentId)
   if (!template) return { ok: false, message: '해당 신화장비를 찾을 수 없습니다.' }
   state.mythicFragments -= MYTHIC_FRAGMENT_COST
   const item = { ...template, id: `${template.id}-${Date.now()}-${state.equipmentInventory.length}` }

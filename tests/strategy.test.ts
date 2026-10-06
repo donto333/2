@@ -183,7 +183,18 @@ describe('commander attributes', () => {
     expect(result.ok).toBe(true)
     expect(state.mythicFragments).toBe(0)
     expect(state.equipmentInventory.some(item => item.type === 'armor' && item.grade === 'mythic')).toBe(true)
-    expect(MYTHIC_SHOP_EQUIPMENT).toHaveLength(3)
+    expect(MYTHIC_SHOP_EQUIPMENT).toHaveLength(12)
+    expect(new Set(MYTHIC_SHOP_EQUIPMENT.map(item => item.set)).size).toBe(4)
+    expect(new Set(MYTHIC_SHOP_EQUIPMENT.map(item => item.mainStat)).size).toBe(4)
+    for (const set of ['command', 'martial', 'stratagem', 'speed'] as const) {
+      expect(MYTHIC_SHOP_EQUIPMENT.filter(item => item.set === set)).toHaveLength(3)
+    }
+    for (const type of ['weapon', 'armor', 'accessory'] as const) {
+      expect(MYTHIC_SHOP_EQUIPMENT.filter(item => item.type === type)).toHaveLength(4)
+    }
+    state.mythicFragments = 20
+    expect(purchaseMythicEquipment(state, 'shop-mythic-speed-accessory').ok).toBe(true)
+    expect(state.equipmentInventory.some(item => item.id.startsWith('shop-mythic-speed-accessory-'))).toBe(true)
     expect(purchaseMythicEquipment(state, 'weapon').ok).toBe(false)
   })
 
