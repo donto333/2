@@ -505,6 +505,48 @@ export function skillPower(general: General): number {
   return general.skillPower ?? (100 + (skillRank(general) - 1) * 18 + Math.max(0, general.level - 10) * 3)
 }
 
+export interface GeneralSkillDetail {
+  trigger: string
+  target: string
+  effect: string
+  duration: string
+  cooldown: string
+}
+
+export function skillDetail(general: General): GeneralSkillDetail {
+  const power = skillPower(general)
+  const rank = skillRank(general)
+  const cooldown = `${Math.max(8, 20 - rank * 2)}초`
+  if (general.role === '기병') return {
+    trigger: '전투 시작 후 2초 또는 돌격 명령',
+    target: '전방 적 1명과 인접 적',
+    effect: `${general.skillName} · 주 대상 피해 ${power}% · 주변 적 사기 -${Math.round(power / 8)}`,
+    duration: '즉시 피해 · 사기 약화 5초',
+    cooldown,
+  }
+  if (general.role === '궁병') return {
+    trigger: '후열 배치 후 3초마다 자동 조준',
+    target: '현재 체력이 가장 낮은 적',
+    effect: `${general.skillName} · 원거리 피해 ${power}% · 치명타 확률 +${Math.min(35, 12 + rank * 3)}%`,
+    duration: '피해 즉시 · 치명타 보정 4초',
+    cooldown,
+  }
+  if (general.role === '책사') return {
+    trigger: '전술 게이지 50% 이상 또는 전술 명령 직후',
+    target: '아군 전체와 적 전열',
+    effect: `${general.skillName} · 아군 전술 위력 +${Math.round(power / 7)}% · 적 행동력 -${Math.round(power / 10)}`,
+    duration: `${5 + rank}초`,
+    cooldown,
+  }
+  return {
+    trigger: '아군 병력 70% 이하 또는 중앙 돌파 명령',
+    target: '자신과 전방 아군',
+    effect: `${general.skillName} · 피해 감소 ${Math.min(45, 18 + rank * 4)}% · 적 위협 +${Math.round(power / 9)}`,
+    duration: `${4 + rank}초`,
+    cooldown,
+  }
+}
+
 export function totalPower(state: StrategyState): number {
   return state.formation.reduce((sum, id) => sum + (findGeneral(state, id) ? combatPower(findGeneral(state, id)!) + equipmentPower(state, id) : 0), 0)
 }

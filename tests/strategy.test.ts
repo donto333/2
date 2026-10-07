@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -57,6 +57,18 @@ describe('commander attributes', () => {
     expect(new Set(generals.map(general => general.id)).size).toBe(65)
     expect(generals.some(general => general.id === 'liu-bei')).toBe(true)
     expect(generals.some(general => general.id === 'da-qiao')).toBe(true)
+  })
+
+  it('provides trigger, target, effect, duration, and cooldown details for every general skill', () => {
+    const details = allGenerals().map(general => skillDetail(general))
+    expect(details).toHaveLength(65)
+    for (const detail of details) {
+      expect(detail.trigger.length).toBeGreaterThan(0)
+      expect(detail.target.length).toBeGreaterThan(0)
+      expect(detail.effect.length).toBeGreaterThan(0)
+      expect(detail.duration.length).toBeGreaterThan(0)
+      expect(detail.cooldown).toMatch(/초/)
+    }
   })
 
   it('returns ten visible rewards for a ten-pull and charges the ten-pull cost', () => {
