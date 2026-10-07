@@ -1,4 +1,4 @@
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentSetCounts, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
+import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentSetCounts, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, BattleTroopStatus } from '../game/arena'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
@@ -84,6 +84,7 @@ export interface StrategyUiCallbacks {
   onRankRefresh: () => void
   onStore: () => void
   onShopPurchase: (equipmentId: string) => void
+  onCashShopPurchase: (productId: string) => void
   onAdminAction: (action: string) => void
   onAdminAccountsRefresh: (search?: string) => void
   onAdminRoleChange: (id: number, role: 'user' | 'admin') => void
@@ -114,6 +115,7 @@ export class StrategyUI {
   private summonTab: 'generals' | 'equipment' = 'generals'
   private equipmentSort: EquipmentSort = 'grade'
   private equipmentSortDescending = true
+  private shopTab: 'resources' | 'mythic' = 'resources'
 
   constructor(root: HTMLElement, callbacks: StrategyUiCallbacks) {
     this.root = root
@@ -665,8 +667,12 @@ export class StrategyUI {
 
   private shopSection(state: StrategyState): string {
     const statLabels: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
-    const cards = MYTHIC_SHOP_EQUIPMENT.map(item => `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon">${EQUIPMENT_TYPE_META[item.type].icon}</div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small></div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>`).join('')
-    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">MYTHIC ARMORY · SHOP</span><h1>신화 장비 상점</h1><p class="heading-copy">유저 대련 승리로 얻은 신화장비 조각으로 장비를 교환합니다.</p></div><div class="shop-fragments glass-card"><span>보유 신화장비 조각</span><strong>✦ ${state.mythicFragments}</strong><small>신화장비 1개 · 조각 20개</small></div></div><div class="shop-notice glass-card"><strong>대련 승리 보상</strong><span>유저 대련에서 승리할 때마다 신화장비 조각 1개를 획득합니다. 신화 장비 뽑기는 제공하지 않으며 상점에서만 교환할 수 있습니다.</span></div><div class="shop-grid">${cards}</div></section>`
+    const resourceCards = CASH_SHOP_PRODUCTS.map(product => `<article class="shop-item shop-item--resource glass-card"><div class="shop-item-icon shop-item-icon--resource">${RESOURCE_META[product.resource].icon}</div><div class="shop-item-copy"><span class="pill pill--resource">재화 보급</span><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.description)}</p><small>${RESOURCE_META[product.resource].label} +${formatNumber(product.amount)} · 테스트 상품</small></div><button class="action-button action-button--primary" data-action="cash-shop-purchase" data-product-id="${product.id}">₩ ${product.priceKRW.toLocaleString('ko-KR')} · 테스트 구매</button></article>`).join('')
+    const mythicCards = MYTHIC_SHOP_EQUIPMENT.map(item => `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon">${EQUIPMENT_TYPE_META[item.type].icon}</div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small></div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>`).join('')
+    const cards = this.shopTab === 'resources' ? resourceCards : mythicCards
+    const title = this.shopTab === 'resources' ? '재화 보급 상점' : '신화 장비 상점'
+    const description = this.shopTab === 'resources' ? '영토·강화·연구에 필요한 재화를 상품별로 보급합니다.' : '유저 대련 승리로 얻은 신화장비 조각으로 장비를 교환합니다.'
+    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">CELESTIAL MARKET · SHOP</span><h1>${title}</h1><p class="heading-copy">${description}</p></div><div class="shop-balances glass-card"><div><span>보유 신화 조각</span><strong>✦ ${state.mythicFragments}</strong></div><div><span>은전</span><strong>◈ ${formatNumber(state.silver)}</strong></div></div></div><div class="shop-tabs" role="tablist"><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">일반 재화 상점 <small>5종</small></button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비 상점 <small>12종</small></button></div><div class="shop-notice glass-card"><strong>${this.shopTab === 'resources' ? '테스트 구매 안내' : '대련 승리 보상'}</strong><span>${this.shopTab === 'resources' ? '현재는 결제 게이트웨이 없이 지급 흐름을 확인하는 테스트 구매입니다. 추후 동일한 상품 ID에 결제를 연결할 수 있습니다.' : '유저 대련에서 승리할 때마다 신화장비 조각 1개를 획득합니다. 신화 장비 뽑기는 제공하지 않으며 상점에서만 교환할 수 있습니다.'}</span></div><div class="shop-grid">${cards}</div></section>`
   }
 
   private updatesSection(): string {
@@ -676,6 +682,7 @@ export class StrategyUI {
       ['2026.10.06', '관리자 센터 접근 제한', '관리자 권한이 있는 계정만 관리자 센터 메뉴와 운영 기능을 볼 수 있도록 보호했습니다.', '완료', 'jade'],
       ['2026.10.06', '로그인 화면 개선', '삼국지 분위기의 배경과 회원 로그인·게스트 로그인 선택 화면을 적용했습니다.', '완료', 'jade'],
       ['2026.10.05', '전투 연출 개선', '피격 반응, 병력 상태 막대, 카메라 움직임, 기술 색상 효과를 추가했습니다.', '완료', 'jade'],
+      ['2026.10.07', '통합 상점 업데이트', '일반 재화 5종 보급 상품과 기존 신화 장비 12종 상점을 하나의 탭형 상점으로 통합했습니다. 현재 재화 지급은 테스트 구매 흐름으로 제공됩니다.', '완료', 'jade'],
       ['2026.10.04', '신화 상점 확장', '통솔·무력·모략·속도별 장비 세트와 무기·갑옷·장신구 12종을 상점에 추가했습니다.', '완료', 'jade'],
       ['2026.10.03', '장비 관리 시스템', '장비 뽑기, 장착·해제, 강화, 등급 정렬, 세트 효과를 구현했습니다.', '완료', 'jade'],
       ['2026.10.07', '천하영토 성 아이콘 전체 표시', '천하영토의 25개 성을 빠짐없이 표시하고 화면 크기에 맞게 아이콘 크기와 간격을 조정했습니다.', '완료', 'jade'],
@@ -769,6 +776,11 @@ export class StrategyUI {
     else if (action === 'rank-refresh') this.callbacks.onRankRefresh()
     else if (action === 'store') this.callbacks.onStore()
     else if (action === 'shop-purchase') this.callbacks.onShopPurchase(button.dataset.equipmentId ?? 'shop-mythic-martial-weapon')
+    else if (action === 'cash-shop-purchase') this.callbacks.onCashShopPurchase(button.dataset.productId ?? '')
+    else if (action === 'shop-tab') {
+      this.shopTab = button.dataset.shopTab === 'mythic' ? 'mythic' : 'resources'
+      if (this.renderedState) this.render(this.renderedState)
+    }
     else if (action === 'admin-tab') {
       this.adminTab = button.dataset.adminTab ?? 'overview'
       this.callbacks.onAdminAction(`관리자 탭을 「${button.textContent?.trim() ?? '운영 개요'}」로 전환했습니다.`)

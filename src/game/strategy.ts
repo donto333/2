@@ -126,6 +126,23 @@ export const FACTION_BATTLE_COOLDOWN_MS = 12 * 1000
 export const DUEL_DAILY_LIMIT = 5
 export const MYTHIC_FRAGMENT_COST = 20
 
+export interface CashShopProduct {
+  id: string
+  name: string
+  resource: ResourceKey
+  amount: number
+  priceKRW: number
+  description: string
+}
+
+export const CASH_SHOP_PRODUCTS: CashShopProduct[] = [
+  { id: 'cash-grain-50k', name: '식량 상자', resource: 'grain', amount: 50000, priceKRW: 1100, description: '영토와 출정용 식량' },
+  { id: 'cash-silver-30k', name: '은전 상자', resource: 'silver', amount: 30000, priceKRW: 1100, description: '강화와 내정용 은전' },
+  { id: 'cash-wood-20k', name: '목재 상자', resource: 'wood', amount: 20000, priceKRW: 1100, description: '건물 강화용 목재' },
+  { id: 'cash-iron-12k', name: '철재 상자', resource: 'iron', amount: 12000, priceKRW: 2200, description: '장비와 군사 시설용 철' },
+  { id: 'cash-influence-8k', name: '영향력 상자', resource: 'influence', amount: 8000, priceKRW: 2200, description: '연구와 정책용 영향력' },
+]
+
 export function dayKey(now = Date.now()): string {
   const date = new Date(now)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -605,6 +622,18 @@ function createDrawnEquipment(index: number): Equipment {
 export interface EquipmentDrawResult { ok: boolean; message: string; rewards: Equipment[] }
 
 export interface MythicShopResult { ok: boolean; message: string; item?: Equipment }
+
+export interface CashShopResult { ok: boolean; message: string; product?: CashShopProduct }
+
+export function purchaseCashShopProduct(state: StrategyState, productId: string): CashShopResult {
+  const product = CASH_SHOP_PRODUCTS.find(item => item.id === productId)
+  if (!product) return { ok: false, message: '해당 재화 상품을 찾을 수 없습니다.' }
+  if (product.resource === 'silver') state.silver += product.amount
+  else state.resources[product.resource] += product.amount
+  state.lastNotice = `${product.name} 지급 완료 · ${product.amount.toLocaleString('ko-KR')} ${RESOURCE_META[product.resource].label}`
+  return { ok: true, message: `${state.lastNotice} · 테스트 구매`, product }
+}
+
 export function purchaseMythicEquipment(state: StrategyState, equipmentId: string): MythicShopResult {
   ensureEquipmentState(state)
   if (state.mythicFragments < MYTHIC_FRAGMENT_COST) return { ok: false, message: `신화장비 조각이 부족합니다. ${MYTHIC_FRAGMENT_COST}개가 필요합니다.` }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -196,6 +196,19 @@ describe('commander attributes', () => {
     expect(purchaseMythicEquipment(state, 'shop-mythic-speed-accessory').ok).toBe(true)
     expect(state.equipmentInventory.some(item => item.id.startsWith('shop-mythic-speed-accessory-'))).toBe(true)
     expect(purchaseMythicEquipment(state, 'weapon').ok).toBe(false)
+  })
+
+  it('offers five non-fragment resource products and grants the purchased resource', () => {
+    const state = createInitialState()
+    expect(CASH_SHOP_PRODUCTS).toHaveLength(5)
+    const before = { ...state.resources, silver: state.silver }
+    for (const product of CASH_SHOP_PRODUCTS) {
+      expect(purchaseCashShopProduct(state, product.id).ok).toBe(true)
+      const after = product.resource === 'silver' ? state.silver : state.resources[product.resource]
+      const initial = product.resource === 'silver' ? before.silver : before[product.resource]
+      expect(after).toBe(initial + product.amount)
+    }
+    expect(purchaseCashShopProduct(state, 'unknown-product').ok).toBe(false)
   })
 
 })
