@@ -15,6 +15,7 @@ import {
   ensureEquipmentState,
   purchaseMythicEquipment,
   purchaseGoldPackage,
+  purchaseHonorPackage,
   purchaseResourcePackage,
   consumeDuelAttempt,
   ensureDuelDailyState,
@@ -501,6 +502,12 @@ const ui = new StrategyUI(root, {
   },
   onCashShopPurchase: productId => {
     const result = purchaseResourcePackage(state, productId)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onHonorShopPurchase: packageId => {
+    const result = purchaseHonorPackage(state, packageId)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()

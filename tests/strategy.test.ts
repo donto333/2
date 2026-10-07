@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GOLD_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GOLD_PACKAGES, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseHonorPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 import { effectLoadout } from '../src/game/battle-effects'
 
 describe('commander attributes', () => {
@@ -275,6 +275,13 @@ describe('commander attributes', () => {
     state.gold = 0
     expect(purchaseResourcePackage(state, 'resource-grain-100').ok).toBe(false)
     expect(purchaseGoldPackage(state, 'unknown-package').ok).toBe(false)
+    state.gold = 20
+    const beforeHonor = state.honor
+    expect(HONOR_SHOP_PACKAGES.map(item => item.goldCost)).toEqual([3, 5, 10, 20])
+    expect(purchaseHonorPackage(state, 'honor-10').ok).toBe(true)
+    expect(state.gold).toBe(10)
+    expect(state.honor).toBe(beforeHonor + 1000)
+    expect(purchaseHonorPackage(state, 'honor-20').ok).toBe(false)
   })
 
   it('awards the prelaunch stipend only once per day', () => {

@@ -168,6 +168,14 @@ export interface ResourceShopPackage {
   description: string
 }
 
+export interface HonorShopPackage {
+  id: string
+  name: string
+  honor: number
+  goldCost: number
+  description: string
+}
+
 export const GOLD_PACKAGES: GoldPackage[] = [3, 10, 20, 50, 100].map(gold => ({
   id: `gold-${gold}`,
   name: `금화 ${gold}개 충전`,
@@ -192,6 +200,14 @@ export const RESOURCE_SHOP_PACKAGES: ResourceShopPackage[] = (Object.entries(RES
   goldCost,
   description: '금화로 교환하는 자원 보급 패키지',
 })))
+
+export const HONOR_SHOP_PACKAGES: HonorShopPackage[] = [3, 5, 10, 20].map(goldCost => ({
+  id: `honor-${goldCost}`,
+  name: `명망 ${goldCost}금화 패키지`,
+  honor: goldCost * 100,
+  goldCost,
+  description: '금화 1개당 명망 100개로 교환하는 패키지',
+}))
 
 export function dayKey(now = Date.now()): string {
   const date = new Date(now)
@@ -850,6 +866,7 @@ export interface MythicShopResult { ok: boolean; message: string; item?: Equipme
 
 export interface GoldPurchaseResult { ok: boolean; message: string; package?: GoldPackage }
 export interface ResourceShopResult { ok: boolean; message: string; package?: ResourceShopPackage }
+export interface HonorShopResult { ok: boolean; message: string; package?: HonorShopPackage }
 
 export function purchaseGoldPackage(state: StrategyState, packageId: string): GoldPurchaseResult {
   if (!GOLD_PURCHASE_ENABLED) return { ok: false, message: '금화 충전은 정식 출시 전까지 잠겨 있습니다.' }
@@ -870,6 +887,16 @@ export function purchaseResourcePackage(state: StrategyState, packageId: string)
   state.resources.silver = state.silver
   state.lastNotice = `${RESOURCE_META[resourcePackage.resource].label} ${resourcePackage.amount.toLocaleString('ko-KR')} 지급 완료 · 금화 -${resourcePackage.goldCost}`
   return { ok: true, message: state.lastNotice, package: resourcePackage }
+}
+
+export function purchaseHonorPackage(state: StrategyState, packageId: string): HonorShopResult {
+  const honorPackage = HONOR_SHOP_PACKAGES.find(item => item.id === packageId)
+  if (!honorPackage) return { ok: false, message: '해당 명망 패키지를 찾을 수 없습니다.' }
+  if (state.gold < honorPackage.goldCost) return { ok: false, message: `금화가 부족합니다. ${honorPackage.goldCost}개가 필요합니다.` }
+  state.gold -= honorPackage.goldCost
+  state.honor += honorPackage.honor
+  state.lastNotice = `명망 ${honorPackage.honor.toLocaleString('ko-KR')} 지급 완료 · 금화 -${honorPackage.goldCost}`
+  return { ok: true, message: state.lastNotice, package: honorPackage }
 }
 
 export function purchaseMythicEquipment(state: StrategyState, equipmentId: string): MythicShopResult {
