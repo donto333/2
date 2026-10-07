@@ -123,6 +123,13 @@ try {
   await page.waitForSelector('[data-action="battle-start"]')
   await page.click('[data-action="battle-start"]')
   await page.waitForFunction(() => window.__strategy.arena.getSnapshot().elapsed > 0.25, null, { timeout: 5000 })
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('manus-auth-change', { detail: { status: 'logged_out', user: null } })))
+  await page.waitForTimeout(100)
+  if (await page.evaluate(() => window.__strategy.state.section) !== 'battle' || !(await page.evaluate(() => window.__strategy.arena.getSnapshot().active))) throw new Error('auth refresh reset the active expedition battle')
+  await page.evaluate(() => {
+    window.__strategy.ui.setAuth({ status: 'authenticated', name: '스모크 관리자' })
+    window.__strategy.ui.setAccount({ id: 1, openId: 'smoke-admin', name: '스모크 관리자', email: 'admin@example.com', loginMethod: 'smoke', role: 'admin', createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() })
+  })
   const battle = await page.evaluate(() => window.__strategy.arena.getSnapshot())
   if (!battle.active || battle.elapsed <= 0.25) throw new Error(`battle clock did not start (${battle.elapsed.toFixed(2)}s)`)
   await page.waitForFunction(() => {

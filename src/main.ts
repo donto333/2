@@ -126,8 +126,10 @@ let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_AC
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
 
 function restoreAccessState(mode: 'member' | 'guest'): void {
+  const currentSection = state.section
   const fresh = createInitialState()
   Object.assign(state, fresh)
+  state.section = currentSection
   gameAccess = mode
   restoreLocalGame(mode === 'guest' ? GUEST_GAME_SAVE_KEY : LOCAL_GAME_SAVE_KEY)
   ensureCityRoster(state)
@@ -516,11 +518,17 @@ window.addEventListener('manus-auth-change', (event: Event) => {
     window.localStorage.removeItem(GUEST_ACCESS_KEY)
     ui.render(state)
     void refreshAccount()
+  } else if (gameAccess === 'guest') {
+    ui.render(state)
+    if (state.section === 'battle') ui.updateBattle(arena.getSnapshot())
+  } else if (state.section === 'battle' && arena.getSnapshot().active) {
+    ui.render(state)
+    ui.updateBattle(arena.getSnapshot())
   } else if (!gameAccess) {
     ui.showAccessGate()
   } else {
-    restoreAccessState('guest')
-    ui.render(state)
+    gameAccess = null
+    ui.showAccessGate()
   }
 })
 
@@ -534,9 +542,11 @@ void ManusAuth.prepare().then(session => {
     void refreshAccount()
   } else if (!gameAccess) {
     ui.showAccessGate()
-  } else {
+  } else if (gameAccess === 'guest') {
     restoreAccessState('guest')
     ui.render(state)
+  } else {
+    ui.showAccessGate()
   }
   if (state.section === 'rank') void refreshLeaderboard()
 }).catch(() => {
