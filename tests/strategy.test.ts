@@ -266,11 +266,11 @@ describe('commander attributes', () => {
     expect(RESOURCE_SHOP_PACKAGES).toHaveLength(25)
     expect(new Set(RESOURCE_SHOP_PACKAGES.map(item => item.resource)).size).toBe(5)
     expect(new Set(RESOURCE_SHOP_PACKAGES.map(item => item.goldCost)).size).toBe(5)
-    expect(purchaseGoldPackage(state, 'gold-3').ok).toBe(true)
-    expect(state.gold).toBe(103)
+    expect(purchaseGoldPackage(state, 'gold-3').ok).toBe(false)
+    expect(state.gold).toBe(100)
     const beforeGrain = state.resources.grain
     expect(purchaseResourcePackage(state, 'resource-grain-3').ok).toBe(true)
-    expect(state.gold).toBe(100)
+    expect(state.gold).toBe(97)
     expect(state.resources.grain).toBe(beforeGrain + 5000)
     state.gold = 0
     expect(purchaseResourcePackage(state, 'resource-grain-100').ok).toBe(false)

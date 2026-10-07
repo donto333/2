@@ -200,6 +200,8 @@ export function dayKey(now = Date.now()): string {
 
 export const PRELAUNCH_DAILY_GOLD = 100
 export const PRELAUNCH_GOLD_ENABLED = true
+// 정식 출시 지시를 받으면 이 값을 true로 전환한다.
+export const GOLD_PURCHASE_ENABLED = false
 
 export function ensurePrelaunchDailyGold(state: StrategyState, now = Date.now()): boolean {
   if (typeof state.gold !== 'number' || !Number.isFinite(state.gold)) state.gold = 0
@@ -850,6 +852,7 @@ export interface GoldPurchaseResult { ok: boolean; message: string; package?: Go
 export interface ResourceShopResult { ok: boolean; message: string; package?: ResourceShopPackage }
 
 export function purchaseGoldPackage(state: StrategyState, packageId: string): GoldPurchaseResult {
+  if (!GOLD_PURCHASE_ENABLED) return { ok: false, message: '금화 충전은 정식 출시 전까지 잠겨 있습니다.' }
   const goldPackage = GOLD_PACKAGES.find(item => item.id === packageId)
   if (!goldPackage) return { ok: false, message: '해당 금화 충전 패키지를 찾을 수 없습니다.' }
   state.gold += goldPackage.gold
