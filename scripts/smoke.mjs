@@ -146,6 +146,8 @@ try {
   if (await page.locator('.page-section--updates .update-entry').count() < 10) throw new Error('update history entries are incomplete')
   if (!(await page.locator('.page-section--updates').textContent())?.includes('유저 대련 실제 덱 연동')) throw new Error('real-deck update is missing from in-game history')
   if (!(await page.locator('.page-section--updates').textContent())?.includes('전투 병사 모델링 개선')) throw new Error('soldier-model update is missing from in-game history')
+  if (!(await page.locator('.page-section--updates').textContent())?.includes('천하영토 진영별 유저 점령 연동')) throw new Error('territory faction sync plan is missing from in-game history')
+  if (!(await page.locator('.page-section--updates').textContent())?.includes('로그아웃 후 로그인 첫 페이지 이동')) throw new Error('logout login-page plan is missing from in-game history')
   await page.click('[data-action="section"][data-section="codex"]')
   await page.waitForSelector('.codex-grid')
   if (await page.locator('.codex-card').count() !== 65) throw new Error('general codex does not show all 65 generals')

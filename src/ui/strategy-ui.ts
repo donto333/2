@@ -685,6 +685,8 @@ export class StrategyUI {
       ['예정', '한자 표기 제거 및 한글 대체', '게임 전체의 불필요한 한자 표기를 자연스러운 한글로 통일합니다.'],
       ['예정', '무장 스킬 정보 상세화', '발동 조건, 대상, 수치, 지속시간, 재사용 조건을 더 자세히 표시합니다.'],
       ['예정', '신화 장비 특기 능력', '장비 종류별 10종 특기와 실제 전투·상태 계산 반영을 준비합니다.'],
+      ['예정', '천하영토 진영별 유저 점령 연동', '각 진영 소속 유저의 실제 점령 결과를 서버에서 집계해 천하영토에 반영합니다.'],
+      ['예정', '로그아웃 후 로그인 첫 페이지 이동', '로그아웃하면 회원 로그인·게스트 로그인 선택 화면으로 돌아가도록 접속 흐름을 개선합니다.'],
     ] as const
     const completedMarkup = completed.map(([date, title, detail, status, tone]) => `<article class="update-entry"><time>${date}</time><span class="update-mark update-mark--${tone}"></span><div class="update-entry-copy"><div><h3>${title}</h3><span class="update-status update-status--${tone}">${status}</span></div><p>${detail}</p></div></article>`).join('')
     const plannedMarkup = planned.map(([status, title, detail]) => `<article class="update-entry update-entry--planned"><span class="update-mark update-mark--gold"></span><div class="update-entry-copy"><div><h3>${title}</h3><span class="update-status update-status--gold">${status}</span></div><p>${detail}</p></div></article>`).join('')
