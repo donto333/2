@@ -100,6 +100,24 @@ describe('commander attributes', () => {
     expect(state.honor).toBe(before - 900)
   })
 
+  it('resets catalog level data for every newly summoned general', () => {
+    const state = createInitialState()
+    state.generals = []
+    state.formation = []
+    const originalRandom = Math.random
+    Math.random = () => 0
+    try {
+      const result = recruit(state, 1)
+      expect(result.ok).toBe(true)
+      expect(result.general?.id).toBe('guan-yu')
+      expect(result.general?.level).toBe(1)
+      expect(result.general?.skillUnlocked).toBe(false)
+      expect(state.generals[0].level).toBe(1)
+    } finally {
+      Math.random = originalRandom
+    }
+  })
+
   it('keeps formation at three slots and replaces the last slot when full', () => {
     const state = createInitialState()
     const initialFormation = [...state.formation]

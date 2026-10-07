@@ -939,6 +939,11 @@ function pickFromGrade(grade: Grade): General {
   return copyGeneral(candidates[Math.floor(Math.random() * candidates.length)] ?? LIBRARY[LIBRARY.length - 1])
 }
 
+function createSummonedGeneral(grade: Grade): General {
+  const general = pickFromGrade(grade)
+  return { ...general, level: 1, stars: 1, skillUnlocked: false, skillRank: 1, skillPower: 100 }
+}
+
 export interface RecruitResult {
   ok: boolean
   message: string
@@ -953,7 +958,7 @@ export function recruit(state: StrategyState, count = 1): RecruitResult {
   let featured: General | null = null
   const rewards: General[] = []
   for (let index = 0; index < count; index += 1) {
-    const reward = pickFromGrade(weightedGrade())
+    const reward = createSummonedGeneral(weightedGrade())
     rewards.push(reward)
     const owned = findGeneral(state, reward.id)
     if (owned) {
