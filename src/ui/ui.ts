@@ -523,7 +523,7 @@ export class Ui {
         </div></div>
         ${toggle('reducedMotion', 'settings.reducedMotion')}
         <div class="row"><span data-i18n="settings.language"></span><div class="seg" data-setting="locale">
-          <button data-nav data-value="en" lang="en">English</button><button data-nav data-value="zh-CN" lang="zh-CN">简体中文</button>
+          <button data-nav data-value="en" lang="en">English</button><button data-nav data-value="zh-CN" lang="zh-CN">중국어</button>
         </div></div>
       </fieldset>
     </div>
