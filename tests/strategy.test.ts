@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 import { effectLoadout } from '../src/game/battle-effects'
 
 describe('commander attributes', () => {
@@ -10,6 +10,17 @@ describe('commander attributes', () => {
     expect(new Set(state.generals.map(general => general.id)).size).toBe(3)
     expect(state.generals.every(general => general.leadership > 0 && general.martial > 0 && general.stratagem > 0 && general.speed > 0)).toBe(true)
     expect(state.generals.every(general => combatPower(general) > 0)).toBe(true)
+  })
+
+  it('migrates the untouched legacy fixed starter trio to random grade-3 starters', () => {
+    const state = createInitialState()
+    state.generals = ['guan-yu', 'zhao-yun', 'zhuge-liang'].map(id => ({ ...allGenerals().find(general => general.id === id)! }))
+    state.formation = ['guan-yu', 'zhao-yun', 'zhuge-liang']
+    state.equipmentLoadouts = { 'guan-yu': { weapon: 'starter-weapon' }, 'zhao-yun': { armor: 'starter-armor' }, 'zhuge-liang': { accessory: 'starter-accessory' } }
+    expect(migrateLegacyStarterRoster(state)).toBe(true)
+    expect(state.generals.every(general => general.grade === 3 && general.level === 1)).toBe(true)
+    expect(state.generals.map(general => general.id)).not.toEqual(['guan-yu', 'zhao-yun', 'zhuge-liang'])
+    expect(migrateLegacyStarterRoster(state)).toBe(false)
   })
 
   it('raises the four attributes when a general is upgraded', () => {

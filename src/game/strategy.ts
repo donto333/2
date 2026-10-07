@@ -454,6 +454,31 @@ function randomStarterGenerals(count = 3): General[] {
   return selected
 }
 
+export function migrateLegacyStarterRoster(state: StrategyState): boolean {
+  const legacyLevels: Record<string, number> = { 'guan-yu': 14, 'zhao-yun': 12, 'zhuge-liang': 11 }
+  const legacyIds = Object.keys(legacyLevels)
+  const isLegacyStarter = state.generals.length === 3
+    && state.generals.every(general => legacyIds.includes(general.id) && general.grade === 5 && general.level === legacyLevels[general.id])
+    && new Set(state.generals.map(general => general.id)).size === 3
+    && state.formation.length === 3
+    && new Set(state.formation).size === 3
+    && state.formation.every(id => legacyIds.includes(id))
+  if (!isLegacyStarter) return false
+  const generals = randomStarterGenerals()
+  const starterIds = generals.map(general => general.id)
+  if (generals.length !== 3) return false
+  state.generals = generals
+  state.formation = starterIds
+  state.equipmentLoadouts = {
+    [starterIds[0]]: { weapon: 'starter-weapon' },
+    [starterIds[1]]: { armor: 'starter-armor' },
+    [starterIds[2]]: { accessory: 'starter-accessory' },
+  }
+  state.selectedEquipmentGeneralId = starterIds[0]
+  state.lastNotice = '새로운 지휘관의 무장 3명을 무작위로 배치했습니다.'
+  return true
+}
+
 export const EQUIPMENT_TYPE_META: Record<EquipmentType, { label: string; icon: string }> = {
   weapon: { label: '무기', icon: '⚔' },
   armor: { label: '갑옷', icon: '◈' },

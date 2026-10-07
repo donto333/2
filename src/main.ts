@@ -22,6 +22,7 @@ import {
   ensureCityRoster,
   ensureResearchRoster,
   mergeFactionTerritories,
+  migrateLegacyStarterRoster,
   findGeneral,
   recruit,
   selectCity,
@@ -139,7 +140,9 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   ensureCityRoster(state)
   ensureResearchRoster(state)
   ensureEquipmentState(state)
-  localSaveDirty = false
+  const migratedStarter = migrateLegacyStarterRoster(state)
+  if (migratedStarter) persistLocalGame()
+  localSaveDirty = migratedStarter && mode === 'member'
 }
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
@@ -641,6 +644,11 @@ async function refreshAccount(): Promise<void> {
       if (typeof game.duelDayKey === 'string') state.duelDayKey = game.duelDayKey
       ensureDuelDailyState(state)
       ensureEquipmentState(state)
+      const migratedStarter = migrateLegacyStarterRoster(state)
+      if (migratedStarter) {
+        persistLocalGame()
+        localSaveDirty = true
+      }
       persistLocalGame()
     }
     accountView = account
