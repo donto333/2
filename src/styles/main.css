@@ -304,3 +304,16 @@
 .ritual-reveal .ritual-portrait{border-width:2px;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent),transparent 82%),0 0 28px color-mix(in srgb,var(--accent),transparent 72%)}
 .ritual-portrait.has-portrait{background:var(--portrait) center 16%/cover no-repeat !important}
 .ritual-portrait.has-portrait>i{display:none !important}
+
+
+/* Draw results: animated arrival with rarity emphasis kept on the frame. */
+.recruit-results-panel{animation:results-panel-in .48s cubic-bezier(.16,1,.3,1) both}
+.recruit-result-card{opacity:0;transform:translateY(16px) scale(.94);animation:recruit-card-reveal .56s cubic-bezier(.16,1,.3,1) var(--reveal-delay,0ms) both}
+.recruit-result-card--five-star{border:2px solid #f6c56d;box-shadow:0 0 0 2px rgba(246,197,109,.3),0 0 28px rgba(246,197,109,.38),0 14px 30px rgba(0,0,0,.2);animation-name:recruit-card-reveal,five-star-border-pulse;animation-duration:.56s,2.2s;animation-delay:var(--reveal-delay,0ms),calc(var(--reveal-delay,0ms) + .56s);animation-iteration-count:1,infinite}
+.equipment-result-card .equipment-result-icon{animation:equipment-icon-pop .65s cubic-bezier(.16,1,.3,1) calc(var(--reveal-delay,0ms) + .18s) both}
+.equipment-result-card--legendary{box-shadow:0 0 0 1px rgba(246,197,109,.3),0 0 24px rgba(246,197,109,.2),0 14px 28px rgba(0,0,0,.18)}
+@keyframes results-panel-in{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes recruit-card-reveal{from{opacity:0;transform:translateY(16px) scale(.94);filter:brightness(.7)}to{opacity:1;transform:none;filter:none}}
+@keyframes equipment-icon-pop{from{opacity:0;transform:scale(.55) rotate(-12deg);filter:brightness(.55) saturate(.7)}to{opacity:1;transform:scale(1) rotate(0);filter:none}}
+@keyframes five-star-border-pulse{0%,100%{box-shadow:0 0 0 2px rgba(246,197,109,.3),0 0 28px rgba(246,197,109,.38),0 14px 30px rgba(0,0,0,.2)}50%{box-shadow:0 0 0 3px rgba(246,197,109,.72),0 0 48px rgba(246,197,109,.72),0 16px 34px rgba(0,0,0,.25)}}
+@media (prefers-reduced-motion:reduce){.recruit-results-panel,.recruit-result-card,.recruit-result-card--five-star,.equipment-result-card .equipment-result-icon{animation:none;opacity:1;transform:none;filter:none}}
