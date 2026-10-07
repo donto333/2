@@ -333,6 +333,7 @@ export class StrategyUI {
           ${this.navButton('duel', '⚔', '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
           ${this.navButton('shop', '◈', '신화 상점', state.section, `${state.mythicFragments}조각`)}
           ${this.navButton('rank', '≋', '천하 랭킹', state.section)}
+          ${this.navButton('updates', '✎', '업데이트 기록', state.section, 'NEW')}
           ${this.navButton('account', '◎', '계정 관리', state.section)}
           ${this.isAdmin() ? '<div class="sidebar-rule"></div><div class="sidebar-label">운영</div>' : ''}
           ${this.isAdmin() ? this.navButton('admin', '▣', '관리자 센터', state.section, 'LIVE') : ''}
@@ -362,6 +363,7 @@ export class StrategyUI {
     if (state.section === 'duel') return this.duelSection(state)
     if (state.section === 'shop') return this.shopSection(state)
     if (state.section === 'rank') return this.rankSection(state)
+    if (state.section === 'updates') return this.updatesSection()
     if (state.section === 'account') return this.accountSection()
     if (state.section === 'admin') return this.isAdmin() ? this.adminSection(state) : this.overviewSection(state)
     return this.overviewSection(state)
@@ -665,6 +667,28 @@ export class StrategyUI {
     const statLabels: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
     const cards = MYTHIC_SHOP_EQUIPMENT.map(item => `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon">${EQUIPMENT_TYPE_META[item.type].icon}</div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small></div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>`).join('')
     return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">MYTHIC ARMORY · SHOP</span><h1>신화 장비 상점</h1><p class="heading-copy">유저 대련 승리로 얻은 신화장비 조각으로 장비를 교환합니다.</p></div><div class="shop-fragments glass-card"><span>보유 신화장비 조각</span><strong>✦ ${state.mythicFragments}</strong><small>신화장비 1개 · 조각 20개</small></div></div><div class="shop-notice glass-card"><strong>대련 승리 보상</strong><span>유저 대련에서 승리할 때마다 신화장비 조각 1개를 획득합니다. 신화 장비 뽑기는 제공하지 않으며 상점에서만 교환할 수 있습니다.</span></div><div class="shop-grid">${cards}</div></section>`
+  }
+
+  private updatesSection(): string {
+    const completed = [
+      ['2026.10.07', '유저 대련 실제 덱 연동', '인증된 상대의 저장 편성 덱을 서버에서 불러와 실제 무장 3명으로 대련합니다. 실제 상대가 없을 때만 훈련용 더미 덱으로 전환합니다.', '완료', 'jade'],
+      ['2026.10.07', '전투 병사 모델링 개선', '보병·궁병·기병별 실사풍 병사 아트, 편성 그림자, 팀 색상 링을 전투 장면에 적용했습니다.', '완료', 'jade'],
+      ['2026.10.06', '관리자 센터 접근 제한', '관리자 권한이 있는 계정만 관리자 센터 메뉴와 운영 기능을 볼 수 있도록 보호했습니다.', '완료', 'jade'],
+      ['2026.10.06', '로그인 화면 개선', '삼국지 분위기의 배경과 회원 로그인·게스트 로그인 선택 화면을 적용했습니다.', '완료', 'jade'],
+      ['2026.10.05', '전투 연출 개선', '피격 반응, 병력 상태 막대, 카메라 움직임, 기술 색상 효과를 추가했습니다.', '완료', 'jade'],
+      ['2026.10.04', '신화 상점 확장', '통솔·무력·모략·속도별 장비 세트와 무기·갑옷·장신구 12종을 상점에 추가했습니다.', '완료', 'jade'],
+      ['2026.10.03', '장비 관리 시스템', '장비 뽑기, 장착·해제, 강화, 등급 정렬, 세트 효과를 구현했습니다.', '완료', 'jade'],
+      ['2026.10.02', '영토 화면 개편', '성곽 중심의 삼국지 지도와 성 아이콘을 영토 화면에 적용했습니다.', '완료', 'jade'],
+    ] as const
+    const planned = [
+      ['다음 순위', '천하영토 성 아이콘 전체 표시', '영토 화면의 모든 성을 누락 없이 표시하고 화면 크기별 겹침을 조정합니다.'],
+      ['예정', '한자 표기 제거 및 한글 대체', '게임 전체의 불필요한 한자 표기를 자연스러운 한글로 통일합니다.'],
+      ['예정', '무장 스킬 정보 상세화', '발동 조건, 대상, 수치, 지속시간, 재사용 조건을 더 자세히 표시합니다.'],
+      ['예정', '신화 장비 특기 능력', '장비 종류별 10종 특기와 실제 전투·상태 계산 반영을 준비합니다.'],
+    ] as const
+    const completedMarkup = completed.map(([date, title, detail, status, tone]) => `<article class="update-entry"><time>${date}</time><span class="update-mark update-mark--${tone}"></span><div class="update-entry-copy"><div><h3>${title}</h3><span class="update-status update-status--${tone}">${status}</span></div><p>${detail}</p></div></article>`).join('')
+    const plannedMarkup = planned.map(([status, title, detail]) => `<article class="update-entry update-entry--planned"><span class="update-mark update-mark--gold"></span><div class="update-entry-copy"><div><h3>${title}</h3><span class="update-status update-status--gold">${status}</span></div><p>${detail}</p></div></article>`).join('')
+    return `<section class="page-section page-section--updates"><div class="section-heading section-heading--compact"><div><span class="eyebrow">COMMAND LOG · UPDATE HISTORY</span><h1>업데이트 기록</h1><p class="heading-copy">지금까지 반영된 변경사항과 다음 업데이트 계획을 확인하십시오.</p></div><div class="updates-summary glass-card"><span>반영 완료</span><strong>${completed.length}<small>건</small></strong><em>다음 순위 · 영토 성 아이콘</em></div></div><div class="updates-layout"><div class="glass-card updates-panel"><div class="card-header"><div><span class="eyebrow">RELEASED UPDATES</span><h2>적용된 업데이트</h2></div><span class="sync-label">SYNCED</span></div><div class="update-list">${completedMarkup}</div></div><div class="glass-card updates-panel updates-panel--planned"><div class="card-header"><div><span class="eyebrow">NEXT OPERATIONS</span><h2>업데이트 예정</h2></div><span class="rate-note">우선순위</span></div><div class="update-list">${plannedMarkup}</div></div></div><div class="updates-footnote"><span class="status-dot"></span><span>업데이트 기록은 게임 배포 버전과 함께 갱신됩니다.</span><span class="muted">현재 버전 · 2026.10</span></div></section>`
   }
 
   private rankSection(state: StrategyState): string {

@@ -141,6 +141,11 @@ try {
 
   await page.click('[data-action="section"][data-section="rank"]')
   await page.waitForSelector('[data-rank-list]')
+  await page.click('[data-action="section"][data-section="updates"]')
+  await page.waitForSelector('.page-section--updates')
+  if (await page.locator('.page-section--updates .update-entry').count() < 10) throw new Error('update history entries are incomplete')
+  if (!(await page.locator('.page-section--updates').textContent())?.includes('유저 대련 실제 덱 연동')) throw new Error('real-deck update is missing from in-game history')
+  if (!(await page.locator('.page-section--updates').textContent())?.includes('전투 병사 모델링 개선')) throw new Error('soldier-model update is missing from in-game history')
   await page.click('[data-action="section"][data-section="codex"]')
   await page.waitForSelector('.codex-grid')
   if (await page.locator('.codex-card').count() !== 65) throw new Error('general codex does not show all 65 generals')
