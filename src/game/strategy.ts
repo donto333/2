@@ -201,7 +201,7 @@ export const RESOURCE_SHOP_PACKAGES: ResourceShopPackage[] = (Object.entries(RES
   description: '금화로 교환하는 자원 보급 패키지',
 })))
 
-export const HONOR_SHOP_PACKAGES: HonorShopPackage[] = [3, 5, 10, 20].map(goldCost => ({
+export const HONOR_SHOP_PACKAGES: HonorShopPackage[] = [3, 5, 10, 20, 50, 100].map(goldCost => ({
   id: `honor-${goldCost}`,
   name: `명망 ${goldCost}금화 패키지`,
   honor: goldCost * 100,

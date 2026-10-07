@@ -295,11 +295,16 @@ describe('commander attributes', () => {
     expect(purchaseGoldPackage(state, 'unknown-package').ok).toBe(false)
     state.gold = 20
     const beforeHonor = state.honor
-    expect(HONOR_SHOP_PACKAGES.map(item => item.goldCost)).toEqual([3, 5, 10, 20])
+    expect(HONOR_SHOP_PACKAGES.map(item => item.goldCost)).toEqual([3, 5, 10, 20, 50, 100])
     expect(purchaseHonorPackage(state, 'honor-10').ok).toBe(true)
     expect(state.gold).toBe(10)
     expect(state.honor).toBe(beforeHonor + 1000)
     expect(purchaseHonorPackage(state, 'honor-20').ok).toBe(false)
+    state.gold = 150
+    expect(purchaseHonorPackage(state, 'honor-50').ok).toBe(true)
+    expect(state.gold).toBe(100)
+    expect(purchaseHonorPackage(state, 'honor-100').ok).toBe(true)
+    expect(state.gold).toBe(0)
   })
 
   it('awards the prelaunch stipend only once per day', () => {
