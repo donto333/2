@@ -100,6 +100,26 @@ describe('commander attributes', () => {
     expect(state.honor).toBe(before - 900)
   })
 
+  it('keeps the most recent five-star as the latest acquisition instead of the final ten-pull item', () => {
+    const state = createInitialState()
+    const originalRandom = Math.random
+    let call = 0
+    Math.random = () => {
+      const value = call % 2 === 0 ? (call === 0 ? 0 : 0.99) : 0
+      call += 1
+      return value
+    }
+    try {
+      const result = recruit(state, 10)
+      expect(result.ok).toBe(true)
+      expect(result.general?.grade).toBe(5)
+      expect(result.general?.id).toBe('guan-yu')
+      expect(result.rewards.at(-1)?.grade).toBe(1)
+    } finally {
+      Math.random = originalRandom
+    }
+  })
+
   it('resets catalog level data for every newly summoned general', () => {
     const state = createInitialState()
     state.generals = []

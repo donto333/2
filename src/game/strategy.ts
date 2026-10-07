@@ -955,7 +955,6 @@ export function recruit(state: StrategyState, count = 1): RecruitResult {
   const cost = count === 10 ? 900 : 100
   if (state.honor < cost) return { ok: false, message: '명망이 부족합니다. 전투에서 명망을 모아 다시 시도하십시오.', general: null, rewards: [] }
   state.honor -= cost
-  let featured: General | null = null
   const rewards: General[] = []
   for (let index = 0; index < count; index += 1) {
     const reward = createSummonedGeneral(weightedGrade())
@@ -977,14 +976,14 @@ export function recruit(state: StrategyState, count = 1): RecruitResult {
       } else {
         state.manuals += 8
       }
-      featured = owned
     } else {
       state.generals.push(reward)
       state.formation = state.formation.length < 3 ? [...state.formation, reward.id] : state.formation
-      featured = reward
     }
   }
-  const duplicates = rewards.filter(reward => state.generals.some(general => general.id === reward.id && general !== featured)).length
+  const preferredReward = [...rewards].reverse().find(reward => reward.grade === 5) ?? rewards.reduce((highest, reward) => reward.grade > highest.grade ? reward : highest, rewards[0])
+  const featured = preferredReward ? findGeneral(state, preferredReward.id) ?? preferredReward : null
+  const duplicates = rewards.filter(reward => state.generals.some(general => general.id === reward.id && general.id !== featured?.id)).length
   const tail = count === 10 ? ` 10회 모집 완료 · ${duplicates}장의 중복 인장이 성장 재료로 전환되었습니다.` : ''
   state.lastRecruit = featured ? copyGeneral(featured) : null
   state.lastNotice = featured ? `${featured.name} — ${featured.stars}성으로 응답했습니다.${tail}` : '모집 결과를 확인하십시오.'
