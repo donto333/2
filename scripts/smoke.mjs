@@ -129,6 +129,8 @@ try {
   await page.click('[data-action="close-summon"]')
   await page.waitForSelector('.recruit-results.is-visible', { timeout: 10_000 })
   if (await page.locator('.recruit-result-card').count() !== 10) throw new Error('ten-pull did not show ten rewards')
+  const summonFrame = await page.locator('.recruit-result-card').first().evaluate(card => ({ cardBorder: getComputedStyle(card).borderTopWidth, portraitBorder: getComputedStyle(card.querySelector('.ritual-portrait')).borderTopWidth }))
+  if (summonFrame.cardBorder !== '2px' || summonFrame.portraitBorder !== '2px') throw new Error('summon rarity emphasis is not using border highlights')
   await page.screenshot({ path: `${out}/02-ten-pull.png` })
   await page.click('[data-action="reroll-recruit"]')
   await page.waitForSelector('[data-action="close-summon"]', { timeout: 10_000 })
