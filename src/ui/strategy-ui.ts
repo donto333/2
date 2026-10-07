@@ -65,6 +65,7 @@ export interface StrategyUiCallbacks {
   onEquipmentUnequip: (generalId: string, type: EquipmentType) => void
   onEquipmentSelectGeneral: (id: string) => void
   onCitySelect: (id: string) => void
+  onTerritoryRefresh: () => void
   onConquest: (id: string) => void
   onDefense: (id: string) => void
   onFactionBattle: (id: string) => void
@@ -117,6 +118,7 @@ export class StrategyUI {
   private equipmentSort: EquipmentSort = 'grade'
   private equipmentSortDescending = true
   private shopTab: 'resources' | 'mythic' = 'resources'
+  private territorySyncText = '서버 원장 대기'
 
   constructor(root: HTMLElement, callbacks: StrategyUiCallbacks) {
     this.root = root
@@ -151,6 +153,11 @@ export class StrategyUI {
 
   setAccount(account: AccountView | null): void {
     this.account = account
+  }
+  setTerritorySync(text: string): void {
+    this.territorySyncText = text
+    const status = this.root.querySelector<HTMLElement>('[data-territory-sync]')
+    if (status) status.textContent = text
   }
   private isAdmin(): boolean {
     return this.account?.role === 'admin'
@@ -329,7 +336,7 @@ export class StrategyUI {
           ${this.navButton('codex', '▤', '무장 도감', state.section, `${allGenerals().length}`)}
           ${this.navButton('formation', '⌘', '출전 편성', state.section, `${state.formation.length}/3`)}
           ${this.navButton('equipment', '⚒', '장비 관리', state.section, `${state.equipmentInventory.length}`)}
-          ${this.navButton('territory', '⌂', '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === '촉한').length}`)}
+          ${this.navButton('territory', '⌂', '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === state.faction).length}`)}
           ${this.navButton('research', '✧', '기술 연구', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">작전</div>
           ${this.navButton('battle', '⚔', '전장 출정', state.section)}
@@ -341,7 +348,7 @@ export class StrategyUI {
           ${this.isAdmin() ? '<div class="sidebar-rule"></div><div class="sidebar-label">운영</div>' : ''}
           ${this.isAdmin() ? this.navButton('admin', '▣', '관리자 센터', state.section, 'LIVE') : ''}
           <div class="sidebar-spacer"></div>
-          <div class="sidebar-profile"><div class="profile-orb">촉</div><div><strong>촉한 진영</strong><small>옥패 07 · Lv.12</small></div></div>
+          <div class="sidebar-profile"><div class="profile-orb">${state.faction.slice(0, 1)}</div><div><strong>${state.faction} 진영</strong><small>옥패 07 · Lv.12</small></div></div>
         </aside>
         <main class="main-content">
           ${this.renderSection(state)}
@@ -478,27 +485,27 @@ export class StrategyUI {
   private territorySection(state: StrategyState): string {
     const selected = state.cities.find(city => city.id === state.selectedCityId) ?? state.cities[0]
     const income = selected ? cityIncome(selected, state) : { grain: 0, silver: 0, wood: 0, iron: 0, influence: 0 }
-    const owned = state.cities.filter(city => city.owner === '촉한').length
-    const contested = state.cities.filter(city => city.owner !== '촉한').length
+    const owned = state.cities.filter(city => city.owner === state.faction).length
+    const contested = state.cities.filter(city => city.owner !== state.faction).length
     const incomeWait = incomeCooldownRemaining(state)
     const incomeLabel = incomeWait ? `금일 수확 완료 · ${Math.ceil(incomeWait / 3600000)}시간 후` : '금일 내정 수확'
-    return `<section class="page-section page-section--territory"><div class="section-heading section-heading--compact"><div><span class="eyebrow">DOMAIN &amp; GOVERNANCE · 04</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div><div class="resource-strip glass-card">${this.resourceTokens(state)}</div><div class="conquest-overview glass-card"><div><span class="eyebrow">CONQUEST FRONT</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 도시가 촉한의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">THREE KINGDOMS DOMAIN</span><h3>천하 영토</h3></div><span class="sync-label">SEASON 01</span></div><div class="map-canvas"><div class="map-river"></div>${state.cities.map(city => this.cityMarker(city, state.selectedCityId)).join('')}<span class="map-label map-label--north">중원</span><span class="map-label map-label--south">강동</span><span class="map-label map-label--west">익주</span></div><div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>촉한 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span></div></div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
+    return `<section class="page-section page-section--territory"><div class="section-heading section-heading--compact"><div><span class="eyebrow">DOMAIN &amp; GOVERNANCE · 04</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">서버 원장 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="resource-strip glass-card">${this.resourceTokens(state)}</div><div class="conquest-overview glass-card"><div><span class="eyebrow">CONQUEST FRONT</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">THREE KINGDOMS DOMAIN</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div><div class="map-canvas"><div class="map-river"></div>${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}<span class="map-label map-label--north">중원</span><span class="map-label map-label--south">강동</span><span class="map-label map-label--west">익주</span></div><div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span></div></div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
   }
 
-  private cityMarker(city: City, selectedId: string): string {
-    const ownerClass = city.owner === '촉한' ? 'is-ally' : city.owner === '중립' ? 'is-neutral' : 'is-enemy'
+  private cityMarker(city: City, selectedId: string, faction: StrategyState['faction']): string {
+    const ownerClass = city.owner === faction ? 'is-ally' : city.owner === '중립' ? 'is-neutral' : 'is-enemy'
     const position = { chengdu: 'left:12%;top:76%', hanzhong: 'left:23%;top:52%', fucheng: 'left:31%;top:72%', xindu: 'left:21%;top:84%', tianshui: 'left:37%;top:28%', wuwei: 'left:20%;top:15%', xiangyang: 'left:52%;top:51%', wancheng: 'left:45%;top:61%', jiangling: 'left:55%;top:67%', yiling: 'left:61%;top:73%', changsha: 'left:58%;top:87%', lingling: 'left:48%;top:93%', guiyang: 'left:69%;top:91%', jianye: 'left:88%;top:76%', wujun: 'left:82%;top:62%', kuaiji: 'left:91%;top:91%', poyang: 'left:76%;top:73%', xuchang: 'left:63%;top:23%', luoyang: 'left:53%;top:9%', ye: 'left:67%;top:7%', chenliu: 'left:76%;top:16%', puyang: 'left:84%;top:24%', hefei: 'left:76%;top:43%', shouchun: 'left:84%;top:49%', jiujiang: 'left:72%;top:56%' }[city.id] ?? 'left:50%;top:50%'
     const castle = city.level >= 3 ? 'castle-city-major' : city.level === 2 ? 'castle-city-medium' : 'castle-city-minor'
     return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="eager"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong></button>`
   }
 
   private cityManagementCard(city: City, income: ReturnType<typeof cityIncome>, state: StrategyState): string {
-    const canManage = city.owner === '촉한'
+    const canManage = city.owner === state.faction
     const defense = Math.min(100, city.defense + (state.research.some(node => node.id === 'drill' && node.unlocked) ? 12 : 0))
     const metrics = [['민심', city.prosperity], ['성벽', defense], ['도시 등급', city.level * 20]] as const
     const siege = Math.min(100, city.conquestProgress ?? 0)
     const conquest = canManage ? this.defenseCard(city, state) : this.conquestCard(city, state, siege)
-    return `<div class="glass-card city-management"><div class="city-management-head"><div><span class="eyebrow">도시 관리</span><h2>${city.name}</h2><p>${city.region} · ${city.owner === '촉한' ? '아군 직할령' : `${city.owner} 관할`}</p></div><span class="city-level">Lv.${city.level}</span></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div>${conquest}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">ESTIMATED YIELD</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${RESOURCE_META[key].icon} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">CIVIL WORKS</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">건물을 강화하면 다음 수확부터 도시 생산량과 방어 수치가 상승합니다.</p>' : '<p class="management-tip management-tip--warn">점령 진전은 유지됩니다. 다시 출정해 성벽을 무너뜨리십시오.</p>'}</div>`
+    return `<div class="glass-card city-management"><div class="city-management-head"><div><span class="eyebrow">도시 관리</span><h2>${city.name}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><span class="city-level">Lv.${city.level}</span></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div>${conquest}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">ESTIMATED YIELD</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${RESOURCE_META[key].icon} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">CIVIL WORKS</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">건물을 강화하면 다음 수확부터 도시 생산량과 방어 수치가 상승합니다.</p>' : '<p class="management-tip management-tip--warn">점령 진전은 유지됩니다. 다시 출정해 성벽을 무너뜨리십시오.</p>'}</div>`
   }
 
   private conquestCard(city: City, state: StrategyState, siege: number): string {
@@ -656,7 +663,7 @@ export class StrategyUI {
     const tabMarkup = tabs.map(([id, label]) => `<button class="admin-tab ${this.adminTab === id ? 'is-active' : ''}" data-action="admin-tab" data-admin-tab="${id}">${label}</button>`).join('')
     let body = ''
     if (this.adminTab === 'overview') {
-      body = `<div class="admin-kpis"><div class="glass-card admin-kpi"><span>도감 콘텐츠</span><strong>${catalog.length}</strong><small>전체 등록 장수</small><b class="kpi-up">+50 이번 업데이트</b></div><div class="glass-card admin-kpi"><span>활성 영토</span><strong>${state.cities.filter(city => city.owner === '촉한').length}<em> / ${state.cities.length}</em></strong><small>시즌 01 점령 상태</small><b class="kpi-neutral">정상 운영</b></div><div class="glass-card admin-kpi"><span>출전 진형</span><strong>${state.formation.length}<em> / 3</em></strong><small>현재 배치 장수</small><b class="kpi-up">전투 준비</b></div><div class="glass-card admin-kpi"><span>최고 전투 점수</span><strong>${formatNumber(state.battleScore)}</strong><small>${state.wins}승 · 개인 기록</small><b class="kpi-gold">로컬 기록</b></div></div><div class="admin-grid"><div class="glass-card admin-panel"><div class="card-header"><div><span class="eyebrow">SERVICE HEALTH</span><h3>서비스 상태</h3></div><span class="sync-label">LIVE</span></div><div class="health-row"><span><i class="health-dot"></i> 게임 클라이언트</span><b>정상</b><small>Three.js · Vite</small></div><div class="health-row"><span><i class="health-dot"></i> 전투 시뮬레이션</span><b>정상</b><small>Rapier · 실시간</small></div><div class="health-row"><span><i class="health-dot"></i> 온라인 랭킹</span><b class="health-warn">대기</b><small>로그인 연결 시 활성</small></div><button class="action-button action-button--outline admin-action" data-action="admin-refresh">상태 새로고침 ↻</button></div><div class="glass-card admin-panel"><div class="card-header"><div><span class="eyebrow">RECENT OPERATIONS</span><h3>최근 운영 기록</h3></div><span class="rate-note">최근 24시간</span></div><div class="admin-activity">${activity.map(([time, category, message, tone]) => `<div class="activity-row"><time>${time}</time><span class="activity-mark activity-mark--${tone}"></span><div><b>${category}</b><p>${message}</p></div></div>`).join('')}</div></div></div>`
+      body = `<div class="admin-kpis"><div class="glass-card admin-kpi"><span>도감 콘텐츠</span><strong>${catalog.length}</strong><small>전체 등록 장수</small><b class="kpi-up">+50 이번 업데이트</b></div><div class="glass-card admin-kpi"><span>활성 영토</span><strong>${state.cities.filter(city => city.owner === state.faction).length}<em> / ${state.cities.length}</em></strong><small>시즌 01 점령 상태</small><b class="kpi-neutral">정상 운영</b></div><div class="glass-card admin-kpi"><span>출전 진형</span><strong>${state.formation.length}<em> / 3</em></strong><small>현재 배치 장수</small><b class="kpi-up">전투 준비</b></div><div class="glass-card admin-kpi"><span>최고 전투 점수</span><strong>${formatNumber(state.battleScore)}</strong><small>${state.wins}승 · 개인 기록</small><b class="kpi-gold">로컬 기록</b></div></div><div class="admin-grid"><div class="glass-card admin-panel"><div class="card-header"><div><span class="eyebrow">SERVICE HEALTH</span><h3>서비스 상태</h3></div><span class="sync-label">LIVE</span></div><div class="health-row"><span><i class="health-dot"></i> 게임 클라이언트</span><b>정상</b><small>Three.js · Vite</small></div><div class="health-row"><span><i class="health-dot"></i> 전투 시뮬레이션</span><b>정상</b><small>Rapier · 실시간</small></div><div class="health-row"><span><i class="health-dot"></i> 온라인 랭킹</span><b class="health-warn">대기</b><small>로그인 연결 시 활성</small></div><button class="action-button action-button--outline admin-action" data-action="admin-refresh">상태 새로고침 ↻</button></div><div class="glass-card admin-panel"><div class="card-header"><div><span class="eyebrow">RECENT OPERATIONS</span><h3>최근 운영 기록</h3></div><span class="rate-note">최근 24시간</span></div><div class="admin-activity">${activity.map(([time, category, message, tone]) => `<div class="activity-row"><time>${time}</time><span class="activity-mark activity-mark--${tone}"></span><div><b>${category}</b><p>${message}</p></div></div>`).join('')}</div></div></div>`
     } else if (this.adminTab === 'generals') {
       body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">GENERAL CONTENT LIBRARY</span><h3>장수 콘텐츠 관리</h3><p>총 ${catalog.length}명의 장수 카드와 모집 등급을 확인합니다.</p></div><div class="admin-filters">${filters.map(([id, label]) => `<button class="admin-filter ${this.adminFilter === id ? 'is-active' : ''}" data-action="admin-filter" data-admin-filter="${id}">${label}</button>`).join('')}</div></div><div class="admin-general-table"><div class="admin-table-head"><span>장수</span><span>역할</span><span>등급</span><span>레벨</span><span>상태</span></div>${filtered.map(general => `<div class="admin-general-row"><div class="admin-general-name">${this.portrait(general, 'admin-portrait')}<span><b>${general.name}</b><small>${general.skillName}</small></span></div><span>${general.role}</span><strong style="color:${GRADE_META[general.grade].color}">${general.grade} · ${GRADE_META[general.grade].label}</strong><span>Lv.${general.level}</span><em>${state.formation.includes(general.id) ? '출전 중' : '대기'}</em></div>`).join('')}</div><div class="admin-table-foot">표시 ${filtered.length}명 · 전체 도감은 무장 관리에서 확인할 수 있습니다.</div></div>`
     } else if (this.adminTab === 'accounts') {
@@ -765,6 +772,7 @@ export class StrategyUI {
       if (this.renderedState) this.render(this.renderedState)
     }
     else if (action === 'city-select') this.callbacks.onCitySelect(button.dataset.city ?? '')
+    else if (action === 'territory-refresh') this.callbacks.onTerritoryRefresh()
     else if (action === 'conquer') this.callbacks.onConquest(button.dataset.city ?? '')
     else if (action === 'defense') this.callbacks.onDefense(button.dataset.city ?? '')
     else if (action === 'faction-battle') this.callbacks.onFactionBattle(button.dataset.city ?? '')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, collectIncome, conquestCost, conquestPower, createInitialState, defendCity, ensureCityRoster, findCity, launchConquest, launchFactionBattle, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, collectIncome, conquestCost, conquestPower, createInitialState, defendCity, ensureCityRoster, findCity, launchConquest, launchFactionBattle, mergeFactionTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with owned cities and a full resource inventory', () => {
@@ -17,6 +17,18 @@ describe('territory and governance', () => {
     expect(state.cities).toHaveLength(25)
     expect(findCity(state, 'luoyang')?.owner).toBe('위나라')
     expect(findCity(state, 'fucheng')?.region).toBe('익주 북방')
+  })
+
+  it('merges server ownership while preserving personal city buildings', () => {
+    const state = createInitialState()
+    const farm = findCity(state, 'xiangyang')!.buildings.find(building => building.id === 'farm')!
+    farm.level = 4
+    const merged = mergeFactionTerritories(state, [{ cityId: 'xiangyang', owner: '촉한', conquestProgress: 100, defense: 41, prosperity: 72 }])
+    expect(merged).toBe(1)
+    expect(findCity(state, 'xiangyang')?.owner).toBe('촉한')
+    expect(findCity(state, 'xiangyang')?.conquestProgress).toBe(100)
+    expect(findCity(state, 'xiangyang')?.defense).toBe(41)
+    expect(findCity(state, 'xiangyang')?.buildings.find(building => building.id === 'farm')?.level).toBe(4)
   })
 
   it('collects production from owned cities without collecting enemy yields', () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getGameState, listDuelOpponents, listGameStates, listUsers, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getFactionTerritories, getGameState, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -37,6 +37,18 @@ export const gameRouter = router({
   duel: router({
     listOpponents: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(12) }).strict()).query(({ ctx, input }) => listDuelOpponents(ctx.user.id, input.limit)),
   }),
+  territory: router({
+    list: protectedProcedure.query(() => getFactionTerritories()),
+    recordBattle: protectedProcedure.input(z.object({
+      cityId: z.string().trim().min(1).max(64),
+      damage: z.number().int().min(0).max(100),
+      won: z.boolean(),
+      captured: z.boolean(),
+    }).strict()).mutation(async ({ ctx, input }) => {
+      if (ctx.user.isCron) throw new Error('예약 실행 계정은 영토 전투를 기록할 수 없습니다.')
+      return recordFactionTerritoryBattle(ctx.user.id, input)
+    }),
+  }),
   account: router({
     me: protectedProcedure.query(({ ctx }) => accountView(ctx.user)),
     gameState: protectedProcedure.query(({ ctx }) => getGameState(ctx.user.id)),
@@ -58,6 +70,7 @@ export const gameRouter = router({
       equipmentLoadoutsData: z.string().max(200_000).optional(),
       selectedEquipmentGeneralId: z.string().max(64).optional(),
       selectedCityId: z.string().max(64).nullable().optional(),
+      faction: z.enum(['촉한', '위나라', '오나라']).optional(),
       factionWarScore: z.number().int().min(0).max(100000000).optional(),
       mythicFragments: z.number().int().min(0).max(1000000).optional(),
       duelAttemptsToday: z.number().int().min(0).max(5).optional(),

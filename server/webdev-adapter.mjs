@@ -24,7 +24,7 @@ var decodeOAuthState = (state) => {
 import { parse as parseCookieHeader2 } from "cookie";
 
 // starters/web-db-user-v1/server/db.ts
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 // starters/web-db-user-v1/drizzle/schema.ts
@@ -56,6 +56,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
   wood: int("wood").default(8200).notNull(),
   iron: int("iron").default(3900).notNull(),
   influence: int("influence").default(2480).notNull(),
+  faction: mysqlEnum("faction", ["촉한", "위나라", "오나라"]).default("촉한").notNull(),
   factionWarScore: int("factionWarScore").default(0).notNull(),
   mythicFragments: int("mythicFragments").default(0).notNull(),
   duelAttemptsToday: int("duelAttemptsToday").default(0).notNull(),
@@ -71,6 +72,16 @@ var gameAccountStates = mysqlTable("game_account_states", {
   selectedCityId: varchar("selectedCityId", { length: 64 }),
   incomeCollectedAt: varchar("incomeCollectedAt", { length: 32 }),
   conquestAt: varchar("conquestAt", { length: 32 })
+});
+var factionTerritoryStates = mysqlTable("faction_territory_states", {
+  cityId: varchar("cityId", { length: 64 }).primaryKey(),
+  owner: mysqlEnum("owner", ["촉한", "위나라", "오나라", "중립"]).notNull(),
+  conquestProgress: int("conquestProgress").default(0).notNull(),
+  defense: int("defense").default(50).notNull(),
+  prosperity: int("prosperity").default(50).notNull(),
+  version: int("version").default(1).notNull(),
+  updatedByUserId: int("updatedByUserId"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
 
 // starters/web-db-user-v1/server/_core/env.ts
@@ -196,7 +207,15 @@ async function updateUserRole(id, role, actorOpenId) {
   await db.update(users).set({ role }).where(eq(users.id, id));
   return getUserByOpenId(target[0].openId);
 }
-const defaultGameState = { honor: 2480, silver: 12500, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480 };
+const defaultGameState = { honor: 2480, silver: 12500, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한" };
+const FACTION_TERRITORY_SEED = [
+  ["chengdu", "촉한", 74, 82], ["hanzhong", "촉한", 86, 64], ["xiangyang", "중립", 62, 58], ["jianye", "오나라", 70, 76], ["xuchang", "위나라", 81, 79],
+  ["luoyang", "위나라", 92, 88], ["ye", "위나라", 86, 84], ["chenliu", "위나라", 57, 61], ["puyang", "위나라", 64, 58], ["wancheng", "중립", 70, 67],
+  ["jiangling", "오나라", 76, 73], ["yiling", "오나라", 68, 55], ["changsha", "중립", 63, 71], ["lingling", "중립", 46, 49], ["guiyang", "중립", 52, 45],
+  ["wujun", "오나라", 73, 78], ["kuaiji", "오나라", 66, 69], ["poyang", "오나라", 59, 62], ["hefei", "위나라", 88, 64], ["shouchun", "위나라", 79, 68],
+  ["jiujiang", "중립", 55, 57], ["tianshui", "위나라", 71, 53], ["wuwei", "중립", 61, 42], ["fucheng", "중립", 58, 51], ["xindu", "중립", 49, 47]
+].map(([cityId, owner, defense, prosperity]) => ({ cityId, owner, conquestProgress: 0, defense, prosperity, version: 1 }));
+const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.cityId));
 function parseStateJson(value) {
   if (typeof value !== "string" || value.length === 0) return null;
   try {
@@ -226,6 +245,57 @@ async function getGameState(userId) {
   if (!db) throw new Error("Database is not available");
   const result = await db.select().from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
   return gameStateView(result[0] ?? { userId, ...defaultGameState, updatedAt: new Date() });
+}
+function factionTerritoryView(row) {
+  return {
+    cityId: row.cityId,
+    owner: row.owner,
+    conquestProgress: Math.max(0, Math.min(100, Number(row.conquestProgress) || 0)),
+    defense: Math.max(0, Math.min(100, Number(row.defense) || 0)),
+    prosperity: Math.max(0, Math.min(100, Number(row.prosperity) || 0)),
+    version: Number(row.version) || 1,
+    updatedAt: row.updatedAt
+  };
+}
+async function ensureFactionTerritories(db) {
+  const existing = await db.select({ cityId: factionTerritoryStates.cityId }).from(factionTerritoryStates);
+  const known = new Set(existing.map(row => row.cityId));
+  const missing = FACTION_TERRITORY_SEED.filter(city => !known.has(city.cityId));
+  if (missing.length) {
+    await db.insert(factionTerritoryStates).values(missing).onDuplicateKeyUpdate({ set: { cityId: sql`cityId` } });
+  }
+}
+async function getFactionTerritories() {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await ensureFactionTerritories(db);
+  const rows = await db.select().from(factionTerritoryStates);
+  const byCityId = new Map(rows.map(row => [row.cityId, row]));
+  return FACTION_TERRITORY_SEED.map(city => factionTerritoryView(byCityId.get(city.cityId) ?? city));
+}
+async function recordFactionTerritoryBattle(userId, input) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (!FACTION_TERRITORY_IDS.has(input.cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
+  await ensureFactionTerritories(db);
+  if (!input.won) return getFactionTerritories();
+  const account = await db.select({ faction: gameAccountStates.faction }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
+  const faction = account[0]?.faction ?? "촉한";
+  const rows = await db.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1);
+  const current = rows[0];
+  if (!current || current.owner === faction) return getFactionTerritories();
+  const damage = Math.max(1, Math.min(40, Math.trunc(input.damage)));
+  const conquestProgress = input.captured ? 100 : Math.min(100, Number(current.conquestProgress) + damage);
+  const captured = conquestProgress >= 100;
+  await db.update(factionTerritoryStates).set({
+    owner: captured ? faction : current.owner,
+    conquestProgress,
+    defense: Math.max(20, Number(current.defense) - Math.ceil(damage / 2)),
+    prosperity: captured ? Math.max(30, Number(current.prosperity) - 20) : current.prosperity,
+    version: sql`${factionTerritoryStates.version} + 1`,
+    updatedByUserId: userId
+  }).where(eq(factionTerritoryStates.cityId, input.cityId));
+  return getFactionTerritories();
 }
 async function listGameStates() {
   const db = await getDb();
@@ -772,11 +842,13 @@ export {
   adminProcedure,
   getDb,
   getGameState,
+  getFactionTerritories,
   listDuelOpponents,
   listGameStates,
   listUsers,
   protectedProcedure,
   updateGameState,
+  recordFactionTerritoryBattle,
   updateUserRole,
   updateUserName,
   publicPlatformConfig,

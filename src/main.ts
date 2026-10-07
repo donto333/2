@@ -21,6 +21,7 @@ import {
   unequipEquipment,
   ensureCityRoster,
   ensureResearchRoster,
+  mergeFactionTerritories,
   findGeneral,
   recruit,
   selectCity,
@@ -31,6 +32,7 @@ import {
   upgradeBuilding,
   type Section,
   type StrategyState,
+  type FactionTerritorySnapshot,
 } from './game/strategy'
 import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 
@@ -56,6 +58,7 @@ function persistLocalGame(): void {
       manuals: state.manuals,
       wins: state.wins,
       battleScore: state.battleScore,
+      faction: state.faction,
       resources: state.resources,
       generals: state.generals,
       formation: state.formation,
@@ -89,6 +92,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       manuals: saved.manuals,
       wins: saved.wins,
       battleScore: saved.battleScore,
+      faction: saved.faction ?? '촉한',
       resources: saved.resources,
       generals: saved.generals,
       formation: saved.formation,
@@ -220,6 +224,39 @@ async function refreshDuelOpponents(): Promise<void> {
   ui.notify('게스트 모드에서는 훈련용 더미 덱을 사용합니다.')
 }
 
+async function refreshFactionTerritories(notify = false): Promise<void> {
+  if (authView.status !== 'authenticated') {
+    ui.setTerritorySync('로컬 영토 · 로그인 후 동기화')
+    return
+  }
+  ui.setTerritorySync('서버 원장 확인 중…')
+  try {
+    const snapshots = await ManusAuth.query('territory.list') as FactionTerritorySnapshot[]
+    const merged = mergeFactionTerritories(state, snapshots)
+    persistLocalGame()
+    ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
+    ui.render(state)
+    if (notify) ui.notify(`전역 영토 원장 동기화 완료 · ${merged}개 도시 반영`, 'jade')
+  } catch {
+    ui.setTerritorySync('서버 원장 연결 대기')
+    if (notify) ui.notify('전역 영토를 불러오지 못했습니다. 로컬 작전은 계속됩니다.', 'ember')
+  }
+}
+
+async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: number; won: boolean; captured: boolean }): Promise<void> {
+  if (authView.status !== 'authenticated') return
+  try {
+    const snapshots = await ManusAuth.mutate('territory.recordBattle', { cityId, damage: outcome.damage, won: outcome.won, captured: outcome.captured }) as FactionTerritorySnapshot[]
+    mergeFactionTerritories(state, snapshots)
+    persistLocalGame()
+    ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
+    ui.render(state)
+  } catch {
+    ui.setTerritorySync('서버 기록 재시도 대기')
+    ui.notify('전투 결과를 서버 영토 원장에 기록하지 못했습니다. 다시 영토 화면에서 동기화하십시오.', 'ember')
+  }
+}
+
 const ui = new StrategyUI(root, {
   onSection: (section: Section) => {
     if (section === 'admin' && accountView?.role !== 'admin') {
@@ -310,11 +347,17 @@ const ui = new StrategyUI(root, {
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
   },
+  onTerritoryRefresh: () => {
+    void refreshFactionTerritories(true)
+  },
   onConquest: id => {
     const result = launchConquest(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
+    if (result.ok) {
+      queueAccountSave()
+      void recordFactionTerritoryBattle(id, { damage: result.damage, won: true, captured: result.captured })
+    }
   },
   onDefense: id => {
     const result = defendCity(state, id)
@@ -326,7 +369,10 @@ const ui = new StrategyUI(root, {
     const result = launchFactionBattle(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok && result.won ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
+    if (result.ok) {
+      queueAccountSave()
+      void recordFactionTerritoryBattle(id, { damage: result.damage, won: result.won, captured: result.won && state.cities.find(city => city.id === id)?.owner === state.faction })
+    }
   },
   onCollectIncome: () => {
     const result = collectIncome(state)
@@ -572,9 +618,10 @@ async function refreshAccount(): Promise<void> {
   }
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
     if (!localSaveDirty) {
       Object.assign(state, { honor: game.honor, silver: game.silver, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
+      if (game.faction) state.faction = game.faction
       state.resources = { ...state.resources, grain: game.grain, silver: game.silver, wood: game.wood, iron: game.iron, influence: game.influence }
       if (Array.isArray(game.generals)) state.generals = game.generals
       if (Array.isArray(game.formation)) state.formation = game.formation
@@ -600,6 +647,7 @@ async function refreshAccount(): Promise<void> {
     ui.setAccount(accountView)
     ui.render(state)
     if (localSaveDirty) void flushAccountSave()
+    void refreshFactionTerritories()
   } catch {
     ui.notify('계정 정보를 불러오지 못했습니다. 로그인 상태를 확인해 주세요.', 'ember')
   }
@@ -616,6 +664,7 @@ function accountStatePayload() {
     wood: Math.trunc(state.resources.wood),
     iron: Math.trunc(state.resources.iron),
     influence: Math.trunc(state.resources.influence),
+    faction: state.faction,
     generalData: JSON.stringify(state.generals),
     formationData: JSON.stringify(state.formation),
     citiesData: JSON.stringify(state.cities),

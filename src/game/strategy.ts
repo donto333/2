@@ -3,6 +3,7 @@ export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
 export type ResourceKey = 'grain' | 'silver' | 'wood' | 'iron' | 'influence'
 export type CityOwner = '촉한' | '위나라' | '오나라' | '중립'
+export type Faction = Exclude<CityOwner, '중립'>
 export type BuildingKind = 'agriculture' | 'commerce' | 'barracks' | 'workshop' | 'academy'
 export type EquipmentType = 'weapon' | 'armor' | 'accessory'
 export type EquipmentGrade = 'normal' | 'rare' | 'unique' | 'legendary' | 'mythic'
@@ -47,6 +48,16 @@ export interface City {
   defense: number
   buildings: CityBuilding[]
   conquestProgress?: number
+}
+
+export interface FactionTerritorySnapshot {
+  cityId: string
+  owner: CityOwner
+  conquestProgress: number
+  defense: number
+  prosperity: number
+  version?: number
+  updatedAt?: string | Date
 }
 
 export interface ResearchNode {
@@ -102,6 +113,7 @@ export interface General {
 
 export interface StrategyState {
   section: Section
+  faction: Faction
   honor: number
   silver: number
   manuals: number
@@ -505,12 +517,27 @@ export function createInitialState(): StrategyState {
   const generals = starterIds.map(id => copyGeneral(LIBRARY.find(general => general.id === id)!))
   const equipmentInventory = starterEquipment()
   return {
-    section: 'overview', honor: 2480, silver: 12500, manuals: 180, generals,
+    section: 'overview', faction: '촉한', honor: 2480, silver: 12500, manuals: 180, generals,
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
     equipmentInventory, equipmentLoadouts: { 'guan-yu': { weapon: 'starter-weapon' }, 'zhao-yun': { armor: 'starter-armor' }, 'zhuge-liang': { accessory: 'starter-accessory' } }, selectedEquipmentGeneralId: 'guan-yu', lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(),
   }
+}
+
+export function mergeFactionTerritories(state: StrategyState, snapshots: FactionTerritorySnapshot[]): number {
+  const byCityId = new Map(snapshots.map(snapshot => [snapshot.cityId, snapshot]))
+  let merged = 0
+  state.cities.forEach(city => {
+    const snapshot = byCityId.get(city.id)
+    if (!snapshot) return
+    city.owner = snapshot.owner
+    city.conquestProgress = Math.max(0, Math.min(100, Math.trunc(snapshot.conquestProgress)))
+    city.defense = Math.max(0, Math.min(100, Math.trunc(snapshot.defense)))
+    city.prosperity = Math.max(0, Math.min(100, Math.trunc(snapshot.prosperity)))
+    merged += 1
+  })
+  return merged
 }
 
 export function allGenerals(): General[] {
@@ -909,7 +936,7 @@ function researchCount(state: StrategyState, prefix: string): number {
 }
 
 export function cityIncome(city: City, state?: StrategyState): Resources {
-  if (city.owner !== '촉한') return { grain: 0, silver: 0, wood: 0, iron: 0, influence: 0 }
+  if (city.owner !== (state?.faction ?? '촉한')) return { grain: 0, silver: 0, wood: 0, iron: 0, influence: 0 }
   const farm = buildingLevel(city, 'agriculture')
   const market = buildingLevel(city, 'commerce')
   const workshop = buildingLevel(city, 'workshop')
@@ -934,7 +961,7 @@ export function cityIncome(city: City, state?: StrategyState): Resources {
 export function conquestPower(state: StrategyState): number {
   const formationPower = totalPower(state)
   const commandBonus = state.research.some(node => node.id === 'drill' && node.unlocked) ? 120 : 0
-  return formationPower + commandBonus + state.cities.filter(city => city.owner === '촉한').length * 35 + researchCount(state, 'military-') * 42 + researchCount(state, 'scholar-') * 12
+  return formationPower + commandBonus + state.cities.filter(city => city.owner === state.faction).length * 35 + researchCount(state, 'military-') * 42 + researchCount(state, 'scholar-') * 12
 }
 
 export function conquestCost(city: City): Partial<Record<ResourceKey, number>> {
@@ -966,7 +993,7 @@ function territoryBattleCost(city: City): Partial<Record<ResourceKey, number>> {
 export function defendCity(state: StrategyState, cityId: string, now = Date.now()): TerritoryBattleResult {
   const city = findCity(state, cityId)
   if (!city) return { ok: false, won: false, message: '해당 도시를 찾을 수 없습니다.', damage: 0 }
-  if (city.owner !== '촉한') return { ok: false, won: false, message: '아군 도시에서만 방어전을 지휘할 수 있습니다.', damage: 0 }
+  if (city.owner !== state.faction) return { ok: false, won: false, message: '아군 도시에서만 방어전을 지휘할 수 있습니다.', damage: 0 }
   const wait = defenseCooldownRemaining(state, now)
   if (wait > 0) return { ok: false, won: false, message: `수비대가 재정비 중입니다. ${Math.ceil(wait / 1000)}초 후 방어전을 시작할 수 있습니다.`, damage: 0 }
   const cost = territoryBattleCost(city)
@@ -993,13 +1020,13 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
 export function launchFactionBattle(state: StrategyState, cityId: string, now = Date.now()): TerritoryBattleResult {
   const city = findCity(state, cityId)
   if (!city) return { ok: false, won: false, message: '해당 전선을 찾을 수 없습니다.', damage: 0 }
-  if (city.owner === '촉한') return { ok: false, won: false, message: '아군 도시에는 세력전 공격을 할 수 없습니다.', damage: 0 }
+  if (city.owner === state.faction) return { ok: false, won: false, message: '아군 도시에는 세력전 공격을 할 수 없습니다.', damage: 0 }
   const wait = factionBattleCooldownRemaining(state, now)
   if (wait > 0) return { ok: false, won: false, message: `세력전 부대가 재편성 중입니다. ${Math.ceil(wait / 1000)}초 후 다시 공격할 수 있습니다.`, damage: 0 }
   const cost = territoryBattleCost(city)
   if (!spendResources(state, cost)) return { ok: false, won: false, message: '세력전 보급품이 부족합니다.', damage: 0 }
   state.lastFactionBattleAt = now
-  const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === '촉한').length * 70 + researchCount(state, 'military-') * 45 + researchCount(state, 'scholar-') * 15
+  const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70 + researchCount(state, 'military-') * 45 + researchCount(state, 'scholar-') * 15
   const factionPower = city.defense * 5 + city.level * 260 + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
   const won = attackPower >= factionPower * 0.75
   const damage = Math.max(5, Math.round((attackPower / Math.max(factionPower, 1)) * 14))
@@ -1008,7 +1035,7 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
     city.defense = Math.max(20, city.defense - Math.ceil(damage / 2))
     state.factionWarScore += 150
     if ((city.conquestProgress ?? 0) >= 100) {
-      city.owner = '촉한'
+      city.owner = state.faction
       state.honor += 260
       state.silver += 1400
       state.resources.silver = state.silver
@@ -1024,7 +1051,7 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
 export function launchConquest(state: StrategyState, cityId: string, now = Date.now()): ConquestResult {
   const city = findCity(state, cityId)
   if (!city) return { ok: false, captured: false, message: '해당 도시를 찾을 수 없습니다.', damage: 0 }
-  if (city.owner === '촉한') return { ok: false, captured: false, message: '이미 촉한이 지배하는 도시입니다.', damage: 0 }
+  if (city.owner === state.faction) return { ok: false, captured: false, message: `이미 ${state.faction}이(가) 지배하는 도시입니다.`, damage: 0 }
   const conquestWait = conquestCooldownRemaining(state, now)
   if (conquestWait > 0) return { ok: false, captured: false, message: `공성 준비 중입니다. ${Math.ceil(conquestWait / 1000)}초 후 다시 출정할 수 있습니다.`, damage: 0 }
   const cost = conquestCost(city)
@@ -1038,7 +1065,7 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
   city.conquestProgress = progress
   state.selectedCityId = city.id
   if (progress >= 100) {
-    city.owner = '촉한'
+    city.owner = state.faction
     city.defense = Math.max(30, city.defense - 18)
     city.prosperity = Math.max(30, city.prosperity - 20)
     state.honor += 260
@@ -1116,7 +1143,7 @@ export function buildingCost(building: CityBuilding): Partial<Record<ResourceKey
 export function upgradeBuilding(state: StrategyState, cityId: string, buildingId: string): { ok: boolean; message: string } {
   const city = findCity(state, cityId)
   if (!city) return { ok: false, message: '도시를 찾을 수 없습니다.' }
-  if (city.owner !== '촉한') return { ok: false, message: '아군 영토의 도시만 내정을 지휘할 수 있습니다.' }
+  if (city.owner !== state.faction) return { ok: false, message: '아군 영토의 도시만 내정을 지휘할 수 있습니다.' }
   const building = city.buildings.find(item => item.id === buildingId)
   if (!building) return { ok: false, message: '건물을 찾을 수 없습니다.' }
   if (building.level >= building.maxLevel) return { ok: false, message: `${building.name}은(는) 이미 최고 단계입니다.` }
