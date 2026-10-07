@@ -281,20 +281,22 @@ async function recordFactionTerritoryBattle(userId, input) {
   if (!input.won) return getFactionTerritories();
   const account = await db.select({ faction: gameAccountStates.faction }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
   const faction = account[0]?.faction ?? "촉한";
-  const rows = await db.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1);
-  const current = rows[0];
-  if (!current || current.owner === faction) return getFactionTerritories();
   const damage = Math.max(1, Math.min(40, Math.trunc(input.damage)));
-  const conquestProgress = input.captured ? 100 : Math.min(100, Number(current.conquestProgress) + damage);
-  const captured = conquestProgress >= 100;
-  await db.update(factionTerritoryStates).set({
-    owner: captured ? faction : current.owner,
-    conquestProgress,
-    defense: Math.max(20, Number(current.defense) - Math.ceil(damage / 2)),
-    prosperity: captured ? Math.max(30, Number(current.prosperity) - 20) : current.prosperity,
-    version: sql`${factionTerritoryStates.version} + 1`,
-    updatedByUserId: userId
-  }).where(eq(factionTerritoryStates.cityId, input.cityId));
+  await db.transaction(async tx => {
+    const rows = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1).for("update");
+    const current = rows[0];
+    if (!current || current.owner === faction) return;
+    const conquestProgress = input.captured ? 100 : Math.min(100, Number(current.conquestProgress) + damage);
+    const captured = conquestProgress >= 100;
+    await tx.update(factionTerritoryStates).set({
+      owner: captured ? faction : current.owner,
+      conquestProgress,
+      defense: Math.max(20, Number(current.defense) - Math.ceil(damage / 2)),
+      prosperity: captured ? Math.max(30, Number(current.prosperity) - 20) : current.prosperity,
+      version: sql`${factionTerritoryStates.version} + 1`,
+      updatedByUserId: userId
+    }).where(eq(factionTerritoryStates.cityId, input.cityId));
+  });
   return getFactionTerritories();
 }
 async function listGameStates() {
