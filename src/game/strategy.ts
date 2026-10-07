@@ -8,6 +8,16 @@ export type EquipmentType = 'weapon' | 'armor' | 'accessory'
 export type EquipmentGrade = 'normal' | 'rare' | 'unique' | 'legendary' | 'mythic'
 export type EquipmentSet = 'command' | 'martial' | 'stratagem' | 'speed'
 export type EquipmentStat = 'leadership' | 'martial' | 'stratagem' | 'speed'
+export type EquipmentSpecialtyId = string
+
+export interface EquipmentSpecialty {
+  id: EquipmentSpecialtyId
+  label: string
+  type: EquipmentType
+  stat: EquipmentStat
+  value: number
+  description: string
+}
 
 export interface Resources {
   grain: number
@@ -62,6 +72,7 @@ export interface Equipment {
   skillName: string
   skillDescription: string
   mythicEventOnly?: boolean
+  specialty?: EquipmentSpecialtyId
 }
 
 export interface General {
@@ -434,6 +445,27 @@ export const EQUIPMENT_GRADE_META: Record<EquipmentGrade, { label: string; color
   mythic: { label: '신화', color: '#ff8066', base: 52, drawWeight: 0 },
 }
 
+export const EQUIPMENT_SPECIALTIES: Record<EquipmentType, EquipmentSpecialty[]> = {
+  weapon: ([
+    ['bravery', '용맹', 'martial', 9, '무력 +9 · 공격 피해 보정'], ['tactics', '기책', 'stratagem', 9, '모략 +9 · 전술 피해 보정'], ['swift-strike', '신속', 'speed', 9, '속도 +9 · 선제 행동 보정'], ['rapid-assault', '속공', 'martial', 7, '무력 +7 · 연계 피해 보정'], ['change', '천변', 'stratagem', 7, '모략 +7 · 적 약화 보정'], ['guarding', '비호', 'leadership', 7, '통솔 +7 · 받는 피해 감소 보정'], ['clear-sight', '천안', 'speed', 7, '속도 +7 · 명중 보정'], ['exorcism', '모산', 'stratagem', 6, '모략 +6 · 상태 효과 보정'], ['siege', '포위', 'martial', 6, '무력 +6 · 방어 돌파 보정'], ['heaven-aid', '천우', 'leadership', 6, '통솔 +6 · 위기 대응 보정'],
+  ] as Array<[string, string, EquipmentStat, number, string]>).map(([id, label, stat, value, description]) => ({ id: `weapon-${id}`, label, type: 'weapon' as const, stat: stat as EquipmentStat, value: value as number, description })),
+  armor: ([
+    ['bravery', '용맹', 'martial', 7, '무력 +7 · 반격 보정'], ['tactics', '기책', 'stratagem', 7, '모략 +7 · 상태 저항 보정'], ['swift-strike', '신속', 'speed', 7, '속도 +7 · 행동 순환 보정'], ['rapid-assault', '속공', 'speed', 6, '속도 +6 · 재사용 대기시간 보정'], ['change', '천변', 'stratagem', 9, '모략 +9 · 적 제어 저항 보정'], ['guarding', '비호', 'leadership', 10, '통솔 +10 · 방어 보정'], ['clear-sight', '천안', 'speed', 6, '속도 +6 · 회피 보정'], ['exorcism', '모산', 'stratagem', 6, '모략 +6 · 디버프 지속시간 감소'], ['siege', '포위', 'martial', 6, '무력 +6 · 포위 피해 저항'], ['heaven-aid', '천우', 'leadership', 8, '통솔 +8 · 위기 방어 보정'],
+  ] as Array<[string, string, EquipmentStat, number, string]>).map(([id, label, stat, value, description]) => ({ id: `armor-${id}`, label, type: 'armor' as const, stat: stat as EquipmentStat, value: value as number, description })),
+  accessory: ([
+    ['bravery', '용맹', 'martial', 6, '무력 +6 · 기술 피해 보정'], ['tactics', '기책', 'stratagem', 10, '모략 +10 · 전술 게이지 보정'], ['swift-strike', '신속', 'speed', 8, '속도 +8 · 행동 순환 보정'], ['rapid-assault', '속공', 'speed', 7, '속도 +7 · 연계 유지 보정'], ['change', '천변', 'stratagem', 8, '모략 +8 · 적 약화 보정'], ['guarding', '비호', 'leadership', 6, '통솔 +6 · 아군 보호 보정'], ['clear-sight', '천안', 'speed', 10, '속도 +10 · 명중·치명 보정'], ['exorcism', '모산', 'stratagem', 8, '모략 +8 · 정화 효과 보정'], ['siege', '포위', 'martial', 8, '무력 +8 · 방어 돌파 보정'], ['heaven-aid', '천우', 'leadership', 8, '통솔 +8 · 회복 효과 보정'],
+  ] as Array<[string, string, EquipmentStat, number, string]>).map(([id, label, stat, value, description]) => ({ id: `accessory-${id}`, label, type: 'accessory' as const, stat: stat as EquipmentStat, value: value as number, description })),
+}
+
+export function equipmentSpecialty(item: Equipment): EquipmentSpecialty | undefined {
+  return item.specialty ? Object.values(EQUIPMENT_SPECIALTIES).flat().find(specialty => specialty.id === item.specialty) : undefined
+}
+
+function mythicSpecialty(type: EquipmentType, set: EquipmentSet): EquipmentSpecialtyId {
+  const index = ({ command: 0, martial: 1, stratagem: 2, speed: 3 } as Record<EquipmentSet, number>)[set] * 2 + (type === 'weapon' ? 0 : type === 'armor' ? 1 : 2)
+  return EQUIPMENT_SPECIALTIES[type][index % 10].id
+}
+
 export const EQUIPMENT_SET_META: Record<EquipmentSet, { label: string; stat: EquipmentStat; skillName: string; skillDescription: string; twoPiece: string; threePiece: string }> = {
   command: { label: '천군 세트', stat: 'leadership', skillName: '군령의 깃발', skillDescription: '통솔 기반 편성 전투력 보정', twoPiece: '통솔 +10', threePiece: '전투 시작 시 아군 방어 +8%' },
   martial: { label: '패왕 세트', stat: 'martial', skillName: '파천의 일격', skillDescription: '무력 기반 공격 효율 보정', twoPiece: '무력 +10', threePiece: '전투 시작 시 공격 피해 +8%' },
@@ -450,22 +482,22 @@ function starterEquipment(): Equipment[] {
 }
 
 export const MYTHIC_EVENT_EQUIPMENT: Equipment = {
-  id: 'event-mythic-heavenblade', name: '천명·용천검', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: EQUIPMENT_GRADE_META.mythic.base, skillName: '용천 개벽', skillDescription: '이벤트 지급 전용 신화 무기 · 전투 개시 시 아군의 무력을 크게 끌어올립니다.', mythicEventOnly: true,
+  id: 'event-mythic-heavenblade', name: '천명·용천검', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: EQUIPMENT_GRADE_META.mythic.base, skillName: '용천 개벽', skillDescription: '이벤트 지급 전용 신화 무기 · 전투 개시 시 아군의 무력을 크게 끌어올립니다.', mythicEventOnly: true, specialty: mythicSpecialty('weapon', 'martial'),
 }
 
 export const MYTHIC_SHOP_EQUIPMENT: Equipment[] = [
-  { id: 'shop-mythic-command-weapon', name: '신화·천군명검', type: 'weapon', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, skillName: '천군의 칼날', skillDescription: '통솔 기반 지휘 효율을 크게 높입니다.' },
-  { id: 'shop-mythic-command-armor', name: '신화·천군용갑', type: 'armor', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, skillName: '천군 철벽', skillDescription: '통솔 기반 방어 효율을 크게 높입니다.' },
-  { id: 'shop-mythic-command-accessory', name: '신화·군령옥패', type: 'accessory', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, skillName: '군령의 성좌', skillDescription: '통솔 기반 편성 보정을 크게 높입니다.' },
-  { id: 'shop-mythic-martial-weapon', name: '신화·적룡천극', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, skillName: '적룡 파천', skillDescription: '무력 기반 공격 효율을 크게 높입니다.' },
-  { id: 'shop-mythic-martial-armor', name: '신화·패왕철갑', type: 'armor', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, skillName: '패왕 강체', skillDescription: '무력 기반 돌파력을 크게 높입니다.' },
-  { id: 'shop-mythic-martial-accessory', name: '신화·무쌍호패', type: 'accessory', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, skillName: '무쌍의 혼', skillDescription: '무력 기반 연계 피해를 크게 높입니다.' },
-  { id: 'shop-mythic-stratagem-weapon', name: '신화·천책선검', type: 'weapon', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, skillName: '천책 개문', skillDescription: '모략 기반 전술 효율을 크게 높입니다.' },
-  { id: 'shop-mythic-stratagem-armor', name: '신화·귀모도포', type: 'armor', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, skillName: '귀모 환영', skillDescription: '모략 기반 적 약화 효율을 크게 높입니다.' },
-  { id: 'shop-mythic-stratagem-accessory', name: '신화·천책옥패', type: 'accessory', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, skillName: '천책 귀모', skillDescription: '모략 기반 전술 게이지를 크게 높입니다.' },
-  { id: 'shop-mythic-speed-weapon', name: '신화·질풍유성창', type: 'weapon', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, skillName: '유성 관통', skillDescription: '속도 기반 선제 공격 효율을 크게 높입니다.' },
-  { id: 'shop-mythic-speed-armor', name: '신화·질풍경갑', type: 'armor', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, skillName: '질풍 보법', skillDescription: '속도 기반 행동 순환을 크게 높입니다.' },
-  { id: 'shop-mythic-speed-accessory', name: '신화·유성환', type: 'accessory', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, skillName: '유성 잔상', skillDescription: '속도 기반 회피와 연계 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-command-weapon', name: '신화·천군명검', type: 'weapon', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, specialty: mythicSpecialty('weapon', 'command'), skillName: '천군의 칼날', skillDescription: '통솔 기반 지휘 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-command-armor', name: '신화·천군용갑', type: 'armor', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, specialty: mythicSpecialty('armor', 'command'), skillName: '천군 철벽', skillDescription: '통솔 기반 방어 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-command-accessory', name: '신화·군령옥패', type: 'accessory', set: 'command', grade: 'mythic', level: 1, mainStat: 'leadership', baseValue: 52, specialty: mythicSpecialty('accessory', 'command'), skillName: '군령의 성좌', skillDescription: '통솔 기반 편성 보정을 크게 높입니다.' },
+  { id: 'shop-mythic-martial-weapon', name: '신화·적룡천극', type: 'weapon', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, specialty: mythicSpecialty('weapon', 'martial'), skillName: '적룡 파천', skillDescription: '무력 기반 공격 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-martial-armor', name: '신화·패왕철갑', type: 'armor', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, specialty: mythicSpecialty('armor', 'martial'), skillName: '패왕 강체', skillDescription: '무력 기반 돌파력을 크게 높입니다.' },
+  { id: 'shop-mythic-martial-accessory', name: '신화·무쌍호패', type: 'accessory', set: 'martial', grade: 'mythic', level: 1, mainStat: 'martial', baseValue: 52, specialty: mythicSpecialty('accessory', 'martial'), skillName: '무쌍의 혼', skillDescription: '무력 기반 연계 피해를 크게 높입니다.' },
+  { id: 'shop-mythic-stratagem-weapon', name: '신화·천책선검', type: 'weapon', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, specialty: mythicSpecialty('weapon', 'stratagem'), skillName: '천책 개문', skillDescription: '모략 기반 전술 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-stratagem-armor', name: '신화·귀모도포', type: 'armor', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, specialty: mythicSpecialty('armor', 'stratagem'), skillName: '귀모 환영', skillDescription: '모략 기반 적 약화 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-stratagem-accessory', name: '신화·천책옥패', type: 'accessory', set: 'stratagem', grade: 'mythic', level: 1, mainStat: 'stratagem', baseValue: 52, specialty: mythicSpecialty('accessory', 'stratagem'), skillName: '천책 귀모', skillDescription: '모략 기반 전술 게이지를 크게 높입니다.' },
+  { id: 'shop-mythic-speed-weapon', name: '신화·질풍유성창', type: 'weapon', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, specialty: mythicSpecialty('weapon', 'speed'), skillName: '유성 관통', skillDescription: '속도 기반 선제 공격 효율을 크게 높입니다.' },
+  { id: 'shop-mythic-speed-armor', name: '신화·질풍경갑', type: 'armor', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, specialty: mythicSpecialty('armor', 'speed'), skillName: '질풍 보법', skillDescription: '속도 기반 행동 순환을 크게 높입니다.' },
+  { id: 'shop-mythic-speed-accessory', name: '신화·유성환', type: 'accessory', set: 'speed', grade: 'mythic', level: 1, mainStat: 'speed', baseValue: 52, specialty: mythicSpecialty('accessory', 'speed'), skillName: '유성 잔상', skillDescription: '속도 기반 회피와 연계 효율을 크게 높입니다.' },
 ]
 
 export function createInitialState(): StrategyState {
@@ -586,6 +618,9 @@ export function totalPower(state: StrategyState): number {
 
 export function ensureEquipmentState(state: StrategyState): void {
   if (!Array.isArray(state.equipmentInventory)) state.equipmentInventory = starterEquipment()
+  state.equipmentInventory.forEach(item => {
+    if (item.grade === 'mythic' && !item.specialty) item.specialty = mythicSpecialty(item.type, item.set)
+  })
   if (!state.equipmentLoadouts || typeof state.equipmentLoadouts !== 'object') state.equipmentLoadouts = {}
   if (!state.selectedEquipmentGeneralId || !state.generals.some(general => general.id === state.selectedEquipmentGeneralId)) state.selectedEquipmentGeneralId = state.generals[0]?.id ?? ''
   if (!Array.isArray(state.lastEquipmentDraw)) state.lastEquipmentDraw = []
@@ -606,6 +641,8 @@ export function equipmentBonus(state: StrategyState, generalId: string): Record<
     const item = state.equipmentInventory.find(candidate => candidate.id === itemId)
     if (item) {
       bonus[item.mainStat] += equipmentValue(item)
+      const specialty = equipmentSpecialty(item)
+      if (specialty) bonus[specialty.stat] += specialty.value
       setCounts[item.set] = (setCounts[item.set] ?? 0) + 1
     }
   })

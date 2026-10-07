@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 import { effectLoadout } from '../src/game/battle-effects'
 
 describe('commander attributes', () => {
@@ -134,6 +134,20 @@ describe('commander attributes', () => {
     expect(state.equipmentInventory[0].mainStat).toBe('martial')
     expect(powerBefore).toBeGreaterThan(0)
     expect(state.equipmentInventory[0].baseValue).toBe(before)
+  })
+
+  it('defines ten specialties for each equipment type and applies mythic specialty power', () => {
+    expect(EQUIPMENT_SPECIALTIES.weapon).toHaveLength(10)
+    expect(EQUIPMENT_SPECIALTIES.armor).toHaveLength(10)
+    expect(EQUIPMENT_SPECIALTIES.accessory).toHaveLength(10)
+    for (const specialties of Object.values(EQUIPMENT_SPECIALTIES)) expect(new Set(specialties.map(specialty => specialty.id)).size).toBe(10)
+    expect(MYTHIC_SHOP_EQUIPMENT.every(item => item.specialty)).toBe(true)
+    const state = createInitialState()
+    const mythic = { ...MYTHIC_SHOP_EQUIPMENT[0], id: 'test-mythic-specialty' }
+    state.equipmentInventory.push(mythic)
+    const before = equipmentBonus(state, 'guan-yu').leadership
+    expect(equipEquipment(state, 'guan-yu', mythic.id).ok).toBe(true)
+    expect(equipmentBonus(state, 'guan-yu').leadership + equipmentBonus(state, 'guan-yu').martial + equipmentBonus(state, 'guan-yu').stratagem + equipmentBonus(state, 'guan-yu').speed).toBeGreaterThan(before)
   })
 
   it('allows equipment draws only through legendary and never mythic', () => {
