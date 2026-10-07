@@ -39,14 +39,16 @@ const canvas = document.querySelector<HTMLCanvasElement>('#game')
 
 if (!root || !canvas) throw new Error('Strategy game shell is incomplete')
 
-const LOCAL_GAME_SAVE_KEY = 'cheonharo.strategy.save.v2'
+const LOCAL_GAME_SAVE_KEY = 'cheonharo.strategy.save.member.v2'
+const GUEST_GAME_SAVE_KEY = 'cheonharo.strategy.save.guest.v2'
 const GUEST_ACCESS_KEY = 'cheonharo.access.guest.v1'
 const state: StrategyState = createInitialState()
 let localSaveDirty = false
 
 function persistLocalGame(): void {
   try {
-    window.localStorage.setItem(LOCAL_GAME_SAVE_KEY, JSON.stringify({
+    const saveKey = gameAccess === 'guest' ? GUEST_GAME_SAVE_KEY : LOCAL_GAME_SAVE_KEY
+    window.localStorage.setItem(saveKey, JSON.stringify({
       version: 2,
       savedAt: Date.now(),
       honor: state.honor,
@@ -75,9 +77,9 @@ function persistLocalGame(): void {
   }
 }
 
-function restoreLocalGame(): void {
+function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
   try {
-    const raw = window.localStorage.getItem(LOCAL_GAME_SAVE_KEY)
+    const raw = window.localStorage.getItem(saveKey)
     if (!raw) return
     const saved = JSON.parse(raw) as Partial<StrategyState> & { version?: number; resources?: StrategyState['resources']; savedAt?: number }
     if (saved.version !== undefined && saved.version !== 2) return
@@ -108,7 +110,6 @@ function restoreLocalGame(): void {
   }
 }
 
-restoreLocalGame()
 ensureCityRoster(state)
 ensureResearchRoster(state)
 ensureEquipmentState(state)
@@ -123,6 +124,17 @@ let saveRetryCount = 0
 let duelActive = false
 let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
+
+function restoreAccessState(mode: 'member' | 'guest'): void {
+  const fresh = createInitialState()
+  Object.assign(state, fresh)
+  gameAccess = mode
+  restoreLocalGame(mode === 'guest' ? GUEST_GAME_SAVE_KEY : LOCAL_GAME_SAVE_KEY)
+  ensureCityRoster(state)
+  ensureResearchRoster(state)
+  ensureEquipmentState(state)
+  localSaveDirty = false
+}
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
   return state.formation.map(id => {
@@ -385,7 +397,7 @@ const ui = new StrategyUI(root, {
     ui.notify('유저 대련을 시작했습니다. 상대 덱의 전력을 돌파하십시오.')
   },
   onGuestLogin: () => {
-    gameAccess = 'guest'
+    restoreAccessState('guest')
     window.localStorage.setItem(GUEST_ACCESS_KEY, '1')
     ui.render(state)
     ui.notify('게스트 모드로 입장했습니다. 진행 데이터는 이 기기에 저장됩니다.')
@@ -397,6 +409,11 @@ const ui = new StrategyUI(root, {
     void ManusAuth.logout().then(session => {
       gameAccess = null
       window.localStorage.removeItem(GUEST_ACCESS_KEY)
+      Object.assign(state, createInitialState())
+      ensureCityRoster(state)
+      ensureResearchRoster(state)
+      ensureEquipmentState(state)
+      localSaveDirty = false
       authView = { status: session.status, name: session.user?.name ?? null }
       accountView = null
       ui.setAccount(null)
@@ -495,13 +512,14 @@ window.addEventListener('manus-auth-change', (event: Event) => {
   }
   ui.setAuth(authView)
   if (authView.status === 'authenticated') {
-    gameAccess = 'member'
+    restoreAccessState('member')
     window.localStorage.removeItem(GUEST_ACCESS_KEY)
     ui.render(state)
     void refreshAccount()
   } else if (!gameAccess) {
     ui.showAccessGate()
   } else {
+    restoreAccessState('guest')
     ui.render(state)
   }
 })
@@ -510,13 +528,14 @@ void ManusAuth.prepare().then(session => {
   authView = { status: session.status, name: session.user?.name ?? null }
   ui.setAuth(authView)
   if (authView.status === 'authenticated') {
-    gameAccess = 'member'
+    restoreAccessState('member')
     window.localStorage.removeItem(GUEST_ACCESS_KEY)
     ui.render(state)
     void refreshAccount()
   } else if (!gameAccess) {
     ui.showAccessGate()
   } else {
+    restoreAccessState('guest')
     ui.render(state)
   }
   if (state.section === 'rank') void refreshLeaderboard()
