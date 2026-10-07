@@ -194,6 +194,7 @@ try {
   if (await page.locator('.equipment-slot.is-filled').count() < 1) throw new Error('equipment slot did not render an equipped item')
   await page.click('[data-action="section"][data-section="territory"]')
   await page.waitForSelector('.territory-map')
+  if (await page.locator('.city-marker').count() !== 25) throw new Error('territory city marker count is incomplete')
   if (await page.locator('.city-marker-castle img').count() !== 25) throw new Error('territory city castle art is incomplete')
   if (await page.locator('.city-marker-castle img').evaluateAll(images => images.some(image => !image.complete || image.naturalWidth === 0))) throw new Error('territory castle art failed to load')
   await page.locator('.map-canvas').scrollIntoViewIfNeeded()

@@ -484,7 +484,7 @@ export class StrategyUI {
     const ownerClass = city.owner === '촉한' ? 'is-ally' : city.owner === '중립' ? 'is-neutral' : 'is-enemy'
     const position = { chengdu: 'left:12%;top:76%', hanzhong: 'left:23%;top:52%', fucheng: 'left:31%;top:72%', xindu: 'left:21%;top:84%', tianshui: 'left:37%;top:28%', wuwei: 'left:20%;top:15%', xiangyang: 'left:52%;top:51%', wancheng: 'left:45%;top:61%', jiangling: 'left:55%;top:67%', yiling: 'left:61%;top:73%', changsha: 'left:58%;top:87%', lingling: 'left:48%;top:93%', guiyang: 'left:69%;top:91%', jianye: 'left:88%;top:76%', wujun: 'left:82%;top:62%', kuaiji: 'left:91%;top:91%', poyang: 'left:76%;top:73%', xuchang: 'left:63%;top:23%', luoyang: 'left:53%;top:9%', ye: 'left:67%;top:7%', chenliu: 'left:76%;top:16%', puyang: 'left:84%;top:24%', hefei: 'left:76%;top:43%', shouchun: 'left:84%;top:49%', jiujiang: 'left:72%;top:56%' }[city.id] ?? 'left:50%;top:50%'
     const castle = city.level >= 3 ? 'castle-city-major' : city.level === 2 ? 'castle-city-medium' : 'castle-city-minor'
-    return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="lazy"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong><small>${city.chineseName}</small></button>`
+    return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="eager"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong><small>${city.chineseName}</small></button>`
   }
 
   private cityManagementCard(city: City, income: ReturnType<typeof cityIncome>, state: StrategyState): string {
@@ -678,10 +678,9 @@ export class StrategyUI {
       ['2026.10.05', '전투 연출 개선', '피격 반응, 병력 상태 막대, 카메라 움직임, 기술 색상 효과를 추가했습니다.', '완료', 'jade'],
       ['2026.10.04', '신화 상점 확장', '통솔·무력·모략·속도별 장비 세트와 무기·갑옷·장신구 12종을 상점에 추가했습니다.', '완료', 'jade'],
       ['2026.10.03', '장비 관리 시스템', '장비 뽑기, 장착·해제, 강화, 등급 정렬, 세트 효과를 구현했습니다.', '완료', 'jade'],
-      ['2026.10.02', '영토 화면 개편', '성곽 중심의 삼국지 지도와 성 아이콘을 영토 화면에 적용했습니다.', '완료', 'jade'],
+      ['2026.10.07', '천하영토 성 아이콘 전체 표시', '천하영토의 25개 성을 빠짐없이 표시하고 화면 크기에 맞게 아이콘 크기와 간격을 조정했습니다.', '완료', 'jade'],
     ] as const
     const planned = [
-      ['다음 순위', '천하영토 성 아이콘 전체 표시', '영토 화면의 모든 성을 누락 없이 표시하고 화면 크기별 겹침을 조정합니다.'],
       ['예정', '한자 표기 제거 및 한글 대체', '게임 전체의 불필요한 한자 표기를 자연스러운 한글로 통일합니다.'],
       ['예정', '무장 스킬 정보 상세화', '발동 조건, 대상, 수치, 지속시간, 재사용 조건을 더 자세히 표시합니다.'],
       ['예정', '신화 장비 특기 능력', '장비 종류별 10종 특기와 실제 전투·상태 계산 반영을 준비합니다.'],
