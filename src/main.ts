@@ -298,9 +298,8 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
-    if (result.ok && result.general) void ui.playRecruitAnimation(result.general, count).then(() => {
-      if (count === 10) ui.showRecruitResults(result.rewards)
-    })
+    if (result.ok && count === 10) ui.showRecruitResults(result.rewards)
+    else if (result.ok && result.general) void ui.playRecruitAnimation(result.general, count)
   },
   onUpgrade: id => {
     const result = upgrade(state, id)
