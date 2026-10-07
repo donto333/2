@@ -175,6 +175,8 @@ try {
   await page.click('[data-action="section"][data-section="updates"]')
   await page.waitForSelector('.page-section--updates')
   if (await page.locator('.page-section--updates .update-entry').count() < 10) throw new Error('update history entries are incomplete')
+  if (await page.locator('.page-section--updates .updates-panel:first-child .update-entry time').first().textContent() !== '2026.10.08') throw new Error('update history is not sorted newest first')
+  if (!(await page.locator('.page-section--updates .updates-panel:first-child .update-entry').first().textContent())?.includes('명망 교환 대형 패키지 추가')) throw new Error('latest update is not shown first')
   if (!(await page.locator('.page-section--updates').textContent())?.includes('유저 대련 실제 덱 연동')) throw new Error('real-deck update is missing from in-game history')
   if (!(await page.locator('.page-section--updates').textContent())?.includes('전투 병사 모델링 개선')) throw new Error('soldier-model update is missing from in-game history')
   if (!(await page.locator('.page-section--updates').textContent())?.includes('천하영토 진영별 유저 점령 연동')) throw new Error('territory faction sync plan is missing from in-game history')
