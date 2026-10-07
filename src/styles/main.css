@@ -303,3 +303,4 @@
 .recruit-result-card .ritual-portrait:not(.has-portrait){background:rgba(9,24,25,.88)}
 .ritual-reveal .ritual-portrait{border-width:2px;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent),transparent 82%),0 0 28px color-mix(in srgb,var(--accent),transparent 72%)}
 .ritual-portrait.has-portrait{background:var(--portrait) center 16%/cover no-repeat !important}
+.ritual-portrait.has-portrait>i{display:none !important}
