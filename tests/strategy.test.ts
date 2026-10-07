@@ -5,24 +5,23 @@ import { effectLoadout } from '../src/game/battle-effects'
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
     const state = createInitialState()
-    const guanYu = findGeneral(state, 'guan-yu')!
-    expect(guanYu.leadership).toBe(96)
-    expect(guanYu.martial).toBe(98)
-    expect(guanYu.stratagem).toBe(72)
-    expect(guanYu.speed).toBe(86)
-    expect(combatPower(guanYu)).toBeGreaterThan(0)
+    expect(state.generals).toHaveLength(3)
+    expect(state.generals.every(general => general.grade === 3 && general.level === 1)).toBe(true)
+    expect(new Set(state.generals.map(general => general.id)).size).toBe(3)
+    expect(state.generals.every(general => general.leadership > 0 && general.martial > 0 && general.stratagem > 0 && general.speed > 0)).toBe(true)
+    expect(state.generals.every(general => combatPower(general) > 0)).toBe(true)
   })
 
   it('raises the four attributes when a general is upgraded', () => {
     const state = createInitialState()
-    const guanYu = findGeneral(state, 'guan-yu')!
-    const before = { leadership: guanYu.leadership, martial: guanYu.martial, stratagem: guanYu.stratagem, speed: guanYu.speed }
-    const result = upgrade(state, 'guan-yu')
+    const general = state.generals[0]
+    const before = { leadership: general.leadership, martial: general.martial, stratagem: general.stratagem, speed: general.speed }
+    const result = upgrade(state, general.id)
     expect(result.ok).toBe(true)
-    expect(guanYu.leadership).toBe(before.leadership + 3)
-    expect(guanYu.martial).toBe(before.martial + 7)
-    expect(guanYu.stratagem).toBe(before.stratagem + 2)
-    expect(guanYu.speed).toBe(before.speed + 2)
+    expect(general.leadership).toBe(before.leadership + 3)
+    expect(general.martial).toBe(before.martial + 7)
+    expect(general.stratagem).toBe(before.stratagem + 2)
+    expect(general.speed).toBe(before.speed + 2)
   })
 
   it('makes higher stars unlock skills earlier and strengthen skill power', () => {
@@ -43,7 +42,7 @@ describe('commander attributes', () => {
 
   it('applies the current star tier to every future level-up stat gain', () => {
     const state = createInitialState()
-    const general = findGeneral(state, 'guan-yu')!
+    const general = state.generals[0]
     general.stars = 4
     const beforeAttack = general.attack
     const beforeMartial = general.martial
@@ -92,12 +91,13 @@ describe('commander attributes', () => {
 
   it('keeps formation at three slots and replaces the last slot when full', () => {
     const state = createInitialState()
+    const initialFormation = [...state.formation]
     state.generals.push(findGeneral({ ...state, generals: allGenerals() } as typeof state, 'liu-bei')!)
     toggleFormation(state, 'liu-bei')
-    expect(state.formation).toEqual(['guan-yu', 'zhao-yun', 'liu-bei'])
-    toggleFormation(state, 'zhuge-liang')
+    expect(state.formation).toEqual([initialFormation[0], initialFormation[1], 'liu-bei'])
+    toggleFormation(state, initialFormation[2])
     expect(state.formation).toHaveLength(3)
-    expect(state.formation[2]).toBe('zhuge-liang')
+    expect(state.formation[2]).toBe(initialFormation[2])
   })
 
   it('starts with 58 technologies across four branches', () => {
@@ -127,10 +127,11 @@ describe('commander attributes', () => {
 
   it('starts with three equipment slots and applies equipped stats to formation power', () => {
     const state = createInitialState()
+    const starterId = state.generals[0].id
     expect(state.equipmentInventory).toHaveLength(3)
-    expect(state.equipmentLoadouts['guan-yu'].weapon).toBe('starter-weapon')
+    expect(state.equipmentLoadouts[starterId].weapon).toBe('starter-weapon')
     const before = state.equipmentInventory[0].baseValue
-    const powerBefore = combatPower(findGeneral(state, 'guan-yu')!)
+    const powerBefore = combatPower(state.generals[0])
     expect(state.equipmentInventory[0].mainStat).toBe('martial')
     expect(powerBefore).toBeGreaterThan(0)
     expect(state.equipmentInventory[0].baseValue).toBe(before)
@@ -143,11 +144,12 @@ describe('commander attributes', () => {
     for (const specialties of Object.values(EQUIPMENT_SPECIALTIES)) expect(new Set(specialties.map(specialty => specialty.id)).size).toBe(10)
     expect(MYTHIC_SHOP_EQUIPMENT.every(item => item.specialty)).toBe(true)
     const state = createInitialState()
+    const starterId = state.generals[0].id
     const mythic = { ...MYTHIC_SHOP_EQUIPMENT[0], id: 'test-mythic-specialty' }
     state.equipmentInventory.push(mythic)
-    const before = equipmentBonus(state, 'guan-yu').leadership
-    expect(equipEquipment(state, 'guan-yu', mythic.id).ok).toBe(true)
-    expect(equipmentBonus(state, 'guan-yu').leadership + equipmentBonus(state, 'guan-yu').martial + equipmentBonus(state, 'guan-yu').stratagem + equipmentBonus(state, 'guan-yu').speed).toBeGreaterThan(before)
+    const before = equipmentBonus(state, starterId).leadership
+    expect(equipEquipment(state, starterId, mythic.id).ok).toBe(true)
+    expect(equipmentBonus(state, starterId).leadership + equipmentBonus(state, starterId).martial + equipmentBonus(state, starterId).stratagem + equipmentBonus(state, starterId).speed).toBeGreaterThan(before)
   })
 
   it('backfills a missing specialty on legacy mythic equipment saves', () => {
@@ -172,12 +174,13 @@ describe('commander attributes', () => {
 
   it('equips an item to a general, replaces the same slot, and enhances with silver and iron', () => {
     const state = createInitialState()
+    const starterId = state.generals[0].id
     const draw = drawEquipment(state, 1)
     const item = draw.rewards[0]
     const beforeSilver = state.silver
     const beforeLevel = item.level
-    expect(equipEquipment(state, 'guan-yu', item.id).ok).toBe(true)
-    expect(state.equipmentLoadouts['guan-yu'][item.type]).toBe(item.id)
+    expect(equipEquipment(state, starterId, item.id).ok).toBe(true)
+    expect(state.equipmentLoadouts[starterId][item.type]).toBe(item.id)
     expect(enhanceEquipment(state, item.id).ok).toBe(true)
     expect(item.level).toBe(beforeLevel + 1)
     expect(state.silver).toBeLessThan(beforeSilver)
@@ -185,33 +188,34 @@ describe('commander attributes', () => {
 
   it('activates two-piece and three-piece set abilities for a general', () => {
     const state = createInitialState()
-    const guanYu = findGeneral(state, 'guan-yu')!
+    const starterId = state.generals[0].id
     const commandItems = ['set-command-armor', 'set-command-accessory'].map((id, index) => ({
       id, name: `천군 테스트 ${index}`, type: index === 0 ? 'armor' as const : 'accessory' as const, set: 'command' as const, grade: 'rare' as const, level: 1, mainStat: 'leadership' as const, baseValue: 12, skillName: EQUIPMENT_SET_META.command.skillName, skillDescription: EQUIPMENT_SET_META.command.skillDescription,
     }))
     state.equipmentInventory.push(...commandItems)
-    expect(equipEquipment(state, guanYu.id, commandItems[0].id).ok).toBe(true)
-    expect(equipEquipment(state, guanYu.id, commandItems[1].id).ok).toBe(true)
-    expect(equipmentSetCounts(state, guanYu.id).command).toBe(2)
-    expect(equipmentBonus(state, guanYu.id).leadership).toBe(34)
+    expect(equipEquipment(state, starterId, commandItems[0].id).ok).toBe(true)
+    expect(equipEquipment(state, starterId, commandItems[1].id).ok).toBe(true)
+    expect(equipmentSetCounts(state, starterId).command).toBe(2)
+    expect(equipmentBonus(state, starterId).leadership).toBe(34)
     const third = { ...commandItems[0], id: 'set-command-weapon', type: 'weapon' as const }
     state.equipmentInventory.push(third)
-    expect(equipEquipment(state, guanYu.id, third.id).ok).toBe(true)
-    expect(equipmentSetCounts(state, guanYu.id).command).toBe(3)
-    expect(equipmentBonus(state, guanYu.id).leadership).toBe(54)
+    expect(equipEquipment(state, starterId, third.id).ok).toBe(true)
+    expect(equipmentSetCounts(state, starterId).command).toBe(3)
+    expect(equipmentBonus(state, starterId).leadership).toBe(54)
   })
 
   it('unequips a selected slot and removes its contribution from the general', () => {
     const state = createInitialState()
-    expect(state.equipmentLoadouts['guan-yu'].weapon).toBe('starter-weapon')
-    const equippedPower = equipmentPower(state, 'guan-yu')
+    const starterId = state.generals[0].id
+    expect(state.equipmentLoadouts[starterId].weapon).toBe('starter-weapon')
+    const equippedPower = equipmentPower(state, starterId)
     expect(equippedPower).toBeGreaterThan(0)
     const formationPower = totalPower(state)
-    expect(unequipEquipment(state, 'guan-yu', 'weapon').ok).toBe(true)
-    expect(state.equipmentLoadouts['guan-yu'].weapon).toBeUndefined()
-    expect(equipmentPower(state, 'guan-yu')).toBeLessThan(equippedPower)
+    expect(unequipEquipment(state, starterId, 'weapon').ok).toBe(true)
+    expect(state.equipmentLoadouts[starterId].weapon).toBeUndefined()
+    expect(equipmentPower(state, starterId)).toBeLessThan(equippedPower)
     expect(totalPower(state)).toBeLessThan(formationPower)
-    expect(unequipEquipment(state, 'guan-yu', 'weapon').ok).toBe(false)
+    expect(unequipEquipment(state, starterId, 'weapon').ok).toBe(false)
   })
   it('limits user duels to five per local day and resets on the next day', () => {
     const state = createInitialState()

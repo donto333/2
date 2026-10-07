@@ -443,6 +443,17 @@ function copyGeneral(general: General): General {
   return { ...general }
 }
 
+function randomStarterGenerals(count = 3): General[] {
+  const pool = LIBRARY.filter(general => general.grade === 3).map(copyGeneral)
+  const selected: General[] = []
+  while (selected.length < count && pool.length > 0) {
+    const index = Math.floor(Math.random() * pool.length)
+    const [general] = pool.splice(index, 1)
+    if (general) selected.push({ ...general, level: 1, stars: 1, skillUnlocked: false, skillRank: 1, skillPower: 100 })
+  }
+  return selected
+}
+
 export const EQUIPMENT_TYPE_META: Record<EquipmentType, { label: string; icon: string }> = {
   weapon: { label: '무기', icon: '⚔' },
   armor: { label: '갑옷', icon: '◈' },
@@ -513,15 +524,20 @@ export const MYTHIC_SHOP_EQUIPMENT: Equipment[] = [
 ]
 
 export function createInitialState(): StrategyState {
-  const starterIds = ['guan-yu', 'zhao-yun', 'zhuge-liang']
-  const generals = starterIds.map(id => copyGeneral(LIBRARY.find(general => general.id === id)!))
+  const generals = randomStarterGenerals()
+  const starterIds = generals.map(general => general.id)
   const equipmentInventory = starterEquipment()
+  const equipmentLoadouts: StrategyState['equipmentLoadouts'] = {
+    [starterIds[0]]: { weapon: 'starter-weapon' },
+    [starterIds[1]]: { armor: 'starter-armor' },
+    [starterIds[2]]: { accessory: 'starter-accessory' },
+  }
   return {
     section: 'overview', faction: '촉한', honor: 2480, silver: 12500, manuals: 180, generals,
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
-    equipmentInventory, equipmentLoadouts: { 'guan-yu': { weapon: 'starter-weapon' }, 'zhao-yun': { armor: 'starter-armor' }, 'zhuge-liang': { accessory: 'starter-accessory' } }, selectedEquipmentGeneralId: 'guan-yu', lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(),
+    equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(),
   }
 }
 
