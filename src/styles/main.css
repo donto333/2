@@ -57,7 +57,7 @@
 .sidebar{overflow-y:auto;overflow-x:hidden}
 
 /* Castle territory map treatment */
-.map-canvas{height:420px;background-image:linear-gradient(180deg,rgba(8,21,24,.28),rgba(8,21,24,.52)),url('/assets/territory/territory-castle-panorama.webp');background-size:cover;background-position:center center;box-shadow:inset 0 0 90px rgba(5,14,16,.42)}
+.map-canvas{height:420px;background-image:linear-gradient(180deg,rgba(8,21,24,.28),rgba(8,21,24,.52)),url('/assets/territory/china-strategic-map.webp');background-size:cover;background-position:center center;box-shadow:inset 0 0 90px rgba(5,14,16,.42)}
 .map-canvas:before{opacity:.14;background-size:180px 160px,220px 180px,48px 42px}
 .map-canvas:after{color:rgba(238,234,202,.46);text-shadow:0 2px 12px rgba(0,0,0,.45)}
 .city-marker{min-width:66px;padding:5px 6px;border-color:rgba(231,220,171,.4);background:rgba(7,20,22,.78);backdrop-filter:blur(5px);box-shadow:0 8px 18px rgba(0,0,0,.36),inset 0 0 16px rgba(82,224,196,.05)}
@@ -69,7 +69,7 @@
 @media (max-width:760px){.map-canvas{height:350px;background-position:center center}.city-marker{min-width:58px;padding:4px 5px}.city-marker strong{font-size:9px}.city-marker small{font-size:7px}.city-marker span{width:15px;height:15px;font-size:8px}.map-label{font-size:10px}}
 
 /* Chinese strategic map with embedded castle city art */
-.map-canvas{height:460px;background-image:linear-gradient(180deg,rgba(9,20,22,.24),rgba(9,20,22,.48)),url('/assets/territory/territory-castle-panorama.webp');background-size:cover;background-position:center 46%;border-color:rgba(94,119,103,.42);box-shadow:inset 0 0 90px rgba(32,25,14,.2)}
+.map-canvas{height:460px;background-image:linear-gradient(180deg,rgba(9,20,22,.24),rgba(9,20,22,.48)),url('/assets/territory/china-strategic-map.webp');background-size:cover;background-position:center 46%;border-color:rgba(94,119,103,.42);box-shadow:inset 0 0 90px rgba(32,25,14,.2)}
 .map-canvas:before{opacity:.08}.map-canvas:after{content:'천하 · 성곽 영토';color:rgba(238,234,202,.72);text-shadow:0 1px 4px rgba(245,232,188,.3)}
 .city-marker{min-width:76px;padding:0 7px 7px;border:1px solid rgba(246,197,109,.22);border-radius:10px;background:rgba(9,25,27,.84);box-shadow:0 8px 20px rgba(0,0,0,.32);backdrop-filter:blur(4px)}
 .city-marker-castle{position:relative;display:block;width:72px;height:49px;margin:-4px auto 1px;overflow:visible;pointer-events:none}.city-marker-castle img{position:absolute;left:50%;bottom:-5px;width:100%;height:100%;object-fit:contain;transform:translateX(-50%);filter:drop-shadow(0 5px 4px rgba(0,0,0,.5))}.city-marker-level{position:absolute!important;top:41px;left:50%;z-index:2;width:18px!important;height:18px!important;transform:translateX(-50%);font:650 9px/18px Sora,sans-serif!important;border-radius:50%!important}.city-marker strong{position:relative;z-index:2;margin-top:3px;font-size:10px;text-shadow:0 1px 7px rgba(0,0,0,.8)}.city-marker small{position:relative;z-index:2;font-size:8px;text-shadow:0 1px 5px rgba(0,0,0,.8)}
@@ -317,3 +317,9 @@
 @keyframes equipment-icon-pop{from{opacity:0;transform:scale(.55) rotate(-12deg);filter:brightness(.55) saturate(.7)}to{opacity:1;transform:scale(1) rotate(0);filter:none}}
 @keyframes five-star-border-pulse{0%,100%{box-shadow:0 0 0 2px rgba(246,197,109,.3),0 0 28px rgba(246,197,109,.38),0 14px 30px rgba(0,0,0,.2)}50%{box-shadow:0 0 0 3px rgba(246,197,109,.72),0 0 48px rgba(246,197,109,.72),0 16px 34px rgba(0,0,0,.25)}}
 @media (prefers-reduced-motion:reduce){.recruit-results-panel,.recruit-result-card,.recruit-result-card--five-star,.equipment-result-card .equipment-result-icon{animation:none;opacity:1;transform:none;filter:none}}
+
+
+/* China-inspired strategic territory map: terrain relief and coast remain visible beneath castle markers. */
+.map-canvas{background-image:linear-gradient(180deg,rgba(9,19,18,.12),rgba(9,19,18,.3)),url('/assets/territory/china-strategic-map.webp');background-size:cover;background-position:center center;border-color:rgba(116,126,86,.52);box-shadow:inset 0 0 110px rgba(23,28,18,.3),inset 0 -28px 70px rgba(4,15,18,.25)}
+.map-canvas:before{opacity:.045}
+.map-canvas:after{content:'천하 · 중국 대륙 전선';color:rgba(247,239,198,.82);text-shadow:0 1px 5px rgba(5,12,10,.8)}
