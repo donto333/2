@@ -688,6 +688,7 @@ export class StrategyUI {
       ['2026.10.06', '로그인 화면 개선', '삼국지 분위기의 배경과 회원 로그인·게스트 로그인 선택 화면을 적용했습니다.', '완료', 'jade'],
       ['2026.10.05', '전투 연출 개선', '피격 반응, 병력 상태 막대, 카메라 움직임, 기술 색상 효과를 추가했습니다.', '완료', 'jade'],
       ['2026.10.07', '통합 상점 업데이트', '일반 재화 5종 보급 상품과 기존 신화 장비 12종 상점을 하나의 탭형 상점으로 통합했습니다. 현재 재화 지급은 테스트 구매 흐름으로 제공됩니다.', '완료', 'jade'],
+      ['2026.10.07', '로그아웃 후 로그인 첫 페이지 이동', '로그아웃하면 회원 로그인·게스트 로그인 선택 화면으로 돌아가며, 기존 세션과 게스트 상태를 정리합니다.', '완료', 'jade'],
       ['2026.10.07', '무장 스킬 정보 상세화', '65명 무장별 스킬에 발동 조건, 대상, 효과 수치, 지속 시간, 재사용 조건을 추가하고 공격·버프·디버프·정화·치료 콘셉트를 전투 상태 효과와 연결했습니다.', '완료', 'jade'],
       ['2026.10.04', '신화 상점 확장', '통솔·무력·모략·속도별 장비 세트와 무기·갑옷·장신구 12종을 상점에 추가했습니다.', '완료', 'jade'],
       ['2026.10.03', '장비 관리 시스템', '장비 뽑기, 장착·해제, 강화, 등급 정렬, 세트 효과를 구현했습니다.', '완료', 'jade'],
@@ -697,11 +698,10 @@ export class StrategyUI {
       ['예정', '한자 표기 제거 및 한글 대체', '게임 전체의 불필요한 한자 표기를 자연스러운 한글로 통일합니다.'],
       ['예정', '신화 장비 특기 능력', '장비 종류별 10종 특기와 실제 전투·상태 계산 반영을 준비합니다.'],
       ['예정', '천하영토 진영별 유저 점령 연동', '각 진영 소속 유저의 실제 점령 결과를 서버에서 집계해 천하영토에 반영합니다.'],
-      ['예정', '로그아웃 후 로그인 첫 페이지 이동', '로그아웃하면 회원 로그인·게스트 로그인 선택 화면으로 돌아가도록 접속 흐름을 개선합니다.'],
     ] as const
     const completedMarkup = completed.map(([date, title, detail, status, tone]) => `<article class="update-entry"><time>${date}</time><span class="update-mark update-mark--${tone}"></span><div class="update-entry-copy"><div><h3>${title}</h3><span class="update-status update-status--${tone}">${status}</span></div><p>${detail}</p></div></article>`).join('')
     const plannedMarkup = planned.map(([status, title, detail]) => `<article class="update-entry update-entry--planned"><span class="update-mark update-mark--gold"></span><div class="update-entry-copy"><div><h3>${title}</h3><span class="update-status update-status--gold">${status}</span></div><p>${detail}</p></div></article>`).join('')
-    return `<section class="page-section page-section--updates"><div class="section-heading section-heading--compact"><div><span class="eyebrow">COMMAND LOG · UPDATE HISTORY</span><h1>업데이트 기록</h1><p class="heading-copy">지금까지 반영된 변경사항과 다음 업데이트 계획을 확인하십시오.</p></div><div class="updates-summary glass-card"><span>반영 완료</span><strong>${completed.length}<small>건</small></strong><em>다음 순위 · 영토 성 아이콘</em></div></div><div class="updates-layout"><div class="glass-card updates-panel"><div class="card-header"><div><span class="eyebrow">RELEASED UPDATES</span><h2>적용된 업데이트</h2></div><span class="sync-label">SYNCED</span></div><div class="update-list">${completedMarkup}</div></div><div class="glass-card updates-panel updates-panel--planned"><div class="card-header"><div><span class="eyebrow">NEXT OPERATIONS</span><h2>업데이트 예정</h2></div><span class="rate-note">우선순위</span></div><div class="update-list">${plannedMarkup}</div></div></div><div class="updates-footnote"><span class="status-dot"></span><span>업데이트 기록은 게임 배포 버전과 함께 갱신됩니다.</span><span class="muted">현재 버전 · 2026.10</span></div></section>`
+    return `<section class="page-section page-section--updates"><div class="section-heading section-heading--compact"><div><span class="eyebrow">COMMAND LOG · UPDATE HISTORY</span><h1>업데이트 기록</h1><p class="heading-copy">지금까지 반영된 변경사항과 다음 업데이트 계획을 확인하십시오.</p></div><div class="updates-summary glass-card"><span>반영 완료</span><strong>${completed.length}<small>건</small></strong><em>다음 순위 · 한글 표기</em></div></div><div class="updates-layout"><div class="glass-card updates-panel"><div class="card-header"><div><span class="eyebrow">RELEASED UPDATES</span><h2>적용된 업데이트</h2></div><span class="sync-label">SYNCED</span></div><div class="update-list">${completedMarkup}</div></div><div class="glass-card updates-panel updates-panel--planned"><div class="card-header"><div><span class="eyebrow">NEXT OPERATIONS</span><h2>업데이트 예정</h2></div><span class="rate-note">우선순위</span></div><div class="update-list">${plannedMarkup}</div></div></div><div class="updates-footnote"><span class="status-dot"></span><span>업데이트 기록은 게임 배포 버전과 함께 갱신됩니다.</span><span class="muted">현재 버전 · 2026.10</span></div></section>`
   }
 
   private rankSection(state: StrategyState): string {
