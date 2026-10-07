@@ -49,6 +49,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
   userId: int("userId").primaryKey(),
   honor: int("honor").default(2480).notNull(),
   silver: int("silver").default(12500).notNull(),
+  gold: int("gold").default(0).notNull(),
   manuals: int("manuals").default(180).notNull(),
   wins: int("wins").default(7).notNull(),
   battleScore: int("battleScore").default(18460).notNull(),
@@ -61,6 +62,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
   mythicFragments: int("mythicFragments").default(0).notNull(),
   duelAttemptsToday: int("duelAttemptsToday").default(0).notNull(),
   duelDayKey: varchar("duelDayKey", { length: 16 }),
+  prelaunchGoldDayKey: varchar("prelaunchGoldDayKey", { length: 16 }),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   generalData: text("generalData"),
   formationData: text("formationData"),
@@ -207,7 +209,7 @@ async function updateUserRole(id, role, actorOpenId) {
   await db.update(users).set({ role }).where(eq(users.id, id));
   return getUserByOpenId(target[0].openId);
 }
-const defaultGameState = { honor: 2480, silver: 12500, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한" };
+const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한" };
 const FACTION_TERRITORY_SEED = [
   ["chengdu", "촉한", 74, 82], ["hanzhong", "촉한", 86, 64], ["xiangyang", "중립", 62, 58], ["jianye", "오나라", 70, 76], ["xuchang", "위나라", 81, 79],
   ["luoyang", "위나라", 92, 88], ["ye", "위나라", 86, 84], ["chenliu", "위나라", 57, 61], ["puyang", "위나라", 64, 58], ["wancheng", "중립", 70, 67],

@@ -116,6 +116,7 @@ export interface StrategyState {
   faction: Faction
   honor: number
   silver: number
+  gold: number
   manuals: number
   generals: General[]
   formation: string[]
@@ -140,6 +141,7 @@ export interface StrategyState {
   mythicFragments: number
   duelAttemptsToday: number
   duelDayKey: string
+  prelaunchGoldDayKey: string
 }
 
 export const INCOME_COOLDOWN_MS = 24 * 60 * 60 * 1000
@@ -149,26 +151,65 @@ export const FACTION_BATTLE_COOLDOWN_MS = 12 * 1000
 export const DUEL_DAILY_LIMIT = 5
 export const MYTHIC_FRAGMENT_COST = 20
 
-export interface CashShopProduct {
+export interface GoldPackage {
   id: string
   name: string
-  resource: ResourceKey
-  amount: number
+  gold: number
   priceKRW: number
   description: string
 }
 
-export const CASH_SHOP_PRODUCTS: CashShopProduct[] = [
-  { id: 'cash-grain-50k', name: '식량 상자', resource: 'grain', amount: 50000, priceKRW: 1100, description: '영토와 출정용 식량' },
-  { id: 'cash-silver-30k', name: '은전 상자', resource: 'silver', amount: 30000, priceKRW: 1100, description: '강화와 내정용 은전' },
-  { id: 'cash-wood-20k', name: '목재 상자', resource: 'wood', amount: 20000, priceKRW: 1100, description: '건물 강화용 목재' },
-  { id: 'cash-iron-12k', name: '철재 상자', resource: 'iron', amount: 12000, priceKRW: 2200, description: '장비와 군사 시설용 철' },
-  { id: 'cash-influence-8k', name: '영향력 상자', resource: 'influence', amount: 8000, priceKRW: 2200, description: '연구와 정책용 영향력' },
-]
+export interface ResourceShopPackage {
+  id: string
+  name: string
+  resource: ResourceKey
+  amount: number
+  goldCost: number
+  description: string
+}
+
+export const GOLD_PACKAGES: GoldPackage[] = [3, 10, 20, 50, 100].map(gold => ({
+  id: `gold-${gold}`,
+  name: `금화 ${gold}개 충전`,
+  gold,
+  priceKRW: gold * 1500,
+  description: '금화 1개당 1,500원 기준 충전 패키지',
+}))
+
+const RESOURCE_PACKAGE_AMOUNTS: Record<ResourceKey, [number, number, number, number, number]> = {
+  grain: [5000, 18000, 40000, 110000, 250000],
+  silver: [3500, 12000, 28000, 80000, 180000],
+  wood: [2500, 9000, 21000, 60000, 140000],
+  iron: [1200, 4500, 10000, 30000, 70000],
+  influence: [600, 2200, 5000, 15000, 36000],
+}
+
+export const RESOURCE_SHOP_PACKAGES: ResourceShopPackage[] = (Object.entries(RESOURCE_PACKAGE_AMOUNTS) as Array<[ResourceKey, [number, number, number, number, number]]>).flatMap(([resource, amounts]) => [3, 10, 20, 50, 100].map((goldCost, index) => ({
+  id: `resource-${resource}-${goldCost}`,
+  name: `${resource} ${goldCost}금화 패키지`,
+  resource,
+  amount: amounts[index],
+  goldCost,
+  description: '금화로 교환하는 자원 보급 패키지',
+})))
 
 export function dayKey(now = Date.now()): string {
   const date = new Date(now)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+export const PRELAUNCH_DAILY_GOLD = 100
+export const PRELAUNCH_GOLD_ENABLED = true
+
+export function ensurePrelaunchDailyGold(state: StrategyState, now = Date.now()): boolean {
+  if (typeof state.gold !== 'number' || !Number.isFinite(state.gold)) state.gold = 0
+  if (typeof state.prelaunchGoldDayKey !== 'string') state.prelaunchGoldDayKey = ''
+  const today = dayKey(now)
+  if (!PRELAUNCH_GOLD_ENABLED || state.prelaunchGoldDayKey === today) return false
+  state.gold += PRELAUNCH_DAILY_GOLD
+  state.prelaunchGoldDayKey = today
+  state.lastNotice = `정식 출시 전 매일 금화 ${PRELAUNCH_DAILY_GOLD}개를 지급했습니다.`
+  return true
 }
 
 export function ensureDuelDailyState(state: StrategyState, now = Date.now()): void {
@@ -557,13 +598,15 @@ export function createInitialState(): StrategyState {
     [starterIds[1]]: { armor: 'starter-armor' },
     [starterIds[2]]: { accessory: 'starter-accessory' },
   }
-  return {
-    section: 'overview', faction: '촉한', honor: 2480, silver: 12500, manuals: 180, generals,
+  const state: StrategyState = {
+    section: 'overview', faction: '촉한', honor: 2480, silver: 12500, gold: 0, manuals: 180, generals,
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
-    equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(),
+    equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '',
   }
+  ensurePrelaunchDailyGold(state)
+  return state
 }
 
 export function mergeFactionTerritories(state: StrategyState, snapshots: FactionTerritorySnapshot[]): number {
@@ -803,15 +846,27 @@ export interface EquipmentDrawResult { ok: boolean; message: string; rewards: Eq
 
 export interface MythicShopResult { ok: boolean; message: string; item?: Equipment }
 
-export interface CashShopResult { ok: boolean; message: string; product?: CashShopProduct }
+export interface GoldPurchaseResult { ok: boolean; message: string; package?: GoldPackage }
+export interface ResourceShopResult { ok: boolean; message: string; package?: ResourceShopPackage }
 
-export function purchaseCashShopProduct(state: StrategyState, productId: string): CashShopResult {
-  const product = CASH_SHOP_PRODUCTS.find(item => item.id === productId)
-  if (!product) return { ok: false, message: '해당 재화 상품을 찾을 수 없습니다.' }
-  if (product.resource === 'silver') state.silver += product.amount
-  else state.resources[product.resource] += product.amount
-  state.lastNotice = `${product.name} 지급 완료 · ${product.amount.toLocaleString('ko-KR')} ${RESOURCE_META[product.resource].label}`
-  return { ok: true, message: `${state.lastNotice} · 테스트 구매`, product }
+export function purchaseGoldPackage(state: StrategyState, packageId: string): GoldPurchaseResult {
+  const goldPackage = GOLD_PACKAGES.find(item => item.id === packageId)
+  if (!goldPackage) return { ok: false, message: '해당 금화 충전 패키지를 찾을 수 없습니다.' }
+  state.gold += goldPackage.gold
+  state.lastNotice = `${goldPackage.name} 지급 완료 · 테스트 충전`
+  return { ok: true, message: state.lastNotice, package: goldPackage }
+}
+
+export function purchaseResourcePackage(state: StrategyState, packageId: string): ResourceShopResult {
+  const resourcePackage = RESOURCE_SHOP_PACKAGES.find(item => item.id === packageId)
+  if (!resourcePackage) return { ok: false, message: '해당 자원 패키지를 찾을 수 없습니다.' }
+  if (state.gold < resourcePackage.goldCost) return { ok: false, message: `금화가 부족합니다. ${resourcePackage.goldCost}개가 필요합니다.` }
+  state.gold -= resourcePackage.goldCost
+  if (resourcePackage.resource === 'silver') state.silver += resourcePackage.amount
+  else state.resources[resourcePackage.resource] += resourcePackage.amount
+  state.resources.silver = state.silver
+  state.lastNotice = `${RESOURCE_META[resourcePackage.resource].label} ${resourcePackage.amount.toLocaleString('ko-KR')} 지급 완료 · 금화 -${resourcePackage.goldCost}`
+  return { ok: true, message: state.lastNotice, package: resourcePackage }
 }
 
 export function purchaseMythicEquipment(state: StrategyState, equipmentId: string): MythicShopResult {

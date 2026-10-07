@@ -30,8 +30,8 @@ export const gameRouter = router({
       if (!updated) throw new Error('해당 계정을 찾을 수 없습니다.')
       return accountView(updated)
     }),
-    listGameStates: adminProcedure.query(async () => (await listGameStates()).map(user => ({ ...accountView(user), game: { userId: user.id, honor: user.honor, silver: user.silver, manuals: user.manuals, wins: user.wins, battleScore: user.battleScore, grain: user.grain, wood: user.wood, iron: user.iron, influence: user.influence, updatedAt: user.updatedAt } }))),
-    updateGameState: adminProcedure.input(z.object({ userId: z.number().int().positive(), honor: z.number().int().min(0).max(100000000), silver: z.number().int().min(0).max(100000000), manuals: z.number().int().min(0).max(1000000), wins: z.number().int().min(0).max(1000000), battleScore: z.number().int().min(0).max(1000000000), grain: z.number().int().min(0).max(1000000000), wood: z.number().int().min(0).max(1000000000), iron: z.number().int().min(0).max(1000000000), influence: z.number().int().min(0).max(100000000) })).mutation(async ({ input }) => ({ userId: input.userId, game: await updateGameState(input.userId, { honor: input.honor, silver: input.silver, manuals: input.manuals, wins: input.wins, battleScore: input.battleScore, grain: input.grain, wood: input.wood, iron: input.iron, influence: input.influence }) })),
+    listGameStates: adminProcedure.query(async () => (await listGameStates()).map(user => ({ ...accountView(user), game: { userId: user.id, honor: user.honor, silver: user.silver, gold: user.gold, manuals: user.manuals, wins: user.wins, battleScore: user.battleScore, grain: user.grain, wood: user.wood, iron: user.iron, influence: user.influence, updatedAt: user.updatedAt } }))),
+    updateGameState: adminProcedure.input(z.object({ userId: z.number().int().positive(), honor: z.number().int().min(0).max(100000000), silver: z.number().int().min(0).max(100000000), gold: z.number().int().min(0).max(100000000), manuals: z.number().int().min(0).max(1000000), wins: z.number().int().min(0).max(1000000), battleScore: z.number().int().min(0).max(1000000000), grain: z.number().int().min(0).max(1000000000), wood: z.number().int().min(0).max(1000000000), iron: z.number().int().min(0).max(1000000000), influence: z.number().int().min(0).max(100000000) })).mutation(async ({ input }) => ({ userId: input.userId, game: await updateGameState(input.userId, { honor: input.honor, silver: input.silver, gold: input.gold, manuals: input.manuals, wins: input.wins, battleScore: input.battleScore, grain: input.grain, wood: input.wood, iron: input.iron, influence: input.influence }) })),
   }),
   leaderboard: createLeaderboardRouter({ router, publicProcedure, protectedProcedure }, leaderboard),
   duel: router({
@@ -55,6 +55,7 @@ export const gameRouter = router({
     saveGameState: protectedProcedure.input(z.object({
       honor: z.number().int().min(0).max(100000000),
       silver: z.number().int().min(0).max(100000000),
+      gold: z.number().int().min(0).max(100000000).optional(),
       manuals: z.number().int().min(0).max(1000000),
       wins: z.number().int().min(0).max(1000000),
       battleScore: z.number().int().min(0).max(1000000000),
@@ -75,6 +76,7 @@ export const gameRouter = router({
       mythicFragments: z.number().int().min(0).max(1000000).optional(),
       duelAttemptsToday: z.number().int().min(0).max(5).optional(),
       duelDayKey: z.string().max(16).nullable().optional(),
+      prelaunchGoldDayKey: z.string().max(16).nullable().optional(),
       incomeCollectedAt: z.string().max(32).nullable().optional(),
       conquestAt: z.string().max(32).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {

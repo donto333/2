@@ -14,7 +14,8 @@ import {
   equipmentBonus,
   ensureEquipmentState,
   purchaseMythicEquipment,
-  purchaseCashShopProduct,
+  purchaseGoldPackage,
+  purchaseResourcePackage,
   consumeDuelAttempt,
   ensureDuelDailyState,
   equipEquipment,
@@ -23,6 +24,7 @@ import {
   ensureResearchRoster,
   mergeFactionTerritories,
   migrateLegacyStarterRoster,
+  ensurePrelaunchDailyGold,
   findGeneral,
   recruit,
   selectCity,
@@ -56,6 +58,7 @@ function persistLocalGame(): void {
       savedAt: Date.now(),
       honor: state.honor,
       silver: state.silver,
+      gold: state.gold,
       manuals: state.manuals,
       wins: state.wins,
       battleScore: state.battleScore,
@@ -75,6 +78,7 @@ function persistLocalGame(): void {
       mythicFragments: state.mythicFragments,
       duelAttemptsToday: state.duelAttemptsToday,
       duelDayKey: state.duelDayKey,
+      prelaunchGoldDayKey: state.prelaunchGoldDayKey,
     }))
   } catch {
     // Private browsing and quota restrictions should not stop gameplay.
@@ -90,6 +94,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
     Object.assign(state, {
       honor: saved.honor,
       silver: saved.silver,
+      gold: saved.gold,
       manuals: saved.manuals,
       wins: saved.wins,
       battleScore: saved.battleScore,
@@ -109,6 +114,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       mythicFragments: saved.mythicFragments,
       duelAttemptsToday: saved.duelAttemptsToday,
       duelDayKey: saved.duelDayKey,
+      prelaunchGoldDayKey: saved.prelaunchGoldDayKey,
     })
   } catch {
     // Corrupt local data is ignored and replaced by the normal starter state.
@@ -140,9 +146,10 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   ensureCityRoster(state)
   ensureResearchRoster(state)
   ensureEquipmentState(state)
+  const receivedDailyGold = ensurePrelaunchDailyGold(state)
   const migratedStarter = migrateLegacyStarterRoster(state)
-  if (migratedStarter) persistLocalGame()
-  localSaveDirty = migratedStarter && mode === 'member'
+  if (receivedDailyGold || migratedStarter) persistLocalGame()
+  localSaveDirty = (receivedDailyGold || migratedStarter) && mode === 'member'
 }
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
@@ -493,7 +500,13 @@ const ui = new StrategyUI(root, {
     if (result.ok) queueAccountSave()
   },
   onCashShopPurchase: productId => {
-    const result = purchaseCashShopProduct(state, productId)
+    const result = purchaseResourcePackage(state, productId)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onGoldPurchase: packageId => {
+    const result = purchaseGoldPackage(state, packageId)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
@@ -621,9 +634,9 @@ async function refreshAccount(): Promise<void> {
   }
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
     if (!localSaveDirty) {
-      Object.assign(state, { honor: game.honor, silver: game.silver, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
+      Object.assign(state, { honor: game.honor, silver: game.silver, gold: typeof game.gold === 'number' ? game.gold : state.gold, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
       if (game.faction) state.faction = game.faction
       state.resources = { ...state.resources, grain: game.grain, silver: game.silver, wood: game.wood, iron: game.iron, influence: game.influence }
       if (Array.isArray(game.generals)) state.generals = game.generals
@@ -642,8 +655,10 @@ async function refreshAccount(): Promise<void> {
       state.mythicFragments = Math.max(0, Math.trunc(state.mythicFragments), Math.trunc(game.mythicFragments ?? 0))
       state.duelAttemptsToday = Math.max(0, Math.trunc(game.duelAttemptsToday ?? state.duelAttemptsToday))
       if (typeof game.duelDayKey === 'string') state.duelDayKey = game.duelDayKey
+      if (typeof game.prelaunchGoldDayKey === 'string') state.prelaunchGoldDayKey = game.prelaunchGoldDayKey
       ensureDuelDailyState(state)
       ensureEquipmentState(state)
+      if (ensurePrelaunchDailyGold(state)) localSaveDirty = true
       const migratedStarter = migrateLegacyStarterRoster(state)
       if (migratedStarter) {
         persistLocalGame()
@@ -665,6 +680,7 @@ function accountStatePayload() {
   return {
     honor: Math.trunc(state.honor),
     silver: Math.trunc(state.silver),
+    gold: Math.trunc(state.gold),
     manuals: Math.trunc(state.manuals),
     wins: Math.trunc(state.wins),
     battleScore: Math.trunc(state.battleScore),
@@ -687,6 +703,7 @@ function accountStatePayload() {
     mythicFragments: Math.trunc(state.mythicFragments),
     duelAttemptsToday: Math.trunc(state.duelAttemptsToday),
     duelDayKey: state.duelDayKey,
+    prelaunchGoldDayKey: state.prelaunchGoldDayKey,
   }
 }
 

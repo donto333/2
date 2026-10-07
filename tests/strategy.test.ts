@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GOLD_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 import { effectLoadout } from '../src/game/battle-effects'
 
 describe('commander attributes', () => {
@@ -258,17 +258,35 @@ describe('commander attributes', () => {
     expect(purchaseMythicEquipment(state, 'weapon').ok).toBe(false)
   })
 
-  it('offers five non-fragment resource products and grants the purchased resource', () => {
+  it('offers gold recharge tiers and gold-priced resource packages', () => {
     const state = createInitialState()
-    expect(CASH_SHOP_PRODUCTS).toHaveLength(5)
-    const before = { ...state.resources, silver: state.silver }
-    for (const product of CASH_SHOP_PRODUCTS) {
-      expect(purchaseCashShopProduct(state, product.id).ok).toBe(true)
-      const after = product.resource === 'silver' ? state.silver : state.resources[product.resource]
-      const initial = product.resource === 'silver' ? before.silver : before[product.resource]
-      expect(after).toBe(initial + product.amount)
-    }
-    expect(purchaseCashShopProduct(state, 'unknown-product').ok).toBe(false)
+    expect(state.gold).toBe(100)
+    expect(GOLD_PACKAGES.map(item => item.gold)).toEqual([3, 10, 20, 50, 100])
+    expect(GOLD_PACKAGES.map(item => item.priceKRW)).toEqual([4500, 15000, 30000, 75000, 150000])
+    expect(RESOURCE_SHOP_PACKAGES).toHaveLength(25)
+    expect(new Set(RESOURCE_SHOP_PACKAGES.map(item => item.resource)).size).toBe(5)
+    expect(new Set(RESOURCE_SHOP_PACKAGES.map(item => item.goldCost)).size).toBe(5)
+    expect(purchaseGoldPackage(state, 'gold-3').ok).toBe(true)
+    expect(state.gold).toBe(103)
+    const beforeGrain = state.resources.grain
+    expect(purchaseResourcePackage(state, 'resource-grain-3').ok).toBe(true)
+    expect(state.gold).toBe(100)
+    expect(state.resources.grain).toBe(beforeGrain + 5000)
+    state.gold = 0
+    expect(purchaseResourcePackage(state, 'resource-grain-100').ok).toBe(false)
+    expect(purchaseGoldPackage(state, 'unknown-package').ok).toBe(false)
+  })
+
+  it('awards the prelaunch stipend only once per day', () => {
+    const state = createInitialState()
+    const today = new Date('2026-10-07T09:00:00').getTime()
+    state.prelaunchGoldDayKey = ''
+    state.gold = 0
+    expect(ensurePrelaunchDailyGold(state, today)).toBe(true)
+    expect(state.gold).toBe(100)
+    expect(ensurePrelaunchDailyGold(state, today)).toBe(false)
+    expect(ensurePrelaunchDailyGold(state, today + 24 * 60 * 60 * 1000)).toBe(true)
+    expect(state.gold).toBe(200)
   })
 
 })
