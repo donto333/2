@@ -160,6 +160,8 @@ try {
   await page.click('[data-action="section"][data-section="roster"]')
   await page.waitForSelector('select[data-action="roster-sort"]')
   if (await page.locator('.general-card .skill-detail-grid').count() < 1) throw new Error('owned roster skill detail panel is missing')
+  const skillCategories = await page.locator('.general-card .skill-category').allTextContents()
+  if (!skillCategories.some(text => text.includes('버프')) || !skillCategories.some(text => text.includes('디버프')) || !skillCategories.some(text => text.includes('정화'))) throw new Error('skill concept categories are not visible')
   await page.locator('select[data-action="roster-sort"]').selectOption('level')
   await page.click('[data-action="roster-sort-direction"]')
   await page.click('[data-action="section"][data-section="formation"]')

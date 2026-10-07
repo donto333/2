@@ -575,7 +575,7 @@ export class StrategyUI {
 
   private skillDetailPanel(general: General): string {
     const detail = skillDetail(general)
-    return `<div class="skill-detail-panel"><div class="skill-detail-title"><span>◈ 스킬 상세</span><b>${skillRank(general)}단계 · 위력 ${skillPower(general)}</b></div><div class="skill-detail-grid"><div><small>발동 조건</small><strong>${escapeHtml(detail.trigger)}</strong></div><div><small>대상</small><strong>${escapeHtml(detail.target)}</strong></div><div><small>효과 수치</small><strong>${escapeHtml(detail.effect)}</strong></div><div><small>지속 시간</small><strong>${escapeHtml(detail.duration)}</strong></div><div><small>재사용 조건</small><strong>${escapeHtml(detail.cooldown)} 후 재사용</strong></div></div></div>`
+    return `<div class="skill-detail-panel skill-detail-panel--${detail.category === '정화·치료' ? 'cleanse' : detail.category === '버프' ? 'buff' : detail.category === '디버프' ? 'debuff' : 'combat'}"><div class="skill-detail-title"><span>◈ 스킬 상세 <b class="skill-category">${detail.category}</b></span><b>${skillRank(general)}단계 · 위력 ${skillPower(general)}</b></div><div class="skill-detail-grid"><div><small>발동 조건</small><strong>${escapeHtml(detail.trigger)}</strong></div><div><small>대상</small><strong>${escapeHtml(detail.target)}</strong></div><div><small>효과 수치</small><strong>${escapeHtml(detail.effect)}</strong></div><div><small>지속 시간</small><strong>${escapeHtml(detail.duration)}</strong></div><div><small>재사용 조건</small><strong>${escapeHtml(detail.cooldown)} 후 재사용</strong></div></div></div>`
   }
 
   private generalCard(general: General, inFormation: boolean): string {
@@ -688,7 +688,7 @@ export class StrategyUI {
       ['2026.10.06', '로그인 화면 개선', '삼국지 분위기의 배경과 회원 로그인·게스트 로그인 선택 화면을 적용했습니다.', '완료', 'jade'],
       ['2026.10.05', '전투 연출 개선', '피격 반응, 병력 상태 막대, 카메라 움직임, 기술 색상 효과를 추가했습니다.', '완료', 'jade'],
       ['2026.10.07', '통합 상점 업데이트', '일반 재화 5종 보급 상품과 기존 신화 장비 12종 상점을 하나의 탭형 상점으로 통합했습니다. 현재 재화 지급은 테스트 구매 흐름으로 제공됩니다.', '완료', 'jade'],
-      ['2026.10.07', '무장 스킬 정보 상세화', '65명 무장별 스킬에 발동 조건, 대상, 효과 수치, 지속 시간, 재사용 조건을 추가해 도감과 보유 무장 화면에서 확인할 수 있습니다.', '완료', 'jade'],
+      ['2026.10.07', '무장 스킬 정보 상세화', '65명 무장별 스킬에 발동 조건, 대상, 효과 수치, 지속 시간, 재사용 조건을 추가하고 공격·버프·디버프·정화·치료 콘셉트를 전투 상태 효과와 연결했습니다.', '완료', 'jade'],
       ['2026.10.04', '신화 상점 확장', '통솔·무력·모략·속도별 장비 세트와 무기·갑옷·장신구 12종을 상점에 추가했습니다.', '완료', 'jade'],
       ['2026.10.03', '장비 관리 시스템', '장비 뽑기, 장착·해제, 강화, 등급 정렬, 세트 효과를 구현했습니다.', '완료', 'jade'],
       ['2026.10.07', '천하영토 성 아이콘 전체 표시', '천하영토의 25개 성을 빠짐없이 표시하고 화면 크기에 맞게 아이콘 크기와 간격을 조정했습니다.', '완료', 'jade'],

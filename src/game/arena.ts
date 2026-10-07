@@ -866,6 +866,7 @@ export class Arena {
     }
     const impact = this.skillImpact(unit.general)
     const loadout = effectLoadout(unit.general.id, unit.general.role)
+    const cleansed = loadout.cleanse ? this.activeDebuffs.splice(0).length : 0
     this.applyEffect('buff', loadout.buff)
     this.applyEffect('debuff', loadout.debuff)
     const comboBonus = 1 + Math.min(this.combo, 8) * (hasBattleEffect(this.activeBuffs, 'chain-fury') ? 0.088 : 0.08)
@@ -886,7 +887,7 @@ export class Arena {
     this.spawnSlashWave(unit.general, amplifiedDamage * 10)
     this.spawnSkillBurst(new THREE.Vector3(0, 1.1, -5.5), this.skillColor(unit.general))
     this.cameraShake = Math.min(0.55, this.cameraShake + 0.22)
-    this.callbacks.onEvent(`${unit.general.name} · ${unit.general.skillName} 발동 · ${impact.message} · ${effectDefinition(loadout.buff).name} + ${effectDefinition(loadout.debuff).name} · ${consumedCombo ? `${consumedCombo}연계 증폭 · ` : ''}적 사기 -${amplifiedDamage}`)
+    this.callbacks.onEvent(`${unit.general.name} · ${unit.general.skillName} 발동 · ${impact.message} · ${effectDefinition(loadout.buff).name} + ${effectDefinition(loadout.debuff).name}${cleansed ? ` · 상태이상 ${cleansed}개 치료` : ''} · ${consumedCombo ? `${consumedCombo}연계 증폭 · ` : ''}적 사기 -${amplifiedDamage}`)
   }
 
   private applyEffect(kind: 'buff' | 'debuff', id: BattleEffectId): void {

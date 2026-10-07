@@ -41,6 +41,7 @@ export interface ActiveBattleEffect extends BattleEffectDefinition {
 export interface GeneralEffectLoadout {
   buff: BuffId
   debuff: DebuffId
+  cleanse?: boolean
 }
 
 export const BATTLE_EFFECTS: Record<BattleEffectId, BattleEffectDefinition> = {
@@ -76,7 +77,7 @@ const ROLE_LOADOUT: Record<'기병' | '궁병' | '책사' | '보병', GeneralEff
 export const GENERAL_EFFECT_LOADOUTS: Record<string, GeneralEffectLoadout> = {
   'guan-yu': { buff: 'dragon-might', debuff: 'armor-break' },
   'zhao-yun': { buff: 'swift-step', debuff: 'slow' },
-  'zhuge-liang': { buff: 'jade-command', debuff: 'confusion' },
+  'zhuge-liang': { buff: 'jade-command', debuff: 'confusion', cleanse: true },
   'lu-bu': { buff: 'war-chant', debuff: 'fear' },
   'zhou-yu': { buff: 'rally-banner', debuff: 'burning' },
   'zhang-fei': { buff: 'chain-fury', debuff: 'fear' },
@@ -89,6 +90,10 @@ export const GENERAL_EFFECT_LOADOUTS: Record<string, GeneralEffectLoadout> = {
   'gao-shun': { buff: 'phoenix-guard', debuff: 'slow' },
   'wen-ping': { buff: 'rally-banner', debuff: 'mark' },
   'song-xian': { buff: 'battle-focus', debuff: 'blind' },
+  'liu-bei': { buff: 'rally-banner', debuff: 'fear', cleanse: true },
+  'da-qiao': { buff: 'jade-command', debuff: 'mark', cleanse: true },
+  'lu-su': { buff: 'battle-focus', debuff: 'confusion', cleanse: true },
+  'xu-shu': { buff: 'swift-step', debuff: 'slow', cleanse: true },
 }
 
 export function effectLoadout(generalId: string, role: keyof typeof ROLE_LOADOUT): GeneralEffectLoadout {

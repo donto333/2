@@ -506,6 +506,7 @@ export function skillPower(general: General): number {
 }
 
 export interface GeneralSkillDetail {
+  category: '공격' | '버프' | '디버프' | '정화·치료' | '방어·제어'
   trigger: string
   target: string
   effect: string
@@ -517,7 +518,36 @@ export function skillDetail(general: General): GeneralSkillDetail {
   const power = skillPower(general)
   const rank = skillRank(general)
   const cooldown = `${Math.max(8, 20 - rank * 2)}초`
+  const cleanseIds = new Set(['zhuge-liang', 'liu-bei', 'da-qiao', 'lu-su', 'xu-shu'])
+  const debuffIds = new Set(['guan-yu', 'lu-bu', 'zhou-yu', 'huang-zhong', 'jia-xu', 'pang-tong', 'gan-ning', 'taishi-ci'])
+  const buffIds = new Set(['zhao-yun', 'zhuge-liang', 'liu-bei', 'da-qiao', 'lu-su', 'xu-shu', 'wen-ping'])
+  const category: GeneralSkillDetail['category'] = cleanseIds.has(general.id) ? '정화·치료' : debuffIds.has(general.id) ? '디버프' : buffIds.has(general.id) ? '버프' : general.role === '보병' ? '방어·제어' : '공격'
+  if (category === '정화·치료') return {
+    category,
+    trigger: '아군에게 상태이상 발생 또는 체력 70% 이하',
+    target: '아군 전체와 자신',
+    effect: `${general.skillName} · 상태이상 2개 치료 · 회복력 ${Math.round(power / 3)} · 사기 +${Math.round(power / 10)}`,
+    duration: `${5 + rank}초 동안 제어 저항 +${10 + rank * 3}%`,
+    cooldown,
+  }
+  if (category === '버프') return {
+    category,
+    trigger: general.role === '책사' ? '전술 게이지 50% 이상 또는 전술 명령 직후' : '전투 시작 후 2초 또는 아군 위기 시',
+    target: general.role === '책사' ? '아군 전체' : '자신과 전방 아군',
+    effect: `${general.skillName} · 공격·전술 능력 +${Math.round(power / 7)}% · 상태이상 저항 +${10 + rank * 2}%`,
+    duration: `${5 + rank}초`,
+    cooldown,
+  }
+  if (category === '디버프') return {
+    category,
+    trigger: general.role === '궁병' ? '후열 조준 완료 또는 체력이 낮은 적 포착' : '돌격 명령 또는 연계 2회 달성',
+    target: general.role === '궁병' ? '체력이 가장 낮은 적' : '전방 적과 인접 적',
+    effect: `${general.skillName} · 적 방어·행동력 -${Math.round(power / 8)}% · 받는 피해 +${Math.min(30, 10 + rank * 3)}%`,
+    duration: `${4 + rank}초`,
+    cooldown,
+  }
   if (general.role === '기병') return {
+    category,
     trigger: '전투 시작 후 2초 또는 돌격 명령',
     target: '전방 적 1명과 인접 적',
     effect: `${general.skillName} · 주 대상 피해 ${power}% · 주변 적 사기 -${Math.round(power / 8)}`,
@@ -525,6 +555,7 @@ export function skillDetail(general: General): GeneralSkillDetail {
     cooldown,
   }
   if (general.role === '궁병') return {
+    category,
     trigger: '후열 배치 후 3초마다 자동 조준',
     target: '현재 체력이 가장 낮은 적',
     effect: `${general.skillName} · 원거리 피해 ${power}% · 치명타 확률 +${Math.min(35, 12 + rank * 3)}%`,
@@ -532,6 +563,7 @@ export function skillDetail(general: General): GeneralSkillDetail {
     cooldown,
   }
   if (general.role === '책사') return {
+    category,
     trigger: '전술 게이지 50% 이상 또는 전술 명령 직후',
     target: '아군 전체와 적 전열',
     effect: `${general.skillName} · 아군 전술 위력 +${Math.round(power / 7)}% · 적 행동력 -${Math.round(power / 10)}`,
@@ -539,6 +571,7 @@ export function skillDetail(general: General): GeneralSkillDetail {
     cooldown,
   }
   return {
+    category,
     trigger: '아군 병력 70% 이하 또는 중앙 돌파 명령',
     target: '자신과 전방 아군',
     effect: `${general.skillName} · 피해 감소 ${Math.min(45, 18 + rank * 4)}% · 적 위협 +${Math.round(power / 9)}`,

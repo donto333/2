@@ -11,7 +11,7 @@ describe('battle effect catalog', () => {
 
   it('assigns signature effects to core generals and role fallbacks to expansions', () => {
     expect(effectLoadout('guan-yu', '기병')).toEqual({ buff: 'dragon-might', debuff: 'armor-break' })
-    expect(effectLoadout('zhuge-liang', '책사')).toEqual({ buff: 'jade-command', debuff: 'confusion' })
+    expect(effectLoadout('zhuge-liang', '책사')).toEqual({ buff: 'jade-command', debuff: 'confusion', cleanse: true })
     expect(effectLoadout('unknown-general', '궁병')).toEqual({ buff: 'hawk-eye', debuff: 'mark' })
   })
 

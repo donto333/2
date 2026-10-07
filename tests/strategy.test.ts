@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { effectLoadout } from '../src/game/battle-effects'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -69,6 +70,15 @@ describe('commander attributes', () => {
       expect(detail.duration.length).toBeGreaterThan(0)
       expect(detail.cooldown).toMatch(/초/)
     }
+  })
+
+  it('aligns support concepts with cleanse-capable battle loadouts', () => {
+    const catalog = allGenerals()
+    expect(skillDetail(catalog.find(general => general.id === 'zhuge-liang')!).category).toBe('정화·치료')
+    expect(skillDetail(catalog.find(general => general.id === 'lu-bu')!).category).toBe('디버프')
+    expect(skillDetail(catalog.find(general => general.id === 'zhao-yun')!).category).toBe('버프')
+    expect(effectLoadout('zhuge-liang', '책사').cleanse).toBe(true)
+    expect(effectLoadout('liu-bei', '보병').cleanse).toBe(true)
   })
 
   it('returns ten visible rewards for a ten-pull and charges the ten-pull cost', () => {
