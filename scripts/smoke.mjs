@@ -95,9 +95,11 @@ try {
   if (await page.evaluate(() => window.__strategy.state.resources.grain) !== beforeGrain + 50000) throw new Error('resource shop test purchase did not grant grain')
   await page.click('[data-action="shop-tab"][data-shop-tab="mythic"]')
   if (await page.locator('.page-section--shop .shop-item').count() !== 12) throw new Error('mythic shop does not show twelve stat-specific equipment items')
+  if (await page.locator('.page-section--shop .shop-specialty').count() !== 12) throw new Error('mythic shop specialty labels are incomplete')
   await page.evaluate(() => { window.__strategy.state.mythicFragments = 20; window.__strategy.ui.render(window.__strategy.state) })
   await page.click('[data-action="shop-purchase"][data-equipment-id="shop-mythic-command-weapon"]')
   if (await page.evaluate(() => window.__strategy.state.mythicFragments) !== 0) throw new Error('mythic fragment purchase did not consume twenty fragments')
+  if (!(await page.evaluate(() => window.__strategy.state.equipmentInventory.at(-1)?.specialty))) throw new Error('purchased mythic equipment lost its specialty')
 
   await page.click('[data-action="section"][data-section="recruit"]')
   await page.waitForSelector('[data-action="recruit"][data-count="1"]')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { CASH_SHOP_PRODUCTS, EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, consumeDuelAttempt, duelAttemptsRemaining, purchaseCashShopProduct, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 import { effectLoadout } from '../src/game/battle-effects'
 
 describe('commander attributes', () => {
@@ -148,6 +148,15 @@ describe('commander attributes', () => {
     const before = equipmentBonus(state, 'guan-yu').leadership
     expect(equipEquipment(state, 'guan-yu', mythic.id).ok).toBe(true)
     expect(equipmentBonus(state, 'guan-yu').leadership + equipmentBonus(state, 'guan-yu').martial + equipmentBonus(state, 'guan-yu').stratagem + equipmentBonus(state, 'guan-yu').speed).toBeGreaterThan(before)
+  })
+
+  it('backfills a missing specialty on legacy mythic equipment saves', () => {
+    const state = createInitialState()
+    const legacy = { ...MYTHIC_SHOP_EQUIPMENT[0], id: 'legacy-mythic' }
+    delete legacy.specialty
+    state.equipmentInventory.push(legacy)
+    ensureEquipmentState(state)
+    expect(state.equipmentInventory.find(item => item.id === legacy.id)?.specialty).toBeTruthy()
   })
 
   it('allows equipment draws only through legendary and never mythic', () => {
