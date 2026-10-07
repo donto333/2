@@ -5,6 +5,7 @@ const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>
 const equipmentImage = (type: EquipmentType): string => `/assets/equipment/${type}.webp`
 type RosterSort = 'power' | 'level' | 'grade' | 'name' | 'role'
 type EquipmentSort = 'grade' | 'level' | 'name'
+type FormationSort = 'power' | 'grade'
 
 export interface AuthView {
   status: 'authenticated' | 'logged_out' | 'offline'
@@ -116,6 +117,8 @@ export class StrategyUI {
   private adminGameDataError: string | null = null
   private rosterSort: RosterSort = 'power'
   private rosterSortDescending = true
+  private formationSort: FormationSort = 'power'
+  private formationSortDescending = true
   private renderedState: StrategyState | null = null
   private summonTab: 'generals' | 'equipment' = 'generals'
   private equipmentSort: EquipmentSort = 'grade'
@@ -414,8 +417,9 @@ export class StrategyUI {
   }
 
   private formationSection(state: StrategyState): string {
-    const bench = this.sortedOwnedGenerals(state).filter(general => !state.formation.includes(general.id))
-    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">FORMATION COMMAND · 05</span><h1>출전 편성</h1><p class="heading-copy">세 개의 전열 슬롯에 장수를 배치해 황혼의 관문을 돌파할 진형을 완성하십시오.</p></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">ACTIVE DEPLOYMENT</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>아래 장수를 눌러 편성에 넣거나 해제할 수 있습니다. 세 번째 슬롯은 상황에 맞춰 교체하십시오.</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '슬롯을 채우는 중'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">AVAILABLE RESERVE</span><h3>대기 중인 보유 무장</h3></div><span class="toolbar-note">전투력 순으로 표시</span></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
+    const bench = this.sortedFormationBench(state)
+    const sortOptions: Array<[FormationSort, string]> = [['power', '전투력'], ['grade', '등급']]
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">FORMATION COMMAND · 05</span><h1>출전 편성</h1><p class="heading-copy">세 개의 전열 슬롯에 장수를 배치해 황혼의 관문을 돌파할 진형을 완성하십시오.</p></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">ACTIVE DEPLOYMENT</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>아래 장수를 눌러 편성에 넣거나 해제할 수 있습니다. 세 번째 슬롯은 상황에 맞춰 교체하십시오.</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '슬롯을 채우는 중'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">AVAILABLE RESERVE</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
   }
 
   private equipmentSection(state: StrategyState): string {
@@ -469,6 +473,17 @@ export class StrategyUI {
         power: [combatPower(a) + equipmentPowerForUi(state, a.id), combatPower(b) + equipmentPowerForUi(state, b.id)], level: [a.level, b.level], grade: [a.grade, b.grade], name: [a.name, b.name], role: [a.role, b.role],
       }
       const [left, right] = values[this.rosterSort]
+      if (left < right) return -1 * direction
+      if (left > right) return 1 * direction
+      return a.name.localeCompare(b.name, 'ko')
+    })
+  }
+
+  private sortedFormationBench(state: StrategyState): General[] {
+    const direction = this.formationSortDescending ? -1 : 1
+    return state.generals.filter(general => !state.formation.includes(general.id)).sort((a, b) => {
+      const left = this.formationSort === 'power' ? combatPower(a) + equipmentPowerForUi(state, a.id) : a.grade
+      const right = this.formationSort === 'power' ? combatPower(b) + equipmentPowerForUi(state, b.id) : b.grade
       if (left < right) return -1 * direction
       if (left > right) return 1 * direction
       return a.name.localeCompare(b.name, 'ko')
@@ -776,6 +791,9 @@ export class StrategyUI {
     } else if (action === 'roster-sort-direction') {
       this.rosterSortDescending = !this.rosterSortDescending
       if (this.renderedState) this.render(this.renderedState)
+    } else if (action === 'formation-sort-direction') {
+      this.formationSortDescending = !this.formationSortDescending
+      if (this.renderedState) this.render(this.renderedState)
     } else if (action === 'equipment-sort-direction') {
       this.equipmentSortDescending = !this.equipmentSortDescending
       if (this.renderedState) this.render(this.renderedState)
@@ -857,6 +875,9 @@ export class StrategyUI {
     const select = event.target as HTMLSelectElement
     if (select.matches('[data-action="roster-sort"]')) {
       this.rosterSort = select.value as RosterSort
+      if (this.renderedState) this.render(this.renderedState)
+    } else if (select.matches('[data-action="formation-sort"]')) {
+      this.formationSort = select.value as FormationSort
       if (this.renderedState) this.render(this.renderedState)
     } else if (select.matches('[data-action="equipment-sort"]')) {
       this.equipmentSort = select.value as EquipmentSort
