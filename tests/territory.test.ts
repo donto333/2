@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, collectIncome, conquestCost, conquestPower, createInitialState, defendCity, ensureCityRoster, findCity, launchConquest, launchFactionBattle, mergeFactionTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, ensureCityRoster, findCity, launchConquest, launchFactionBattle, mergeFactionTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with owned cities and a full resource inventory', () => {
@@ -83,6 +83,28 @@ describe('territory and governance', () => {
     expect(state.lastConquest?.captured).toBe(true)
   })
 
+  it('protects each faction capital and blocks remote conquest', () => {
+    const state = createInitialState()
+    expect(conquestEligibility(state, 'chengdu').allowed).toBe(false)
+    expect(conquestEligibility(state, 'ye').reason).toContain('위나라의 본성')
+    expect(conquestEligibility(state, 'luoyang').allowed).toBe(false)
+    expect(conquestEligibility(state, 'xiangyang').allowed).toBe(true)
+    const beforeGrain = state.resources.grain
+    expect(launchConquest(state, 'ye', 1000).ok).toBe(false)
+    expect(launchConquest(state, 'luoyang', 1000).ok).toBe(false)
+    expect(state.resources.grain).toBe(beforeGrain)
+  })
+
+  it('opens only the next connected front after a neighboring city is captured', () => {
+    const state = createInitialState()
+    const xiangyang = findCity(state, 'xiangyang')!
+    xiangyang.owner = state.faction
+    xiangyang.conquestProgress = 100
+    expect(conquestEligibility(state, 'wancheng').allowed).toBe(true)
+    expect(conquestEligibility(state, 'jiangling').allowed).toBe(true)
+    expect(conquestEligibility(state, 'puyang').allowed).toBe(false)
+  })
+
   it('does not start a siege when the march resources are missing', () => {
     const state = createInitialState()
     state.resources.grain = 0
@@ -103,7 +125,7 @@ describe('territory and governance', () => {
 
   it('starts faction warfare against an enemy city and throttles repeats', () => {
     const state = createInitialState()
-    const city = findCity(state, 'xuchang')!
+    const city = findCity(state, 'xiangyang')!
     const result = launchFactionBattle(state, city.id, 2000)
     expect(result.ok).toBe(true)
     expect(state.factionWarScore).toBeGreaterThanOrEqual(0)

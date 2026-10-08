@@ -50,6 +50,21 @@ export interface City {
   conquestProgress?: number
 }
 
+export const FACTION_CAPITALS: Record<Faction, string> = { 촉한: 'chengdu', 위나라: 'ye', 오나라: 'jianye' }
+export const CITY_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
+  chengdu: ['hanzhong', 'fucheng', 'xindu'], hanzhong: ['chengdu', 'fucheng', 'tianshui', 'xiangyang'],
+  fucheng: ['chengdu', 'hanzhong', 'xindu'], xindu: ['chengdu', 'fucheng'], tianshui: ['wuwei', 'hanzhong'], wuwei: ['tianshui'],
+  luoyang: ['tianshui', 'xuchang', 'ye', 'chenliu'], ye: ['luoyang', 'chenliu', 'puyang'],
+  chenliu: ['luoyang', 'ye', 'puyang', 'xuchang'], puyang: ['ye', 'chenliu'],
+  xuchang: ['luoyang', 'chenliu', 'wancheng', 'shouchun'], wancheng: ['xuchang', 'xiangyang', 'jiangling'],
+  xiangyang: ['hanzhong', 'wancheng', 'jiangling'], jiangling: ['xiangyang', 'wancheng', 'yiling', 'changsha'],
+  yiling: ['jiangling', 'changsha', 'guiyang'], changsha: ['jiangling', 'yiling', 'lingling', 'guiyang'],
+  lingling: ['changsha', 'guiyang'], guiyang: ['lingling', 'changsha', 'yiling'],
+  shouchun: ['xuchang', 'hefei', 'jiujiang'], hefei: ['shouchun', 'jiujiang', 'jianye'],
+  jiujiang: ['hefei', 'shouchun', 'poyang', 'jiangling'], poyang: ['jiujiang', 'jianye', 'changsha'],
+  jianye: ['hefei', 'poyang', 'wujun'], wujun: ['jianye', 'kuaiji'], kuaiji: ['wujun'],
+}
+
 export interface FactionTerritorySnapshot {
   cityId: string
   owner: CityOwner
@@ -1053,6 +1068,28 @@ export function findCity(state: StrategyState, id = state.selectedCityId): City 
   return state.cities.find(city => city.id === id)
 }
 
+export interface ConquestEligibility {
+  allowed: boolean
+  reason: string
+  neighborNames: string[]
+}
+
+export function capitalFactionForCity(cityId: string): Faction | undefined {
+  return (Object.entries(FACTION_CAPITALS) as Array<[Faction, string]>).find(([, capitalId]) => capitalId === cityId)?.[0]
+}
+
+export function conquestEligibility(state: StrategyState, cityId: string): ConquestEligibility {
+  const city = findCity(state, cityId)
+  if (!city) return { allowed: false, reason: '해당 도시를 찾을 수 없습니다.', neighborNames: [] }
+  const neighborNames = (CITY_ADJACENCY[city.id] ?? []).map(id => findCity(state, id)).filter((neighbor): neighbor is City => Boolean(neighbor)).map(neighbor => neighbor.name)
+  if (city.owner === state.faction) return { allowed: false, reason: `이미 ${state.faction}이(가) 지배하는 도시입니다.`, neighborNames }
+  const capitalFaction = capitalFactionForCity(city.id)
+  if (capitalFaction) return { allowed: false, reason: `${city.name}은(는) ${capitalFaction}의 본성이라 점령할 수 없습니다.`, neighborNames }
+  const borderNeighbors = (CITY_ADJACENCY[city.id] ?? []).map(id => findCity(state, id)).filter((neighbor): neighbor is City => Boolean(neighbor)).filter(neighbor => neighbor.owner === state.faction)
+  if (borderNeighbors.length === 0) return { allowed: false, reason: '아군 국경과 맞닿은 도시만 점령할 수 있습니다. 원거리 점령은 불가능합니다.', neighborNames }
+  return { allowed: true, reason: `${borderNeighbors.map(neighbor => neighbor.name).join(' · ')}에서 연결되는 국경 전선입니다.`, neighborNames }
+}
+
 function buildingLevel(city: City, kind: BuildingKind): number {
   return city.buildings.find(building => building.kind === kind)?.level ?? 0
 }
@@ -1151,6 +1188,8 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   const city = findCity(state, cityId)
   if (!city) return { ok: false, won: false, message: '해당 전선을 찾을 수 없습니다.', damage: 0 }
   if (city.owner === state.faction) return { ok: false, won: false, message: '아군 도시에는 세력전 공격을 할 수 없습니다.', damage: 0 }
+  const eligibility = conquestEligibility(state, cityId)
+  if (!eligibility.allowed) return { ok: false, won: false, message: eligibility.reason, damage: 0 }
   const wait = factionBattleCooldownRemaining(state, now)
   if (wait > 0) return { ok: false, won: false, message: `세력전 부대가 재편성 중입니다. ${Math.ceil(wait / 1000)}초 후 다시 공격할 수 있습니다.`, damage: 0 }
   const cost = territoryBattleCost(city)
@@ -1182,6 +1221,8 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
   const city = findCity(state, cityId)
   if (!city) return { ok: false, captured: false, message: '해당 도시를 찾을 수 없습니다.', damage: 0 }
   if (city.owner === state.faction) return { ok: false, captured: false, message: `이미 ${state.faction}이(가) 지배하는 도시입니다.`, damage: 0 }
+  const eligibility = conquestEligibility(state, cityId)
+  if (!eligibility.allowed) return { ok: false, captured: false, message: eligibility.reason, damage: 0 }
   const conquestWait = conquestCooldownRemaining(state, now)
   if (conquestWait > 0) return { ok: false, captured: false, message: `공성 준비 중입니다. ${Math.ceil(conquestWait / 1000)}초 후 다시 출정할 수 있습니다.`, damage: 0 }
   const cost = conquestCost(city)
