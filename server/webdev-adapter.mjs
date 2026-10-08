@@ -86,6 +86,10 @@ var factionTerritoryStates = mysqlTable("faction_territory_states", {
   updatedByUserId: int("updatedByUserId"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
+var factionTerritoryAiState = mysqlTable("faction_territory_ai_state", {
+  id: int("id").primaryKey(),
+  lastTickAt: timestamp("lastTickAt")
+});
 
 // starters/web-db-user-v1/server/_core/env.ts
 var ENV = {
@@ -219,6 +223,15 @@ const FACTION_TERRITORY_SEED = [
   ["jiujiang", "중립", 55, 57], ["tianshui", "중립", 71, 53], ["wuwei", "중립", 61, 42], ["fucheng", "중립", 58, 51], ["xindu", "중립", 49, 47]
 ].map(([cityId, owner, defense, prosperity]) => ({ cityId, owner, conquestProgress: 0, defense, prosperity, version: 1 }));
 const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.cityId));
+const NEUTRAL_AI_TICK_MS = 10 * 60 * 1000;
+const PROTECTED_CAPITAL_IDS = new Set(["chengdu", "ye", "jianye"]);
+const CITY_ADJACENCY = {
+  chengdu: ["hanzhong", "fucheng", "xindu"], hanzhong: ["chengdu", "fucheng", "tianshui", "xiangyang"], fucheng: ["chengdu", "hanzhong", "xindu"], xindu: ["chengdu", "fucheng"], tianshui: ["wuwei", "hanzhong"], wuwei: ["tianshui"],
+  luoyang: ["tianshui", "xuchang", "ye", "chenliu"], ye: ["luoyang", "chenliu", "puyang"], chenliu: ["luoyang", "ye", "puyang", "xuchang"], puyang: ["ye", "chenliu"],
+  xuchang: ["luoyang", "chenliu", "wancheng", "shouchun"], wancheng: ["xuchang", "xiangyang", "jiangling"], xiangyang: ["hanzhong", "wancheng", "jiangling"], jiangling: ["xiangyang", "wancheng", "yiling", "changsha"],
+  yiling: ["jiangling", "changsha", "guiyang"], changsha: ["jiangling", "yiling", "lingling", "guiyang"], lingling: ["changsha", "guiyang"], guiyang: ["lingling", "changsha", "yiling"],
+  shouchun: ["xuchang", "hefei", "jiujiang"], hefei: ["shouchun", "jiujiang", "jianye"], jiujiang: ["hefei", "shouchun", "poyang", "jiangling"], poyang: ["jiujiang", "jianye", "changsha"], jianye: ["hefei", "poyang", "wujun"], wujun: ["jianye", "kuaiji"], kuaiji: ["wujun"]
+};
 function parseStateJson(value) {
   if (typeof value !== "string" || value.length === 0) return null;
   try {
@@ -268,10 +281,53 @@ async function ensureFactionTerritories(db) {
     await db.insert(factionTerritoryStates).values(missing).onDuplicateKeyUpdate({ set: { cityId: sql`cityId` } });
   }
 }
+async function advanceNeutralTerritoryAi(db, now = Date.now()) {
+  const shouldTick = await db.transaction(async tx => {
+    const rows = await tx.select().from(factionTerritoryAiState).where(eq(factionTerritoryAiState.id, 1)).limit(1).for("update");
+    const current = rows[0];
+    const lastTick = current?.lastTickAt ? new Date(current.lastTickAt).getTime() : 0;
+    if (current && now - lastTick < NEUTRAL_AI_TICK_MS) return false;
+    if (current) await tx.update(factionTerritoryAiState).set({ lastTickAt: new Date(now) }).where(eq(factionTerritoryAiState.id, 1));
+    else await tx.insert(factionTerritoryAiState).values({ id: 1, lastTickAt: new Date(now) });
+    return true;
+  });
+  if (!shouldTick) return 0;
+  const rows = await db.select().from(factionTerritoryStates);
+  const byCityId = new Map(rows.map(row => [row.cityId, row]));
+  const attacks = [];
+  for (const attacker of rows.filter(row => row.owner === "중립")) {
+    const target = (CITY_ADJACENCY[attacker.cityId] ?? [])
+      .map(cityId => byCityId.get(cityId))
+      .filter(row => row && row.owner !== "중립" && !PROTECTED_CAPITAL_IDS.has(row.cityId))
+      .sort((left, right) => Number(left.defense) - Number(right.defense))[0];
+    if (target) attacks.push({ attacker: attacker.cityId, target: target.cityId });
+  }
+  if (!attacks.length) return 0;
+  await db.transaction(async tx => {
+    for (const attack of attacks) {
+      const locked = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, attack.target)).limit(1).for("update");
+      const target = locked[0];
+      if (!target || target.owner === "중립" || PROTECTED_CAPITAL_IDS.has(target.cityId)) continue;
+      const damage = 8 + ((now + attack.attacker.length * 17) % 8);
+      const defense = Math.max(0, Number(target.defense) - damage);
+      const captured = defense <= 20;
+      await tx.update(factionTerritoryStates).set({
+        owner: captured ? "중립" : target.owner,
+        conquestProgress: captured ? 0 : Math.min(100, Number(target.conquestProgress) + damage),
+        defense: captured ? 50 : defense,
+        prosperity: captured ? Math.max(25, Number(target.prosperity) - 15) : Math.max(20, Number(target.prosperity) - 3),
+        version: sql`${factionTerritoryStates.version} + 1`,
+        updatedByUserId: null
+      }).where(eq(factionTerritoryStates.cityId, target.cityId));
+    }
+  });
+  return attacks.length;
+}
 async function getFactionTerritories() {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await ensureFactionTerritories(db);
+  await advanceNeutralTerritoryAi(db);
   const rows = await db.select().from(factionTerritoryStates);
   const byCityId = new Map(rows.map(row => [row.cityId, row]));
   return FACTION_TERRITORY_SEED.map(city => factionTerritoryView(byCityId.get(city.cityId) ?? city));
@@ -281,6 +337,7 @@ async function recordFactionTerritoryBattle(userId, input) {
   if (!db) throw new Error("Database is not available");
   if (!FACTION_TERRITORY_IDS.has(input.cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
   await ensureFactionTerritories(db);
+  await advanceNeutralTerritoryAi(db);
   if (!input.won) return getFactionTerritories();
   const account = await db.select({ faction: gameAccountStates.faction }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
   const faction = account[0]?.faction ?? "촉한";
