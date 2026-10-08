@@ -138,6 +138,12 @@ export class StrategyUI {
   private summonTab: 'generals' | 'equipment' = 'generals'
   private equipmentSort: EquipmentSort = 'grade'
   private equipmentSortDescending = true
+  private equipmentScrollTop = 0
+  private equipmentScrollFrame: number | null = null
+  private equipmentIndexSource: Equipment[] | null = null
+  private equipmentIndex = new Map<string, Equipment>()
+  private equipmentSortCache: { key: string; items: Equipment[] } | null = null
+  private readonly equipmentRowHeight = 286
   private shopTab: 'gold' | 'resources' | 'mythic' = 'gold'
   private territorySyncText = '서버 원장 대기'
 
@@ -147,10 +153,26 @@ export class StrategyUI {
     root.addEventListener('click', this.handleClick)
     root.addEventListener('change', this.handleChange)
     root.addEventListener('submit', this.handleSubmit)
+    root.addEventListener('scroll', this.handleScroll, true)
   }
 
   render(state: StrategyState): void {
+    const previousSection = this.renderedState?.section
     this.renderedState = state
+    if (previousSection === 'equipment' && state.section === 'equipment') {
+      const section = this.root.querySelector<HTMLElement>('.page-section--equipment')
+      if (section) {
+        const scroll = this.root.querySelector<HTMLElement>('[data-equipment-scroll]')
+        const scrollTop = scroll?.scrollTop ?? this.equipmentScrollTop
+        section.outerHTML = this.equipmentSection(state)
+        window.requestAnimationFrame(() => {
+          const nextScroll = this.root.querySelector<HTMLElement>('[data-equipment-scroll]')
+          if (nextScroll) nextScroll.scrollTop = scrollTop
+        })
+        return
+      }
+    }
+    if (state.section !== 'equipment') this.equipmentScrollTop = 0
     this.root.innerHTML = this.shell(state)
     const shell = this.root.querySelector<HTMLElement>('.app-shell')
     if (shell) {
@@ -468,11 +490,19 @@ export class StrategyUI {
     const recent = !managementOnly && state.lastEquipmentDraw.length ? `<div class="equipment-draw-results glass-card"><div class="card-header"><div><span class="eyebrow">LATEST DROP</span><h3>이번 뽑기 결과</h3></div><span class="rate-note">${state.lastEquipmentDraw.length}개 획득</span></div><div class="equipment-mini-row">${state.lastEquipmentDraw.map(item => this.equipmentMiniCard(item)).join('')}</div><div class="equipment-extra-draw"><span>더 뽑으시겠습니까?</span><button class="mini-action" data-action="equipment-draw" data-count="1">1회 추가 뽑기 · ✦ 240</button><button class="mini-action" data-action="equipment-draw" data-count="10">10회 추가 뽑기 · ✦ 2,200</button></div></div>` : ''
     const setBonusPanel = `<div class="equipment-set-bonuses glass-card"><div class="card-header"><div><span class="eyebrow">SET SYNERGY</span><h3>종류별 세트 능력</h3></div><span class="rate-note">${selected?.name ?? '무장'} 기준</span></div><div class="set-bonus-grid">${(Object.keys(EQUIPMENT_SET_META) as Array<keyof typeof EQUIPMENT_SET_META>).map(set => { const count = setCounts[set] ?? 0; const meta = EQUIPMENT_SET_META[set]; return `<div class="set-bonus-card ${count >= 2 ? 'is-active' : ''}" style="--set-color:${EQUIPMENT_GRADE_META.legendary.color}"><strong>${meta.label}</strong><span>${count}/3 장착</span><small>2세트 · ${meta.twoPiece}</small><small>3세트 · ${meta.threePiece}</small></div>` }).join('')}</div>${activeSets.length ? `<p class="set-active-note">활성 세트: ${activeSets.map(set => EQUIPMENT_SET_META[set].label).join(' · ')}</p>` : '<p class="set-active-note is-muted">같은 세트 장비를 2개 이상 장착하면 세트 능력이 활성화됩니다.</p>'}</div>`
     const equipmentHero = managementOnly ? `<div class="equipment-hero glass-card equipment-management-hero"><div><span class="pill pill--jade">ARMORY MANAGEMENT</span><h2>장비 관리</h2><p>선택한 무장의 장착현황을 확인하고 장비를 해제하거나 강화하십시오.</p></div><div class="equipment-management-mark">⚒</div></div>` : `<div class="equipment-hero glass-card"><div><span class="pill pill--gold">EQUIPMENT SUMMON</span><h2>천하의 병장기</h2><p>노멀부터 전설까지 획득할 수 있습니다. 신화 장비는 추후 이벤트로만 지급됩니다.</p></div><div class="equipment-draw-actions"><button class="action-button action-button--primary" data-action="equipment-draw" data-count="1"><span>1회 뽑기</span><b>✦ 240</b></button><button class="action-button action-button--outline" data-action="equipment-draw" data-count="10"><span>10회 연속</span><b>✦ 2,200</b></button></div></div>`
-    return `<section class="page-section page-section--equipment"><div class="section-heading section-heading--compact"><div><span class="eyebrow">ARMORY &amp; FORGE · 06</span><h1>장비 관리</h1><p class="heading-copy">무기·갑옷·장신구를 장착하고 강화해 무장의 네 가지 전투 능력과 세트 능력을 끌어올리십시오.</p></div><div class="section-counter"><span>보유 장비</span><strong>${state.equipmentInventory.length}</strong></div></div>${equipmentHero}<div class="equipment-layout"><div><div class="equipment-toolbar glass-card"><div><span class="eyebrow">EQUIPPED COMMANDER</span><h3>장착 무장</h3></div><select data-action="equipment-general">${state.generals.map(general => `<option value="${general.id}" ${general.id === selected?.id ? 'selected' : ''}>${general.name} · ${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</option>`).join('')}</select></div><div class="equipment-slots glass-card">${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => this.equipmentSlot(type, loadout[type], state, selected?.id ?? '')).join('')}</div>${setBonusPanel}${recent}</div><div><div class="equipment-rates glass-card"><div class="card-header"><div><span class="eyebrow">DROP TABLE</span><h3>장비 뽑기 확률</h3></div><span class="rate-note">신화 제외</span></div>${(['normal', 'rare', 'unique', 'legendary'] as const).map(grade => `<div class="equipment-rate-row"><i style="--grade:${EQUIPMENT_GRADE_META[grade].color}"></i><span>${EQUIPMENT_GRADE_META[grade].label}</span><b>${grade === 'normal' ? '55%' : grade === 'rare' ? '28%' : grade === 'unique' ? '12%' : '5%'}</b></div>`).join('')}<div class="mythic-lock"><strong>${MYTHIC_EVENT_EQUIPMENT.name}</strong><span>신화 · 이벤트 한정 지급 · 뽑기 획득 불가</span></div></div><div class="equipment-inventory"><div class="equipment-inventory-toolbar"><div class="card-header"><div><span class="eyebrow">ARMORY INVENTORY</span><h3>보유 장비</h3></div><span class="rate-note">${state.equipmentInventory.length}개</span></div><div class="equipment-sort-controls"><label>정렬 <select data-action="equipment-sort"><option value="grade" ${this.equipmentSort === 'grade' ? 'selected' : ''}>등급</option><option value="level" ${this.equipmentSort === 'level' ? 'selected' : ''}>강화 레벨</option><option value="name" ${this.equipmentSort === 'name' ? 'selected' : ''}>이름</option></select></label><button class="sort-direction" data-action="equipment-sort-direction">${this.equipmentSortDescending ? '↓' : '↑'}</button></div></div>${this.sortedEquipment(state).map(item => this.equipmentCard(item, selected?.id ?? '', equipped.has(item.id))).join('')}</div></div></div></section>`
+    return `<section class="page-section page-section--equipment"><div class="section-heading section-heading--compact"><div><span class="eyebrow">ARMORY &amp; FORGE · 06</span><h1>장비 관리</h1><p class="heading-copy">무기·갑옷·장신구를 장착하고 강화해 무장의 네 가지 전투 능력과 세트 능력을 끌어올리십시오.</p></div><div class="section-counter"><span>보유 장비</span><strong>${state.equipmentInventory.length}</strong></div></div>${equipmentHero}<div class="equipment-layout"><div><div class="equipment-toolbar glass-card"><div><span class="eyebrow">EQUIPPED COMMANDER</span><h3>장착 무장</h3></div><select data-action="equipment-general">${state.generals.map(general => `<option value="${general.id}" ${general.id === selected?.id ? 'selected' : ''}>${general.name} · ${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</option>`).join('')}</select></div><div class="equipment-slots glass-card">${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => this.equipmentSlot(type, loadout[type], state, selected?.id ?? '')).join('')}</div>${setBonusPanel}${recent}</div><div><div class="equipment-rates glass-card"><div class="card-header"><div><span class="eyebrow">DROP TABLE</span><h3>장비 뽑기 확률</h3></div><span class="rate-note">신화 제외</span></div>${(['normal', 'rare', 'unique', 'legendary'] as const).map(grade => `<div class="equipment-rate-row"><i style="--grade:${EQUIPMENT_GRADE_META[grade].color}"></i><span>${EQUIPMENT_GRADE_META[grade].label}</span><b>${grade === 'normal' ? '55%' : grade === 'rare' ? '28%' : grade === 'unique' ? '12%' : '5%'}</b></div>`).join('')}<div class="mythic-lock"><strong>${MYTHIC_EVENT_EQUIPMENT.name}</strong><span>신화 · 이벤트 한정 지급 · 뽑기 획득 불가</span></div></div><div class="equipment-inventory"><div class="equipment-inventory-toolbar"><div class="card-header"><div><span class="eyebrow">ARMORY INVENTORY</span><h3>보유 장비</h3></div><span class="rate-note">${state.equipmentInventory.length}개</span></div><div class="equipment-sort-controls"><label>정렬 <select data-action="equipment-sort"><option value="grade" ${this.equipmentSort === 'grade' ? 'selected' : ''}>등급</option><option value="level" ${this.equipmentSort === 'level' ? 'selected' : ''}>강화 레벨</option><option value="name" ${this.equipmentSort === 'name' ? 'selected' : ''}>이름</option></select></label><button class="sort-direction" data-action="equipment-sort-direction">${this.equipmentSortDescending ? '↓' : '↑'}</button></div></div>${this.equipmentVirtualList(state, selected?.id ?? '', equipped)}</div></div></div></section>`
+  }
+
+  private equipmentVirtualList(state: StrategyState, generalId: string, equipped: Set<string>): string {
+    const items = this.sortedEquipment(state)
+    const start = Math.max(0, Math.floor(this.equipmentScrollTop / this.equipmentRowHeight) - 3)
+    const count = Math.ceil(720 / this.equipmentRowHeight) + 6
+    const visible = items.slice(start, start + count)
+    return `<div class="equipment-inventory-scroll" data-equipment-scroll><div class="equipment-virtual-list" style="height:${items.length * this.equipmentRowHeight}px"><div class="equipment-virtual-window" style="transform:translateY(${start * this.equipmentRowHeight}px)">${visible.map(item => this.equipmentCard(item, generalId, equipped.has(item.id))).join('')}</div></div></div>`
   }
 
   private equipmentSlot(type: EquipmentType, itemId: string | undefined, state: StrategyState, generalId: string): string {
-    const item = state.equipmentInventory.find(candidate => candidate.id === itemId)
+    const item = itemId ? this.equipmentById(state).get(itemId) : undefined
     const action = item ? `<button class="equipment-slot-unequip" data-action="equipment-unequip" data-equipment-type="${type}" data-general-id="${generalId}">장착 해제</button>` : ''
     const specialty = item ? equipmentSpecialty(item) : undefined
     return `<div class="equipment-slot ${item ? 'is-filled' : ''}"><span class="equipment-slot-icon"><img src="${equipmentImage(type)}" alt="${EQUIPMENT_TYPE_META[type].label}" /></span><div><small>${EQUIPMENT_TYPE_META[type].label}</small>${item ? `<strong style="--grade:${EQUIPMENT_GRADE_META[item.grade].color}">${item.name}</strong><em>Lv.${item.level} · ${EQUIPMENT_GRADE_META[item.grade].label}</em>${specialty ? `<b class="equipment-specialty-line">특기 · ${escapeHtml(specialty.label)}</b>` : ''}${action}` : '<strong>비어 있음</strong><em>보유 장비를 선택하십시오</em>'}</div></div>`
@@ -482,7 +512,7 @@ export class StrategyUI {
     const grade = EQUIPMENT_GRADE_META[item.grade]
     const set = EQUIPMENT_SET_META[item.set]
     const specialty = equipmentSpecialty(item)
-    return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}" style="--grade:${grade.color}"><div class="equipment-card-top"><span class="equipment-type"><img src="${equipmentImage(item.type)}" alt="" /> ${EQUIPMENT_TYPE_META[item.type].label}</span><span class="equipment-grade">${grade.label}</span></div><img class="equipment-image ${item.grade === 'mythic' ? 'equipment-image--mythic' : ''}" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /><h4>${item.name}</h4><p>${set.label} · ${item.skillName}</p><div class="equipment-stat"><b>${item.mainStat}</b><strong>+${equipmentValue(item)}</strong><span>Lv.${item.level}/20</span></div><small>${item.skillDescription}</small>${specialty ? `<div class="equipment-specialty"><b>특기 · ${escapeHtml(specialty.label)}</b><span>${escapeHtml(specialty.description)}</span></div>` : ''}<div class="equipment-card-actions"><button class="mini-action" data-action="equipment-enhance" data-equipment-id="${item.id}">강화 · 은전 ${formatNumber(420 + item.level * 260)}</button>${equipped ? `<button class="mini-action" data-action="equipment-unequip" data-equipment-type="${item.type}" data-general-id="${generalId}">장착 해제</button>` : `<button class="mini-action" data-action="equipment-equip" data-equipment-id="${item.id}" data-general-id="${generalId}">장착</button>`}</div></article>`
+    return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}" style="--grade:${grade.color}"><div class="equipment-card-top"><span class="equipment-type"><img loading="lazy" decoding="async" width="21" height="21" src="${equipmentImage(item.type)}" alt="" /> ${EQUIPMENT_TYPE_META[item.type].label}</span><span class="equipment-grade">${grade.label}</span></div><img loading="lazy" decoding="async" width="72" height="72" class="equipment-image ${item.grade === 'mythic' ? 'equipment-image--mythic' : ''}" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /><h4>${item.name}</h4><p>${set.label} · ${item.skillName}</p><div class="equipment-stat"><b>${item.mainStat}</b><strong>+${equipmentValue(item)}</strong><span>Lv.${item.level}/20</span></div><small>${item.skillDescription}</small>${specialty ? `<div class="equipment-specialty"><b>특기 · ${escapeHtml(specialty.label)}</b><span>${escapeHtml(specialty.description)}</span></div>` : ''}<div class="equipment-card-actions"><button class="mini-action" data-action="equipment-enhance" data-equipment-id="${item.id}">강화 · 은전 ${formatNumber(420 + item.level * 260)}</button>${equipped ? `<button class="mini-action" data-action="equipment-unequip" data-equipment-type="${item.type}" data-general-id="${generalId}">장착 해제</button>` : `<button class="mini-action" data-action="equipment-equip" data-equipment-id="${item.id}" data-general-id="${generalId}">장착</button>`}</div></article>`
   }
 
   private equipmentMiniCard(item: Equipment): string {
@@ -493,13 +523,49 @@ export class StrategyUI {
   private sortedEquipment(state: StrategyState): Equipment[] {
     const gradeRank: Record<EquipmentGrade, number> = { normal: 1, rare: 2, unique: 3, legendary: 4, mythic: 5 }
     const direction = this.equipmentSortDescending ? -1 : 1
-    return [...state.equipmentInventory].sort((a, b) => {
+    const levelSum = state.equipmentInventory.reduce((sum, item) => sum + item.level, 0)
+    const key = `${state.equipmentInventory.length}:${levelSum}:${this.equipmentSort}:${this.equipmentSortDescending}`
+    if (this.equipmentSortCache?.key === key) return this.equipmentSortCache.items
+    const items = [...state.equipmentInventory].sort((a, b) => {
       const left = this.equipmentSort === 'grade' ? gradeRank[a.grade] : this.equipmentSort === 'level' ? a.level : a.name
       const right = this.equipmentSort === 'grade' ? gradeRank[b.grade] : this.equipmentSort === 'level' ? b.level : b.name
       if (left < right) return -1 * direction
       if (left > right) return 1 * direction
       return a.name.localeCompare(b.name, 'ko')
     })
+    this.equipmentSortCache = { key, items }
+    return items
+  }
+
+  private equipmentById(state: StrategyState): Map<string, Equipment> {
+    if (this.equipmentIndexSource !== state.equipmentInventory || this.equipmentIndex.size !== state.equipmentInventory.length) {
+      this.equipmentIndexSource = state.equipmentInventory
+      this.equipmentIndex = new Map(state.equipmentInventory.map(item => [item.id, item]))
+    }
+    return this.equipmentIndex
+  }
+
+  private handleScroll = (event: Event): void => {
+    const target = event.target as HTMLElement
+    if (!target.matches('[data-equipment-scroll]') || !this.renderedState || this.renderedState.section !== 'equipment') return
+    this.equipmentScrollTop = target.scrollTop
+    if (this.equipmentScrollFrame !== null) return
+    this.equipmentScrollFrame = window.requestAnimationFrame(() => {
+      this.equipmentScrollFrame = null
+      const state = this.renderedState
+      if (!state || state.section !== 'equipment') return
+      const selected = state.generals.find(general => general.id === state.selectedEquipmentGeneralId) ?? state.generals[0]
+      const loadout = selected ? state.equipmentLoadouts[selected.id] ?? {} : {}
+      const windowNode = target.querySelector<HTMLElement>('.equipment-virtual-window')
+      if (windowNode) windowNode.outerHTML = this.equipmentVirtualWindow(state, selected?.id ?? '', new Set(Object.values(loadout)))
+    })
+  }
+
+  private equipmentVirtualWindow(state: StrategyState, generalId: string, equipped: Set<string>): string {
+    const items = this.sortedEquipment(state)
+    const start = Math.max(0, Math.floor(this.equipmentScrollTop / this.equipmentRowHeight) - 3)
+    const count = Math.ceil(720 / this.equipmentRowHeight) + 6
+    return `<div class="equipment-virtual-window" style="transform:translateY(${start * this.equipmentRowHeight}px)">${items.slice(start, start + count).map(item => this.equipmentCard(item, generalId, equipped.has(item.id))).join('')}</div>`
   }
 
   private sortedOwnedGenerals(state: StrategyState): General[] {
@@ -695,7 +761,8 @@ export class StrategyUI {
     if (!general) return `<div class="formation-slot formation-slot--empty"><span>${String(index + 1).padStart(2, '0')}</span><strong>빈 슬롯</strong><small>대기 무장을 선택하십시오.</small></div>`
     const loadout = state.equipmentLoadouts[general.id] ?? {}
     const equipment = (['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => {
-      const item = state.equipmentInventory.find(candidate => candidate.id === loadout[type])
+      const itemId = loadout[type]
+      const item = itemId ? this.equipmentById(state).get(itemId) : undefined
       return `<div class="formation-equipment-chip ${item ? 'is-equipped' : ''}"><span>${EQUIPMENT_TYPE_META[type].icon}</span><strong>${item ? escapeHtml(item.name) : '비어 있음'}</strong>${item ? `<button class="formation-unequip" data-action="equipment-unequip" data-equipment-type="${type}" data-general-id="${general.id}">해제</button>` : ''}</div>`
     }).join('')
     return `<div class="formation-slot formation-slot--filled" style="--accent:${general.accent}"><button class="formation-slot-main" data-action="formation" data-id="${general.id}"><span class="formation-slot-index">${String(index + 1).padStart(2, '0')}</span>${this.portrait(general, 'formation-portrait')}<strong>${general.name}</strong><small>${general.role} · Lv.${general.level}</small><b>${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</b><em>클릭해 편성 해제</em></button><div class="formation-equipment"><span class="formation-equipment-label">장착 장비</span>${equipment}</div></div>`

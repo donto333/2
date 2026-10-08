@@ -429,3 +429,11 @@
 @keyframes stage3-actions-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes stage3-battle-panel-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.app-shell.is-entering .topbar,.app-shell.is-entering .sidebar,.app-shell.is-entering .main-content,.app-shell.is-entering .page-section > *,.result-modal .result-card,.result-modal.is-visible .result-mark,.result-modal.is-visible .result-score,.recruit-results.is-visible .recruit-results-heading,.recruit-results.is-visible .recruit-results-actions,.battle-panel,.battle-command-panel,.troop-status-panel{animation:none}.nav-button:after{transition:none}.toast{transition:opacity .1s}.glass-card,.duel-opponent,.shop-item,.update-entry{transition:none}}
+
+/* Inventory performance: keep a small virtual window and defer offscreen card work. */
+.equipment-card{content-visibility:auto;contain-intrinsic-size:286px}
+.equipment-inventory-scroll{max-height:720px;overflow-y:auto;contain:layout paint;overscroll-behavior:contain;padding-right:4px}
+.equipment-virtual-list{position:relative;width:100%}
+.equipment-virtual-window{position:absolute;inset:0 auto auto 0;width:100%;will-change:transform}
+.equipment-virtual-window>.equipment-card{height:277px;box-sizing:border-box;overflow:hidden}
+@media (max-width:900px){.equipment-inventory-scroll{max-height:640px}}
