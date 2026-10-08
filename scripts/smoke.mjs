@@ -185,7 +185,11 @@ try {
   }, null, { timeout: 5000 })
   await page.click('[data-action="move"][data-index="1"]')
   const battleSkill = page.locator('[data-action="battle-skill"]')
-  if (await battleSkill.isEnabled()) await battleSkill.click()
+  if (await battleSkill.isEnabled()) {
+    await battleSkill.click()
+    await page.waitForFunction(() => window.__strategy.arena.effects.some(effect => effect.object.children.length >= 15), null, { timeout: 3000 })
+  }
+  await page.waitForFunction(() => window.__strategy.arena.effects.some(effect => effect.object.children.length >= 3), null, { timeout: 3000 })
   await page.waitForTimeout(250)
   await page.screenshot({ path: `${out}/03-battle.png` })
   await page.evaluate(() => window.__strategy.arena.dispose())

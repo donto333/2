@@ -71,6 +71,7 @@ interface BattleUnit {
   statusGroup: THREE.Group
   statusFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
   hitFlash: number
+  hitReact: number
   knockback: THREE.Vector3
   motionPhase: number
   motionPulse: number
@@ -289,7 +290,7 @@ export class Arena {
       const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(jade)
       group.add(status.group)
-      const unit: BattleUnit = { group, squad, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25 }
+      const unit: BattleUnit = { group, squad, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25 }
       this.playerUnits.push(unit)
       this.scene.add(group)
     })
@@ -549,11 +550,23 @@ export class Arena {
 
   private spawnImpact(position: THREE.Vector3, damage: number, color = 0xf6c56d): void {
     const group = new THREE.Group()
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.72, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+    const intensity = Math.min(1.65, 0.82 + damage / 180)
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.72, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+    const innerRing = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.3, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
     ring.rotation.x = -Math.PI / 2
-    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }))
+    innerRing.rotation.x = -Math.PI / 2
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.98, blending: THREE.AdditiveBlending, depthWrite: false }))
     flash.position.y = 0.7
-    group.add(ring, flash)
+    const shards: THREE.Mesh[] = []
+    for (let index = 0; index < 8; index += 1) {
+      const shard = new THREE.Mesh(new THREE.TetrahedronGeometry(0.08 + (index % 2) * 0.04, 0), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending, depthWrite: false }))
+      const angle = (index / 8) * Math.PI * 2
+      shard.position.set(Math.cos(angle) * 0.34, 0.42 + (index % 3) * 0.1, Math.sin(angle) * 0.34)
+      shard.userData.velocity = new THREE.Vector3(Math.cos(angle) * (1.2 + (index % 3) * 0.18), 0.45 + (index % 2) * 0.25, Math.sin(angle) * (1.2 + (index % 3) * 0.18))
+      group.add(shard)
+      shards.push(shard)
+    }
+    group.add(ring, innerRing, flash)
     group.position.copy(position)
     const label = this.makeTextSprite(`-${damage}`, color === 0x4cdfff ? '#8deaff' : '#ffe5a4', 1.15)
     label.position.set(0, 1.35, 0)
@@ -564,10 +577,18 @@ export class Arena {
       life: 0.72,
       tick: (effect, delta) => {
         const progress = effect.age / effect.life
-        ring.scale.setScalar(1 + progress * 2.2)
-        ring.material.opacity = 0.9 * (1 - progress)
-        flash.scale.setScalar(1 + progress * 2.5)
-        flash.material.opacity = 0.9 * (1 - progress)
+        ring.scale.setScalar(1 + progress * 2.2 * intensity)
+        ring.material.opacity = 0.95 * (1 - progress)
+        innerRing.scale.setScalar(1 + progress * 3.6 * intensity)
+        innerRing.material.opacity = 0.9 * (1 - progress * 1.15)
+        flash.scale.setScalar(1 + progress * 2.5 * intensity)
+        flash.material.opacity = 0.98 * (1 - progress)
+        shards.forEach(shard => {
+          shard.position.addScaledVector(shard.userData.velocity as THREE.Vector3, delta)
+          shard.rotation.x += delta * 8
+          shard.rotation.y += delta * 11
+          ;(shard.material as THREE.MeshBasicMaterial).opacity = 0.92 * (1 - progress)
+        })
         label.position.y = 1.35 + progress * 1.2
         label.material.opacity = 1 - progress
         group.rotation.y += delta * 3
@@ -667,7 +688,12 @@ export class Arena {
   private spawnSkillBurst(position: THREE.Vector3, color: number): void {
     const group = new THREE.Group()
     const particles: THREE.Mesh[] = []
-    for (let index = 0; index < 12; index += 1) {
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.98, blending: THREE.AdditiveBlending, depthWrite: false }))
+    const aura = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 12), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }))
+    const rune = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.045, 8, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+    rune.rotation.x = Math.PI / 2
+    group.add(core, aura, rune)
+    for (let index = 0; index < 18; index += 1) {
       const particle = new THREE.Mesh(new THREE.IcosahedronGeometry(0.055 + (index % 3) * 0.025, 0), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }))
       particle.userData.velocity = new THREE.Vector3(Math.cos(index * 0.52) * (0.7 + (index % 4) * 0.12), 0.35 + (index % 3) * 0.18, Math.sin(index * 0.52) * (0.7 + (index % 4) * 0.12))
       group.add(particle)
@@ -680,11 +706,19 @@ export class Arena {
       life: 0.9,
       tick: effect => {
         const progress = effect.age / effect.life
+        const burst = Math.sin(Math.min(progress * 1.35, 1) * Math.PI)
+        core.scale.setScalar(0.8 + burst * 2.2)
+        core.material.opacity = 0.98 * (1 - progress)
+        aura.scale.setScalar(0.8 + burst * 2.8)
+        aura.material.opacity = 0.25 * (1 - progress)
+        rune.scale.setScalar(0.7 + burst * 2.1)
+        rune.rotation.z += 0.12
+        rune.material.opacity = 0.88 * (1 - progress)
         particles.forEach(particle => {
           const velocity = particle.userData.velocity as THREE.Vector3
-          particle.position.copy(velocity).multiplyScalar(progress * 2.2)
-          particle.rotation.x += 0.12
-          particle.rotation.y += 0.16
+          particle.position.copy(velocity).multiplyScalar(progress * 2.7)
+          particle.rotation.x += 0.18
+          particle.rotation.y += 0.22
           ;(particle.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - progress)
         })
       },
@@ -824,7 +858,7 @@ export class Arena {
       const status = this.createTroopStatus(ember)
       group.add(status.group)
       const squad = group.getObjectByName(`realistic-squad-${general.role}`) as THREE.Group
-      this.enemyUnits.push({ group, squad, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25 })
+      this.enemyUnits.push({ group, squad, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25 })
       this.scene.add(group)
     })
     this.playerUnits.forEach((unit, index) => {
@@ -1011,8 +1045,9 @@ export class Arena {
     const damage = Math.max(1, Math.round(amount))
     target.troops = Math.max(0, target.troops - damage)
     target.hitFlash = 0.18
-    target.knockback.add(new THREE.Vector3(target.group.position.x > 0 ? 0.08 : -0.08, 0, target.group.position.z > 0 ? 0.18 : -0.18))
-    this.cameraShake = Math.min(0.42, this.cameraShake + (damage >= 80 ? 0.16 : 0.06))
+    target.hitReact = Math.min(1, target.hitReact + Math.min(0.72, 0.22 + damage / 150))
+    target.knockback.add(new THREE.Vector3(target.group.position.x > 0 ? 0.11 : -0.11, 0, target.group.position.z > 0 ? 0.3 : -0.3))
+    this.cameraShake = Math.min(0.62, this.cameraShake + (damage >= 80 ? 0.22 : 0.1))
     target.statusFill.scale.x = Math.max(0.001, target.troops / target.maxTroops)
     if (target.troops === 0) {
       target.group.visible = false
@@ -1036,6 +1071,10 @@ export class Arena {
     unit.group.position.lerp(unit.target, Math.min(delta * (1.15 + unit.general.speed / 75), 1))
     unit.group.position.addScaledVector(unit.knockback, delta * 7)
     unit.knockback.multiplyScalar(Math.max(0, 1 - delta * 8))
+    unit.hitReact = Math.max(0, unit.hitReact - delta * 3.8)
+    const hitPulse = unit.hitReact > 0 ? Math.sin(unit.hitReact * Math.PI) * unit.hitReact : 0
+    unit.model.scale.set(1 + hitPulse * 0.16, 1 - hitPulse * 0.1, 1 + hitPulse * 0.16)
+    unit.squad.scale.set(1 + hitPulse * 0.08, 1 - hitPulse * 0.05, 1 + hitPulse * 0.08)
     unit.group.position.y = Math.sin(elapsed * 1.6 + unit.motionPhase) * 0.035
     unit.squad.position.z = 0.7 + Math.sin(elapsed * 2.2 + unit.motionPhase) * (moving ? 0.11 : 0.04)
     unit.squad.rotation.y = Math.sin(elapsed * 1.4 + unit.motionPhase) * (moving ? 0.035 : 0.015)
