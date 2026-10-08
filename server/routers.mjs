@@ -38,7 +38,7 @@ export const gameRouter = router({
     listOpponents: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(12) }).strict()).query(({ ctx, input }) => listDuelOpponents(ctx.user.id, input.limit)),
   }),
   territory: router({
-    list: protectedProcedure.query(() => getFactionTerritories()),
+    list: protectedProcedure.query(({ ctx }) => getFactionTerritories(ctx.user.id)),
     recordBattle: protectedProcedure.input(z.object({
       cityId: z.string().trim().min(1).max(64),
       damage: z.number().int().min(0).max(100),
@@ -76,6 +76,7 @@ export const gameRouter = router({
       factionWarScore: z.number().int().min(0).max(100000000).optional(),
       luoyangBoxes: z.number().int().min(0).max(1000000).optional(),
       lastLuoyangReward: z.number().int().min(0).max(100).nullable().optional(),
+      luoyangRewardWeekKey: z.string().max(16).nullable().optional(),
       mythicFragments: z.number().int().min(0).max(1000000).optional(),
       duelAttemptsToday: z.number().int().min(0).max(5).optional(),
       duelDayKey: z.string().max(16).nullable().optional(),

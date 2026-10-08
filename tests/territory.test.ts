@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -154,8 +154,10 @@ describe('territory and governance', () => {
   it('keeps Xiangyang and Luoyang protected by their special rules', () => {
     const state = createInitialState()
     expect(conquestEligibility(state, 'xiangyang').reason).toContain('인공지능 진영의 수도')
+    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 19, 59))).toBe(false)
+    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 20, 0))).toBe(true)
+    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 12, 0, 0))).toBe(false)
     expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 19, 59)).reason).toContain('일요일 저녁 8시')
-    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 20, 0)).allowed).toBe(false)
   })
 
   it('starts faction warfare against an enemy city and throttles repeats', () => {

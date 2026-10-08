@@ -161,6 +161,7 @@ export interface StrategyState {
   lastConquest: { cityId: string; cityName: string; captured: boolean; damage: number } | null
   luoyangBoxes: number
   lastLuoyangReward?: number
+  luoyangRewardWeekKey?: string
   lastIncomeCollectedAt?: number
   lastConquestAt?: number
   lastDefenseAt?: number
@@ -723,7 +724,7 @@ export function createInitialState(): StrategyState {
     section: 'overview', faction: '촉한', factionConfirmed: false, honor: 2480, silver: 12500, gold: 0, manuals: 180, generals,
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
-    cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, luoyangBoxes: 0, lastLuoyangReward: undefined, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
+    cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, luoyangBoxes: 0, lastLuoyangReward: undefined, luoyangRewardWeekKey: undefined, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
     equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '',
   }
   ensurePrelaunchDailyGold(state)
@@ -1171,7 +1172,7 @@ export function capitalFactionForCity(cityId: string): Faction | undefined {
 }
 export function isLuoyangSiegeWindow(now = Date.now()): boolean {
   const date = new Date(now)
-  return date.getDay() === 0 && date.getHours() >= 20
+  return date.getDay() === 0 && date.getHours() >= 20 && date.getHours() < 24
 }
 export function conquestEligibility(state: StrategyState, cityId: string, now = Date.now()): ConquestEligibility {
   const city = findCity(state, cityId)
@@ -1314,11 +1315,7 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
       state.silver += 1400
       state.resources.silver = state.silver
       if (city.id === LUOYANG_ID) {
-        const reward = 10 + Math.floor(Math.random() * 91)
-        state.luoyangBoxes += 1
-        state.lastLuoyangReward = reward
-        state.gold += reward
-        state.lastNotice = `${city.name} 세력전 승리 · 낙양 상자 획득 · 금화 ${reward}개를 받았습니다.`
+        state.lastNotice = `${city.name} 세력전 승리 · 자정까지 수비한 진영이 주간 승자가 됩니다.`
       } else state.lastNotice = `${city.name} 세력전 승리 · 적 세력을 몰아내고 전선을 확보했습니다.`
     } else state.lastNotice = `${city.name} 세력전 승리 · 수비병 ${city.defendersDefeated}부대 격파 · ${defenseLine.length - city.defendersDefeated}부대 남음`
   } else {
@@ -1374,11 +1371,7 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
     state.resources.influence += 120
     state.lastConquest = { cityId: city.id, cityName: city.name, captured: true, damage }
     if (city.id === LUOYANG_ID) {
-      const reward = 10 + Math.floor(Math.random() * 91)
-      state.luoyangBoxes += 1
-      state.lastLuoyangReward = reward
-      state.gold += reward
-      state.lastNotice = `${city.name} 점령 성공 · 낙양 상자 획득 · 금화 ${reward}개를 받았습니다.`
+      state.lastNotice = `${city.name} 점령 성공 · 일요일 자정까지 수비한 진영이 주간 승자가 됩니다.`
     } else state.lastNotice = `${city.name} 점령 성공 · 명망 +260 · 영향력 +120`
     return { ok: true, captured: true, message: state.lastNotice, damage }
   }

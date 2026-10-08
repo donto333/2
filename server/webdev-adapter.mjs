@@ -62,6 +62,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
   factionWarScore: int("factionWarScore").default(0).notNull(),
   luoyangBoxes: int("luoyangBoxes").default(0).notNull(),
   lastLuoyangReward: int("lastLuoyangReward"),
+  luoyangRewardWeekKey: varchar("luoyangRewardWeekKey", { length: 16 }),
   mythicFragments: int("mythicFragments").default(0).notNull(),
   duelAttemptsToday: int("duelAttemptsToday").default(0).notNull(),
   duelDayKey: varchar("duelDayKey", { length: 16 }),
@@ -91,6 +92,11 @@ var factionTerritoryStates = mysqlTable("faction_territory_states", {
 var factionTerritoryAiState = mysqlTable("faction_territory_ai_state", {
   id: int("id").primaryKey(),
   lastTickAt: timestamp("lastTickAt")
+});
+var luoyangWeeklyResults = mysqlTable("luoyang_weekly_results", {
+  weekKey: varchar("weekKey", { length: 16 }).primaryKey(),
+  winnerFaction: mysqlEnum("winnerFaction", ["촉한", "위나라", "오나라"]),
+  settledAt: timestamp("settledAt").defaultNow().notNull()
 });
 
 // starters/web-db-user-v1/server/_core/env.ts
@@ -227,6 +233,7 @@ const FACTION_TERRITORY_SEED = [
 const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.cityId));
 const NEUTRAL_AI_TICK_MS = 10 * 60 * 1000;
 const PROTECTED_CAPITAL_IDS = new Set(["chengdu", "ye", "jianye"]);
+const LUOYANG_CITY_ID = "luoyang";
 const CITY_ADJACENCY = {
   chengdu: ["hanzhong", "fucheng", "xindu"], hanzhong: ["chengdu", "fucheng", "tianshui", "xiangyang"], fucheng: ["chengdu", "hanzhong", "xindu"], xindu: ["chengdu", "fucheng"], tianshui: ["wuwei", "hanzhong"], wuwei: ["tianshui"],
   luoyang: ["tianshui", "xuchang", "ye", "chenliu"], ye: ["luoyang", "chenliu", "puyang"], chenliu: ["luoyang", "ye", "puyang", "xuchang"], puyang: ["ye", "chenliu"],
@@ -234,6 +241,20 @@ const CITY_ADJACENCY = {
   yiling: ["jiangling", "changsha", "guiyang"], changsha: ["jiangling", "yiling", "lingling", "guiyang"], lingling: ["changsha", "guiyang"], guiyang: ["lingling", "changsha", "yiling"],
   shouchun: ["xuchang", "hefei", "jiujiang"], hefei: ["shouchun", "jiujiang", "jianye"], jiujiang: ["hefei", "shouchun", "poyang", "jiangling"], poyang: ["jiujiang", "jianye", "changsha"], jianye: ["hefei", "poyang", "wujun"], wujun: ["jianye", "kuaiji"], kuaiji: ["wujun"]
 };
+function luoyangSeoulParts(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date(now));
+  const value = Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));
+  return { year: Number(value.year), month: Number(value.month), day: Number(value.day), hour: Number(value.hour), weekday: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(value.weekday) };
+}
+function isLuoyangWindowOpen(now = Date.now()) {
+  const parts = luoyangSeoulParts(now);
+  return parts.weekday === 0 && parts.hour >= 20 && parts.hour < 24;
+}
+function luoyangSettledWeekKey(now = Date.now()) {
+  const parts = luoyangSeoulParts(now);
+  const previousSunday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day - (parts.weekday === 0 ? 7 : parts.weekday)));
+  return previousSunday.toISOString().slice(0, 10);
+}
 function parseStateJson(value) {
   if (typeof value !== "string" || value.length === 0) return null;
   try {
@@ -325,11 +346,33 @@ async function advanceNeutralTerritoryAi(db, now = Date.now()) {
   });
   return attacks.length;
 }
-async function getFactionTerritories() {
+async function settleLuoyangWeek(db, now = Date.now()) {
+  const weekKey = luoyangSettledWeekKey(now);
+  const existing = await db.select().from(luoyangWeeklyResults).where(eq(luoyangWeeklyResults.weekKey, weekKey)).limit(1);
+  if (existing[0]) return { weekKey, winnerFaction: existing[0].winnerFaction };
+  const city = await db.select({ owner: factionTerritoryStates.owner }).from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, LUOYANG_CITY_ID)).limit(1);
+  const winnerFaction = city[0]?.owner && city[0].owner !== "중립" ? city[0].owner : null;
+  await db.insert(luoyangWeeklyResults).values({ weekKey, winnerFaction }).onDuplicateKeyUpdate({ set: { weekKey: sql`weekKey` } });
+  return { weekKey, winnerFaction };
+}
+async function grantLuoyangBox(db, userId, now = Date.now()) {
+  const settlement = await settleLuoyangWeek(db, now);
+  if (!settlement.winnerFaction) return false;
+  return db.transaction(async tx => {
+    const rows = await tx.select().from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1).for("update");
+    const account = rows[0];
+    if (!account || account.faction !== settlement.winnerFaction || account.luoyangRewardWeekKey === settlement.weekKey) return false;
+    const reward = 10 + Math.floor(Math.random() * 91);
+    await tx.update(gameAccountStates).set({ luoyangBoxes: sql`${gameAccountStates.luoyangBoxes} + 1`, lastLuoyangReward: reward, gold: sql`${gameAccountStates.gold} + ${reward}`, luoyangRewardWeekKey: settlement.weekKey }).where(eq(gameAccountStates.userId, userId));
+    return true;
+  });
+}
+async function getFactionTerritories(userId) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await ensureFactionTerritories(db);
   await advanceNeutralTerritoryAi(db);
+  if (userId) await grantLuoyangBox(db, userId);
   const rows = await db.select().from(factionTerritoryStates);
   const byCityId = new Map(rows.map(row => [row.cityId, row]));
   return FACTION_TERRITORY_SEED.map(city => factionTerritoryView(byCityId.get(city.cityId) ?? city));
@@ -340,7 +383,8 @@ async function recordFactionTerritoryBattle(userId, input) {
   if (!FACTION_TERRITORY_IDS.has(input.cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
   await ensureFactionTerritories(db);
   await advanceNeutralTerritoryAi(db);
-  if (!input.won) return getFactionTerritories();
+  if (input.cityId === LUOYANG_CITY_ID && !isLuoyangWindowOpen()) return getFactionTerritories(userId);
+  if (!input.won) return getFactionTerritories(userId);
   const account = await db.select({ faction: gameAccountStates.faction }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
   const faction = account[0]?.faction ?? "촉한";
   const damage = Math.max(1, Math.min(40, Math.trunc(input.damage)));
@@ -359,7 +403,7 @@ async function recordFactionTerritoryBattle(userId, input) {
       updatedByUserId: userId
     }).where(eq(factionTerritoryStates.cityId, input.cityId));
   });
-  return getFactionTerritories();
+  return getFactionTerritories(userId);
 }
 async function listGameStates() {
   const db = await getDb();

@@ -103,6 +103,7 @@ function persistLocalGame(): void {
       lastConquestAt: state.lastConquestAt,
       luoyangBoxes: state.luoyangBoxes,
       lastLuoyangReward: state.lastLuoyangReward,
+      luoyangRewardWeekKey: state.luoyangRewardWeekKey,
       factionWarScore: state.factionWarScore,
       equipmentInventory: state.equipmentInventory,
       equipmentLoadouts: state.equipmentLoadouts,
@@ -142,6 +143,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       lastConquestAt: saved.lastConquestAt,
       luoyangBoxes: saved.luoyangBoxes,
       lastLuoyangReward: saved.lastLuoyangReward,
+      luoyangRewardWeekKey: saved.luoyangRewardWeekKey,
       factionWarScore: saved.factionWarScore,
       equipmentInventory: saved.equipmentInventory,
       equipmentLoadouts: saved.equipmentLoadouts,
@@ -717,7 +719,7 @@ async function refreshAccount(): Promise<void> {
   }
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null }
     if (!localSaveDirty) {
       Object.assign(state, { honor: game.honor, silver: game.silver, gold: typeof game.gold === 'number' ? game.gold : state.gold, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
       if (game.faction) state.faction = game.faction
@@ -735,6 +737,7 @@ async function refreshAccount(): Promise<void> {
       state.lastConquestAt = game.lastConquestAt
       state.luoyangBoxes = Math.max(0, Math.trunc(game.luoyangBoxes ?? state.luoyangBoxes))
       state.lastLuoyangReward = game.lastLuoyangReward
+      state.luoyangRewardWeekKey = game.luoyangRewardWeekKey ?? undefined
       state.factionWarScore = game.factionWarScore ?? 0
       if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
       if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
@@ -790,6 +793,7 @@ function accountStatePayload() {
     conquestAt: state.lastConquestAt === undefined ? null : String(state.lastConquestAt),
     luoyangBoxes: Math.trunc(state.luoyangBoxes),
     lastLuoyangReward: state.lastLuoyangReward === undefined ? null : Math.trunc(state.lastLuoyangReward),
+    luoyangRewardWeekKey: state.luoyangRewardWeekKey ?? null,
     factionWarScore: Math.trunc(state.factionWarScore),
     equipmentData: JSON.stringify(state.equipmentInventory),
     equipmentLoadoutsData: JSON.stringify(state.equipmentLoadouts),
