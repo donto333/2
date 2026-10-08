@@ -373,3 +373,15 @@
   display: none !important;
   opacity: 0 !important;
 }
+
+/* Formation reserve portraits: show the full upper-body artwork instead of a face-only crop. */
+.formation-bench-portrait.has-portrait {
+  width: 56px;
+  height: 72px;
+  flex: 0 0 56px;
+  background-size: contain !important;
+  background-position: center top !important;
+  background-color: rgba(9, 24, 25, .7);
+  background-repeat: no-repeat !important;
+  border-color: color-mix(in srgb, var(--accent), white 20%);
+}
