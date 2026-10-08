@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { allGenerals, skillPower, skillRank, type General } from './strategy'
 import { BATTLE_PATTERNS, phaseName, resolveBattleTactic, resolveTactic, type BattleTactic } from './battle-rules'
 import { effectDefinition, effectLoadout, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId } from './battle-effects'
@@ -129,6 +130,9 @@ export class Arena {
   private readonly effects: ArenaEffect[] = []
   private readonly activeBuffs: ActiveBattleEffect[] = []
   private readonly activeDebuffs: ActiveBattleEffect[] = []
+  private readonly commanderModelCache = new Map<CommanderArchetype, THREE.Group>()
+  private readonly commanderModelRequests = new Map<CommanderArchetype, Promise<THREE.Group>>()
+  private gltfLoaderPromise: Promise<GLTFLoader> | null = null
   private readonly cameraBase = new THREE.Vector3(0, 22, 29)
   private readonly cameraLookAt = new THREE.Vector3(0, 0, -3)
   private cameraShake = 0
@@ -345,6 +349,63 @@ export class Arena {
     return group
   }
 
+  private commanderModelPath(_archetype: CommanderArchetype): string {
+    return '/assets/commanders/warrior.glb'
+  }
+
+  private loadGLTFLoader(): Promise<GLTFLoader> {
+    if (!this.gltfLoaderPromise) {
+      this.gltfLoaderPromise = import('three/examples/jsm/loaders/GLTFLoader.js').then(({ GLTFLoader: Loader }) => new Loader())
+    }
+    return this.gltfLoaderPromise
+  }
+
+  private loadCommanderModel(archetype: CommanderArchetype): Promise<THREE.Group> {
+    const cached = this.commanderModelCache.get(archetype)
+    if (cached) return Promise.resolve(cached)
+    const pending = this.commanderModelRequests.get(archetype)
+    if (pending) return pending
+    const request = this.loadGLTFLoader().then(loader => loader.loadAsync(this.commanderModelPath(archetype))).then(gltf => {
+      const root = gltf.scene
+      root.traverse(node => {
+        const mesh = node as THREE.Mesh
+        if (mesh.isMesh) {
+          mesh.castShadow = true
+          mesh.receiveShadow = true
+        }
+      })
+      const bounds = new THREE.Box3().setFromObject(root)
+      const size = bounds.getSize(new THREE.Vector3())
+      const height = Math.max(size.y, 0.1)
+      root.scale.setScalar(2.05 / height)
+      root.position.y = 0.02
+      this.commanderModelCache.set(archetype, root)
+      return root
+    })
+    this.commanderModelRequests.set(archetype, request)
+    return request
+  }
+
+  private attachCommanderModel(model: THREE.Group, procedural: THREE.Group, archetype: CommanderArchetype): void {
+    this.loadCommanderModel(archetype).then(template => {
+      const commander = template.clone(true)
+      commander.name = `gltf-commander-${archetype}`
+      commander.position.set(0, 0.06, 0.18)
+      const tint = archetype === '책사형' ? 0x8b78c8 : archetype === '지원형' ? 0xd0a84d : 0x3ba996
+      commander.traverse(node => {
+        const mesh = node as THREE.Mesh
+        if (!mesh.isMesh || Array.isArray(mesh.material)) return
+        mesh.material = mesh.material.clone()
+        if ('color' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).color.lerp(new THREE.Color(tint), 0.18)
+      })
+      model.add(commander)
+      model.userData.commanderRoot = commander
+      procedural.visible = false
+    }).catch(() => {
+      // Keep the procedural commander visible when a GLB is unavailable or fails to decode.
+    })
+  }
+
   private createGeneralModel(general: General, teamColor: number): THREE.Group {
     const model = new THREE.Group()
     model.name = `model-${general.id}`
@@ -438,24 +499,7 @@ export class Arena {
     procedural.add(weapon)
     model.scale.setScalar(general.role === '기병' ? 1.1 : 1.02 + (seed % 3) * 0.04)
 
-    // Realistic AI portrait rendered as a 3D-facing commander card. The procedural
-    // silhouette remains as a resilient fallback until the optimized WebP arrives.
-    const portraitMaterial = new THREE.MeshBasicMaterial({ color: 0x263b3a, side: THREE.DoubleSide, fog: false })
-    const portrait = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.54), portraitMaterial)
-    portrait.position.set(0, general.role === '기병' ? 1.5 : 1.28, 0.34)
-    portrait.renderOrder = 3
-    portrait.visible = false
-    model.add(portrait)
-    const portraitLoader = new THREE.TextureLoader()
-    portraitLoader.load(`/assets/generals-realistic-webp/${general.id}.webp`, texture => {
-      texture.colorSpace = THREE.SRGBColorSpace
-      texture.anisotropy = 1
-      portrait.material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, fog: false, toneMapped: false })
-      portrait.visible = true
-      procedural.visible = false
-    }, undefined, () => {
-      portrait.visible = false
-    })
+    this.attachCommanderModel(model, procedural, this.commanderArchetype(general))
     return model
   }
 
