@@ -212,11 +212,11 @@ async function updateUserRole(id, role, actorOpenId) {
 }
 const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한", factionChosen: 0 };
 const FACTION_TERRITORY_SEED = [
-  ["chengdu", "촉한", 74, 82], ["hanzhong", "촉한", 86, 64], ["xiangyang", "중립", 62, 58], ["jianye", "오나라", 70, 76], ["xuchang", "위나라", 81, 79],
-  ["luoyang", "위나라", 92, 88], ["ye", "위나라", 86, 84], ["chenliu", "위나라", 57, 61], ["puyang", "위나라", 64, 58], ["wancheng", "중립", 70, 67],
-  ["jiangling", "오나라", 76, 73], ["yiling", "오나라", 68, 55], ["changsha", "중립", 63, 71], ["lingling", "중립", 46, 49], ["guiyang", "중립", 52, 45],
-  ["wujun", "오나라", 73, 78], ["kuaiji", "오나라", 66, 69], ["poyang", "오나라", 59, 62], ["hefei", "위나라", 88, 64], ["shouchun", "위나라", 79, 68],
-  ["jiujiang", "중립", 55, 57], ["tianshui", "위나라", 71, 53], ["wuwei", "중립", 61, 42], ["fucheng", "중립", 58, 51], ["xindu", "중립", 49, 47]
+  ["chengdu", "촉한", 74, 82], ["hanzhong", "중립", 86, 64], ["xiangyang", "중립", 62, 58], ["jianye", "오나라", 70, 76], ["xuchang", "중립", 81, 79],
+  ["luoyang", "중립", 92, 88], ["ye", "위나라", 86, 84], ["chenliu", "중립", 57, 61], ["puyang", "중립", 64, 58], ["wancheng", "중립", 70, 67],
+  ["jiangling", "중립", 76, 73], ["yiling", "중립", 68, 55], ["changsha", "중립", 63, 71], ["lingling", "중립", 46, 49], ["guiyang", "중립", 52, 45],
+  ["wujun", "중립", 73, 78], ["kuaiji", "중립", 66, 69], ["poyang", "중립", 59, 62], ["hefei", "중립", 88, 64], ["shouchun", "중립", 79, 68],
+  ["jiujiang", "중립", 55, 57], ["tianshui", "중립", 71, 53], ["wuwei", "중립", 61, 42], ["fucheng", "중립", 58, 51], ["xindu", "중립", 49, 47]
 ].map(([cityId, owner, defense, prosperity]) => ({ cityId, owner, conquestProgress: 0, defense, prosperity, version: 1 }));
 const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.cityId));
 function parseStateJson(value) {

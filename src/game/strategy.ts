@@ -310,27 +310,27 @@ function createBuildings(level = 1): CityBuilding[] {
 export function createCities(): City[] {
   return [
     { id: 'chengdu', name: '성도', chineseName: '成都', region: '익주 중심', owner: '촉한', level: 3, prosperity: 82, defense: 74, buildings: createBuildings(2) },
-    { id: 'hanzhong', name: '한중', chineseName: '漢中', region: '검각 북문', owner: '촉한', level: 2, prosperity: 64, defense: 86, buildings: createBuildings(1) },
+    { id: 'hanzhong', name: '한중', chineseName: '漢中', region: '검각 북문', owner: '중립', level: 2, prosperity: 64, defense: 86, buildings: createBuildings(1) },
     { id: 'xiangyang', name: '양양', chineseName: '襄陽', region: '형주 요충', owner: '중립', level: 2, prosperity: 58, defense: 62, buildings: createBuildings(1) },
     { id: 'jianye', name: '건업', chineseName: '建業', region: '강동 수운', owner: '오나라', level: 3, prosperity: 76, defense: 70, buildings: createBuildings(2) },
-    { id: 'xuchang', name: '허창', chineseName: '許昌', region: '중원 관문', owner: '위나라', level: 3, prosperity: 79, defense: 81, buildings: createBuildings(2) },
-    { id: 'luoyang', name: '낙양', chineseName: '洛陽', region: '황하 수도권', owner: '위나라', level: 4, prosperity: 88, defense: 92, buildings: createBuildings(3) },
+    { id: 'xuchang', name: '허창', chineseName: '許昌', region: '중원 관문', owner: '중립', level: 3, prosperity: 79, defense: 81, buildings: createBuildings(2) },
+    { id: 'luoyang', name: '낙양', chineseName: '洛陽', region: '황하 수도권', owner: '중립', level: 4, prosperity: 88, defense: 92, buildings: createBuildings(3) },
     { id: 'ye', name: '업', chineseName: '鄴', region: '기주 북부', owner: '위나라', level: 4, prosperity: 84, defense: 86, buildings: createBuildings(3) },
-    { id: 'chenliu', name: '진류', chineseName: '陳留', region: '연주 평원', owner: '위나라', level: 2, prosperity: 61, defense: 57, buildings: createBuildings(1) },
-    { id: 'puyang', name: '복양', chineseName: '濮陽', region: '연주 동문', owner: '위나라', level: 2, prosperity: 58, defense: 64, buildings: createBuildings(1) },
+    { id: 'chenliu', name: '진류', chineseName: '陳留', region: '연주 평원', owner: '중립', level: 2, prosperity: 61, defense: 57, buildings: createBuildings(1) },
+    { id: 'puyang', name: '복양', chineseName: '濮陽', region: '연주 동문', owner: '중립', level: 2, prosperity: 58, defense: 64, buildings: createBuildings(1) },
     { id: 'wancheng', name: '완성', chineseName: '宛城', region: '남양 요충', owner: '중립', level: 2, prosperity: 67, defense: 70, buildings: createBuildings(1) },
-    { id: 'jiangling', name: '강릉', chineseName: '江陵', region: '형주 수운', owner: '오나라', level: 3, prosperity: 73, defense: 76, buildings: createBuildings(2) },
-    { id: 'yiling', name: '이릉', chineseName: '夷陵', region: '삼협 관문', owner: '오나라', level: 2, prosperity: 55, defense: 68, buildings: createBuildings(1) },
+    { id: 'jiangling', name: '강릉', chineseName: '江陵', region: '형주 수운', owner: '중립', level: 3, prosperity: 73, defense: 76, buildings: createBuildings(2) },
+    { id: 'yiling', name: '이릉', chineseName: '夷陵', region: '삼협 관문', owner: '중립', level: 2, prosperity: 55, defense: 68, buildings: createBuildings(1) },
     { id: 'changsha', name: '장사', chineseName: '長沙', region: '형남 동부', owner: '중립', level: 3, prosperity: 71, defense: 63, buildings: createBuildings(2) },
     { id: 'lingling', name: '영릉', chineseName: '零陵', region: '형남 남부', owner: '중립', level: 1, prosperity: 49, defense: 46, buildings: createBuildings(1) },
     { id: 'guiyang', name: '계양', chineseName: '桂陽', region: '남령 북쪽', owner: '중립', level: 1, prosperity: 45, defense: 52, buildings: createBuildings(1) },
-    { id: 'wujun', name: '오군', chineseName: '吳郡', region: '강동 동부', owner: '오나라', level: 3, prosperity: 78, defense: 73, buildings: createBuildings(2) },
-    { id: 'kuaiji', name: '회계', chineseName: '會稽', region: '동남 해안', owner: '오나라', level: 2, prosperity: 69, defense: 66, buildings: createBuildings(1) },
-    { id: 'poyang', name: '파양', chineseName: '鄱陽', region: '강동 호수길', owner: '오나라', level: 2, prosperity: 62, defense: 59, buildings: createBuildings(1) },
-    { id: 'hefei', name: '합비', chineseName: '合肥', region: '회남 전선', owner: '위나라', level: 3, prosperity: 64, defense: 88, buildings: createBuildings(2) },
-    { id: 'shouchun', name: '수춘', chineseName: '壽春', region: '회남 중심', owner: '위나라', level: 3, prosperity: 68, defense: 79, buildings: createBuildings(2) },
+    { id: 'wujun', name: '오군', chineseName: '吳郡', region: '강동 동부', owner: '중립', level: 3, prosperity: 78, defense: 73, buildings: createBuildings(2) },
+    { id: 'kuaiji', name: '회계', chineseName: '會稽', region: '동남 해안', owner: '중립', level: 2, prosperity: 69, defense: 66, buildings: createBuildings(1) },
+    { id: 'poyang', name: '파양', chineseName: '鄱陽', region: '강동 호수길', owner: '중립', level: 2, prosperity: 62, defense: 59, buildings: createBuildings(1) },
+    { id: 'hefei', name: '합비', chineseName: '合肥', region: '회남 전선', owner: '중립', level: 3, prosperity: 64, defense: 88, buildings: createBuildings(2) },
+    { id: 'shouchun', name: '수춘', chineseName: '壽春', region: '회남 중심', owner: '중립', level: 3, prosperity: 68, defense: 79, buildings: createBuildings(2) },
     { id: 'jiujiang', name: '구강', chineseName: '九江', region: '회수 수운', owner: '중립', level: 2, prosperity: 57, defense: 55, buildings: createBuildings(1) },
-    { id: 'tianshui', name: '천수', chineseName: '天水', region: '농서 동문', owner: '위나라', level: 2, prosperity: 53, defense: 71, buildings: createBuildings(1) },
+    { id: 'tianshui', name: '천수', chineseName: '天水', region: '농서 동문', owner: '중립', level: 2, prosperity: 53, defense: 71, buildings: createBuildings(1) },
     { id: 'wuwei', name: '무위', chineseName: '武威', region: '하서 회랑', owner: '중립', level: 1, prosperity: 42, defense: 61, buildings: createBuildings(1) },
     { id: 'fucheng', name: '부성', chineseName: '涪城', region: '익주 북방', owner: '중립', level: 2, prosperity: 51, defense: 58, buildings: createBuildings(1) },
     { id: 'xindu', name: '신도', chineseName: '新都', region: '익주 동북', owner: '중립', level: 1, prosperity: 47, defense: 49, buildings: createBuildings(1) },
@@ -342,7 +342,21 @@ export function ensureCityRoster(state: StrategyState): void {
   const fresh = createCities().filter(city => !existing.has(city.id))
   state.cities.push(...fresh)
 }
-
+export function normalizeInitialSeasonTerritories(state: StrategyState): boolean {
+  const hasProgress = state.cities.some(city => typeof city.conquestProgress === 'number' && city.conquestProgress > 0)
+  const hasLegacyFactionOwnership = state.cities.some(city => city.owner !== '중립' && city.id !== 'chengdu' && city.id !== 'ye' && city.id !== 'jianye')
+  if (hasProgress || !hasLegacyFactionOwnership) return false
+  let changed = false
+  state.cities.forEach(city => {
+    if (city.id === 'chengdu' || city.id === 'ye' || city.id === 'jianye') return
+    if (city.owner !== '중립') {
+      city.owner = '중립'
+      city.conquestProgress = 0
+      changed = true
+    }
+  })
+  return changed
+}
 function createResearch(): ResearchNode[] {
   const node = (id: string, name: string, branch: ResearchNode['branch'], tier: ResearchNode['tier'], description: string, cost: Partial<Record<ResourceKey, number>>, prerequisite?: string): ResearchNode => ({ id, name, branch, tier, description, cost, prerequisite, unlocked: false })
   const series = (branch: ResearchNode['branch'], prefix: string, entries: Array<[string, string]>, firstPrerequisite: string): ResearchNode[] => entries.map(([name, description], index) => {

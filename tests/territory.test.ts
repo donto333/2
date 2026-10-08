@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, ensureCityRoster, findCity, launchConquest, launchFactionBattle, mergeFactionTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, ensureCityRoster, findCity, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
-  it('starts with owned cities and a full resource inventory', () => {
+  it('starts with only the three faction capitals owned', () => {
     const state = createInitialState()
-    expect(state.cities.filter(city => city.owner === '촉한')).toHaveLength(2)
+    expect(state.cities.filter(city => city.owner !== '중립').map(city => [city.id, city.owner])).toEqual([
+      ['chengdu', '촉한'],
+      ['jianye', '오나라'],
+      ['ye', '위나라'],
+    ])
     expect(state.cities).toHaveLength(25)
     expect(state.resources.grain).toBeGreaterThan(0)
     expect(state.research).toHaveLength(58)
@@ -15,8 +19,20 @@ describe('territory and governance', () => {
     state.cities = state.cities.slice(0, 5)
     ensureCityRoster(state)
     expect(state.cities).toHaveLength(25)
-    expect(findCity(state, 'luoyang')?.owner).toBe('위나라')
+    expect(findCity(state, 'luoyang')?.owner).toBe('중립')
     expect(findCity(state, 'fucheng')?.region).toBe('익주 북방')
+  })
+
+  it('normalizes an untouched legacy season while preserving progressed conquests', () => {
+    const state = createInitialState()
+    findCity(state, 'hanzhong')!.owner = '촉한'
+    expect(normalizeInitialSeasonTerritories(state)).toBe(true)
+    expect(findCity(state, 'hanzhong')?.owner).toBe('중립')
+    const progressed = createInitialState()
+    findCity(progressed, 'hanzhong')!.owner = '촉한'
+    findCity(progressed, 'hanzhong')!.conquestProgress = 100
+    expect(normalizeInitialSeasonTerritories(progressed)).toBe(false)
+    expect(findCity(progressed, 'hanzhong')?.owner).toBe('촉한')
   })
 
   it('merges server ownership while preserving personal city buildings', () => {
@@ -64,7 +80,7 @@ describe('territory and governance', () => {
 
   it('stages a frontline siege and captures a neutral city with rewards', () => {
     const state = createInitialState()
-    const city = findCity(state, 'xiangyang')!
+    const city = findCity(state, 'hanzhong')!
     const beforeHonor = state.honor
     expect(conquestPower(state)).toBeGreaterThan(0)
     expect(conquestCost(city).grain).toBe(1150)
@@ -88,7 +104,7 @@ describe('territory and governance', () => {
     expect(conquestEligibility(state, 'chengdu').allowed).toBe(false)
     expect(conquestEligibility(state, 'ye').reason).toContain('위나라의 본성')
     expect(conquestEligibility(state, 'luoyang').allowed).toBe(false)
-    expect(conquestEligibility(state, 'xiangyang').allowed).toBe(true)
+    expect(conquestEligibility(state, 'hanzhong').allowed).toBe(true)
     const beforeGrain = state.resources.grain
     expect(launchConquest(state, 'ye', 1000).ok).toBe(false)
     expect(launchConquest(state, 'luoyang', 1000).ok).toBe(false)
@@ -108,7 +124,7 @@ describe('territory and governance', () => {
   it('does not start a siege when the march resources are missing', () => {
     const state = createInitialState()
     state.resources.grain = 0
-    const result = launchConquest(state, 'xiangyang')
+    const result = launchConquest(state, 'hanzhong')
     expect(result.ok).toBe(false)
     expect(findCity(state, 'xiangyang')?.conquestProgress).toBeUndefined()
   })
@@ -125,7 +141,7 @@ describe('territory and governance', () => {
 
   it('starts faction warfare against an enemy city and throttles repeats', () => {
     const state = createInitialState()
-    const city = findCity(state, 'xiangyang')!
+    const city = findCity(state, 'hanzhong')!
     const result = launchFactionBattle(state, city.id, 2000)
     expect(result.ok).toBe(true)
     expect(state.factionWarScore).toBeGreaterThanOrEqual(0)

@@ -52,6 +52,8 @@ async function openGame(context, errors) {
     await page.locator('[data-action="faction-select"][data-faction="촉한"]').evaluate(button => button.click())
   }
   await page.waitForSelector('.app-shell', { timeout: 30_000 })
+  const initialOwners = await page.evaluate(() => window.__strategy.state.cities.filter(city => city.owner !== '중립').map(city => [city.id, city.owner]))
+  if (JSON.stringify(initialOwners) !== JSON.stringify([['chengdu', '촉한'], ['jianye', '오나라'], ['ye', '위나라']])) throw new Error('initial season must own capitals only')
   await page.reload()
   await page.waitForSelector('.app-shell', { timeout: 30_000 })
   if (await page.locator('.access-gate').count() !== 0) throw new Error('guest access was lost after reload')
@@ -253,7 +255,7 @@ try {
   await page.locator('[data-action="city-select"][data-city="luoyang"]').evaluate(button => button.click())
   if (!(await page.locator('.city-map-context').textContent())?.includes('원거리 전선')) throw new Error('remote city geography status is missing')
   if (await page.locator('.frontier-lock').count() !== 1) throw new Error('remote conquest was not locked')
-  await page.locator('[data-action="city-select"][data-city="xiangyang"]').evaluate(button => button.click())
+  await page.locator('[data-action="city-select"][data-city="hanzhong"]').evaluate(button => button.click())
   if (await page.locator('.territory-actions').count() !== 1) throw new Error('border city conquest actions are missing')
   await page.locator('[data-action="city-select"][data-city="ye"]').evaluate(button => button.click())
   if (!(await page.locator('.capital-badge').textContent())?.includes('본성')) throw new Error('faction capital protection badge is missing')

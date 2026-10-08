@@ -22,6 +22,7 @@ import {
   equipEquipment,
   unequipEquipment,
   ensureCityRoster,
+  normalizeInitialSeasonTerritories,
   ensureResearchRoster,
   mergeFactionTerritories,
   migrateLegacyStarterRoster,
@@ -173,12 +174,13 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   gameAccess = mode
   restoreLocalGame(mode === 'guest' ? GUEST_GAME_SAVE_KEY : LOCAL_GAME_SAVE_KEY)
   ensureCityRoster(state)
+  const normalizedTerritories = normalizeInitialSeasonTerritories(state)
   ensureResearchRoster(state)
   ensureEquipmentState(state)
   const receivedDailyGold = ensurePrelaunchDailyGold(state)
   const migratedStarter = migrateLegacyStarterRoster(state)
-  if (receivedDailyGold || migratedStarter) persistLocalGame()
-  localSaveDirty = (receivedDailyGold || migratedStarter) && mode === 'member'
+  if (receivedDailyGold || migratedStarter || normalizedTerritories) persistLocalGame()
+  localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories) && mode === 'member'
 }
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
@@ -714,6 +716,7 @@ async function refreshAccount(): Promise<void> {
       if (Array.isArray(game.formation)) state.formation = game.formation
       if (Array.isArray(game.cities)) state.cities = game.cities
       ensureCityRoster(state)
+      if (normalizeInitialSeasonTerritories(state)) localSaveDirty = true
       if (Array.isArray(game.research)) state.research = game.research
       ensureResearchRoster(state)
       if (typeof game.selectedCityId === 'string') state.selectedCityId = game.selectedCityId
