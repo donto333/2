@@ -68,9 +68,9 @@ export const MAX_CITY_GARRISONS = 100
 export const CITY_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
   chengdu: ['hanzhong', 'fucheng', 'xindu'], hanzhong: ['chengdu', 'fucheng', 'tianshui', 'xiangyang'],
   fucheng: ['chengdu', 'hanzhong', 'xindu'], xindu: ['chengdu', 'fucheng'], tianshui: ['wuwei', 'hanzhong'], wuwei: ['tianshui'],
-  luoyang: ['tianshui', 'xuchang', 'ye', 'chenliu'], ye: ['luoyang', 'chenliu', 'puyang'],
-  chenliu: ['luoyang', 'ye', 'puyang', 'xuchang'], puyang: ['ye', 'chenliu'],
-  xuchang: ['luoyang', 'chenliu', 'wancheng', 'shouchun'], wancheng: ['xuchang', 'xiangyang', 'jiangling'],
+  luoyang: [], ye: ['chenliu', 'puyang'],
+  chenliu: ['ye', 'puyang', 'xuchang'], puyang: ['ye', 'chenliu'],
+  xuchang: ['chenliu', 'wancheng', 'shouchun'], wancheng: ['xuchang', 'xiangyang', 'jiangling'],
   xiangyang: ['hanzhong', 'wancheng', 'jiangling'], jiangling: ['xiangyang', 'wancheng', 'yiling', 'changsha'],
   yiling: ['jiangling', 'changsha', 'guiyang'], changsha: ['jiangling', 'yiling', 'lingling', 'guiyang'],
   lingling: ['changsha', 'guiyang'], guiyang: ['lingling', 'changsha', 'yiling'],
@@ -1183,6 +1183,7 @@ export function conquestEligibility(state: StrategyState, cityId: string, now = 
   if (capitalFaction) return { allowed: false, reason: `${city.name}은(는) ${capitalFaction}의 본성이라 점령할 수 없습니다.`, neighborNames }
   if (city.id === AI_CAPITAL_ID) return { allowed: false, reason: '양양은 중립 인공지능 진영의 수도라 점령할 수 없습니다.', neighborNames }
   if (city.id === LUOYANG_ID && !isLuoyangSiegeWindow(now)) return { allowed: false, reason: '낙양은 일요일 저녁 8시에만 점령할 수 있습니다.', neighborNames }
+  if (city.id === LUOYANG_ID) return { allowed: true, reason: '낙양 독립 전선 · 점령 창이 열린 동안 모든 진영이 직접 출정할 수 있습니다.', neighborNames }
   const borderNeighbors = (CITY_ADJACENCY[city.id] ?? []).map(id => findCity(state, id)).filter((neighbor): neighbor is City => Boolean(neighbor)).filter(neighbor => neighbor.owner === state.faction)
   if (borderNeighbors.length === 0) return { allowed: false, reason: '아군 국경과 맞닿은 도시만 점령할 수 있습니다. 원거리 점령은 불가능합니다.', neighborNames }
   return { allowed: true, reason: `${borderNeighbors.map(neighbor => neighbor.name).join(' · ')}에서 연결되는 국경 전선입니다.`, neighborNames }

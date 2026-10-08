@@ -158,6 +158,9 @@ describe('territory and governance', () => {
     expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 20, 0))).toBe(true)
     expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 12, 0, 0))).toBe(false)
     expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 19, 59)).reason).toContain('일요일 저녁 8시')
+    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 20, 0)).allowed).toBe(true)
+    state.faction = '오나라'
+    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 20, 0)).allowed).toBe(true)
   })
 
   it('starts faction warfare against an enemy city and throttles repeats', () => {

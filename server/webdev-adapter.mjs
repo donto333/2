@@ -236,8 +236,8 @@ const PROTECTED_CAPITAL_IDS = new Set(["chengdu", "ye", "jianye"]);
 const LUOYANG_CITY_ID = "luoyang";
 const CITY_ADJACENCY = {
   chengdu: ["hanzhong", "fucheng", "xindu"], hanzhong: ["chengdu", "fucheng", "tianshui", "xiangyang"], fucheng: ["chengdu", "hanzhong", "xindu"], xindu: ["chengdu", "fucheng"], tianshui: ["wuwei", "hanzhong"], wuwei: ["tianshui"],
-  luoyang: ["tianshui", "xuchang", "ye", "chenliu"], ye: ["luoyang", "chenliu", "puyang"], chenliu: ["luoyang", "ye", "puyang", "xuchang"], puyang: ["ye", "chenliu"],
-  xuchang: ["luoyang", "chenliu", "wancheng", "shouchun"], wancheng: ["xuchang", "xiangyang", "jiangling"], xiangyang: ["hanzhong", "wancheng", "jiangling"], jiangling: ["xiangyang", "wancheng", "yiling", "changsha"],
+  luoyang: [], ye: ["chenliu", "puyang"], chenliu: ["ye", "puyang", "xuchang"], puyang: ["ye", "chenliu"],
+  xuchang: ["chenliu", "wancheng", "shouchun"], wancheng: ["xuchang", "xiangyang", "jiangling"], xiangyang: ["hanzhong", "wancheng", "jiangling"], jiangling: ["xiangyang", "wancheng", "yiling", "changsha"],
   yiling: ["jiangling", "changsha", "guiyang"], changsha: ["jiangling", "yiling", "lingling", "guiyang"], lingling: ["changsha", "guiyang"], guiyang: ["lingling", "changsha", "yiling"],
   shouchun: ["xuchang", "hefei", "jiujiang"], hefei: ["shouchun", "jiujiang", "jianye"], jiujiang: ["hefei", "shouchun", "poyang", "jiangling"], poyang: ["jiujiang", "jianye", "changsha"], jianye: ["hefei", "poyang", "wujun"], wujun: ["jianye", "kuaiji"], kuaiji: ["wujun"]
 };
