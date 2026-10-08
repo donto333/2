@@ -1,4 +1,4 @@
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
+import { CITY_ADJACENCY, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, BattleTroopStatus } from '../game/arena'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
@@ -6,6 +6,15 @@ const equipmentImage = (type: EquipmentType): string => `/assets/equipment/${typ
 type RosterSort = 'power' | 'level' | 'grade' | 'name' | 'role'
 type EquipmentSort = 'grade' | 'level' | 'name'
 type FormationSort = 'power' | 'grade'
+
+const CITY_MAP_POSITIONS: Readonly<Record<string, { x: number; y: number }>> = {
+  chengdu: { x: 30, y: 66 }, hanzhong: { x: 37, y: 52 }, fucheng: { x: 31, y: 73 }, xindu: { x: 27, y: 68 },
+  tianshui: { x: 34, y: 37 }, wuwei: { x: 21, y: 22 }, wancheng: { x: 52, y: 45 }, xiangyang: { x: 57, y: 52 },
+  jiangling: { x: 57, y: 62 }, yiling: { x: 49, y: 59 }, changsha: { x: 63, y: 74 }, lingling: { x: 56, y: 84 },
+  guiyang: { x: 47, y: 79 }, luoyang: { x: 59, y: 36 }, ye: { x: 68, y: 23 }, chenliu: { x: 68, y: 41 },
+  puyang: { x: 76, y: 31 }, xuchang: { x: 63, y: 47 }, hefei: { x: 74, y: 55 }, shouchun: { x: 67, y: 51 },
+  jiujiang: { x: 65, y: 66 }, poyang: { x: 70, y: 71 }, jianye: { x: 78, y: 58 }, wujun: { x: 82, y: 66 }, kuaiji: { x: 79, y: 75 },
+}
 
 export interface AuthView {
   status: 'authenticated' | 'logged_out' | 'offline'
@@ -507,12 +516,35 @@ export class StrategyUI {
     const contested = state.cities.filter(city => city.owner !== state.faction).length
     const incomeWait = incomeCooldownRemaining(state)
     const incomeLabel = incomeWait ? `금일 수확 완료 · ${Math.ceil(incomeWait / 3600000)}시간 후` : '금일 내정 수확'
-    return `<section class="page-section page-section--territory"><div class="section-heading section-heading--compact"><div><span class="eyebrow">DOMAIN &amp; GOVERNANCE · 04</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">서버 원장 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="resource-strip glass-card">${this.resourceTokens(state)}</div><div class="conquest-overview glass-card"><div><span class="eyebrow">CONQUEST FRONT</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">THREE KINGDOMS DOMAIN</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div><div class="map-canvas"><div class="map-river"></div>${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}<span class="map-label map-label--north">중원</span><span class="map-label map-label--south">강동</span><span class="map-label map-label--west">익주</span></div><div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span></div></div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
+    return `<section class="page-section page-section--territory"><div class="section-heading section-heading--compact"><div><span class="eyebrow">DOMAIN &amp; GOVERNANCE · 04</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">서버 원장 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="resource-strip glass-card">${this.resourceTokens(state)}</div><div class="conquest-overview glass-card"><div><span class="eyebrow">CONQUEST FRONT</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">THREE KINGDOMS DOMAIN</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div><div class="map-canvas"><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}<span class="map-label map-label--north">중원</span><span class="map-label map-label--south">강동</span><span class="map-label map-label--west">익주</span></div><div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div></div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
+  }
+
+  private frontlineLines(state: StrategyState): string {
+    const cities = new Map(state.cities.map(city => [city.id, city]))
+    const drawn = new Set<string>()
+    const lines: string[] = []
+    Object.entries(CITY_ADJACENCY).forEach(([fromId, neighbors]) => {
+      neighbors.forEach(toId => {
+        const key = [fromId, toId].sort().join(':')
+        if (drawn.has(key)) return
+        drawn.add(key)
+        const from = CITY_MAP_POSITIONS[fromId]
+        const to = CITY_MAP_POSITIONS[toId]
+        if (!from || !to) return
+        const fromCity = cities.get(fromId)
+        const toCity = cities.get(toId)
+        if (!fromCity || !toCity) return
+        const className = fromCity.owner === state.faction && toCity.owner === state.faction ? 'territory-frontline territory-frontline--owned' : fromCity.owner !== toCity.owner ? 'territory-frontline territory-frontline--contested' : 'territory-frontline territory-frontline--regional'
+        lines.push(`<line class="${className}" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" />`)
+      })
+    })
+    return `<svg class="territory-frontlines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="도시 연결 전선">${lines.join('')}</svg>`
   }
 
   private cityMarker(city: City, selectedId: string, faction: StrategyState['faction']): string {
     const ownerClass = city.owner === faction ? 'is-ally' : city.owner === '중립' ? 'is-neutral' : 'is-enemy'
-    const position = { chengdu: 'left:30%;top:66%', hanzhong: 'left:37%;top:52%', fucheng: 'left:31%;top:73%', xindu: 'left:27%;top:68%', tianshui: 'left:34%;top:37%', wuwei: 'left:21%;top:22%', wancheng: 'left:52%;top:45%', xiangyang: 'left:57%;top:52%', jiangling: 'left:57%;top:62%', yiling: 'left:49%;top:59%', changsha: 'left:63%;top:74%', lingling: 'left:56%;top:84%', guiyang: 'left:47%;top:79%', luoyang: 'left:59%;top:36%', ye: 'left:68%;top:23%', chenliu: 'left:68%;top:41%', puyang: 'left:76%;top:31%', xuchang: 'left:63%;top:47%', hefei: 'left:74%;top:55%', shouchun: 'left:67%;top:51%', jiujiang: 'left:65%;top:66%', poyang: 'left:70%;top:71%', jianye: 'left:78%;top:58%', wujun: 'left:82%;top:66%', kuaiji: 'left:79%;top:75%' }[city.id] ?? 'left:50%;top:50%'
+    const mapPosition = CITY_MAP_POSITIONS[city.id] ?? { x: 50, y: 50 }
+    const position = `left:${mapPosition.x}%;top:${mapPosition.y}%`
     const castle = city.level >= 3 ? 'castle-city-major' : city.level === 2 ? 'castle-city-medium' : 'castle-city-minor'
     return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="eager"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong></button>`
   }

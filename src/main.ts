@@ -48,8 +48,32 @@ if (!root || !canvas) throw new Error('Strategy game shell is incomplete')
 const LOCAL_GAME_SAVE_KEY = 'cheonharo.strategy.save.member.v2'
 const GUEST_GAME_SAVE_KEY = 'cheonharo.strategy.save.guest.v2'
 const GUEST_ACCESS_KEY = 'cheonharo.access.guest.v1'
+const PENDING_TERRITORY_BATTLES_KEY = 'cheonharo.territory.pending-battles.v1'
 const state: StrategyState = createInitialState()
 let localSaveDirty = false
+
+type PendingTerritoryBattle = { cityId: string; damage: number; won: boolean; captured: boolean }
+
+function readPendingTerritoryBattles(): PendingTerritoryBattle[] {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(PENDING_TERRITORY_BATTLES_KEY) ?? '[]') as unknown
+    return Array.isArray(value) ? value.filter(item => item && typeof item.cityId === 'string' && typeof item.damage === 'number' && typeof item.won === 'boolean' && typeof item.captured === 'boolean') as PendingTerritoryBattle[] : []
+  } catch {
+    return []
+  }
+}
+
+function writePendingTerritoryBattles(battles: PendingTerritoryBattle[]): void {
+  try {
+    window.localStorage.setItem(PENDING_TERRITORY_BATTLES_KEY, JSON.stringify(battles.slice(-20)))
+  } catch {
+    // Local storage may be unavailable; the live state still remains playable.
+  }
+}
+
+function enqueueTerritoryBattle(battle: PendingTerritoryBattle): void {
+  writePendingTerritoryBattles([...readPendingTerritoryBattles(), battle])
+}
 
 function persistLocalGame(): void {
   try {
@@ -242,29 +266,45 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
   }
   ui.setTerritorySync('서버 원장 확인 중…')
   try {
+    const pending = readPendingTerritoryBattles()
+    const remaining: PendingTerritoryBattle[] = []
+    let retried = 0
+    for (const battle of pending) {
+      try {
+        const retryPayload = { ...battle, damage: Math.max(0, Math.min(100, Math.trunc(battle.damage))) }
+        const snapshots = await ManusAuth.mutate('territory.recordBattle', retryPayload) as FactionTerritorySnapshot[]
+        mergeFactionTerritories(state, snapshots)
+        retried += 1
+      } catch {
+        remaining.push(battle)
+      }
+    }
+    writePendingTerritoryBattles(remaining)
     const snapshots = await ManusAuth.query('territory.list') as FactionTerritorySnapshot[]
     const merged = mergeFactionTerritories(state, snapshots)
     persistLocalGame()
     ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
     ui.render(state)
-    if (notify) ui.notify(`전역 영토 원장 동기화 완료 · ${merged}개 도시 반영`, 'jade')
+    if (notify) ui.notify(`전역 영토 원장 동기화 완료 · ${merged}개 도시 반영${retried ? ` · 대기 전투 ${retried}건 재기록` : ''}`, 'jade')
   } catch {
     ui.setTerritorySync('서버 원장 연결 대기')
-    if (notify) ui.notify('전역 영토를 불러오지 못했습니다. 로컬 작전은 계속됩니다.', 'ember')
+    if (notify) ui.notify('서버 원장 연결이 지연되고 있습니다. 로컬 작전 결과는 보존되며 다시 시도합니다.', 'jade')
   }
 }
 
 async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: number; won: boolean; captured: boolean }): Promise<void> {
   if (authView.status !== 'authenticated') return
+  const payload = { cityId, damage: Math.max(0, Math.min(100, Math.trunc(outcome.damage))), won: outcome.won, captured: outcome.captured }
   try {
-    const snapshots = await ManusAuth.mutate('territory.recordBattle', { cityId, damage: outcome.damage, won: outcome.won, captured: outcome.captured }) as FactionTerritorySnapshot[]
+    const snapshots = await ManusAuth.mutate('territory.recordBattle', payload) as FactionTerritorySnapshot[]
     mergeFactionTerritories(state, snapshots)
     persistLocalGame()
     ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
     ui.render(state)
   } catch {
+    enqueueTerritoryBattle(payload)
     ui.setTerritorySync('서버 기록 재시도 대기')
-    ui.notify('전투 결과를 서버 영토 원장에 기록하지 못했습니다. 다시 영토 화면에서 동기화하십시오.', 'ember')
+    ui.notify('전투 결과는 로컬에 반영되었습니다. 서버 기록은 다음 영토 동기화에서 자동 재시도합니다.', 'jade')
   }
 }
 

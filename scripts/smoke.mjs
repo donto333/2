@@ -243,6 +243,8 @@ try {
   if (await page.locator('.city-marker').count() !== 25) throw new Error('territory city marker count is incomplete')
   if (await page.locator('.city-marker-castle img').count() !== 25) throw new Error('territory city castle art is incomplete')
   if (await page.locator('.city-marker-castle img').evaluateAll(images => images.some(image => !image.complete || image.naturalWidth === 0))) throw new Error('territory castle art failed to load')
+  if (await page.locator('.territory-frontlines line').count() < 20) throw new Error('territory frontline connection lines are incomplete')
+  if (await page.locator('.territory-frontlines').getAttribute('aria-label') !== '도시 연결 전선') throw new Error('territory frontline network label is missing')
   await page.locator('[data-action="city-select"][data-city="luoyang"]').evaluate(button => button.click())
   if (!(await page.locator('.city-map-context').textContent())?.includes('원거리 전선')) throw new Error('remote city geography status is missing')
   if (await page.locator('.frontier-lock').count() !== 1) throw new Error('remote conquest was not locked')
