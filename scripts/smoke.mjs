@@ -151,6 +151,17 @@ try {
   await page.waitForSelector('[data-action="battle-start"]')
   await page.click('[data-action="battle-start"]')
   await page.waitForFunction(() => window.__strategy.arena.getSnapshot().elapsed > 0.25, null, { timeout: 5000 })
+  await page.waitForTimeout(800)
+  const formationMotion = await page.evaluate(() => {
+    const arena = window.__strategy.arena
+    return {
+      playerFront: Math.max(...arena.playerUnits.map(unit => unit.group.position.z)),
+      enemyFront: Math.min(...arena.enemyUnits.map(unit => unit.group.position.z)),
+      effectCount: arena.effects.length,
+    }
+  })
+  if (formationMotion.playerFront >= 6 || formationMotion.enemyFront <= -8) throw new Error('battle formations did not advance toward the frontline')
+  if (formationMotion.effectCount < 1) throw new Error('battle movement effects were not spawned')
   await page.evaluate(() => window.dispatchEvent(new CustomEvent('manus-auth-change', { detail: { status: 'logged_out', user: null } })))
   await page.waitForTimeout(100)
   if (await page.evaluate(() => window.__strategy.state.section) !== 'battle' || !(await page.evaluate(() => window.__strategy.arena.getSnapshot().active))) throw new Error('auth refresh reset the active expedition battle')

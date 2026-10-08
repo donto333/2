@@ -61,6 +61,7 @@ export interface ArenaCallbacks {
 
 interface BattleUnit {
   group: THREE.Group
+  squad: THREE.Group
   model: THREE.Group
   general: General
   target: THREE.Vector3
@@ -71,6 +72,8 @@ interface BattleUnit {
   statusFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
   hitFlash: number
   knockback: THREE.Vector3
+  motionPhase: number
+  motionPulse: number
 }
 
 interface ArenaEffect {
@@ -281,11 +284,12 @@ export class Arena {
     const positions = [new THREE.Vector3(-4.2, 0, 6), new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(4.2, 0, 6)]
     this.generals.forEach((general, index) => {
       const group = this.createUnit(general, jade, positions[index] ?? positions[0])
+      const squad = group.getObjectByName(`realistic-squad-${general.role}`) as THREE.Group
       const model = group.userData.model as THREE.Group
       const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(jade)
       group.add(status.group)
-      const unit: BattleUnit = { group, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, knockback: new THREE.Vector3() }
+      const unit: BattleUnit = { group, squad, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25 }
       this.playerUnits.push(unit)
       this.scene.add(group)
     })
@@ -582,6 +586,42 @@ export class Arena {
     })
   }
 
+  private spawnDustCloud(position: THREE.Vector3, color: number): void {
+    const group = new THREE.Group()
+    const particles: THREE.Mesh[] = []
+    for (let index = 0; index < 6; index += 1) {
+      const particle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08 + (index % 3) * 0.04, 6, 5),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, depthWrite: false }),
+      )
+      particle.position.set((index - 2.5) * 0.18, 0.08 + (index % 2) * 0.08, (index % 3) * 0.12)
+      particle.userData.velocity = new THREE.Vector3((index - 2.5) * 0.12, 0.35 + (index % 3) * 0.08, 0.08 + (index % 2) * 0.12)
+      group.add(particle)
+      particles.push(particle)
+    }
+    group.position.copy(position)
+    this.addEffect({
+      object: group,
+      age: 0,
+      life: 0.62,
+      tick: effect => {
+        const progress = effect.age / effect.life
+        particles.forEach(particle => {
+          const velocity = particle.userData.velocity as THREE.Vector3
+          particle.position.addScaledVector(velocity, 0.025)
+          particle.scale.setScalar(1 + progress * 2.5)
+          ;(particle.material as THREE.MeshBasicMaterial).opacity = 0.28 * (1 - progress)
+        })
+      },
+      dispose: () => group.traverse(node => {
+        const mesh = node as THREE.Mesh
+        mesh.geometry?.dispose()
+        const material = mesh.material
+        if (material && !Array.isArray(material)) material.dispose()
+      }),
+    })
+  }
+
   private spawnArrowVolley(): void {
     for (let index = 0; index < 3; index += 1) {
       const start = new THREE.Vector3((index - 1) * 4.2, 2.2 + index * 0.25, 6.2)
@@ -783,8 +823,15 @@ export class Arena {
       const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(ember)
       group.add(status.group)
-      this.enemyUnits.push({ group, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, knockback: new THREE.Vector3() })
+      const squad = group.getObjectByName(`realistic-squad-${general.role}`) as THREE.Group
+      this.enemyUnits.push({ group, squad, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25 })
       this.scene.add(group)
+    })
+    this.playerUnits.forEach((unit, index) => {
+      unit.target.set(-4.4 + index * 4.4, 0, -2.6 - index * 0.15)
+    })
+    this.enemyUnits.forEach((unit, index) => {
+      unit.target.set(-4.4 + index * 4.4, 0, -5.1 - index * 0.15)
     })
     this.callbacks.onEvent(`작전 개시 · 무장 덱 ${this.enemyDeck.map(general => general.name).join(' · ')} · ${BATTLE_PATTERNS[0].warning}`)
   }
@@ -983,6 +1030,25 @@ export class Arena {
     if (target) this.dealTroopDamage(target, amount, source, color)
   }
 
+  private updateUnitMotion(unit: BattleUnit, delta: number, elapsed: number, color: number): void {
+    const distance = unit.group.position.distanceTo(unit.target)
+    const moving = this.battleActive && unit.troops > 0 && distance > 0.08
+    unit.group.position.lerp(unit.target, Math.min(delta * (1.15 + unit.general.speed / 75), 1))
+    unit.group.position.addScaledVector(unit.knockback, delta * 7)
+    unit.knockback.multiplyScalar(Math.max(0, 1 - delta * 8))
+    unit.group.position.y = Math.sin(elapsed * 1.6 + unit.motionPhase) * 0.035
+    unit.squad.position.z = 0.7 + Math.sin(elapsed * 2.2 + unit.motionPhase) * (moving ? 0.11 : 0.04)
+    unit.squad.rotation.y = Math.sin(elapsed * 1.4 + unit.motionPhase) * (moving ? 0.035 : 0.015)
+    unit.motionPulse -= delta
+    if (moving && unit.motionPulse <= 0) {
+      unit.motionPulse = 0.72 + (unit.motionPhase % 0.35)
+      this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, unit.group.rotation.y === 0 ? 0.7 : -0.7)), color === ember ? 0xb68f70 : 0xa4a08a)
+    }
+    unit.hitFlash = Math.max(0, unit.hitFlash - delta)
+    unit.model.traverse(node => { const mesh = node as THREE.Mesh; if (mesh.material && !Array.isArray(mesh.material) && 'emissiveIntensity' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = unit.hitFlash > 0 ? 0.75 : 0 })
+    this.animateModel(unit.model, unit.general, elapsed + unit.motionPhase)
+  }
+
   private autoCombat(delta: number): void {
     const attack = (attacker: BattleUnit, defenders: BattleUnit[], enemySide: boolean): void => {
       if (attacker.troops <= 0) return
@@ -1051,13 +1117,7 @@ export class Arena {
   private update(delta: number): void {
     this.updateEffects(delta)
     this.playerUnits.forEach(unit => {
-      unit.group.position.lerp(unit.target, Math.min(delta * (1.15 + unit.general.speed / 75), 1))
-      unit.group.position.addScaledVector(unit.knockback, delta * 7)
-      unit.knockback.multiplyScalar(Math.max(0, 1 - delta * 8))
-      unit.group.position.y = Math.sin((this.clock.getElapsed() + unit.group.position.x) * 1.6) * 0.035
-      unit.hitFlash = Math.max(0, unit.hitFlash - delta)
-      unit.model.traverse(node => { const mesh = node as THREE.Mesh; if (mesh.material && !Array.isArray(mesh.material) && 'emissiveIntensity' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = unit.hitFlash > 0 ? 0.75 : 0 })
-      this.animateModel(unit.model, unit.general, this.clock.getElapsed())
+      this.updateUnitMotion(unit, delta, this.clock.getElapsed(), jade)
     })
     if (this.selectionRing && this.playerUnits[this.selectedUnit]) {
       const unit = this.playerUnits[this.selectedUnit]
@@ -1067,10 +1127,7 @@ export class Arena {
       this.selectionRing.scale.setScalar(1 + Math.sin(this.clock.getElapsed() * 3) * 0.04)
     }
     this.enemyUnits.forEach((unit, index) => {
-      unit.group.position.y = Math.sin(this.clock.getElapsed() * 1.8 + index) * 0.035
-      unit.hitFlash = Math.max(0, unit.hitFlash - delta)
-      unit.model.traverse(node => { const mesh = node as THREE.Mesh; if (mesh.material && !Array.isArray(mesh.material) && 'emissiveIntensity' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = unit.hitFlash > 0 ? 0.75 : 0 })
-      this.animateModel(unit.model, unit.general, this.clock.getElapsed() + index * 0.4)
+      this.updateUnitMotion(unit, delta, this.clock.getElapsed() + index * 0.4, ember)
     })
     this.updateCamera(delta)
     if (!this.battleActive) return
@@ -1085,6 +1142,11 @@ export class Arena {
     const nextPhase = Math.min(2, Math.floor(this.battleElapsed / 7))
     if (nextPhase !== this.battlePhase) {
       this.battlePhase = nextPhase
+      const closingDistance = this.battlePhase === 1 ? 0.8 : 1.35
+      this.playerUnits.forEach((unit, index) => { unit.target.z -= closingDistance + index * 0.08 })
+      this.enemyUnits.forEach((unit, index) => { unit.target.z += closingDistance + index * 0.08 })
+      this.spawnDustCloud(new THREE.Vector3(0, 0, -3.9), 0xb9a17c)
+      this.cameraShake = Math.min(0.48, this.cameraShake + 0.1)
       this.difficultyMultiplier = [0.86, 1.08, 1.34][this.battlePhase] ?? 1.34
       const phaseRecovery = hasBattleEffect(this.activeDebuffs, 'fracture') || hasBattleEffect(this.activeDebuffs, 'silence') ? 18 : 100
       this.enemyMorale = Math.min(100, Math.max(this.enemyMorale, phaseRecovery))
@@ -1137,12 +1199,17 @@ export class Arena {
     const introOffset = this.cameraIntro > 0 ? (this.cameraIntro / 1.35) * 3.8 : 0
     const victoryOffset = this.cameraVictory > 0 ? (1 - this.cameraVictory / 1.5) * 2.8 : 0
     const shake = this.cameraShake
+    const living = [...this.playerUnits, ...this.enemyUnits].filter(unit => unit.troops > 0)
+    const frontZ = living.length ? living.reduce((sum, unit) => sum + unit.group.position.z, 0) / living.length : this.cameraLookAt.z
+    const selected = this.playerUnits[this.selectedUnit]
+    const focusX = this.battleActive && selected ? selected.group.position.x * 0.12 : 0
+    const focusZ = this.battleActive ? Math.max(-4.5, Math.min(2.5, frontZ * 0.18 - 2.2)) : this.cameraLookAt.z
     this.camera.position.set(
-      this.cameraBase.x + (Math.random() - 0.5) * shake,
+      this.cameraBase.x + focusX + (Math.random() - 0.5) * shake,
       this.cameraBase.y + (Math.random() - 0.5) * shake * 0.55,
-      this.cameraBase.z + introOffset + victoryOffset,
+      this.cameraBase.z + introOffset + victoryOffset + (this.battleActive ? frontZ * 0.06 : 0),
     )
-    this.camera.lookAt(this.cameraLookAt.x, this.cameraLookAt.y + (this.cameraVictory > 0 ? 1.2 : 0), this.cameraLookAt.z)
+    this.camera.lookAt(this.cameraLookAt.x + focusX, this.cameraLookAt.y + (this.cameraVictory > 0 ? 1.2 : 0), focusZ)
   }
 
   private tickBattleEffects(delta: number): void {
