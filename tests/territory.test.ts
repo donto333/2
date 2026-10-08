@@ -110,6 +110,37 @@ describe('territory and governance', () => {
     expect(state.lastConquest?.captured).toBe(true)
   })
 
+  it('requires every deployed garrison to be defeated before capture', () => {
+    const state = createInitialState()
+    const city = findCity(state, 'hanzhong')!
+    city.owner = '위나라'
+    city.defense = 100
+    const attackPower = conquestPower(state)
+    city.garrisons = [1, 2].map(index => ({
+      id: `player-defense-${index}`,
+      generalIds: state.formation,
+      averageLevel: 1,
+      power: attackPower,
+      source: 'player' as const,
+      label: `위나라 수비 진형 ${index}`,
+    }))
+    let now = 1000
+    const first = launchConquest(state, city.id, now)
+    expect(first.ok).toBe(true)
+    expect(first.captured).toBe(false)
+    expect(city.owner).toBe('위나라')
+    expect(city.defendersDefeated).toBe(1)
+    expect(first.message).toContain('1부대 남음')
+
+    now += CONQUEST_COOLDOWN_MS
+    const second = launchConquest(state, city.id, now)
+    expect(second.ok).toBe(true)
+    expect(second.captured).toBe(true)
+    expect(city.owner).toBe('촉한')
+    expect(city.garrisons).toEqual([])
+    expect(city.defendersDefeated).toBe(0)
+  })
+
   it('protects each faction capital and blocks remote conquest', () => {
     const state = createInitialState()
     expect(conquestEligibility(state, 'chengdu').allowed).toBe(false)
