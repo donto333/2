@@ -354,3 +354,22 @@
 .faction-selection__backdrop{position:absolute;inset:0;background:radial-gradient(circle at 18% 18%,rgba(82,224,196,.16),transparent 32%),radial-gradient(circle at 82% 78%,rgba(141,169,255,.14),transparent 34%),linear-gradient(135deg,#071719,#0c2223 48%,#101d23)}
 .faction-selection__panel{position:relative;width:min(1040px,100%);padding:clamp(24px,5vw,58px);border:1px solid rgba(183,215,200,.2);background:linear-gradient(145deg,rgba(13,34,35,.93),rgba(8,22,26,.96));box-shadow:0 30px 90px rgba(0,0,0,.45)}
 .faction-selection__panel h1{max-width:720px;margin:9px 0 12px;font-family:serif;font-size:clamp(25px,4vw,44px);letter-spacing:-.04em}.faction-selection__lead{color:#a7bdb2;font-size:12px;line-height:1.75}.faction-selection__cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin:29px 0 18px}.faction-choice{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;min-height:210px;padding:20px;text-align:left;border:1px solid color-mix(in srgb,var(--faction-color),transparent 55%);background:linear-gradient(145deg,color-mix(in srgb,var(--faction-color),transparent 91%),rgba(5,17,20,.75));color:var(--white);cursor:pointer;transition:transform .2s,border-color .2s,background .2s,box-shadow .2s}.faction-choice:hover{transform:translateY(-4px);border-color:var(--faction-color);background:linear-gradient(145deg,color-mix(in srgb,var(--faction-color),transparent 82%),rgba(5,17,20,.7));box-shadow:0 16px 36px color-mix(in srgb,var(--faction-color),transparent 82%)}.faction-choice__crest{display:grid;place-items:center;width:48px;height:48px;border:2px solid var(--faction-color);border-radius:50%;color:var(--faction-color);font-family:serif;font-size:20px;box-shadow:0 0 20px color-mix(in srgb,var(--faction-color),transparent 70%)}.faction-choice__copy{display:grid;gap:7px}.faction-choice__copy strong{font-size:18px}.faction-choice__copy small{color:var(--faction-color);font-size:9px}.faction-choice__copy em{color:#a7bdb2;font-size:10px;line-height:1.55;font-style:normal}.faction-choice>b{grid-column:1/-1;align-self:end;padding-top:14px;border-top:1px solid rgba(183,215,200,.12);color:var(--faction-color);font-size:10px}.faction-choice>b i{float:right;font-style:normal;font-size:16px}.faction-selection__note{color:#718c82;font-size:9px;line-height:1.6}@media(max-width:760px){.faction-selection{padding:14px}.faction-selection__panel{padding:25px 18px}.faction-selection__cards{grid-template-columns:1fr}.faction-choice{min-height:140px}}
+
+
+/* General portrait clarity: keep the source artwork unobstructed and crisp. */
+.general-portrait.has-portrait,
+.art-spark.has-portrait,
+.ritual-portrait.has-portrait {
+  background-image: var(--portrait) !important;
+  background-position: center 18% !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+  filter: none !important;
+  image-rendering: auto;
+}
+.general-portrait.has-portrait > i,
+.art-spark.has-portrait::after,
+.ritual-portrait.has-portrait > i {
+  display: none !important;
+  opacity: 0 !important;
+}
