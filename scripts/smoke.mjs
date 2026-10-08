@@ -295,6 +295,8 @@ try {
   const phonePage = await openGame(phone, errors)
   await phonePage.evaluate(() => window.__strategy.ui.showBattleResult(true, 8962))
   await phonePage.waitForSelector('.result-modal.is-visible')
+  const resultMotion = await phonePage.locator('.result-modal.is-visible .result-card').evaluate(card => getComputedStyle(card).animationName)
+  if (!resultMotion.includes('stage3-modal-card-in')) throw new Error(`stage 3 result transition is missing (${resultMotion})`)
   await phonePage.tap('[data-action="close-result"]')
   await phonePage.waitForSelector('.result-modal', { state: 'detached' })
   await phonePage.screenshot({ path: `${out}/04-phone.png` })

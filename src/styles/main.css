@@ -388,3 +388,44 @@
 
 /* Luoyang war rules menu */
 .luoyang-rules{display:inline-block;position:relative;margin-left:10px;vertical-align:middle;color:var(--gold);font-size:.72rem;letter-spacing:.04em}.luoyang-rules summary{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid rgba(241,199,107,.48);border-radius:999px;background:rgba(25,28,35,.72);cursor:pointer;list-style:none;white-space:nowrap}.luoyang-rules summary::-webkit-details-marker{display:none}.luoyang-rules summary::before{content:'ⓘ';font-size:.78rem}.luoyang-rules[open] summary{background:rgba(241,199,107,.16)}.luoyang-rules-body{position:absolute;z-index:20;top:calc(100% + 9px);left:0;width:min(320px,72vw);padding:14px 16px;border:1px solid rgba(241,199,107,.42);border-radius:12px;background:rgba(10,24,25,.97);box-shadow:0 16px 34px rgba(0,0,0,.38);color:rgba(240,245,238,.84);line-height:1.55}.luoyang-rules-body strong{display:block;margin-bottom:5px;color:var(--gold)}.luoyang-rules-body p{margin:0 0 8px;font-size:.78rem}.luoyang-rules-body ul{margin:0;padding-left:17px;font-size:.74rem}.luoyang-rules-body li+li{margin-top:4px}@media (max-width:640px){.luoyang-rules{display:block;margin:8px 0 0;width:fit-content}.luoyang-rules-body{left:-2px}}
+
+/* Stage 3 motion: command-center screen transitions and responsive UI feedback. */
+.app-shell.is-entering .topbar{animation:stage3-topbar-in .42s cubic-bezier(.2,.8,.2,1) both}
+.app-shell.is-entering .sidebar{animation:stage3-sidebar-in .5s cubic-bezier(.2,.8,.2,1) both}
+.app-shell.is-entering .main-content{animation:stage3-content-in .52s cubic-bezier(.16,1,.3,1) both}
+.app-shell.is-entering .page-section > *{animation:stage3-item-in .52s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(var(--motion-index, 0) * 45ms)}
+.app-shell.is-entering .page-section > *:nth-child(2){--motion-index:1}
+.app-shell.is-entering .page-section > *:nth-child(3){--motion-index:2}
+.app-shell.is-entering .page-section > *:nth-child(4){--motion-index:3}
+.app-shell.is-entering .page-section > *:nth-child(5){--motion-index:4}
+.nav-button{position:relative;overflow:hidden;transform-origin:left center}
+.nav-button:after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(82,224,196,.22),transparent 72%);transform:translateX(-105%);transition:transform .34s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.nav-button:hover:after,.nav-button.is-active:after{transform:translateX(0)}
+.nav-button:active,.action-button:active,.mini-action:active,.ghost-button:active,.filter-tab:active{transform:scale(.97)}
+.action-button,.mini-action,.ghost-button,.filter-tab,.summon-tab,.admin-tab,.tactic-button{transition:transform .18s ease,background-color .22s ease,border-color .22s ease,box-shadow .22s ease,color .22s ease}
+.action-button:focus-visible,.mini-action:focus-visible,.ghost-button:focus-visible,.filter-tab:focus-visible,.summon-tab:focus-visible,.admin-tab:focus-visible,.tactic-button:focus-visible{animation:stage3-focus-ring .9s ease-in-out infinite}
+.glass-card,.duel-opponent,.general-card,.equipment-card,.shop-item,.update-entry,.admin-panel,.city-management-card{transition:transform .28s cubic-bezier(.2,.8,.2,1),border-color .24s ease,box-shadow .28s ease,background-color .24s ease}
+.glass-card:hover,.duel-opponent:hover,.shop-item:hover,.update-entry:hover{transform:translateY(-3px);border-color:rgba(82,224,196,.3);box-shadow:0 18px 42px rgba(2,10,10,.28)}
+.toast{transform:translate3d(0,18px,0) scale(.96);filter:blur(3px);transition:opacity .28s ease,transform .34s cubic-bezier(.16,1,.3,1),filter .28s ease}
+.toast.is-visible{transform:translate3d(0,0,0) scale(1);filter:none}
+.result-modal .result-card{animation:stage3-modal-card-in .52s cubic-bezier(.16,1,.3,1) both}
+.result-modal.is-visible .result-mark{animation:stage3-result-mark .65s cubic-bezier(.16,1,.3,1) .16s both}
+.result-modal.is-visible .result-score{animation:stage3-score-in .45s ease-out .28s both}
+.recruit-results.is-visible .recruit-results-heading{animation:stage3-heading-in .42s ease-out both}
+.recruit-results.is-visible .recruit-results-actions{animation:stage3-actions-in .42s ease-out .3s both}
+.battle-panel,.battle-command-panel,.troop-status-panel{animation:stage3-battle-panel-in .55s cubic-bezier(.16,1,.3,1) both}
+.battle-panel:nth-child(2),.battle-command-panel:nth-child(2),.troop-status-panel:nth-child(2){animation-delay:.08s}
+[data-battle-phase],[data-battle-status],[data-battle-selected],[data-battle-combo],[data-battle-morale],[data-battle-threat],[data-battle-gauge]{transition:color .22s ease,text-shadow .22s ease}
+[data-morale-bar],[data-threat-bar],[data-gauge-bar],[data-battle-stat]{transition:width .42s cubic-bezier(.2,.8,.2,1),filter .25s ease}
+@keyframes stage3-topbar-in{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:none}}
+@keyframes stage3-sidebar-in{from{opacity:0;transform:translateX(-22px)}to{opacity:1;transform:none}}
+@keyframes stage3-content-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes stage3-item-in{from{opacity:0;transform:translateY(15px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes stage3-focus-ring{0%,100%{box-shadow:0 0 0 0 rgba(82,224,196,0)}50%{box-shadow:0 0 0 4px rgba(82,224,196,.16)}}
+@keyframes stage3-modal-card-in{from{opacity:0;transform:translateY(24px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes stage3-result-mark{from{opacity:0;transform:scale(.55) rotate(-12deg)}70%{transform:scale(1.08) rotate(2deg)}to{opacity:1;transform:none}}
+@keyframes stage3-score-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes stage3-heading-in{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes stage3-actions-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes stage3-battle-panel-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.app-shell.is-entering .topbar,.app-shell.is-entering .sidebar,.app-shell.is-entering .main-content,.app-shell.is-entering .page-section > *,.result-modal .result-card,.result-modal.is-visible .result-mark,.result-modal.is-visible .result-score,.recruit-results.is-visible .recruit-results-heading,.recruit-results.is-visible .recruit-results-actions,.battle-panel,.battle-command-panel,.troop-status-panel{animation:none}.nav-button:after{transition:none}.toast{transition:opacity .1s}.glass-card,.duel-opponent,.shop-item,.update-entry{transition:none}}

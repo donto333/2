@@ -152,6 +152,11 @@ export class StrategyUI {
   render(state: StrategyState): void {
     this.renderedState = state
     this.root.innerHTML = this.shell(state)
+    const shell = this.root.querySelector<HTMLElement>('.app-shell')
+    if (shell) {
+      shell.classList.add('is-entering')
+      window.requestAnimationFrame(() => shell.classList.remove('is-entering'))
+    }
     if (this.latestBattle) this.updateBattle(this.latestBattle)
   }
 
@@ -215,6 +220,8 @@ export class StrategyUI {
     if (!toast) return
     toast.textContent = message
     toast.dataset.tone = tone
+    toast.classList.remove('is-visible')
+    void toast.offsetWidth
     toast.classList.add('is-visible')
     window.setTimeout(() => toast.classList.remove('is-visible'), 3300)
   }
