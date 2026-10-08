@@ -129,6 +129,7 @@ export interface General {
 export interface StrategyState {
   section: Section
   faction: Faction
+  factionConfirmed: boolean
   honor: number
   silver: number
   gold: number
@@ -632,7 +633,7 @@ export function createInitialState(): StrategyState {
     [starterIds[2]]: { accessory: 'starter-accessory' },
   }
   const state: StrategyState = {
-    section: 'overview', faction: '촉한', honor: 2480, silver: 12500, gold: 0, manuals: 180, generals,
+    section: 'overview', faction: '촉한', factionConfirmed: false, honor: 2480, silver: 12500, gold: 0, manuals: 180, generals,
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,

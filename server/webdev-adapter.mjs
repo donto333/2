@@ -58,6 +58,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
   iron: int("iron").default(3900).notNull(),
   influence: int("influence").default(2480).notNull(),
   faction: mysqlEnum("faction", ["촉한", "위나라", "오나라"]).default("촉한").notNull(),
+  factionChosen: int("factionChosen").default(0).notNull(),
   factionWarScore: int("factionWarScore").default(0).notNull(),
   mythicFragments: int("mythicFragments").default(0).notNull(),
   duelAttemptsToday: int("duelAttemptsToday").default(0).notNull(),
@@ -209,7 +210,7 @@ async function updateUserRole(id, role, actorOpenId) {
   await db.update(users).set({ role }).where(eq(users.id, id));
   return getUserByOpenId(target[0].openId);
 }
-const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한" };
+const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한", factionChosen: 0 };
 const FACTION_TERRITORY_SEED = [
   ["chengdu", "촉한", 74, 82], ["hanzhong", "촉한", 86, 64], ["xiangyang", "중립", 62, 58], ["jianye", "오나라", 70, 76], ["xuchang", "위나라", 81, 79],
   ["luoyang", "위나라", 92, 88], ["ye", "위나라", 86, 84], ["chenliu", "위나라", 57, 61], ["puyang", "위나라", 64, 58], ["wancheng", "중립", 70, 67],

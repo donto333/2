@@ -26,6 +26,7 @@ import {
   mergeFactionTerritories,
   migrateLegacyStarterRoster,
   ensurePrelaunchDailyGold,
+  FACTION_CAPITALS,
   findGeneral,
   recruit,
   selectCity,
@@ -37,6 +38,7 @@ import {
   type Section,
   type StrategyState,
   type FactionTerritorySnapshot,
+  type Faction,
 } from './game/strategy'
 import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 
@@ -85,6 +87,7 @@ function persistLocalGame(): void {
       silver: state.silver,
       gold: state.gold,
       manuals: state.manuals,
+      factionConfirmed: state.factionConfirmed,
       wins: state.wins,
       battleScore: state.battleScore,
       faction: state.faction,
@@ -124,6 +127,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       wins: saved.wins,
       battleScore: saved.battleScore,
       faction: saved.faction ?? '촉한',
+      factionConfirmed: saved.factionConfirmed === true,
       resources: saved.resources,
       generals: saved.generals,
       formation: saved.formation,
@@ -494,11 +498,23 @@ const ui = new StrategyUI(root, {
     ui.updateBattle(arena.getSnapshot())
     ui.notify('유저 대련을 시작했습니다. 상대 덱의 전력을 돌파하십시오.')
   },
+  onFactionSelect: faction => {
+    state.faction = faction as Faction
+    state.factionConfirmed = true
+    state.selectedCityId = FACTION_CAPITALS[state.faction]
+    state.section = 'overview'
+    persistLocalGame()
+    ui.render(state)
+    ui.notify(`${state.faction} 진영을 선택했습니다. 본성 ${state.selectedCityId === 'chengdu' ? '성도' : state.selectedCityId === 'ye' ? '업' : '건업'}에서 천하를 시작합니다.`, 'jade')
+    if (authView.status === 'authenticated') queueAccountSave()
+    void refreshFactionTerritories()
+  },
   onGuestLogin: () => {
     restoreAccessState('guest')
     window.localStorage.setItem(GUEST_ACCESS_KEY, '1')
-    ui.render(state)
-    ui.notify('게스트 모드로 입장했습니다. 진행 데이터는 이 기기에 저장됩니다.')
+    if (state.factionConfirmed) ui.render(state)
+    else ui.showFactionSelection()
+    ui.notify(state.factionConfirmed ? '게스트 모드로 입장했습니다. 진행 데이터는 이 기기에 저장됩니다.' : '게스트 모드로 입장했습니다. 먼저 진영을 선택하십시오.')
   },
   onLogin: () => {
     void ManusAuth.login().catch(() => ui.notify('로그인은 저장된 체크포인트의 온라인 화면에서 사용할 수 있습니다.', 'ember'))
@@ -605,8 +621,11 @@ arena = new Arena(canvas, {
 })
 
 ui.setAuth(authView)
-if (gameAccess) ui.render(state)
-else ui.showAccessGate()
+if (gameAccess) {
+  restoreAccessState(gameAccess)
+  if (state.factionConfirmed) ui.render(state)
+  else ui.showFactionSelection()
+} else ui.showAccessGate()
 
 window.setInterval(() => {
   const snapshot = arena.getSnapshot()
@@ -624,10 +643,13 @@ window.addEventListener('manus-auth-change', (event: Event) => {
   if (authView.status === 'authenticated') {
     restoreAccessState('member')
     window.localStorage.removeItem(GUEST_ACCESS_KEY)
-    ui.render(state)
+    if (state.factionConfirmed) ui.render(state)
+    else ui.showFactionSelection()
     void refreshAccount()
   } else if (gameAccess === 'guest') {
-    ui.render(state)
+    if (!state.factionConfirmed) restoreAccessState('guest')
+    if (state.factionConfirmed) ui.render(state)
+    else ui.showFactionSelection()
     if (state.section === 'battle') ui.updateBattle(arena.getSnapshot())
   } else if (state.section === 'battle' && arena.getSnapshot().active) {
     ui.render(state)
@@ -646,13 +668,15 @@ void ManusAuth.prepare().then(session => {
   if (authView.status === 'authenticated') {
     restoreAccessState('member')
     window.localStorage.removeItem(GUEST_ACCESS_KEY)
-    ui.render(state)
+    if (state.factionConfirmed) ui.render(state)
+    else ui.showFactionSelection()
     void refreshAccount()
   } else if (!gameAccess) {
     ui.showAccessGate()
   } else if (gameAccess === 'guest') {
     restoreAccessState('guest')
-    ui.render(state)
+    if (state.factionConfirmed) ui.render(state)
+    else ui.showFactionSelection()
   } else {
     ui.showAccessGate()
   }
@@ -680,10 +704,11 @@ async function refreshAccount(): Promise<void> {
   }
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
     if (!localSaveDirty) {
       Object.assign(state, { honor: game.honor, silver: game.silver, gold: typeof game.gold === 'number' ? game.gold : state.gold, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
       if (game.faction) state.faction = game.faction
+      state.factionConfirmed = game.factionChosen === true || game.factionChosen === 1
       state.resources = { ...state.resources, grain: game.grain, silver: game.silver, wood: game.wood, iron: game.iron, influence: game.influence }
       if (Array.isArray(game.generals)) state.generals = game.generals
       if (Array.isArray(game.formation)) state.formation = game.formation
@@ -714,6 +739,10 @@ async function refreshAccount(): Promise<void> {
     }
     accountView = account
     ui.setAccount(accountView)
+    if (!state.factionConfirmed) {
+      ui.showFactionSelection()
+      return
+    }
     ui.render(state)
     if (localSaveDirty) void flushAccountSave()
     void refreshFactionTerritories()
@@ -735,6 +764,7 @@ function accountStatePayload() {
     iron: Math.trunc(state.resources.iron),
     influence: Math.trunc(state.resources.influence),
     faction: state.faction,
+    factionChosen: state.factionConfirmed,
     generalData: JSON.stringify(state.generals),
     formationData: JSON.stringify(state.formation),
     citiesData: JSON.stringify(state.cities),

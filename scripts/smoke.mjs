@@ -46,6 +46,11 @@ async function openGame(context, errors) {
   await page.waitForSelector('.access-gate', { timeout: 30_000 })
   if (await page.locator('[data-action="guest-login"]').count() !== 1) throw new Error('guest login choice is missing')
   await page.click('[data-action="guest-login"]')
+  await page.waitForSelector('.faction-selection, .app-shell', { timeout: 30_000 })
+  if (await page.locator('.faction-selection').count()) {
+    if (await page.locator('[data-action="faction-select"]').count() !== 3) throw new Error('faction selection choices are incomplete')
+    await page.locator('[data-action="faction-select"][data-faction="촉한"]').evaluate(button => button.click())
+  }
   await page.waitForSelector('.app-shell', { timeout: 30_000 })
   await page.reload()
   await page.waitForSelector('.app-shell', { timeout: 30_000 })

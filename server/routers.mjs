@@ -72,6 +72,7 @@ export const gameRouter = router({
       selectedEquipmentGeneralId: z.string().max(64).optional(),
       selectedCityId: z.string().max(64).nullable().optional(),
       faction: z.enum(['촉한', '위나라', '오나라']).optional(),
+      factionChosen: z.boolean().optional(),
       factionWarScore: z.number().int().min(0).max(100000000).optional(),
       mythicFragments: z.number().int().min(0).max(1000000).optional(),
       duelAttemptsToday: z.number().int().min(0).max(5).optional(),
