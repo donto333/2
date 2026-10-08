@@ -375,30 +375,30 @@ const ui = new StrategyUI(root, {
   },
   onEquipmentDraw: count => {
     const result = drawEquipment(state, count)
+    if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) {
-      queueAccountSave()
       ui.showEquipmentResults(result.rewards)
     }
   },
   onEquipmentEnhance: id => {
     const result = enhanceEquipment(state, id)
+    if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
   },
   onEquipmentEquip: (generalId, itemId) => {
     const result = equipEquipment(state, generalId, itemId)
+    if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
   },
   onEquipmentUnequip: (generalId, type) => {
     const result = unequipEquipment(state, generalId, type)
+    if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
   },
   onEquipmentSelectGeneral: id => {
     state.selectedEquipmentGeneralId = id
@@ -566,9 +566,9 @@ const ui = new StrategyUI(root, {
   },
   onShopPurchase: equipmentId => {
     const result = purchaseMythicEquipment(state, equipmentId)
+    if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
   },
   onCashShopPurchase: productId => {
     const result = purchaseResourcePackage(state, productId)
@@ -805,7 +805,7 @@ function accountStatePayload() {
   }
 }
 
-function queueAccountSave(): void {
+function queueAccountSave(immediate = false): void {
   persistLocalGame()
   localSaveDirty = true
   if (authView.status !== 'authenticated') return
@@ -814,6 +814,11 @@ function queueAccountSave(): void {
     return
   }
   if (saveTimer !== null) window.clearTimeout(saveTimer)
+  if (immediate) {
+    saveTimer = null
+    void flushAccountSave()
+    return
+  }
   const delay = saveRetryCount ? Math.min(10_000, 650 * (2 ** Math.min(saveRetryCount - 1, 4))) : 650
   saveTimer = window.setTimeout(() => {
     saveTimer = null
