@@ -349,7 +349,9 @@ export class Arena {
     return group
   }
 
-  private commanderModelPath(_archetype: CommanderArchetype): string {
+  private commanderModelPath(archetype: CommanderArchetype): string {
+    if (archetype === '책사형') return '/assets/commanders/strategist.glb'
+    if (archetype === '지원형') return '/assets/commanders/support.glb'
     return '/assets/commanders/warrior.glb'
   }
 
@@ -391,13 +393,6 @@ export class Arena {
       const commander = template.clone(true)
       commander.name = `gltf-commander-${archetype}`
       commander.position.set(0, 0.06, 0.18)
-      const tint = archetype === '책사형' ? 0x8b78c8 : archetype === '지원형' ? 0xd0a84d : 0x3ba996
-      commander.traverse(node => {
-        const mesh = node as THREE.Mesh
-        if (!mesh.isMesh || Array.isArray(mesh.material)) return
-        mesh.material = mesh.material.clone()
-        if ('color' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).color.lerp(new THREE.Color(tint), 0.18)
-      })
       model.add(commander)
       model.userData.commanderRoot = commander
       procedural.visible = false
