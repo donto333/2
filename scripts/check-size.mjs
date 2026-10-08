@@ -6,7 +6,8 @@ import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
 const MB = 1024 * 1024
-const BUDGET = { js: 2.0 * MB, fonts: 2.2 * MB, transfer: 4.4 * MB }
+// Raised at the user's request: retain a guardrail while allowing richer GLB/GLTF and visual assets.
+const BUDGET = { js: 20.0 * MB, fonts: 22.0 * MB, transfer: 44.0 * MB }
 const walk = dir => readdirSync(dir).flatMap(name => {
   const p = join(dir, name)
   return statSync(p).isDirectory() ? walk(p) : [p]
