@@ -14,6 +14,10 @@ const CITY_MAP_POSITIONS: Readonly<Record<string, { x: number; y: number }>> = {
   guiyang: { x: 47, y: 79 }, luoyang: { x: 59, y: 36 }, ye: { x: 68, y: 23 }, chenliu: { x: 68, y: 41 },
   puyang: { x: 76, y: 31 }, xuchang: { x: 63, y: 47 }, hefei: { x: 74, y: 55 }, shouchun: { x: 67, y: 51 },
   jiujiang: { x: 65, y: 66 }, poyang: { x: 70, y: 71 }, jianye: { x: 78, y: 58 }, wujun: { x: 82, y: 66 }, kuaiji: { x: 79, y: 75 },
+  changan: { x: 48, y: 25 }, meixian: { x: 42, y: 29 }, anding: { x: 38, y: 24 }, jinyang: { x: 66, y: 16 }, pingyuan: { x: 77, y: 24 },
+  beihai: { x: 85, y: 31 }, langya: { x: 84, y: 42 }, xiapi: { x: 79, y: 47 }, guangling: { x: 82, y: 53 }, lujiang: { x: 76, y: 64 },
+  shangyong: { x: 48, y: 47 }, xinye: { x: 55, y: 45 }, jiangxia: { x: 67, y: 56 }, wuling: { x: 53, y: 72 }, badong: { x: 43, y: 66 },
+  jianning: { x: 34, y: 84 }, yunnan: { x: 26, y: 90 }, jiaozhi: { x: 48, y: 95 }, shixing: { x: 60, y: 88 }, nanhai: { x: 68, y: 94 },
 }
 
 export interface AuthView {

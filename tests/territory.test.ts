@@ -9,16 +9,16 @@ describe('territory and governance', () => {
       ['jianye', '오나라'],
       ['ye', '위나라'],
     ])
-    expect(state.cities).toHaveLength(25)
+    expect(state.cities).toHaveLength(45)
     expect(state.resources.grain).toBeGreaterThan(0)
     expect(state.research).toHaveLength(58)
   })
 
-  it('backfills the 20 new cities into legacy five-city saves', () => {
+  it('backfills the 40 new cities into legacy five-city saves', () => {
     const state = createInitialState()
     state.cities = state.cities.slice(0, 5)
     ensureCityRoster(state)
-    expect(state.cities).toHaveLength(25)
+    expect(state.cities).toHaveLength(45)
     expect(findCity(state, 'luoyang')?.owner).toBe('중립')
     expect(findCity(state, 'fucheng')?.region).toBe('익주 북방')
   })
@@ -33,6 +33,17 @@ describe('territory and governance', () => {
     findCity(progressed, 'hanzhong')!.conquestProgress = 100
     expect(normalizeInitialSeasonTerritories(progressed)).toBe(false)
     expect(findCity(progressed, 'hanzhong')?.owner).toBe('촉한')
+  })
+
+  it('opens the requested frontline links between Bu-seong, Hanzhong, Yiling, Poyang, and Kuaiji', () => {
+    const state = createInitialState()
+    findCity(state, 'hanzhong')!.owner = state.faction
+    expect(conquestEligibility(state, 'yiling').allowed).toBe(true)
+    findCity(state, 'hanzhong')!.owner = '중립'
+    findCity(state, 'fucheng')!.owner = state.faction
+    expect(conquestEligibility(state, 'yiling').allowed).toBe(true)
+    findCity(state, 'kuaiji')!.owner = state.faction
+    expect(conquestEligibility(state, 'poyang').allowed).toBe(true)
   })
 
   it('merges server ownership while preserving personal city buildings', () => {

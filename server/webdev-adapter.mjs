@@ -228,18 +228,23 @@ const FACTION_TERRITORY_SEED = [
   ["luoyang", "중립", 92, 88], ["ye", "위나라", 86, 84], ["chenliu", "중립", 57, 61], ["puyang", "중립", 64, 58], ["wancheng", "중립", 70, 67],
   ["jiangling", "중립", 76, 73], ["yiling", "중립", 68, 55], ["changsha", "중립", 63, 71], ["lingling", "중립", 46, 49], ["guiyang", "중립", 52, 45],
   ["wujun", "중립", 73, 78], ["kuaiji", "중립", 66, 69], ["poyang", "중립", 59, 62], ["hefei", "중립", 88, 64], ["shouchun", "중립", 79, 68],
-  ["jiujiang", "중립", 55, 57], ["tianshui", "중립", 71, 53], ["wuwei", "중립", 61, 42], ["fucheng", "중립", 58, 51], ["xindu", "중립", 49, 47]
+  ["jiujiang", "중립", 55, 57], ["tianshui", "중립", 71, 53], ["wuwei", "중립", 61, 42], ["fucheng", "중립", 58, 51], ["xindu", "중립", 49, 47],
+  ["changan", "중립", 88, 86], ["meixian", "중립", 64, 55], ["anding", "중립", 62, 48], ["jinyang", "중립", 75, 63], ["pingyuan", "중립", 58, 59],
+  ["beihai", "중립", 60, 61], ["langya", "중립", 63, 57], ["xiapi", "중립", 72, 70], ["guangling", "중립", 61, 65], ["lujiang", "중립", 66, 60],
+  ["shangyong", "중립", 70, 52], ["xinye", "중립", 59, 58], ["jiangxia", "중립", 65, 64], ["wuling", "중립", 50, 46], ["badong", "중립", 67, 50],
+  ["jianning", "중립", 54, 42], ["yunnan", "중립", 52, 39], ["jiaozhi", "중립", 48, 44], ["shixing", "중립", 47, 41], ["nanhai", "중립", 45, 43]
 ].map(([cityId, owner, defense, prosperity]) => ({ cityId, owner, conquestProgress: 0, defense, prosperity, version: 1 }));
 const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.cityId));
 const NEUTRAL_AI_TICK_MS = 10 * 60 * 1000;
 const PROTECTED_CAPITAL_IDS = new Set(["chengdu", "ye", "jianye"]);
 const LUOYANG_CITY_ID = "luoyang";
 const CITY_ADJACENCY = {
-  chengdu: ["hanzhong", "fucheng", "xindu"], hanzhong: ["chengdu", "fucheng", "tianshui", "xiangyang"], fucheng: ["chengdu", "hanzhong", "xindu"], xindu: ["chengdu", "fucheng"], tianshui: ["wuwei", "hanzhong"], wuwei: ["tianshui"],
-  luoyang: [], ye: ["chenliu", "puyang"], chenliu: ["ye", "puyang", "xuchang"], puyang: ["ye", "chenliu"],
-  xuchang: ["chenliu", "wancheng", "shouchun"], wancheng: ["xuchang", "xiangyang", "jiangling"], xiangyang: ["hanzhong", "wancheng", "jiangling"], jiangling: ["xiangyang", "wancheng", "yiling", "changsha"],
-  yiling: ["jiangling", "changsha", "guiyang"], changsha: ["jiangling", "yiling", "lingling", "guiyang"], lingling: ["changsha", "guiyang"], guiyang: ["lingling", "changsha", "yiling"],
-  shouchun: ["xuchang", "hefei", "jiujiang"], hefei: ["shouchun", "jiujiang", "jianye"], jiujiang: ["hefei", "shouchun", "poyang", "jiangling"], poyang: ["jiujiang", "jianye", "changsha"], jianye: ["hefei", "poyang", "wujun"], wujun: ["jianye", "kuaiji"], kuaiji: ["wujun"]
+  chengdu: ["hanzhong", "fucheng", "xindu"], hanzhong: ["chengdu", "fucheng", "tianshui", "xiangyang", "yiling", "shangyong"], fucheng: ["chengdu", "hanzhong", "xindu", "yiling", "badong"], xindu: ["chengdu", "fucheng"], tianshui: ["wuwei", "hanzhong", "meixian", "anding"], wuwei: ["tianshui"],
+  luoyang: [], ye: ["chenliu", "puyang", "jinyang"], chenliu: ["ye", "puyang", "xuchang"], puyang: ["ye", "chenliu", "pingyuan"],
+  xuchang: ["chenliu", "wancheng", "shouchun", "xiapi"], wancheng: ["xuchang", "xiangyang", "jiangling", "xinye"], xiangyang: ["hanzhong", "wancheng", "jiangling", "shangyong", "xinye", "jiangxia"], jiangling: ["xiangyang", "wancheng", "yiling", "changsha", "jiangxia", "wuling"],
+  yiling: ["jiangling", "changsha", "guiyang", "hanzhong", "fucheng", "badong"], changsha: ["jiangling", "yiling", "lingling", "guiyang"], lingling: ["changsha", "guiyang", "wuling"], guiyang: ["lingling", "changsha", "yiling", "shixing"],
+  shouchun: ["xuchang", "hefei", "jiujiang"], hefei: ["shouchun", "jiujiang", "jianye", "lujiang"], jiujiang: ["hefei", "shouchun", "poyang", "jiangling", "lujiang"], poyang: ["jiujiang", "jianye", "changsha", "kuaiji"], jianye: ["hefei", "poyang", "wujun", "guangling", "lujiang"], wujun: ["jianye", "kuaiji"], kuaiji: ["wujun", "poyang"],
+  changan: ["meixian", "anding", "jinyang"], meixian: ["changan", "tianshui"], anding: ["meixian", "tianshui"], jinyang: ["changan", "ye", "pingyuan"], pingyuan: ["jinyang", "puyang", "beihai"], beihai: ["pingyuan", "langya"], langya: ["beihai", "xiapi"], xiapi: ["langya", "xuchang", "guangling"], guangling: ["xiapi", "jianye", "lujiang"], lujiang: ["guangling", "jiujiang", "jianye", "hefei"], shangyong: ["hanzhong", "xiangyang", "xinye"], xinye: ["shangyong", "wancheng", "xiangyang"], jiangxia: ["xiangyang", "jiangling", "guangling"], wuling: ["jiangling", "changsha", "lingling"], badong: ["yiling", "fucheng"], jianning: ["fucheng", "yunnan"], yunnan: ["jianning", "jiaozhi"], jiaozhi: ["yunnan", "shixing"], shixing: ["jiaozhi", "guiyang", "nanhai"], nanhai: ["shixing"]
 };
 function luoyangSeoulParts(now = Date.now()) {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date(now));

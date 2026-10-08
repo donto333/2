@@ -66,17 +66,22 @@ export const AI_CAPITAL_ID = 'xiangyang'
 export const LUOYANG_ID = 'luoyang'
 export const MAX_CITY_GARRISONS = 100
 export const CITY_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
-  chengdu: ['hanzhong', 'fucheng', 'xindu'], hanzhong: ['chengdu', 'fucheng', 'tianshui', 'xiangyang'],
-  fucheng: ['chengdu', 'hanzhong', 'xindu'], xindu: ['chengdu', 'fucheng'], tianshui: ['wuwei', 'hanzhong'], wuwei: ['tianshui'],
-  luoyang: [], ye: ['chenliu', 'puyang'],
-  chenliu: ['ye', 'puyang', 'xuchang'], puyang: ['ye', 'chenliu'],
-  xuchang: ['chenliu', 'wancheng', 'shouchun'], wancheng: ['xuchang', 'xiangyang', 'jiangling'],
+  chengdu: ['hanzhong', 'fucheng', 'xindu'], hanzhong: ['chengdu', 'fucheng', 'tianshui', 'xiangyang', 'yiling'],
+  fucheng: ['chengdu', 'hanzhong', 'xindu', 'yiling'], xindu: ['chengdu', 'fucheng'], tianshui: ['wuwei', 'hanzhong'], wuwei: ['tianshui'],
+  luoyang: [], ye: ['chenliu', 'puyang', 'jinyang'],
+  chenliu: ['ye', 'puyang', 'xuchang'], puyang: ['ye', 'chenliu', 'pingyuan'],
+  xuchang: ['chenliu', 'wancheng', 'shouchun', 'xiapi'], wancheng: ['xuchang', 'xiangyang', 'jiangling', 'xinye'],
   xiangyang: ['hanzhong', 'wancheng', 'jiangling'], jiangling: ['xiangyang', 'wancheng', 'yiling', 'changsha'],
-  yiling: ['jiangling', 'changsha', 'guiyang'], changsha: ['jiangling', 'yiling', 'lingling', 'guiyang'],
+  yiling: ['jiangling', 'changsha', 'guiyang', 'hanzhong', 'fucheng'], changsha: ['jiangling', 'yiling', 'lingling', 'guiyang'],
   lingling: ['changsha', 'guiyang'], guiyang: ['lingling', 'changsha', 'yiling'],
-  shouchun: ['xuchang', 'hefei', 'jiujiang'], hefei: ['shouchun', 'jiujiang', 'jianye'],
-  jiujiang: ['hefei', 'shouchun', 'poyang', 'jiangling'], poyang: ['jiujiang', 'jianye', 'changsha'],
-  jianye: ['hefei', 'poyang', 'wujun'], wujun: ['jianye', 'kuaiji'], kuaiji: ['wujun'],
+  shouchun: ['xuchang', 'hefei', 'jiujiang'], hefei: ['shouchun', 'jiujiang', 'jianye', 'lujiang'],
+  jiujiang: ['hefei', 'shouchun', 'poyang', 'jiangling', 'lujiang'], poyang: ['jiujiang', 'jianye', 'changsha', 'kuaiji'],
+  jianye: ['hefei', 'poyang', 'wujun', 'guangling'], wujun: ['jianye', 'kuaiji'], kuaiji: ['wujun', 'poyang'],
+  changan: ['meixian', 'anding', 'jinyang'], meixian: ['changan', 'tianshui'], anding: ['meixian', 'tianshui'], jinyang: ['changan', 'ye', 'pingyuan'],
+  pingyuan: ['jinyang', 'puyang', 'beihai'], beihai: ['pingyuan', 'langya'], langya: ['beihai', 'xiapi'], xiapi: ['langya', 'xuchang', 'guangling'],
+  guangling: ['xiapi', 'jianye', 'lujiang'], lujiang: ['guangling', 'jiujiang', 'jianye'], shangyong: ['hanzhong', 'xiangyang', 'xinye'],
+  xinye: ['shangyong', 'wancheng', 'xiangyang'], jiangxia: ['xiangyang', 'jiangling', 'guangling'], wuling: ['jiangling', 'changsha'],
+  badong: ['yiling', 'fucheng'], jianning: ['fucheng', 'yunnan'], yunnan: ['jianning', 'jiaozhi'], jiaozhi: ['yunnan', 'shixing'], shixing: ['jiaozhi', 'guiyang', 'nanhai'], nanhai: ['shixing'],
 }
 
 export interface FactionTerritorySnapshot {
@@ -361,6 +366,26 @@ export function createCities(): City[] {
     { id: 'wuwei', name: '무위', chineseName: '武威', region: '하서 회랑', owner: '중립', level: 1, prosperity: 42, defense: 61, buildings: createBuildings(1) },
     { id: 'fucheng', name: '부성', chineseName: '涪城', region: '익주 북방', owner: '중립', level: 2, prosperity: 51, defense: 58, buildings: createBuildings(1) },
     { id: 'xindu', name: '신도', chineseName: '新都', region: '익주 동북', owner: '중립', level: 1, prosperity: 47, defense: 49, buildings: createBuildings(1) },
+    { id: 'changan', name: '장안', chineseName: '長安', region: '관중 중심', owner: '중립', level: 4, prosperity: 86, defense: 88, buildings: createBuildings(3) },
+    { id: 'meixian', name: '미현', chineseName: '郿縣', region: '관중 서부', owner: '중립', level: 2, prosperity: 55, defense: 64, buildings: createBuildings(1) },
+    { id: 'anding', name: '안정', chineseName: '安定', region: '농서 북부', owner: '중립', level: 2, prosperity: 48, defense: 62, buildings: createBuildings(1) },
+    { id: 'jinyang', name: '진양', chineseName: '晉陽', region: '병주 중심', owner: '중립', level: 3, prosperity: 63, defense: 75, buildings: createBuildings(2) },
+    { id: 'pingyuan', name: '평원', chineseName: '平原', region: '청주 서부', owner: '중립', level: 2, prosperity: 59, defense: 58, buildings: createBuildings(1) },
+    { id: 'beihai', name: '북해', chineseName: '北海', region: '청주 동부', owner: '중립', level: 2, prosperity: 61, defense: 60, buildings: createBuildings(1) },
+    { id: 'langya', name: '낭야', chineseName: '琅邪', region: '서주 동부', owner: '중립', level: 2, prosperity: 57, defense: 63, buildings: createBuildings(1) },
+    { id: 'xiapi', name: '하비', chineseName: '下邳', region: '서주 중심', owner: '중립', level: 3, prosperity: 70, defense: 72, buildings: createBuildings(2) },
+    { id: 'guangling', name: '광릉', chineseName: '廣陵', region: '회남 동부', owner: '중립', level: 2, prosperity: 65, defense: 61, buildings: createBuildings(1) },
+    { id: 'lujiang', name: '여강', chineseName: '廬江', region: '강동 서북', owner: '중립', level: 2, prosperity: 60, defense: 66, buildings: createBuildings(1) },
+    { id: 'shangyong', name: '상용', chineseName: '上庸', region: '한중 동남', owner: '중립', level: 2, prosperity: 52, defense: 70, buildings: createBuildings(1) },
+    { id: 'xinye', name: '신야', chineseName: '新野', region: '남양 남부', owner: '중립', level: 2, prosperity: 58, defense: 59, buildings: createBuildings(1) },
+    { id: 'jiangxia', name: '강하', chineseName: '江夏', region: '형주 동부', owner: '중립', level: 2, prosperity: 64, defense: 65, buildings: createBuildings(1) },
+    { id: 'wuling', name: '무릉', chineseName: '武陵', region: '형남 서부', owner: '중립', level: 1, prosperity: 46, defense: 50, buildings: createBuildings(1) },
+    { id: 'badong', name: '파동', chineseName: '巴東', region: '삼협 서부', owner: '중립', level: 2, prosperity: 50, defense: 67, buildings: createBuildings(1) },
+    { id: 'jianning', name: '건녕', chineseName: '建寧', region: '익주 남부', owner: '중립', level: 1, prosperity: 42, defense: 54, buildings: createBuildings(1) },
+    { id: 'yunnan', name: '운남', chineseName: '雲南', region: '익주 남서', owner: '중립', level: 1, prosperity: 39, defense: 52, buildings: createBuildings(1) },
+    { id: 'jiaozhi', name: '교지', chineseName: '交趾', region: '남방 해안', owner: '중립', level: 1, prosperity: 44, defense: 48, buildings: createBuildings(1) },
+    { id: 'shixing', name: '시흥', chineseName: '始興', region: '영남 북부', owner: '중립', level: 1, prosperity: 41, defense: 47, buildings: createBuildings(1) },
+    { id: 'nanhai', name: '남해', chineseName: '南海', region: '영남 남부', owner: '중립', level: 1, prosperity: 43, defense: 45, buildings: createBuildings(1) },
   ]
 }
 
