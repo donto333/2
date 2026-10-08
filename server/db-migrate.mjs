@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import mysql from 'mysql2/promise'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const files = ['0000_initial_users.sql', '005_game_account_states.sql', '006_game_strategy_state.sql', '007_action_cooldowns.sql', '008_faction_war_score.sql', '009_equipment_system.sql', '010_equipment_payload_capacity.sql', '011_duel_mythic_shop.sql', '012_faction_territories.sql', '013_gold_shop.sql', '014_faction_selection.sql', '015_initial_season_neutral_territories.sql', '016_neutral_territory_ai.sql']
+const files = ['0000_initial_users.sql', '005_game_account_states.sql', '006_game_strategy_state.sql', '007_action_cooldowns.sql', '008_faction_war_score.sql', '009_equipment_system.sql', '010_equipment_payload_capacity.sql', '011_duel_mythic_shop.sql', '012_faction_territories.sql', '013_gold_shop.sql', '014_faction_selection.sql', '015_initial_season_neutral_territories.sql', '016_neutral_territory_ai.sql', '017_luoyang_reward.sql']
 
 async function readMigrations() {
   return Promise.all(files.map(async name => {

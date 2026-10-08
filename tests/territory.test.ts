@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, ensureCityRoster, findCity, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -137,6 +137,25 @@ describe('territory and governance', () => {
     expect(state.lastDefenseAt).toBe(1000)
     expect(defendCity(state, city.id, 1000).ok).toBe(false)
     expect(defendCity(state, city.id, 1000 + DEFENSE_COOLDOWN_MS).ok).toBe(true)
+  })
+
+  it('deploys the current deck as allied city garrisons up to the 100-unit cap', () => {
+    const state = createInitialState()
+    const city = findCity(state, 'chengdu')!
+    expect(deployCityGarrison(state, city.id).ok).toBe(true)
+    expect(city.garrisons).toHaveLength(1)
+    city.garrisons = Array.from({ length: MAX_CITY_GARRISONS }, (_, index) => ({
+      id: `test-${index}`, generalIds: state.formation, averageLevel: 1, power: 100, source: 'player' as const, label: '테스트 수비대',
+    }))
+    expect(deployCityGarrison(state, city.id).ok).toBe(false)
+    expect(city.garrisons).toHaveLength(MAX_CITY_GARRISONS)
+  })
+
+  it('keeps Xiangyang and Luoyang protected by their special rules', () => {
+    const state = createInitialState()
+    expect(conquestEligibility(state, 'xiangyang').reason).toContain('인공지능 진영의 수도')
+    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 19, 59)).reason).toContain('일요일 저녁 8시')
+    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 20, 0)).allowed).toBe(false)
   })
 
   it('starts faction warfare against an enemy city and throttles repeats', () => {

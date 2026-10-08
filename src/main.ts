@@ -9,6 +9,7 @@ import {
   launchConquest,
   defendCity,
   launchFactionBattle,
+  deployCityGarrison,
   drawEquipment,
   enhanceEquipment,
   equipmentBonus,
@@ -100,6 +101,8 @@ function persistLocalGame(): void {
       selectedCityId: state.selectedCityId,
       lastIncomeCollectedAt: state.lastIncomeCollectedAt,
       lastConquestAt: state.lastConquestAt,
+      luoyangBoxes: state.luoyangBoxes,
+      lastLuoyangReward: state.lastLuoyangReward,
       factionWarScore: state.factionWarScore,
       equipmentInventory: state.equipmentInventory,
       equipmentLoadouts: state.equipmentLoadouts,
@@ -137,6 +140,8 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       selectedCityId: saved.selectedCityId,
       lastIncomeCollectedAt: saved.lastIncomeCollectedAt,
       lastConquestAt: saved.lastConquestAt,
+      luoyangBoxes: saved.luoyangBoxes,
+      lastLuoyangReward: saved.lastLuoyangReward,
       factionWarScore: saved.factionWarScore,
       equipmentInventory: saved.equipmentInventory,
       equipmentLoadouts: saved.equipmentLoadouts,
@@ -419,6 +424,12 @@ const ui = new StrategyUI(root, {
     const result = defendCity(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok && result.won ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onGarrisonDeploy: id => {
+    const result = deployCityGarrison(state, id)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
   },
   onFactionBattle: id => {
@@ -706,7 +717,7 @@ async function refreshAccount(): Promise<void> {
   }
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number }
     if (!localSaveDirty) {
       Object.assign(state, { honor: game.honor, silver: game.silver, gold: typeof game.gold === 'number' ? game.gold : state.gold, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
       if (game.faction) state.faction = game.faction
@@ -722,6 +733,8 @@ async function refreshAccount(): Promise<void> {
       if (typeof game.selectedCityId === 'string') state.selectedCityId = game.selectedCityId
       state.lastIncomeCollectedAt = game.lastIncomeCollectedAt
       state.lastConquestAt = game.lastConquestAt
+      state.luoyangBoxes = Math.max(0, Math.trunc(game.luoyangBoxes ?? state.luoyangBoxes))
+      state.lastLuoyangReward = game.lastLuoyangReward
       state.factionWarScore = game.factionWarScore ?? 0
       if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
       if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
@@ -775,6 +788,8 @@ function accountStatePayload() {
     selectedCityId: state.selectedCityId,
     incomeCollectedAt: state.lastIncomeCollectedAt === undefined ? null : String(state.lastIncomeCollectedAt),
     conquestAt: state.lastConquestAt === undefined ? null : String(state.lastConquestAt),
+    luoyangBoxes: Math.trunc(state.luoyangBoxes),
+    lastLuoyangReward: state.lastLuoyangReward === undefined ? null : Math.trunc(state.lastLuoyangReward),
     factionWarScore: Math.trunc(state.factionWarScore),
     equipmentData: JSON.stringify(state.equipmentInventory),
     equipmentLoadoutsData: JSON.stringify(state.equipmentLoadouts),

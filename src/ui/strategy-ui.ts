@@ -79,6 +79,7 @@ export interface StrategyUiCallbacks {
   onTerritoryRefresh: () => void
   onConquest: (id: string) => void
   onDefense: (id: string) => void
+  onGarrisonDeploy: (id: string) => void
   onFactionBattle: (id: string) => void
   onCollectIncome: () => void
   onBuildingUpgrade: (cityId: string, buildingId: string) => void
@@ -583,15 +584,17 @@ export class StrategyUI {
     const power = conquestPower(state)
     const costText = `▦ ${formatNumber(cost.grain ?? 0)} · ◈ ${formatNumber(cost.silver ?? 0)} · ◆ ${formatNumber(cost.iron ?? 0)}`
     const actions = eligibility.allowed ? `<div class="territory-actions"><button class="action-button action-button--primary conquest-button" data-action="conquer" data-city="${city.id}">공성 출정 <span>${costText}</span></button><button class="action-button action-button--outline conquest-button" data-action="faction-battle" data-city="${city.id}">세력전 개시 <span>⚔</span></button></div>` : `<div class="frontier-lock"><strong>진군 경로 차단</strong><span>${eligibility.reason}</span><small>국경 전선: ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '연결된 아군 도시 없음'}</small></div>`
-    return `<div class="conquest-card"><div class="conquest-card-head"><div><span class="eyebrow">FACTION WAR · ${city.owner}</span><h3>점령 진전 ${siege}%</h3></div><strong>${formatNumber(power)} 전투력</strong></div><div class="conquest-progress"><i style="width:${siege}%"></i></div><p>공성 출정은 지형으로 연결된 국경 전선에서만 가능합니다. 세력전은 인접 수비대와 직접 충돌해 전선을 흔듭니다.</p>${actions}</div>`
+    const garrisonCount = city.garrisons?.length ?? 3
+    const defeated = Math.min(garrisonCount, city.defendersDefeated ?? 0)
+    return `<div class="conquest-card"><div class="conquest-card-head"><div><span class="eyebrow">FACTION WAR · ${city.owner}</span><h3>점령 진전 ${siege}%</h3></div><strong>${formatNumber(power)} 전투력</strong></div><div class="conquest-progress"><i style="width:${siege}%"></i></div><p>수비병 ${defeated}/${garrisonCount}부대 격파 · 상대 수비병을 모두 이겨야 도시를 점령할 수 있습니다.</p>${actions}</div>`
   }
-
   private defenseCard(city: City, state: StrategyState): string {
     const power = conquestPower(state)
     const cost = `▦ ${formatNumber(280 + city.level * 90)} · ◆ ${formatNumber(100 + city.level * 55)}`
-    return `<div class="conquest-card defense-card"><div class="conquest-card-head"><div><span class="eyebrow">성 방어</span><h3>방어전 준비</h3></div><strong>${formatNumber(power)} 전투력</strong></div><p>위나라·오나라의 습격을 막고 성벽을 복구하십시오. 방어 성공 시 민심과 세력전 공헌도가 상승합니다.</p><button class="action-button action-button--outline conquest-button" data-action="defense" data-city="${city.id}">수비대 출격 <span>${cost}</span></button></div>`
+    const garrisonCount = city.garrisons?.length ?? 0
+    const canDeploy = garrisonCount < 100
+    return `<div class="conquest-card defense-card"><div class="conquest-card-head"><div><span class="eyebrow">성 방어</span><h3>방어병 ${garrisonCount}/100부대</h3></div><strong>${formatNumber(power)} 전투력</strong></div><p>현재 출전 진형을 이 도시에 수비병으로 세울 수 있습니다. 상대는 배치된 수비병을 모두 격파해야 점령할 수 있습니다.</p><div class="territory-actions"><button class="action-button action-button--primary conquest-button" data-action="garrison-deploy" data-city="${city.id}" ${canDeploy ? '' : 'disabled'}>현재 덱 수비병 배치</button><button class="action-button action-button--outline conquest-button" data-action="defense" data-city="${city.id}">수비전 출격 <span>${cost}</span></button></div></div>`
   }
-
   private buildingRow(city: City, building: CityBuilding, canManage: boolean): string {
     const cost = buildingCost(building)
     const costText = `◈ ${formatNumber(cost.silver ?? 0)} · ⌁ ${formatNumber(cost.wood ?? 0)} · ◆ ${formatNumber(cost.iron ?? 0)}`
@@ -855,6 +858,7 @@ export class StrategyUI {
     else if (action === 'territory-refresh') this.callbacks.onTerritoryRefresh()
     else if (action === 'conquer') this.callbacks.onConquest(button.dataset.city ?? '')
     else if (action === 'defense') this.callbacks.onDefense(button.dataset.city ?? '')
+    else if (action === 'garrison-deploy') this.callbacks.onGarrisonDeploy(button.dataset.city ?? '')
     else if (action === 'faction-battle') this.callbacks.onFactionBattle(button.dataset.city ?? '')
     else if (action === 'collect-income') this.callbacks.onCollectIncome()
     else if (action === 'building-upgrade') this.callbacks.onBuildingUpgrade(button.dataset.city ?? '', button.dataset.building ?? '')

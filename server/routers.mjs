@@ -74,6 +74,8 @@ export const gameRouter = router({
       faction: z.enum(['촉한', '위나라', '오나라']).optional(),
       factionChosen: z.boolean().optional(),
       factionWarScore: z.number().int().min(0).max(100000000).optional(),
+      luoyangBoxes: z.number().int().min(0).max(1000000).optional(),
+      lastLuoyangReward: z.number().int().min(0).max(100).nullable().optional(),
       mythicFragments: z.number().int().min(0).max(1000000).optional(),
       duelAttemptsToday: z.number().int().min(0).max(5).optional(),
       duelDayKey: z.string().max(16).nullable().optional(),

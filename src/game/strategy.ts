@@ -48,9 +48,23 @@ export interface City {
   defense: number
   buildings: CityBuilding[]
   conquestProgress?: number
+  garrisons?: CityGarrison[]
+  defendersDefeated?: number
+}
+
+export interface CityGarrison {
+  id: string
+  generalIds: string[]
+  averageLevel: number
+  power: number
+  source: 'player' | 'dummy'
+  label: string
 }
 
 export const FACTION_CAPITALS: Record<Faction, string> = { 촉한: 'chengdu', 위나라: 'ye', 오나라: 'jianye' }
+export const AI_CAPITAL_ID = 'xiangyang'
+export const LUOYANG_ID = 'luoyang'
+export const MAX_CITY_GARRISONS = 100
 export const CITY_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
   chengdu: ['hanzhong', 'fucheng', 'xindu'], hanzhong: ['chengdu', 'fucheng', 'tianshui', 'xiangyang'],
   fucheng: ['chengdu', 'hanzhong', 'xindu'], xindu: ['chengdu', 'fucheng'], tianshui: ['wuwei', 'hanzhong'], wuwei: ['tianshui'],
@@ -145,6 +159,8 @@ export interface StrategyState {
   selectedCityId: string
   research: ResearchNode[]
   lastConquest: { cityId: string; cityName: string; captured: boolean; damage: number } | null
+  luoyangBoxes: number
+  lastLuoyangReward?: number
   lastIncomeCollectedAt?: number
   lastConquestAt?: number
   lastDefenseAt?: number
@@ -321,10 +337,10 @@ export function createCities(): City[] {
   return [
     { id: 'chengdu', name: '성도', chineseName: '成都', region: '익주 중심', owner: '촉한', level: 3, prosperity: 82, defense: 74, buildings: createBuildings(2) },
     { id: 'hanzhong', name: '한중', chineseName: '漢中', region: '검각 북문', owner: '중립', level: 2, prosperity: 64, defense: 86, buildings: createBuildings(1) },
-    { id: 'xiangyang', name: '양양', chineseName: '襄陽', region: '형주 요충', owner: '중립', level: 2, prosperity: 58, defense: 62, buildings: createBuildings(1) },
+    { id: 'xiangyang', name: '양양', chineseName: '襄陽', region: '형주 중앙 인공지능 수도', owner: '중립', level: 4, prosperity: 78, defense: 90, buildings: createBuildings(3) },
     { id: 'jianye', name: '건업', chineseName: '建業', region: '강동 수운', owner: '오나라', level: 3, prosperity: 76, defense: 70, buildings: createBuildings(2) },
     { id: 'xuchang', name: '허창', chineseName: '許昌', region: '중원 관문', owner: '중립', level: 3, prosperity: 79, defense: 81, buildings: createBuildings(2) },
-    { id: 'luoyang', name: '낙양', chineseName: '洛陽', region: '황하 수도권', owner: '중립', level: 4, prosperity: 88, defense: 92, buildings: createBuildings(3) },
+    { id: 'luoyang', name: '낙양', chineseName: '洛陽', region: '황하 수도권', owner: '중립', level: 5, prosperity: 94, defense: 100, buildings: createBuildings(5) },
     { id: 'ye', name: '업', chineseName: '鄴', region: '기주 북부', owner: '위나라', level: 4, prosperity: 84, defense: 86, buildings: createBuildings(3) },
     { id: 'chenliu', name: '진류', chineseName: '陳留', region: '연주 평원', owner: '중립', level: 2, prosperity: 61, defense: 57, buildings: createBuildings(1) },
     { id: 'puyang', name: '복양', chineseName: '濮陽', region: '연주 동문', owner: '중립', level: 2, prosperity: 58, defense: 64, buildings: createBuildings(1) },
@@ -351,6 +367,53 @@ export function ensureCityRoster(state: StrategyState): void {
   const existing = new Set(state.cities.map(city => city.id))
   const fresh = createCities().filter(city => !existing.has(city.id))
   state.cities.push(...fresh)
+}
+function dummyDefenseLevel(city: City): number {
+  return ({ 1: 10, 2: 15, 3: 20, 4: 25, 5: 30 } as Record<number, number>)[city.level] ?? 30
+}
+export function createDummyCityGarrisons(city: City): CityGarrison[] {
+  const targetLevel = dummyDefenseLevel(city)
+  const generals = allGenerals().sort((left, right) => right.grade - left.grade).slice(0, 9)
+  return Array.from({ length: 3 }, (_, index) => {
+    const squad = generals.slice(index * 3, index * 3 + 3)
+    const power = squad.reduce((total, general) => total + combatPower({ ...general, level: targetLevel, stars: 1 }), 0)
+    return {
+      id: `dummy-${city.id}-${index + 1}`,
+      generalIds: squad.map(general => general.id),
+      averageLevel: targetLevel,
+      power,
+      source: 'dummy',
+      label: `인공지능 더미 수비대 ${index + 1}`,
+    }
+  })
+}
+export function ensureCityGarrisons(state: StrategyState): void {
+  state.cities.forEach(city => {
+    if (!Array.isArray(city.garrisons)) city.garrisons = city.owner === '중립' ? createDummyCityGarrisons(city) : []
+    city.garrisons = city.garrisons.slice(0, MAX_CITY_GARRISONS)
+    city.defendersDefeated = Math.max(0, Math.min(city.garrisons.length, Math.trunc(city.defendersDefeated ?? 0)))
+  })
+}
+function defenseLineForCity(city: City): CityGarrison[] {
+  return Array.isArray(city.garrisons) && city.garrisons.length ? city.garrisons : createDummyCityGarrisons(city)
+}
+export interface CityGarrisonResult { ok: boolean; message: string; count: number }
+export function deployCityGarrison(state: StrategyState, cityId: string): CityGarrisonResult {
+  const city = findCity(state, cityId)
+  if (!city) return { ok: false, message: '해당 도시를 찾을 수 없습니다.', count: 0 }
+  if (city.owner !== state.faction) return { ok: false, message: '아군 도시에서만 자신의 덱을 수비병으로 세울 수 있습니다.', count: city.garrisons?.length ?? 0 }
+  ensureCityGarrisons(state)
+  if ((city.garrisons?.length ?? 0) >= MAX_CITY_GARRISONS) return { ok: false, message: `수비병은 한 도시에 최대 ${MAX_CITY_GARRISONS}부대까지 세울 수 있습니다.`, count: MAX_CITY_GARRISONS }
+  const generalIds = state.formation.slice(0, 3)
+  if (!generalIds.length) return { ok: false, message: '먼저 출전 진형에 무장을 편성하십시오.', count: city.garrisons?.length ?? 0 }
+  const generals = generalIds.map(id => findGeneral(state, id)).filter((general): general is General => Boolean(general))
+  const power = generals.reduce((total, general) => total + combatPower(general), 0)
+  const averageLevel = Math.round(generals.reduce((total, general) => total + general.level, 0) / generals.length)
+  city.garrisons ??= []
+  city.garrisons.push({ id: `player-${city.id}-${Date.now()}-${city.garrisons.length}`, generalIds, averageLevel, power, source: 'player', label: `${state.faction} 수비 진형 ${city.garrisons.length + 1}` })
+  city.defendersDefeated = 0
+  state.lastNotice = `${city.name}에 현재 진형을 수비병으로 배치했습니다. (${city.garrisons.length}/${MAX_CITY_GARRISONS})`
+  return { ok: true, message: state.lastNotice, count: city.garrisons.length }
 }
 export function normalizeInitialSeasonTerritories(state: StrategyState): boolean {
   const hasProgress = state.cities.some(city => typeof city.conquestProgress === 'number' && city.conquestProgress > 0)
@@ -660,10 +723,11 @@ export function createInitialState(): StrategyState {
     section: 'overview', faction: '촉한', factionConfirmed: false, honor: 2480, silver: 12500, gold: 0, manuals: 180, generals,
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
-    cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
+    cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, luoyangBoxes: 0, lastLuoyangReward: undefined, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
     equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '',
   }
   ensurePrelaunchDailyGold(state)
+  ensureCityGarrisons(state)
   return state
 }
 
@@ -1105,14 +1169,19 @@ export interface ConquestEligibility {
 export function capitalFactionForCity(cityId: string): Faction | undefined {
   return (Object.entries(FACTION_CAPITALS) as Array<[Faction, string]>).find(([, capitalId]) => capitalId === cityId)?.[0]
 }
-
-export function conquestEligibility(state: StrategyState, cityId: string): ConquestEligibility {
+export function isLuoyangSiegeWindow(now = Date.now()): boolean {
+  const date = new Date(now)
+  return date.getDay() === 0 && date.getHours() >= 20
+}
+export function conquestEligibility(state: StrategyState, cityId: string, now = Date.now()): ConquestEligibility {
   const city = findCity(state, cityId)
   if (!city) return { allowed: false, reason: '해당 도시를 찾을 수 없습니다.', neighborNames: [] }
   const neighborNames = (CITY_ADJACENCY[city.id] ?? []).map(id => findCity(state, id)).filter((neighbor): neighbor is City => Boolean(neighbor)).map(neighbor => neighbor.name)
   if (city.owner === state.faction) return { allowed: false, reason: `이미 ${state.faction}이(가) 지배하는 도시입니다.`, neighborNames }
   const capitalFaction = capitalFactionForCity(city.id)
   if (capitalFaction) return { allowed: false, reason: `${city.name}은(는) ${capitalFaction}의 본성이라 점령할 수 없습니다.`, neighborNames }
+  if (city.id === AI_CAPITAL_ID) return { allowed: false, reason: '양양은 중립 인공지능 진영의 수도라 점령할 수 없습니다.', neighborNames }
+  if (city.id === LUOYANG_ID && !isLuoyangSiegeWindow(now)) return { allowed: false, reason: '낙양은 일요일 저녁 8시에만 점령할 수 있습니다.', neighborNames }
   const borderNeighbors = (CITY_ADJACENCY[city.id] ?? []).map(id => findCity(state, id)).filter((neighbor): neighbor is City => Boolean(neighbor)).filter(neighbor => neighbor.owner === state.faction)
   if (borderNeighbors.length === 0) return { allowed: false, reason: '아군 국경과 맞닿은 도시만 점령할 수 있습니다. 원거리 점령은 불가능합니다.', neighborNames }
   return { allowed: true, reason: `${borderNeighbors.map(neighbor => neighbor.name).join(' · ')}에서 연결되는 국경 전선입니다.`, neighborNames }
@@ -1215,8 +1284,9 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
 export function launchFactionBattle(state: StrategyState, cityId: string, now = Date.now()): TerritoryBattleResult {
   const city = findCity(state, cityId)
   if (!city) return { ok: false, won: false, message: '해당 전선을 찾을 수 없습니다.', damage: 0 }
+  ensureCityGarrisons(state)
   if (city.owner === state.faction) return { ok: false, won: false, message: '아군 도시에는 세력전 공격을 할 수 없습니다.', damage: 0 }
-  const eligibility = conquestEligibility(state, cityId)
+  const eligibility = conquestEligibility(state, cityId, now)
   if (!eligibility.allowed) return { ok: false, won: false, message: eligibility.reason, damage: 0 }
   const wait = factionBattleCooldownRemaining(state, now)
   if (wait > 0) return { ok: false, won: false, message: `세력전 부대가 재편성 중입니다. ${Math.ceil(wait / 1000)}초 후 다시 공격할 수 있습니다.`, damage: 0 }
@@ -1224,20 +1294,33 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   if (!spendResources(state, cost)) return { ok: false, won: false, message: '세력전 보급품이 부족합니다.', damage: 0 }
   state.lastFactionBattleAt = now
   const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70 + researchCount(state, 'military-') * 45 + researchCount(state, 'scholar-') * 15
-  const factionPower = city.defense * 5 + city.level * 260 + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
+  const defenseLine = defenseLineForCity(city)
+  if (!city.garrisons?.length) city.garrisons = defenseLine
+  const defeated = Math.max(0, Math.min(defenseLine.length, city.defendersDefeated ?? 0))
+  const currentGarrison = defenseLine[defeated]
+  const factionPower = (currentGarrison?.power ?? city.defense * 5 + city.level * 260) + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
   const won = attackPower >= factionPower * 0.75
   const damage = Math.max(5, Math.round((attackPower / Math.max(factionPower, 1)) * 14))
   if (won) {
-    city.conquestProgress = Math.min(100, (city.conquestProgress ?? 0) + damage)
+    city.defendersDefeated = defeated + 1
+    city.conquestProgress = Math.min(100, Math.round((city.defendersDefeated / defenseLine.length) * 100))
     city.defense = Math.max(20, city.defense - Math.ceil(damage / 2))
     state.factionWarScore += 150
-    if ((city.conquestProgress ?? 0) >= 100) {
+    if (city.defendersDefeated >= defenseLine.length) {
       city.owner = state.faction
+      city.garrisons = []
+      city.defendersDefeated = 0
       state.honor += 260
       state.silver += 1400
       state.resources.silver = state.silver
-      state.lastNotice = `${city.name} 세력전 승리 · 적 세력을 몰아내고 전선을 확보했습니다.`
-    } else state.lastNotice = `${city.name} 세력전 승리 · 공성 진전 +${damage}% · 세력전 공헌도 +150`
+      if (city.id === LUOYANG_ID) {
+        const reward = 10 + Math.floor(Math.random() * 91)
+        state.luoyangBoxes += 1
+        state.lastLuoyangReward = reward
+        state.gold += reward
+        state.lastNotice = `${city.name} 세력전 승리 · 낙양 상자 획득 · 금화 ${reward}개를 받았습니다.`
+      } else state.lastNotice = `${city.name} 세력전 승리 · 적 세력을 몰아내고 전선을 확보했습니다.`
+    } else state.lastNotice = `${city.name} 세력전 승리 · 수비병 ${city.defendersDefeated}부대 격파 · ${defenseLine.length - city.defendersDefeated}부대 남음`
   } else {
     state.factionWarScore = Math.max(0, state.factionWarScore - 40)
     state.lastNotice = `${city.name} 세력전 패배 · 적 세력이 반격해 전선이 유지되었습니다.`
@@ -1248,36 +1331,60 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
 export function launchConquest(state: StrategyState, cityId: string, now = Date.now()): ConquestResult {
   const city = findCity(state, cityId)
   if (!city) return { ok: false, captured: false, message: '해당 도시를 찾을 수 없습니다.', damage: 0 }
+  ensureCityGarrisons(state)
   if (city.owner === state.faction) return { ok: false, captured: false, message: `이미 ${state.faction}이(가) 지배하는 도시입니다.`, damage: 0 }
-  const eligibility = conquestEligibility(state, cityId)
+  const eligibility = conquestEligibility(state, cityId, now)
   if (!eligibility.allowed) return { ok: false, captured: false, message: eligibility.reason, damage: 0 }
   const conquestWait = conquestCooldownRemaining(state, now)
   if (conquestWait > 0) return { ok: false, captured: false, message: `공성 준비 중입니다. ${Math.ceil(conquestWait / 1000)}초 후 다시 출정할 수 있습니다.`, damage: 0 }
-  const cost = conquestCost(city)
+  const cost = city.defense <= 55 ? {} : conquestCost(city)
   if (!spendResources(state, cost)) return { ok: false, captured: false, message: `출정 자원이 부족합니다. 식량 ${formatNumber(cost.grain ?? 0)} · 은전 ${formatNumber(cost.silver ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요`, damage: 0 }
   state.lastConquestAt = now
   const power = conquestPower(state)
-  const defenseScore = city.defense * 5 + city.level * 180
+  const defenseLine = defenseLineForCity(city)
+  if (!city.garrisons?.length) city.garrisons = defenseLine
+  const defeated = Math.max(0, Math.min(defenseLine.length, city.defendersDefeated ?? 0))
+  const currentGarrison = defenseLine[defeated]
+  const defenseScore = currentGarrison?.power ?? (city.defense * 5 + city.level * 180)
   const advantage = power / Math.max(defenseScore, 1)
+  // Repeated failed assaults weaken the wall; once it reaches the breach threshold,
+  // even a low-power roster can finally break the current garrison.
+  const won = advantage >= 0.72 || city.defense <= 55
   const damage = Math.max(8, Math.round(advantage * 18) + (advantage >= 1.25 ? 8 : 0))
-  const progress = Math.min(100, (city.conquestProgress ?? 0) + damage)
+  if (!won) {
+    city.defense = Math.max(20, city.defense - Math.max(4, Math.round(damage / 2)))
+    state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage: 0 }
+    state.lastNotice = `${city.name} 수비대 ${defeated + 1}부대에 패배했습니다. 수비병이 전선을 지켰습니다.`
+    return { ok: true, captured: false, message: state.lastNotice, damage: 0 }
+  }
+  city.defendersDefeated = defeated + 1
+  const progress = Math.min(100, Math.round((city.defendersDefeated / defenseLine.length) * 100))
   city.conquestProgress = progress
   state.selectedCityId = city.id
-  if (progress >= 100) {
+  if (city.defendersDefeated >= defenseLine.length) {
     city.owner = state.faction
     city.defense = Math.max(30, city.defense - 18)
     city.prosperity = Math.max(30, city.prosperity - 20)
+    city.garrisons = []
+    city.defendersDefeated = 0
     state.honor += 260
     state.silver += 1400
     state.resources.silver = state.silver
     state.resources.grain += 900
     state.resources.influence += 120
     state.lastConquest = { cityId: city.id, cityName: city.name, captured: true, damage }
-    state.lastNotice = `${city.name} 점령 성공 · 명망 +260 · 영향력 +120`
+    if (city.id === LUOYANG_ID) {
+      const reward = 10 + Math.floor(Math.random() * 91)
+      state.luoyangBoxes += 1
+      state.lastLuoyangReward = reward
+      state.gold += reward
+      state.lastNotice = `${city.name} 점령 성공 · 낙양 상자 획득 · 금화 ${reward}개를 받았습니다.`
+    } else state.lastNotice = `${city.name} 점령 성공 · 명망 +260 · 영향력 +120`
     return { ok: true, captured: true, message: state.lastNotice, damage }
   }
   state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage }
-  state.lastNotice = `${city.name} 공성 진전 ${progress}% · 성벽 피해 ${damage} · 다음 출정을 준비하십시오.`
+  const remaining = defenseLine.length - city.defendersDefeated
+  state.lastNotice = `${city.name} 수비병 ${city.defendersDefeated}부대 격파 · ${remaining}부대 남음 · 모든 수비병을 물리쳐야 점령할 수 있습니다.`
   return { ok: true, captured: false, message: state.lastNotice, damage }
 }
 

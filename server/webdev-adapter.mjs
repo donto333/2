@@ -60,6 +60,8 @@ var gameAccountStates = mysqlTable("game_account_states", {
   faction: mysqlEnum("faction", ["촉한", "위나라", "오나라"]).default("촉한").notNull(),
   factionChosen: int("factionChosen").default(0).notNull(),
   factionWarScore: int("factionWarScore").default(0).notNull(),
+  luoyangBoxes: int("luoyangBoxes").default(0).notNull(),
+  lastLuoyangReward: int("lastLuoyangReward"),
   mythicFragments: int("mythicFragments").default(0).notNull(),
   duelAttemptsToday: int("duelAttemptsToday").default(0).notNull(),
   duelDayKey: varchar("duelDayKey", { length: 16 }),
