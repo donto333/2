@@ -385,3 +385,6 @@
   background-repeat: no-repeat !important;
   border-color: color-mix(in srgb, var(--accent), white 20%);
 }
+
+/* Luoyang war rules menu */
+.luoyang-rules{display:inline-block;position:relative;margin-left:10px;vertical-align:middle;color:var(--gold);font-size:.72rem;letter-spacing:.04em}.luoyang-rules summary{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid rgba(241,199,107,.48);border-radius:999px;background:rgba(25,28,35,.72);cursor:pointer;list-style:none;white-space:nowrap}.luoyang-rules summary::-webkit-details-marker{display:none}.luoyang-rules summary::before{content:'ⓘ';font-size:.78rem}.luoyang-rules[open] summary{background:rgba(241,199,107,.16)}.luoyang-rules-body{position:absolute;z-index:20;top:calc(100% + 9px);left:0;width:min(320px,72vw);padding:14px 16px;border:1px solid rgba(241,199,107,.42);border-radius:12px;background:rgba(10,24,25,.97);box-shadow:0 16px 34px rgba(0,0,0,.38);color:rgba(240,245,238,.84);line-height:1.55}.luoyang-rules-body strong{display:block;margin-bottom:5px;color:var(--gold)}.luoyang-rules-body p{margin:0 0 8px;font-size:.78rem}.luoyang-rules-body ul{margin:0;padding-left:17px;font-size:.74rem}.luoyang-rules-body li+li{margin-top:4px}@media (max-width:640px){.luoyang-rules{display:block;margin:8px 0 0;width:fit-content}.luoyang-rules-body{left:-2px}}
