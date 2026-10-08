@@ -18,6 +18,7 @@ export interface BattleSnapshot {
   selectedUnit: number
   selectedName: string
   selectedRole: General['role'] | '—'
+  selectedArchetype: CommanderArchetype | '—'
   selectedLevel: number
   selectedStats: { leadership: number; martial: number; stratagem: number; speed: number } | null
   skillName: string
@@ -75,6 +76,8 @@ interface BattleUnit {
   knockback: THREE.Vector3
   motionPhase: number
   motionPulse: number
+  troopType: TroopType
+  attackMotion: number
 }
 
 interface ArenaEffect {
@@ -88,6 +91,8 @@ interface ArenaEffect {
 const WORLD_SIZE = 42
 const jade = 0x52e0c4
 const ember = 0xff8066
+type TroopType = 'cavalry' | 'spearmen' | 'archer'
+export type CommanderArchetype = '무장형' | '책사형' | '지원형'
 export class Arena {
   private readonly renderer: THREE.WebGLRenderer
   private readonly scene = new THREE.Scene()
@@ -279,6 +284,18 @@ export class Arena {
     return Math.round(620 + general.leadership * 6 + general.defense * 3 + general.level * 24 + general.grade * 70)
   }
 
+  private troopType(general: General): TroopType {
+    if (general.role === '기병') return 'cavalry'
+    if (general.role === '궁병') return 'archer'
+    return 'spearmen'
+  }
+
+  private commanderArchetype(general: General): CommanderArchetype {
+    if (general.role === '책사') return '책사형'
+    if (general.role === '궁병') return '지원형'
+    return '무장형'
+  }
+
   setGenerals(generals: General[]): void {
     this.generals = generals.map(general => ({ ...general }))
     this.clearUnits()
@@ -290,7 +307,7 @@ export class Arena {
       const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(jade)
       group.add(status.group)
-      const unit: BattleUnit = { group, squad, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25 }
+      const unit: BattleUnit = { group, squad, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0 }
       this.playerUnits.push(unit)
       this.scene.add(group)
     })
@@ -331,6 +348,7 @@ export class Arena {
   private createGeneralModel(general: General, teamColor: number): THREE.Group {
     const model = new THREE.Group()
     model.name = `model-${general.id}`
+    model.userData.archetype = this.commanderArchetype(general)
     const procedural = new THREE.Group()
     model.add(procedural)
     const seed = [...general.id].reduce((sum, character) => sum + character.charCodeAt(0), 0)
@@ -424,7 +442,7 @@ export class Arena {
     // silhouette remains as a resilient fallback until the optimized WebP arrives.
     const portraitMaterial = new THREE.MeshBasicMaterial({ color: 0x263b3a, side: THREE.DoubleSide, fog: false })
     const portrait = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.54), portraitMaterial)
-    portrait.position.set(0, general.role === '기병' ? 1.5 : 1.28, -0.12)
+    portrait.position.set(0, general.role === '기병' ? 1.5 : 1.28, 0.34)
     portrait.renderOrder = 3
     portrait.visible = false
     model.add(portrait)
@@ -463,6 +481,7 @@ export class Arena {
       const column = index % 3
       const row = Math.floor(index / 3)
       soldier.position.set((column - 1) * (mounted ? 0.88 : 0.68), 0, 0.7 + row * (mounted ? 0.78 : 0.62))
+      soldier.add(this.createTroopFigure(role, teamColor))
       const soldierMaterial = imageMaterial.clone()
       const soldierMesh = new THREE.Mesh(new THREE.PlaneGeometry(mounted ? 1.18 : 0.86, mounted ? 1.77 : 1.48), soldierMaterial)
       soldierMesh.position.y = mounted ? 1.02 : 0.82
@@ -479,6 +498,40 @@ export class Arena {
     }
     squad.scale.setScalar(mounted ? 0.8 : 0.86)
     return squad
+  }
+
+  private createTroopFigure(role: General['role'], teamColor: number): THREE.Group {
+    const figure = new THREE.Group()
+    const armor = new THREE.MeshStandardMaterial({ color: teamColor === ember ? 0x8f3d4b : 0x2d8e7f, roughness: 0.72, metalness: 0.25 })
+    const dark = new THREE.MeshStandardMaterial({ color: 0x172629, roughness: 0.86, metalness: 0.12 })
+    const skin = new THREE.MeshStandardMaterial({ color: 0xb97862, roughness: 0.95 })
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.17, 0.34, 6), armor)
+    torso.position.y = 0.42
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 8, 6), skin)
+    head.position.y = 0.7
+    figure.add(torso, head)
+    if (role === '기병') {
+      const horse = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.24, 0.62), dark)
+      horse.position.set(0, 0.2, 0.08)
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 0.38, 6), dark)
+      neck.position.set(0, 0.42, -0.2)
+      neck.rotation.x = -0.45
+      figure.add(horse, neck)
+    } else if (role === '궁병') {
+      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.018, 5, 12, Math.PI * 1.5), new THREE.MeshStandardMaterial({ color: 0xe4b96c, metalness: 0.45, roughness: 0.5 }))
+      bow.position.set(0.2, 0.48, -0.12)
+      bow.rotation.y = Math.PI / 2
+      figure.add(bow)
+    } else {
+      const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.82, 5), new THREE.MeshStandardMaterial({ color: 0xd9b36c, metalness: 0.5, roughness: 0.42 }))
+      spear.position.set(0.18, 0.64, -0.04)
+      spear.rotation.z = -0.16
+      figure.add(spear)
+    }
+    figure.scale.setScalar(role === '기병' ? 0.9 : 0.78)
+    figure.position.z = -0.08
+    figure.traverse(node => { const mesh = node as THREE.Mesh; mesh.castShadow = true; mesh.receiveShadow = true })
+    return figure
   }
 
   private clearUnits(): void {
@@ -858,7 +911,7 @@ export class Arena {
       const status = this.createTroopStatus(ember)
       group.add(status.group)
       const squad = group.getObjectByName(`realistic-squad-${general.role}`) as THREE.Group
-      this.enemyUnits.push({ group, squad, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25 })
+      this.enemyUnits.push({ group, squad, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0 })
       this.scene.add(group)
     })
     this.playerUnits.forEach((unit, index) => {
@@ -957,6 +1010,7 @@ export class Arena {
       * (hasBattleEffect(this.activeDebuffs, 'mark') ? 1.12 : 1)
     const flatDamage = hasBattleEffect(this.activeBuffs, 'hawk-eye') ? 8 : 0
     const amplifiedDamage = Math.round((impact.moraleDamage + flatDamage) * comboBonus * damageMultiplier)
+    unit.model.userData.skillPulse = 1
     const consumedCombo = this.combo
     this.enemyMorale = Math.max(0, this.enemyMorale - amplifiedDamage)
     this.dealTroopDamageToEnemy(amplifiedDamage * 3, unit.general.skillName, jade)
@@ -1078,6 +1132,7 @@ export class Arena {
     unit.group.position.y = Math.sin(elapsed * 1.6 + unit.motionPhase) * 0.035
     unit.squad.position.z = 0.7 + Math.sin(elapsed * 2.2 + unit.motionPhase) * (moving ? 0.11 : 0.04)
     unit.squad.rotation.y = Math.sin(elapsed * 1.4 + unit.motionPhase) * (moving ? 0.035 : 0.015)
+    this.animateTroopMotion(unit, delta, elapsed)
     unit.motionPulse -= delta
     if (moving && unit.motionPulse <= 0) {
       unit.motionPulse = 0.72 + (unit.motionPhase % 0.35)
@@ -1086,6 +1141,22 @@ export class Arena {
     unit.hitFlash = Math.max(0, unit.hitFlash - delta)
     unit.model.traverse(node => { const mesh = node as THREE.Mesh; if (mesh.material && !Array.isArray(mesh.material) && 'emissiveIntensity' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = unit.hitFlash > 0 ? 0.75 : 0 })
     this.animateModel(unit.model, unit.general, elapsed + unit.motionPhase)
+  }
+
+  private animateTroopMotion(unit: BattleUnit, delta: number, elapsed: number): void {
+    unit.attackMotion = Math.max(0, unit.attackMotion - delta * 3.2)
+    const progress = 1 - unit.attackMotion
+    const direction = unit.group.rotation.y === Math.PI ? 1 : -1
+    if (unit.troopType === 'cavalry') {
+      unit.squad.position.z = 0.7 + direction * Math.sin(progress * Math.PI) * 0.9 + Math.sin(elapsed * 4 + unit.motionPhase) * 0.04
+      unit.squad.rotation.x = Math.sin(progress * Math.PI) * direction * 0.12
+    } else if (unit.troopType === 'spearmen') {
+      unit.squad.position.z = 0.7 + direction * Math.sin(progress * Math.PI) * 0.42
+      unit.squad.rotation.x = Math.sin(progress * Math.PI) * direction * 0.2
+    } else {
+      unit.squad.position.z = 0.7 + Math.sin(elapsed * 2.2 + unit.motionPhase) * 0.06
+      unit.squad.rotation.x = progress > 0 ? Math.sin(progress * Math.PI) * 0.18 : 0
+    }
   }
 
   private autoCombat(delta: number): void {
@@ -1098,6 +1169,7 @@ export class Arena {
       const baseDamage = 20 + attacker.general.attack * 0.34 + attacker.general.martial * 0.24 + attacker.general.leadership * 0.1
       const damage = baseDamage * (enemySide ? this.difficultyMultiplier : 1)
       attacker.attackTimer = Math.max(0.72, 1.85 - attacker.general.speed * 0.008)
+      attacker.attackMotion = 1
       this.dealTroopDamage(target, damage, attacker.general.name, enemySide ? ember : jade)
     }
     this.playerUnits.forEach(unit => attack(unit, this.enemyUnits, false))
@@ -1135,6 +1207,7 @@ export class Arena {
       selectedUnit: this.selectedUnit,
       selectedName: general?.name ?? '—',
       selectedRole: general?.role ?? '—',
+      selectedArchetype: general ? this.commanderArchetype(general) : '—',
       selectedLevel: general?.level ?? 0,
       selectedStats: general ? { leadership: general.leadership, martial: general.martial, stratagem: general.stratagem, speed: general.speed } : null,
       skillName: general?.skillName ?? '장수 스킬',
@@ -1272,6 +1345,17 @@ export class Arena {
     model.position.y = Math.sin(motion * 1.7) * 0.045
     const weapon = model.userData.weapon as THREE.Group | undefined
     if (weapon) weapon.rotation.z = Math.sin(motion * 1.35) * 0.1
+    const skillPulse = Number(model.userData.skillPulse ?? 0)
+    if (skillPulse > 0) {
+      const archetype = model.userData.archetype as CommanderArchetype
+      const accent = archetype === '책사형' ? 0.12 : archetype === '지원형' ? 0.08 : 0.18
+      model.rotation.y = Math.sin((1 - skillPulse) * Math.PI) * accent
+      model.scale.setScalar(1 + Math.sin((1 - skillPulse) * Math.PI) * 0.12)
+      model.userData.skillPulse = Math.max(0, skillPulse - 0.016)
+    } else {
+      model.rotation.y = 0
+      model.scale.setScalar(1)
+    }
   }
 
   private animate = (): void => {
