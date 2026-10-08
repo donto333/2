@@ -295,6 +295,16 @@ export const GRADE_META: Record<Grade, { label: string; color: string; rate: str
   1: { label: '신병', color: '#a9b1b8', rate: '35%' },
 }
 
+// 등급 자체가 전투력과 스킬 성능에 반영되는 공통 보정입니다.
+// 같은 레벨·성급·능력치라면 항상 5등급 > 4등급 > 3등급 순서가 됩니다.
+export const GRADE_POWER_MULTIPLIER: Record<Grade, number> = {
+  1: 0.82,
+  2: 0.91,
+  3: 1,
+  4: 1.12,
+  5: 1.28,
+}
+
 const BUILDING_LIBRARY: Omit<CityBuilding, 'level'>[] = [
   { id: 'farm', name: '屯田 농장', kind: 'agriculture', maxLevel: 5, description: '식량 생산량과 도시의 민생을 높입니다.' },
   { id: 'market', name: '교역 시장', kind: 'commerce', maxLevel: 5, description: '은전과 영향력 수입을 늘립니다.' },
@@ -681,7 +691,8 @@ export function findGeneral(state: StrategyState, id: string): General | undefin
 }
 
 export function combatPower(general: General): number {
-  return Math.round((general.leadership * 1.15 + general.martial * 1.25 + general.stratagem * 0.9 + general.speed * 0.65 + general.defense * 0.25) * (1 + (general.level - 1) * 0.035) * (1 + (general.stars - 1) * 0.06))
+  const basePower = general.leadership * 1.15 + general.martial * 1.25 + general.stratagem * 0.9 + general.speed * 0.65 + general.defense * 0.25
+  return Math.round(basePower * GRADE_POWER_MULTIPLIER[general.grade] * (1 + (general.level - 1) * 0.035) * (1 + (general.stars - 1) * 0.06))
 }
 
 export function skillUnlockLevel(general: General): number {
@@ -693,7 +704,9 @@ export function skillRank(general: General): number {
 }
 
 export function skillPower(general: General): number {
-  return general.skillPower ?? (100 + (skillRank(general) - 1) * 18 + Math.max(0, general.level - 10) * 3)
+  const basePower = general.skillPower ?? 100
+  const progression = (skillRank(general) - 1) * 18 + Math.max(0, general.level - 10) * 3
+  return Math.round((basePower + progression) * GRADE_POWER_MULTIPLIER[general.grade])
 }
 
 export interface GeneralSkillDetail {
@@ -1002,7 +1015,7 @@ export function recruit(state: StrategyState, count = 1): RecruitResult {
         owned.stratagem += 2 + Math.floor(owned.stars / 2)
         owned.speed += 2 + Math.floor(owned.stars / 2)
         owned.skillRank = Math.min(5, (owned.skillRank ?? previousStars) + 1)
-        owned.skillPower = skillPower(owned) + 18
+        owned.skillPower = (owned.skillPower ?? 100) + 18
       } else {
         state.manuals += 8
       }
@@ -1039,7 +1052,7 @@ export function upgrade(state: StrategyState, id: string): UpgradeResult {
   general.martial += 6 + general.stars
   general.stratagem += 2
   general.speed += 2
-  general.skillPower = skillPower(general) + 3
+  general.skillPower = (general.skillPower ?? 100) + 3
   if (general.level >= skillUnlockLevel(general) && !general.skillUnlocked) state.lastNotice = `${general.name}이(가) Lv.${general.level}에 도달했습니다. ${general.stars}성 스킬 해금이 가능합니다.`
   else state.lastNotice = `${general.name} 강화 완료 · Lv.${general.level}`
   return { ok: true, message: state.lastNotice }
@@ -1055,7 +1068,7 @@ export function unlockSkill(state: StrategyState, id: string): UpgradeResult {
   state.resources.silver = state.silver
   general.skillUnlocked = true
   general.skillRank = Math.max(1, general.skillRank ?? general.stars)
-  general.skillPower = skillPower(general)
+  general.skillPower = general.skillPower ?? 100
   state.lastNotice = `${general.name}의 「${general.skillName}」이(가) 해금되었습니다.`
   return { ok: true, message: state.lastNotice }
 }

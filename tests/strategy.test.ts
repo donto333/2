@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GOLD_PACKAGES, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseHonorPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GRADE_POWER_MULTIPLIER, GOLD_PACKAGES, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseHonorPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 import { effectLoadout } from '../src/game/battle-effects'
 
 describe('commander attributes', () => {
@@ -10,6 +10,18 @@ describe('commander attributes', () => {
     expect(new Set(state.generals.map(general => general.id)).size).toBe(3)
     expect(state.generals.every(general => general.leadership > 0 && general.martial > 0 && general.stratagem > 0 && general.speed > 0)).toBe(true)
     expect(state.generals.every(general => combatPower(general) > 0)).toBe(true)
+  })
+
+  it('makes grade 5 the strongest grade for both combat power and skill performance', () => {
+    const template = { ...createInitialState().generals[0], level: 1, stars: 1, skillRank: 1, skillPower: 100 }
+    const generals = ([1, 2, 3, 4, 5] as const).map(grade => ({ ...template, grade }))
+    const combat = generals.map(general => combatPower(general))
+    const skills = generals.map(general => skillPower(general))
+    expect(GRADE_POWER_MULTIPLIER[5]).toBeGreaterThan(GRADE_POWER_MULTIPLIER[4])
+    expect(combat).toEqual([...combat].sort((left, right) => left - right))
+    expect(skills).toEqual([...skills].sort((left, right) => left - right))
+    expect(combat[4]).toBeGreaterThan(combat[3])
+    expect(skills[4]).toBeGreaterThan(skills[3])
   })
 
   it('migrates the untouched legacy fixed starter trio to random grade-3 starters', () => {
