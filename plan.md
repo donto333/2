@@ -74,3 +74,6 @@
 
 ## 온라인 저장 payload 용량 보정
 장비 스택과 도시별 전투 기록이 증가하면 `game_account_states`의 기존 `TEXT` 컬럼(약 64KB)과 Express 2MB 본문 한도에 걸릴 수 있다. `server/020_save_payload_capacity.sql`에서 일반 JSON 상태 필드를 `MEDIUMTEXT`로 확장하고 시나리오 필드도 같은 타입으로 보장한다. `server/app.mjs`의 JSON 본문 한도는 8MB, 저장 mutation의 Zod 필드는 각 payload 범위에 맞춰 확장한다. Docker 런타임은 `db-migrate.mjs`를 먼저 실행한 뒤 API를 시작해 신규 migration이 배포 DB에 누락되지 않도록 한다. 클라이언트는 기존 로컬 우선 저장·revision 추적·지수 재시도 동작을 유지한다.
+
+## 시나리오 재전투 보상 정책
+완료된 시나리오는 다시 3D 전투에 진입할 수 있지만, `scenarioCleared`에 해당 ID가 있으면 최초 클리어 보상은 지급하지 않는다. 보상 판정은 `firstClearReward`로 분리해 재전투 경로에서도 동일하게 적용하고, 시나리오 승리 직후 온라인 저장을 즉시 호출해 클리어 상태가 계정에 남도록 한다.

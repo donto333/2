@@ -69,3 +69,7 @@ export const SCENARIOS: ScenarioDefinition[] = CHAPTERS.flatMap((chapter, chapte
 export function scenarioById(id: string): ScenarioDefinition | undefined {
   return SCENARIOS.find(scenario => scenario.id === id)
 }
+
+export function firstClearReward(scenario: ScenarioDefinition, clearedIds: readonly string[]): ScenarioReward | null {
+  return clearedIds.includes(scenario.id) ? null : scenario.reward
+}

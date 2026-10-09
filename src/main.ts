@@ -43,7 +43,7 @@ import {
   type Faction,
 } from './game/strategy'
 import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
-import { scenarioById, type ScenarioDefinition } from './game/scenarios'
+import { firstClearReward, scenarioById, type ScenarioDefinition } from './game/scenarios'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -675,6 +675,7 @@ arena = new Arena(canvas, {
     state.battleScore = Math.max(state.battleScore, result.score)
     const siege = pendingSiege
     const wasSiege = Boolean(siege)
+    const wasScenario = Boolean(scenarioActive && activeScenario)
     const wasDuel = !wasSiege && (duelActive || arena.isDuelBattle())
     if (wasSiege && siege) {
       state.lastNotice = siege.result.message
@@ -686,8 +687,8 @@ arena = new Arena(canvas, {
       state.resources.silver = state.silver
       if (wasDuel) state.mythicFragments += 1
       if (scenarioActive && activeScenario) {
-        const reward = activeScenario.reward
-        if (!state.scenarioCleared.includes(activeScenario.id)) {
+        const reward = firstClearReward(activeScenario, state.scenarioCleared)
+        if (reward) {
           state.scenarioCleared.push(activeScenario.id)
           state.gold += reward.gold; state.honor += reward.honor; state.silver += reward.silver; state.manuals += reward.manuals
           state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
@@ -698,6 +699,7 @@ arena = new Arena(canvas, {
     scenarioActive = false
     activeScenario = null
     duelActive = false
+    if (wasScenario) queueAccountSave(true)
     ui.render(state)
     ui.showBattleResult(wasSiege ? true : result.won, result.score)
     if (siege) {
