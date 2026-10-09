@@ -417,7 +417,7 @@ export function createCities(): City[] {
     { id: 'jiaozhi', name: '교지', chineseName: '交趾', region: '남방 해안', owner: '중립', level: 1, prosperity: 44, defense: 48, buildings: createBuildings(1) },
     { id: 'shixing', name: '시흥', chineseName: '始興', region: '영남 북부', owner: '중립', level: 1, prosperity: 41, defense: 47, buildings: createBuildings(1) },
     { id: 'nanhai', name: '남해', chineseName: '南海', region: '영남 남부', owner: '중립', level: 1, prosperity: 43, defense: 45, buildings: createBuildings(1) },
-  ].map(city => ({ ...city, defense: cityDefenseForLevel(city.level) })) as City[]
+  ].map(city => ({ ...city, defense: cityBreachThreshold(city) })) as City[]
 }
 
 export function ensureCityRoster(state: StrategyState): void {
@@ -449,6 +449,9 @@ export function ensureCityGarrisons(state: StrategyState): void {
     if (!Array.isArray(city.garrisons)) city.garrisons = city.owner === '중립' ? createDummyCityGarrisons(city) : []
     city.garrisons = city.garrisons.slice(0, MAX_CITY_GARRISONS)
     city.defendersDefeated = Math.max(0, Math.min(city.garrisons.length, Math.trunc(city.defendersDefeated ?? 0)))
+    // 정식 출시 전 약화 디버프는 기존 저장 도시에도 즉시 적용한다.
+    const weakeningFloor = cityBreachThreshold(city)
+    if (city.defense > weakeningFloor) city.defense = weakeningFloor
     if (!Array.isArray(city.battleLogs)) city.battleLogs = []
     city.battleLogs = city.battleLogs.filter(log => log && typeof log.timestamp === 'number').slice(-30)
   })

@@ -17,7 +17,7 @@ describe('territory and governance', () => {
   it('assigns the requested defense and neutral dummy levels by city grade', () => {
     const state = createInitialState()
     for (const city of state.cities) {
-      expect(city.defense).toBe(CITY_DEFENSE_BY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5])
+      expect(city.defense).toBe(cityBreachThreshold(city))
       expect(cityBreachThreshold(city)).toBe(Math.ceil(CITY_DEFENSE_BY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5] * 0.1))
       if (city.owner === '중립') expect(city.garrisons?.every(garrison => garrison.averageLevel === DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5])).toBe(true)
       else expect(city.garrisons).toHaveLength(0)

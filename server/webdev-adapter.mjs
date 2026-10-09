@@ -321,13 +321,15 @@ function factionTerritoryView(row) {
 async function ensureFactionTerritories(db) {
   const existing = await db.select({ cityId: factionTerritoryStates.cityId, defense: factionTerritoryStates.defense }).from(factionTerritoryStates);
   const known = new Set(existing.map(row => row.cityId));
-  const missing = FACTION_TERRITORY_SEED.filter(city => !known.has(city.cityId));
+  const missing = FACTION_TERRITORY_SEED.filter(city => !known.has(city.cityId)).map(city => ({ ...city, defense: cityDefenseFloor(city.cityId) }));
   if (missing.length) {
     await db.insert(factionTerritoryStates).values(missing).onDuplicateKeyUpdate({ set: { cityId: sql`cityId` } });
   }
-  const legacyRows = existing.filter(row => Number(row.defense) >= 0 && Number(row.defense) <= 100);
-  for (const row of legacyRows) {
-    await db.update(factionTerritoryStates).set({ defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[row.cityId]) }).where(eq(factionTerritoryStates.cityId, row.cityId));
+  for (const row of existing) {
+    const floor = cityDefenseFloor(row.cityId);
+    if (Number(row.defense) > floor) {
+      await db.update(factionTerritoryStates).set({ defense: floor }).where(eq(factionTerritoryStates.cityId, row.cityId));
+    }
   }
 }
 async function advanceNeutralTerritoryAi(db, now = Date.now()) {
