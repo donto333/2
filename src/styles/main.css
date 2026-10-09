@@ -450,14 +450,17 @@
 .scenario-chapter-head strong { color: #f4f6f8; }
 .scenario-chapter-head small { color: rgba(220,228,238,.62); }
 .scenario-list { display: grid; gap: 7px; }
-.scenario-card { display: grid; grid-template-columns: 54px 1fr auto; gap: 10px; align-items: center; width: 100%; text-align: left; border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; color: inherit; background: rgba(255,255,255,.035); cursor: pointer; transition: transform .18s ease, border-color .18s ease, background .18s ease; }
+.scenario-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: stretch; width: 100%; text-align: left; border: 1px solid transparent; border-radius: 12px; padding: 0; color: inherit; background: rgba(255,255,255,.035); overflow: hidden; transition: transform .18s ease, border-color .18s ease, background .18s ease; }
 .scenario-card:hover, .scenario-card.is-selected { transform: translateX(3px); border-color: rgba(82,224,196,.65); background: rgba(82,224,196,.1); }
+.scenario-card-select { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-width: 0; width: 100%; padding: 10px 0 10px 12px; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.scenario-card-select:focus-visible { outline: 2px solid var(--jade, #52e0c4); outline-offset: -2px; }
+.scenario-card-start { align-self: center; margin: 7px 8px 7px 0; min-width: 86px; padding: 8px 10px; white-space: nowrap; }
 .scenario-card.is-cleared { border-color: rgba(246,197,109,.2); }
 .scenario-year { color: #f6c56d; font-weight: 800; font-variant-numeric: tabular-nums; }
 .scenario-card strong, .scenario-card small { display: block; }
 .scenario-card strong { color: #f4f6f8; font-size: .92rem; }
 .scenario-card small { margin-top: 3px; color: rgba(220,228,238,.58); font-size: .75rem; line-height: 1.35; }
-.scenario-card > b { color: #52e0c4; font-size: .72rem; white-space: nowrap; }
+.scenario-card-select > b { color: #52e0c4; font-size: .72rem; white-space: nowrap; }
 .scenario-detail { position: sticky; top: 16px; padding: 24px; background: radial-gradient(circle at 90% 5%, rgba(82,224,196,.14), transparent 34%), rgba(19,28,42,.92); }
 .scenario-detail h2 { margin: 16px 0 8px; font-size: clamp(1.35rem, 2.5vw, 2rem); }
 .scenario-detail > p { color: rgba(220,228,238,.7); line-height: 1.65; }
@@ -470,6 +473,7 @@
 .scenario-reward p, .scenario-reward small { margin: 0; color: rgba(240,244,248,.82); line-height: 1.55; }
 .scenario-start-button { width: 100%; margin-top: 22px; }
 @media (max-width: 900px) { .scenario-layout { grid-template-columns: 1fr; } .scenario-detail { position: static; } .scenario-chapter-list { max-height: none; } }
+@media (max-width: 560px) { .scenario-card { grid-template-columns: 1fr; } .scenario-card-select { grid-template-columns: 46px minmax(0, 1fr) auto; padding-right: 10px; } .scenario-card-start { width: calc(100% - 16px); margin: 0 8px 8px; } }
 
 /* Topbar resource strip: replace static scouting copy with live economy values. */
 .topbar-center{min-width:0;display:flex;align-items:center;gap:10px}.topbar-resources{display:flex;align-items:center;gap:7px;min-width:0;overflow-x:auto;scrollbar-width:none}.topbar-resources::-webkit-scrollbar{display:none}.topbar-resource{display:inline-flex;align-items:center;gap:4px;padding:5px 7px;border:1px solid rgba(178,226,209,.14);border-radius:7px;background:rgba(7,20,21,.32);white-space:nowrap}.topbar-resource i{font-style:normal;font-size:11px}.topbar-resource small{color:var(--muted);font-size:8px}.topbar-resource strong{color:var(--white);font:600 10px Sora,sans-serif}.topbar-resource--gold i,.topbar-resource--gold strong{color:#f6c56d}.topbar-resource--silver i,.topbar-resource--silver strong{color:#d4dde0}.topbar-resource--honor i,.topbar-resource--honor strong{color:#52e0c4}.topbar-resource--influence i,.topbar-resource--influence strong{color:#b58cff}.topbar-resource--grain i,.topbar-resource--grain strong{color:#e5bd71}.topbar-resource--wood i,.topbar-resource--wood strong{color:#9bd39b}.topbar-resource--iron i,.topbar-resource--iron strong{color:#9fb7c7}
