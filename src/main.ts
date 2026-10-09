@@ -43,6 +43,7 @@ import {
   type Faction,
 } from './game/strategy'
 import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
+import { scenarioById, type ScenarioDefinition } from './game/scenarios'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -112,6 +113,7 @@ function persistLocalGame(): void {
       duelAttemptsToday: state.duelAttemptsToday,
       duelDayKey: state.duelDayKey,
       prelaunchGoldDayKey: state.prelaunchGoldDayKey,
+      scenarioCleared: state.scenarioCleared,
     }))
   } catch {
     // Private browsing and quota restrictions should not stop gameplay.
@@ -152,6 +154,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       duelAttemptsToday: saved.duelAttemptsToday,
       duelDayKey: saved.duelDayKey,
       prelaunchGoldDayKey: saved.prelaunchGoldDayKey,
+      scenarioCleared: Array.isArray(saved.scenarioCleared) ? saved.scenarioCleared.filter((id): id is string => typeof id === 'string') : [],
     })
   } catch {
     // Corrupt local data is ignored and replaced by the normal starter state.
@@ -171,6 +174,8 @@ let saveQueued = false
 let saveRetryCount = 0
 let saveRevision = 0
 let duelActive = false
+let scenarioActive = false
+let activeScenario: ScenarioDefinition | null = null
 let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
 let pendingSiege: { cityId: string; result: ReturnType<typeof launchConquest> } | null = null
@@ -342,6 +347,11 @@ const ui = new StrategyUI(root, {
       ui.notify('관리자 권한이 있는 계정만 관리자센터를 이용할 수 있습니다.', 'ember')
       return
     }
+    if (scenarioActive && section !== 'battle') {
+      scenarioActive = false
+      activeScenario = null
+      arena.stopBattle()
+    }
     if (duelActive && section !== 'battle') {
       duelActive = false
       arena.stopBattle()
@@ -355,7 +365,7 @@ const ui = new StrategyUI(root, {
       ui.notify('공성 전투를 종료하고 전황을 저장했습니다.', 'jade')
     }
     state.section = section
-    if (section === 'battle') { duelActive = false; arena.setOpponentDeck(null); arena.setGenerals(battleGenerals()); ui.updateBattle(arena.getSnapshot()) }
+    if (section === 'battle' && !scenarioActive) { duelActive = false; arena.setOpponentDeck(null); arena.setGenerals(battleGenerals()); ui.updateBattle(arena.getSnapshot()) }
     if (section === 'duel') {
       installDummyDuelOpponents()
       void refreshDuelOpponents()
@@ -490,7 +500,29 @@ const ui = new StrategyUI(root, {
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
   },
+  onScenarioStart: id => {
+    const scenario = scenarioById(id)
+    if (!scenario) return
+    scenarioActive = true
+    activeScenario = scenario
+    duelActive = false
+    state.section = 'battle'
+    const catalog = allGenerals()
+    const deck = scenario.deck.map((name, index) => {
+      const base = catalog.find(general => general.name === name) ?? catalog[index % catalog.length]
+      return { ...base, level: Math.max(base.level, 6 + Number(scenario.chapter.charAt(2)) * 2 + index * 2), skillUnlocked: true }
+    })
+    arena.setOpponentDeck(deck)
+    arena.setGenerals(battleGenerals())
+    arena.startBattle()
+    ui.updateBattle(arena.getSnapshot())
+    ui.render(state)
+    ui.updateBattle(arena.getSnapshot())
+    ui.notify(`${scenario.year}년 ${scenario.title} · 대화형 시나리오 전투를 시작합니다.`, 'jade')
+  },
   onBattleStart: () => {
+    scenarioActive = false
+    activeScenario = null
     duelActive = false
     arena.setOpponentDeck(null)
     state.section = 'battle'
@@ -501,7 +533,9 @@ const ui = new StrategyUI(root, {
       if (result.ok) pendingTicket = result.value
       else if (authView.status === 'authenticated') ui.notify(`온라인 기록을 시작하지 못했습니다 · ${result.error}`, 'ember')
     })
+    ui.updateBattle(arena.getSnapshot())
     ui.render(state)
+    ui.updateBattle(arena.getSnapshot())
     ui.notify('작전 개시 · 지휘 명령을 선택하십시오.')
   },
   onBattleMove: index => {
@@ -651,8 +685,18 @@ arena = new Arena(canvas, {
       state.silver += wasDuel ? 600 : 1200
       state.resources.silver = state.silver
       if (wasDuel) state.mythicFragments += 1
-      state.lastNotice = wasDuel ? '유저 대련에서 승리했습니다. 명망 +120 · 은전 +600 · 신화장비 조각 +1' : `황혼의 관문을 돌파했습니다. 명망 +180 · 은전 +1,200`
+      if (scenarioActive && activeScenario) {
+        const reward = activeScenario.reward
+        if (!state.scenarioCleared.includes(activeScenario.id)) {
+          state.scenarioCleared.push(activeScenario.id)
+          state.gold += reward.gold; state.honor += reward.honor; state.silver += reward.silver; state.manuals += reward.manuals
+          state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
+          state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 클리어 · 금화 +${reward.gold} · 모든 재화 보상 획득`
+        } else state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · 최초 클리어 보상은 이미 획득했습니다.`
+      } else state.lastNotice = wasDuel ? '유저 대련에서 승리했습니다. 명망 +120 · 은전 +600 · 신화장비 조각 +1' : `황혼의 관문을 돌파했습니다. 명망 +180 · 은전 +1,200`
     }
+    scenarioActive = false
+    activeScenario = null
     duelActive = false
     ui.render(state)
     ui.showBattleResult(wasSiege ? true : result.won, result.score)
@@ -758,7 +802,7 @@ async function refreshAccount(): Promise<void> {
   }
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null }
     if (!localSaveDirty) {
       Object.assign(state, { honor: game.honor, silver: game.silver, gold: typeof game.gold === 'number' ? game.gold : state.gold, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
       if (game.faction) state.faction = game.faction
@@ -785,6 +829,7 @@ async function refreshAccount(): Promise<void> {
       state.duelAttemptsToday = Math.max(0, Math.trunc(game.duelAttemptsToday ?? state.duelAttemptsToday))
       if (typeof game.duelDayKey === 'string') state.duelDayKey = game.duelDayKey
       if (typeof game.prelaunchGoldDayKey === 'string') state.prelaunchGoldDayKey = game.prelaunchGoldDayKey
+      if (Array.isArray(game.scenarioCleared)) state.scenarioCleared = game.scenarioCleared.filter((id: string): id is string => typeof id === 'string')
       ensureDuelDailyState(state)
       ensureEquipmentState(state)
       if (ensurePrelaunchDailyGold(state)) localSaveDirty = true
@@ -841,6 +886,7 @@ function accountStatePayload() {
     duelAttemptsToday: Math.trunc(state.duelAttemptsToday),
     duelDayKey: state.duelDayKey,
     prelaunchGoldDayKey: state.prelaunchGoldDayKey,
+    scenarioData: JSON.stringify(state.scenarioCleared),
   }
 }
 

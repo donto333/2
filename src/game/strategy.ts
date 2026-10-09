@@ -204,6 +204,7 @@ export interface StrategyState {
   duelAttemptsToday: number
   duelDayKey: string
   prelaunchGoldDayKey: string
+  scenarioCleared: string[]
 }
 
 export const INCOME_COOLDOWN_MS = 24 * 60 * 60 * 1000
@@ -781,7 +782,7 @@ export function createInitialState(): StrategyState {
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, luoyangBoxes: 0, lastLuoyangReward: undefined, luoyangRewardWeekKey: undefined, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
-    equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '',
+    equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '', scenarioCleared: [],
   }
   ensurePrelaunchDailyGold(state)
   ensureCityGarrisons(state)

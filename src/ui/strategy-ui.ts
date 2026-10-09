@@ -1,5 +1,6 @@
 import { CITY_ADJACENCY, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, BattleTroopStatus } from '../game/arena'
+import { SCENARIOS, scenarioById } from '../game/scenarios'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
 const equipmentImage = (type: EquipmentType): string => `/assets/equipment/${type}.webp`
@@ -89,6 +90,7 @@ export interface StrategyUiCallbacks {
   onBuildingUpgrade: (cityId: string, buildingId: string) => void
   onResearch: (id: string) => void
   onBattleStart: () => void
+  onScenarioStart: (id: string) => void
   onBattleMove: (index: number) => void
   onBattleSkill: () => void
   onBattleTactic: (tactic: 'guard' | 'feint' | 'charge') => void
@@ -146,6 +148,8 @@ export class StrategyUI {
   private readonly equipmentRowHeight = 286
   private shopTab: 'gold' | 'resources' | 'mythic' = 'gold'
   private territorySyncText = '서버 원장 대기'
+  private scenarioSelectedId = SCENARIOS[0]?.id ?? ''
+  private battleViewActive = false
 
   constructor(root: HTMLElement, callbacks: StrategyUiCallbacks) {
     this.root = root
@@ -173,6 +177,7 @@ export class StrategyUI {
       }
     }
     if (state.section !== 'equipment') this.equipmentScrollTop = 0
+    if (state.section !== 'battle') this.battleViewActive = false
     this.root.innerHTML = this.shell(state)
     const shell = this.root.querySelector<HTMLElement>('.app-shell')
     if (shell) {
@@ -298,6 +303,8 @@ export class StrategyUI {
 
   updateBattle(snapshot: BattleSnapshot): void {
     this.latestBattle = snapshot
+    if (snapshot.active) this.battleViewActive = true
+    else if (this.renderedState?.section === 'battle') this.battleViewActive = false
     const elapsed = this.root.querySelector<HTMLElement>('[data-battle-time]')
     const morale = this.root.querySelector<HTMLElement>('[data-battle-morale]')
     const moraleBar = this.root.querySelector<HTMLElement>('[data-morale-bar]')
@@ -394,7 +401,7 @@ export class StrategyUI {
         </header>
         <aside class="sidebar">
           <div class="sidebar-label">본진</div>
-          ${this.navButton('overview', '◈', '대장전', state.section)}
+          ${this.navButton('overview', '◈', '본영', state.section)}
           ${this.navButton('recruit', '✦', '모집 · 장비', state.section, state.lastRecruit ? 'NEW' : '')}
           ${this.navButton('roster', '◇', '보유 무장', state.section, `${state.generals.length}`)}
           ${this.navButton('codex', '▤', '무장 도감', state.section, `${allGenerals().length}`)}
@@ -403,7 +410,7 @@ export class StrategyUI {
           ${this.navButton('territory', '⌂', '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === state.faction).length}`)}
           ${this.navButton('research', '✧', '기술 연구', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">작전</div>
-          ${this.navButton('battle', '⚔', '전장 출정', state.section)}
+          ${this.navButton('battle', '⚔', '시나리오', state.section)}
           ${this.navButton('duel', '⚔', '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
           ${this.navButton('shop', '◈', '상점', state.section, `${state.gold}금화`)}
           ${this.navButton('rank', '≋', '천하 랭킹', state.section)}
@@ -433,7 +440,7 @@ export class StrategyUI {
     if (state.section === 'formation') return this.formationSection(state)
     if (state.section === 'territory') return this.territorySection(state)
     if (state.section === 'research') return this.researchSection(state)
-    if (state.section === 'battle') return this.battleSection(state)
+    if (state.section === 'battle') return this.battleViewActive ? this.battleSection(state) : this.scenarioSection(state)
     if (state.section === 'duel') return this.duelSection(state)
     if (state.section === 'shop') return this.shopSection(state)
     if (state.section === 'rank') return this.rankSection(state)
@@ -445,7 +452,7 @@ export class StrategyUI {
 
   private overviewSection(state: StrategyState): string {
     return `<section class="page-section page-section--overview"><div class="section-heading"><div><span class="eyebrow">THE WARRIOR'S PATH · 01</span><h1>다음 한 수를<br><em>준비하십시오.</em></h1><p class="heading-copy">무장을 영입하고, 성장을 증명하고,<br>당신의 이름을 전장에 새깁니다.</p></div><button class="ghost-button" data-action="section" data-section="rank">천하 전적 보기 <span>↗</span></button></div>
-      <div class="command-hero"><div class="hero-copy"><span class="pill pill--jade">오늘의 작전</span><h2>황혼의 관문</h2><p>협곡 너머에서 적의 깃발이 감지되었습니다.<br>정예 무장을 편성하고 선제 기동을 지휘하세요.</p><div class="hero-actions"><button class="action-button action-button--primary" data-action="section" data-section="battle">전장 입장 <span>→</span></button><button class="action-button action-button--quiet" data-action="section" data-section="recruit">무장 모집 <span>✦</span></button></div></div><div class="hero-stat"><span class="stat-label">작전 전투력</span><strong>${formatNumber(totalPower(state))}</strong><span class="stat-delta">▲ 12.4% <small>지난 작전 대비</small></span><div class="hero-sigil">✦</div></div></div>
+      <div class="command-hero"><div class="hero-copy"><span class="pill pill--jade">오늘의 작전</span><h2>황혼의 관문</h2><p>협곡 너머에서 적의 깃발이 감지되었습니다.<br>정예 무장을 편성하고 선제 기동을 지휘하세요.</p><div class="hero-actions"><button class="action-button action-button--primary" data-action="section" data-section="battle">시나리오 입장 <span>→</span></button><button class="action-button action-button--quiet" data-action="section" data-section="recruit">무장 모집 <span>✦</span></button></div></div><div class="hero-stat"><span class="stat-label">작전 전투력</span><strong>${formatNumber(totalPower(state))}</strong><span class="stat-delta">▲ 12.4% <small>지난 작전 대비</small></span><div class="hero-sigil">✦</div></div></div>
       <div class="overview-grid"><div class="glass-card formation-card"><div class="card-header"><div><span class="eyebrow">CURRENT FORMATION</span><h3>출전 진형</h3></div><button class="text-button" data-action="section" data-section="roster">편성 변경</button></div><div class="formation-row">${state.formation.map(id => { const general = state.generals.find(item => item.id === id); return general ? this.miniGeneral(general) : '' }).join('')}</div><div class="formation-footer"><span><i class="status-dot"></i> 출전 준비 완료</span><span class="muted">${state.formation.length}/3 슬롯</span></div></div><div class="glass-card notice-card"><div class="card-header"><div><span class="eyebrow">FIELD INTEL</span><h3>전장 기록</h3></div><span class="intel-icon">⌁</span></div><p class="notice-text">${state.lastNotice}</p><div class="notice-meta"><span>마지막 기록 · 방금 전</span><button class="text-button" data-action="section" data-section="battle">작전 보기 →</button></div></div></div>
       <div class="section-footnote"><span class="footnote-line"></span><span>제1장 · 옥패의 계절</span><span class="footnote-line"></span></div></section>`
   }
@@ -783,6 +790,16 @@ export class StrategyUI {
     return `<article class="formation-bench-card" style="--accent:${general.accent}">${this.portrait(general, 'formation-bench-portrait')}<div><strong>${general.name}</strong><small>${general.role} · ${GRADE_META[general.grade].label} · Lv.${general.level}</small></div><b>${formatNumber(combatPower(general))}</b><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">편성</button></article>`
   }
 
+  private scenarioSection(state: StrategyState): string {
+    const selected = scenarioById(this.scenarioSelectedId) ?? SCENARIOS[0]
+    const chapters = [...new Set(SCENARIOS.map(scenario => scenario.chapter))]
+    const selectedCleared = Boolean(selected && state.scenarioCleared.includes(selected.id))
+    const dialogue = selected?.dialogue.map(line => `<div class="scenario-dialogue-line"><b>${escapeHtml(line.speaker)}</b><p>${escapeHtml(line.text)}</p></div>`).join('') ?? ''
+    const reward = selected?.reward
+    const cards = chapters.map(chapter => `<div class="scenario-chapter"><div class="scenario-chapter-head"><span>${chapter}</span><strong>${escapeHtml(SCENARIOS.find(scenario => scenario.chapter === chapter)?.era ?? '')}</strong><small>${SCENARIOS.filter(scenario => scenario.chapter === chapter && state.scenarioCleared.includes(scenario.id)).length}/${SCENARIOS.filter(scenario => scenario.chapter === chapter).length} 클리어</small></div><div class="scenario-list">${SCENARIOS.filter(scenario => scenario.chapter === chapter).map(scenario => `<button class="scenario-card ${scenario.id === selected?.id ? 'is-selected' : ''} ${state.scenarioCleared.includes(scenario.id) ? 'is-cleared' : ''}" data-action="scenario-select" data-scenario-id="${scenario.id}"><span class="scenario-year">${scenario.year}</span><span><strong>${escapeHtml(scenario.title)}</strong><small>${escapeHtml(scenario.summary)}</small></span><b>${state.scenarioCleared.includes(scenario.id) ? '완료' : '출전'}</b></button>`).join('')}</div></div>`).join('')
+    return `<section class="page-section page-section--scenario"><div class="section-heading section-heading--compact"><div><span class="eyebrow">CHRONICLE SCENARIO · 04</span><h1>시나리오</h1><p class="heading-copy">184년부터 263년까지, 삼국지의 주요 사건을 대화와 전투로 직접 지휘하십시오.</p></div><div class="section-counter"><span>연대기 진행</span><strong>${state.scenarioCleared.length}<small> / ${SCENARIOS.length}</small></strong></div></div><div class="scenario-layout"><div class="scenario-chapter-list">${cards}</div><aside class="scenario-detail glass-card"><span class="pill pill--jade">${selected?.year ?? ''} · ${escapeHtml(selected?.era ?? '')}</span><h2>${escapeHtml(selected?.title ?? '시나리오를 선택하십시오')}</h2><p>${escapeHtml(selected?.summary ?? '')}</p><div class="scenario-dialogue">${dialogue}</div><div class="scenario-deck"><span class="eyebrow">RECOMMENDED DECK</span><strong>${selected?.deck.map(escapeHtml).join(' · ') ?? '—'}</strong></div><div class="scenario-reward"><span class="eyebrow">CLEAR REWARD${selectedCleared ? ' · 획득 완료' : ''}</span><p>금화 +${reward?.gold ?? 0} · 명망 +${reward?.honor ?? 0} · 은전 +${reward?.silver ?? 0} · 병서 +${reward?.manuals ?? 0}</p><small>식량 +${reward?.grain ?? 0} · 목재 +${reward?.wood ?? 0} · 철 +${reward?.iron ?? 0} · 영향력 +${reward?.influence ?? 0}</small></div><button class="action-button action-button--primary scenario-start-button" data-action="scenario-start" data-scenario-id="${selected?.id ?? ''}">${selectedCleared ? '다시 전투하기' : '시나리오 출전'} <span>→</span></button></aside></div></section>`
+  }
+
   private battleSection(state: StrategyState): string {
     const battle = this.latestBattle
     const selectedGeneral = state.generals.find(general => general.name === battle?.selectedName) ?? state.generals.find(general => general.id === state.formation[0])
@@ -956,6 +973,8 @@ export class StrategyUI {
     else if (action === 'collect-income') this.callbacks.onCollectIncome()
     else if (action === 'building-upgrade') this.callbacks.onBuildingUpgrade(button.dataset.city ?? '', button.dataset.building ?? '')
     else if (action === 'research') this.callbacks.onResearch(button.dataset.research ?? '')
+    else if (action === 'scenario-select') { this.scenarioSelectedId = button.dataset.scenarioId ?? this.scenarioSelectedId; if (this.renderedState) this.render(this.renderedState) }
+    else if (action === 'scenario-start') this.callbacks.onScenarioStart(button.dataset.scenarioId ?? '')
     else if (action === 'battle-start') this.callbacks.onBattleStart()
     else if (action === 'battle-unit') this.callbacks.onBattleMove(Number(button.dataset.index ?? 0))
     else if (action === 'move') this.callbacks.onBattleMove(Number(button.dataset.index ?? 0))

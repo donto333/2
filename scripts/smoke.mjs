@@ -148,8 +148,12 @@ try {
   await page.click('[data-action="close-recruit-results"]')
 
   await page.click('[data-action="section"][data-section="battle"]')
-  await page.waitForSelector('[data-action="battle-start"]')
-  await page.click('[data-action="battle-start"]')
+  await page.waitForSelector('.page-section--scenario')
+  if (await page.locator('.scenario-card').count() !== 58) throw new Error('scenario chronicle does not show all 58 episodes')
+  if (await page.locator('.scenario-dialogue-line').count() < 3) throw new Error('scenario dialogue panel is missing')
+  await page.click('.scenario-card:first-of-type')
+  await page.click('[data-action="scenario-start"]')
+  await page.waitForSelector('.page-section--battle')
   await page.waitForFunction(() => window.__strategy.arena.getSnapshot().elapsed > 0.25, null, { timeout: 5000 })
   await page.waitForTimeout(800)
   const formationMotion = await page.evaluate(() => {

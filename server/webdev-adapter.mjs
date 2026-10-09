@@ -77,7 +77,8 @@ var gameAccountStates = mysqlTable("game_account_states", {
   selectedEquipmentGeneralId: varchar("selectedEquipmentGeneralId", { length: 64 }),
   selectedCityId: varchar("selectedCityId", { length: 64 }),
   incomeCollectedAt: varchar("incomeCollectedAt", { length: 32 }),
-  conquestAt: varchar("conquestAt", { length: 32 })
+  conquestAt: varchar("conquestAt", { length: 32 }),
+  scenarioData: text("scenarioData")
 });
 var factionTerritoryStates = mysqlTable("faction_territory_states", {
   cityId: varchar("cityId", { length: 64 }).primaryKey(),
@@ -278,7 +279,7 @@ function parseStateJson(value) {
   }
 }
 function gameStateView(row) {
-  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, ...base } = row;
+  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, ...base } = row;
   return {
     ...base,
     generals: parseStateJson(generalData),
@@ -287,6 +288,7 @@ function gameStateView(row) {
     research: parseStateJson(researchData),
     equipmentInventory: parseStateJson(equipmentData),
     equipmentLoadouts: parseStateJson(equipmentLoadoutsData),
+    scenarioCleared: parseStateJson(scenarioData),
     selectedEquipmentGeneralId: row.selectedEquipmentGeneralId ?? null,
     selectedCityId: row.selectedCityId ?? null,
     lastIncomeCollectedAt: row.incomeCollectedAt ? Number(row.incomeCollectedAt) : undefined,

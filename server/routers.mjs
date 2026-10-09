@@ -84,6 +84,7 @@ export const gameRouter = router({
       prelaunchGoldDayKey: z.string().max(16).nullable().optional(),
       incomeCollectedAt: z.string().max(32).nullable().optional(),
       conquestAt: z.string().max(32).nullable().optional(),
+      scenarioData: z.string().max(20000).optional(),
     })).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 게임 상태를 저장할 수 없습니다.')
       return updateGameState(ctx.user.id, input)
