@@ -65,7 +65,8 @@ export const gameRouter = router({
       influence: z.number().int().min(0).max(100000000),
       generalData: z.string().max(60000).optional(),
       formationData: z.string().max(2000).optional(),
-      citiesData: z.string().max(30000).optional(),
+      // 도시별 최근 전투 기록(도시당 최대 30건)을 포함해도 저장되도록 TEXT 컬럼 범위에 맞춘다.
+      citiesData: z.string().max(500000).optional(),
       researchData: z.string().max(12000).optional(),
       equipmentData: z.string().max(2_000_000).optional(),
       equipmentLoadoutsData: z.string().max(200_000).optional(),
