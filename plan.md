@@ -71,3 +71,6 @@
 
 ## 시나리오 연대기 모드
 대장전 메뉴는 `src/game/scenarios.ts`의 데이터 주도 연대기 메뉴로 전환한다. 2.1 후한 쇠퇴부터 2.8 제갈량의 사후까지 8개 장, 총 58개 에피소드를 제공하며 각 항목은 연도·사건명·요약·3줄 대화·추천 적 덱·전 재화 보상을 가진다. `StrategyUI`는 장별 진행률과 에피소드 상세 패널을 표시하고, `onScenarioStart`는 추천 덱을 `Arena`에 주입한 뒤 기존 3D 전투 HUD로 전환한다. 전투 승리 시 `scenarioCleared`에 최초 클리어 ID를 추가하고 금화·명망·은전·병서·식량·목재·철·영향력을 한 번 지급한다. 회원 저장 payload에는 JSON 문자열 `scenarioData`를 사용하며 `game_account_states.scenarioData`로 서버에 보존한다.
+
+## 온라인 저장 payload 용량 보정
+장비 스택과 도시별 전투 기록이 증가하면 `game_account_states`의 기존 `TEXT` 컬럼(약 64KB)과 Express 2MB 본문 한도에 걸릴 수 있다. `server/020_save_payload_capacity.sql`에서 일반 JSON 상태 필드를 `MEDIUMTEXT`로 확장하고 시나리오 필드도 같은 타입으로 보장한다. `server/app.mjs`의 JSON 본문 한도는 8MB, 저장 mutation의 Zod 필드는 각 payload 범위에 맞춰 확장한다. Docker 런타임은 `db-migrate.mjs`를 먼저 실행한 뒤 API를 시작해 신규 migration이 배포 DB에 누락되지 않도록 한다. 클라이언트는 기존 로컬 우선 저장·revision 추적·지수 재시도 동작을 유지한다.

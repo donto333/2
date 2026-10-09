@@ -28,7 +28,7 @@ import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 // starters/web-db-user-v1/drizzle/schema.ts
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mediumtext, mysqlEnum, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
 var users = mysqlTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
@@ -68,17 +68,17 @@ var gameAccountStates = mysqlTable("game_account_states", {
   duelDayKey: varchar("duelDayKey", { length: 16 }),
   prelaunchGoldDayKey: varchar("prelaunchGoldDayKey", { length: 16 }),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  generalData: text("generalData"),
-  formationData: text("formationData"),
-  citiesData: text("citiesData"),
-  researchData: text("researchData"),
-  equipmentData: text("equipmentData"),
-  equipmentLoadoutsData: text("equipmentLoadoutsData"),
+  generalData: mediumtext("generalData"),
+  formationData: mediumtext("formationData"),
+  citiesData: mediumtext("citiesData"),
+  researchData: mediumtext("researchData"),
+  equipmentData: mediumtext("equipmentData"),
+  equipmentLoadoutsData: mediumtext("equipmentLoadoutsData"),
   selectedEquipmentGeneralId: varchar("selectedEquipmentGeneralId", { length: 64 }),
   selectedCityId: varchar("selectedCityId", { length: 64 }),
   incomeCollectedAt: varchar("incomeCollectedAt", { length: 32 }),
   conquestAt: varchar("conquestAt", { length: 32 }),
-  scenarioData: text("scenarioData")
+  scenarioData: mediumtext("scenarioData")
 });
 var factionTerritoryStates = mysqlTable("faction_territory_states", {
   cityId: varchar("cityId", { length: 64 }).primaryKey(),

@@ -5,4 +5,4 @@ RUN npm ci --omit=dev
 COPY server/ ./
 ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["node", "index.mjs"]
+CMD ["sh", "-c", "node db-migrate.mjs && node index.mjs"]

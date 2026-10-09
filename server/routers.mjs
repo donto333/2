@@ -63,13 +63,13 @@ export const gameRouter = router({
       wood: z.number().int().min(0).max(1000000000),
       iron: z.number().int().min(0).max(1000000000),
       influence: z.number().int().min(0).max(100000000),
-      generalData: z.string().max(60000).optional(),
+      generalData: z.string().max(500000).optional(),
       formationData: z.string().max(2000).optional(),
       // 도시별 최근 전투 기록(도시당 최대 30건)을 포함해도 저장되도록 TEXT 컬럼 범위에 맞춘다.
-      citiesData: z.string().max(500000).optional(),
-      researchData: z.string().max(12000).optional(),
-      equipmentData: z.string().max(2_000_000).optional(),
-      equipmentLoadoutsData: z.string().max(200_000).optional(),
+      citiesData: z.string().max(4_000_000).optional(),
+      researchData: z.string().max(100000).optional(),
+      equipmentData: z.string().max(4_000_000).optional(),
+      equipmentLoadoutsData: z.string().max(500_000).optional(),
       selectedEquipmentGeneralId: z.string().max(64).optional(),
       selectedCityId: z.string().max(64).nullable().optional(),
       faction: z.enum(['촉한', '위나라', '오나라']).optional(),
@@ -84,7 +84,7 @@ export const gameRouter = router({
       prelaunchGoldDayKey: z.string().max(16).nullable().optional(),
       incomeCollectedAt: z.string().max(32).nullable().optional(),
       conquestAt: z.string().max(32).nullable().optional(),
-      scenarioData: z.string().max(20000).optional(),
+      scenarioData: z.string().max(100000).optional(),
     })).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 게임 상태를 저장할 수 없습니다.')
       return updateGameState(ctx.user.id, input)
