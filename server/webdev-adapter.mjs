@@ -28,7 +28,7 @@ import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 // starters/web-db-user-v1/drizzle/schema.ts
-import { int, mediumtext, mysqlEnum, mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 var users = mysqlTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
