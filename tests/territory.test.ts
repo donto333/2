@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CITY_DEFENSE_BY_LEVEL, CITY_PRODUCTION_MULTIPLIER, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CITY_DEFENSE_BY_LEVEL, CITY_PRODUCTION_MULTIPLIER, cityBreachThreshold, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -18,6 +18,7 @@ describe('territory and governance', () => {
     const state = createInitialState()
     for (const city of state.cities) {
       expect(city.defense).toBe(CITY_DEFENSE_BY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5])
+      expect(cityBreachThreshold(city)).toBe(Math.ceil(CITY_DEFENSE_BY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5] * 0.1))
       if (city.owner === '중립') expect(city.garrisons?.every(garrison => garrison.averageLevel === DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5])).toBe(true)
       else expect(city.garrisons).toHaveLength(0)
     }
@@ -126,7 +127,7 @@ describe('territory and governance', () => {
     result = launchConquest(state, city.id, now)
     expect(result.ok).toBe(true)
     expect(city.owner).toBe('중립')
-    expect(city.defense).toBe(0)
+    expect(city.defense).toBe(cityBreachThreshold(city))
     expect(city.conquestProgress).toBe(100)
     expect(result.captured).toBe(false)
     const goldBefore = state.gold
@@ -164,7 +165,7 @@ describe('territory and governance', () => {
     expect(second.ok).toBe(true)
     expect(second.captured).toBe(false)
     expect(city.owner).toBe('위나라')
-    expect(city.defense).toBe(0)
+    expect(city.defense).toBe(cityBreachThreshold(city))
     expect(city.garrisons).toHaveLength(2)
     const final = launchFactionBattle(state, city.id, now + FACTION_BATTLE_COOLDOWN_MS)
     expect(final.ok).toBe(true)

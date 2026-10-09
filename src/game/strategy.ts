@@ -78,10 +78,16 @@ export const AI_CAPITAL_ID = 'xiangyang'
 export const LUOYANG_ID = 'luoyang'
 export const MAX_CITY_GARRISONS = 100
 export const CITY_DEFENSE_BY_LEVEL: Record<Grade, number> = { 1: 10_000, 2: 20_000, 3: 50_000, 4: 100_000, 5: 1_000_000 }
+// 정식 출시 전 테스트 기간에는 최대 방어력의 90%를 약화하고 10%를 최저 방어도로 유지한다.
+export const TERRITORY_TEST_WEAKENING_ENABLED = true
+export const TERRITORY_TEST_WEAKENING_RATIO = 0.10
 export const DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL: Record<Grade, number> = { 1: 10, 2: 15, 3: 20, 4: 25, 5: 30 }
 export const CITY_PRODUCTION_MULTIPLIER: Record<Grade, number> = { 1: 1, 2: 3, 3: 5, 4: 10, 5: 20 }
 export function cityDefenseForLevel(level: number): number {
   return CITY_DEFENSE_BY_LEVEL[level as Grade] ?? CITY_DEFENSE_BY_LEVEL[5]
+}
+export function cityBreachThreshold(city: Pick<City, 'level'>): number {
+  return TERRITORY_TEST_WEAKENING_ENABLED ? Math.ceil(cityDefenseForLevel(city.level) * TERRITORY_TEST_WEAKENING_RATIO) : 0
 }
 export function dummyGarrisonLevelForCityLevel(level: number): number {
   return DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[level as Grade] ?? DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[5]
@@ -1397,7 +1403,8 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
   addCityBattleLog(city, { timestamp: now, attackerName: '중립 인공지능 습격대', attackerKind: 'ai', defenderName: state.faction, won, damage, note: won ? `수비병 격파 · 성벽 방어도 -${damage}` : '수비병 방어 성공 · 전선이 유지되었습니다.' })
   if (won) {
     city.defendersDefeated = defeated + 1
-    city.defense = Math.max(0, city.defense - damage)
+    const breachThreshold = cityBreachThreshold(city)
+    city.defense = Math.max(breachThreshold, city.defense - damage)
     state.factionWarScore += 100
     state.lastNotice = `${city.name} 인공지능 습격 방어 성공 · 수비병 ${city.defendersDefeated}/${defenseLine.length} 격파 · 성벽 방어도 -${damage}`
   } else {
@@ -1415,7 +1422,8 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   const eligibility = conquestEligibility(state, cityId, now)
   if (!eligibility.allowed) return { ok: false, won: false, message: eligibility.reason, damage: 0 }
   const remainingGarrisons = Math.max(0, (city.garrisons?.length ?? 0) - (city.defendersDefeated ?? 0))
-  if (city.defense > 0 || remainingGarrisons > 0) return { ok: false, won: false, message: `최종 세력전은 성벽 방어도 0과 수비병 전멸 후에만 실행할 수 있습니다. 현재 방어도 ${city.defense} · 남은 수비병 ${remainingGarrisons}부대`, damage: 0 }
+  const breachThreshold = cityBreachThreshold(city)
+  if (city.defense > breachThreshold || remainingGarrisons > 0) return { ok: false, won: false, message: `최종 세력전은 성벽 방어도 약화 한계(${breachThreshold.toLocaleString()})와 수비병 전멸 후에만 실행할 수 있습니다. 현재 방어도 ${city.defense} · 남은 수비병 ${remainingGarrisons}부대`, damage: 0 }
   const wait = factionBattleCooldownRemaining(state, now)
   if (wait > 0) return { ok: false, won: false, message: `세력전 부대가 재편성 중입니다. ${Math.ceil(wait / 1000)}초 후 다시 공격할 수 있습니다.`, damage: 0 }
   const honorCost = FACTION_WAR_HONOR_COST[city.level] ?? FACTION_WAR_HONOR_COST[5]
@@ -1473,15 +1481,16 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
     return { ok: true, captured: false, message: state.lastNotice, damage: 0 }
   }
   city.defendersDefeated = defeated + 1
-  city.defense = Math.max(0, city.defense - damage)
+  const breachThreshold = cityBreachThreshold(city)
+  city.defense = Math.max(breachThreshold, city.defense - damage)
   const progress = Math.min(100, Math.round((city.defendersDefeated / defenseLine.length) * 100))
   city.conquestProgress = progress
   state.selectedCityId = city.id
   state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage }
   const remaining = defenseLine.length - city.defendersDefeated
-  const finalReady = city.defense <= 0 && remaining <= 0
+  const finalReady = city.defense <= breachThreshold && remaining <= 0
   state.lastNotice = finalReady
-    ? `${city.name} 수비병 전멸 · 성벽 방어도 0 · 최종 세력전을 실행해 점령하십시오.`
+    ? `${city.name} 수비병 전멸 · 성벽 방어도 약화 한계(${breachThreshold.toLocaleString()}) · 최종 세력전을 실행해 점령하십시오.`
     : `${city.name} 수비병 ${city.defendersDefeated}부대 격파 · 성벽 방어도 -${damage} · ${remaining}부대 남음`
   return { ok: true, captured: false, message: state.lastNotice, damage }
 }

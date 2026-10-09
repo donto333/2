@@ -225,6 +225,12 @@ async function updateUserRole(id, role, actorOpenId) {
 }
 const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한", factionChosen: 0 };
 const CITY_DEFENSE_BY_LEVEL = { 1: 10000, 2: 20000, 3: 50000, 4: 100000, 5: 1000000 };
+const TERRITORY_TEST_WEAKENING_ENABLED = true;
+const TERRITORY_TEST_WEAKENING_RATIO = 0.1;
+function cityDefenseFloor(cityId) {
+  const level = CITY_LEVEL_BY_ID[cityId] ?? 5;
+  return TERRITORY_TEST_WEAKENING_ENABLED ? Math.ceil((CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]) * TERRITORY_TEST_WEAKENING_RATIO) : 0;
+}
 const CITY_LEVEL_BY_ID = {
   chengdu: 3, hanzhong: 2, xiangyang: 4, jianye: 3, xuchang: 3, luoyang: 5, ye: 4, chenliu: 2, puyang: 2, wancheng: 2,
   jiangling: 3, yiling: 2, changsha: 3, lingling: 1, guiyang: 1, wujun: 3, kuaiji: 2, poyang: 2, hefei: 3, shouchun: 3,
@@ -413,15 +419,15 @@ async function recordFactionTerritoryBattle(userId, input) {
     const current = rows[0];
     if (!current || current.owner === faction) return;
     const finalRequested = Boolean(input.captured);
-    if (finalRequested && Number(current.defense) > 0) return;
+    if (finalRequested && Number(current.defense) > cityDefenseFloor(input.cityId)) return;
     const conquestProgress = finalRequested ? 100 : Math.min(100, Number(current.conquestProgress) + damage);
     // The row lock makes the first valid final-war request authoritative.
     // A later concurrent request observes the new owner and is ignored.
-    const captured = finalRequested && Number(current.defense) <= 0;
+    const captured = finalRequested && Number(current.defense) <= cityDefenseFloor(input.cityId);
     await tx.update(factionTerritoryStates).set({
       owner: captured ? faction : current.owner,
       conquestProgress,
-      defense: captured ? 0 : Math.max(0, Number(current.defense) - damage),
+      defense: captured ? 0 : Math.max(cityDefenseFloor(input.cityId), Number(current.defense) - damage),
       prosperity: captured ? Math.max(30, Number(current.prosperity) - 20) : current.prosperity,
       version: sql`${factionTerritoryStates.version} + 1`,
       updatedByUserId: userId
