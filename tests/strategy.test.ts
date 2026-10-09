@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GRADE_POWER_MULTIPLIER, GOLD_PACKAGES, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseHonorPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GRADE_POWER_MULTIPLIER, GOLD_PACKAGES, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseHonorPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentInventoryCount, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
 import { effectLoadout } from '../src/game/battle-effects'
 
 describe('commander attributes', () => {
@@ -231,6 +231,20 @@ describe('commander attributes', () => {
     expect(EQUIPMENT_GRADE_META.mythic.drawWeight).toBe(0)
     expect(MYTHIC_EVENT_EQUIPMENT.mythicEventOnly).toBe(true)
     expect(MYTHIC_EVENT_EQUIPMENT.grade).toBe('mythic')
+  })
+
+  it('stacks identical equipment and splits one copy when enhancing a stack', () => {
+    const state = createInitialState()
+    const duplicate = { ...state.equipmentInventory[0], id: 'duplicate-starter-weapon', quantity: 2 }
+    state.equipmentInventory.push(duplicate)
+    ensureEquipmentState(state)
+    const stack = state.equipmentInventory.find(item => item.id === 'starter-weapon')!
+    expect(state.equipmentInventory).toHaveLength(3)
+    expect(stack.quantity).toBe(3)
+    expect(equipmentInventoryCount(state)).toBe(5)
+    expect(enhanceEquipment(state, stack.id).ok).toBe(true)
+    expect(state.equipmentInventory.find(item => item.id === stack.id)?.quantity).toBe(2)
+    expect(state.equipmentInventory.some(item => item.level === 2 && item.quantity === 1)).toBe(true)
   })
 
   it('equips an item to a general, replaces the same slot, and enhances with silver and iron', () => {

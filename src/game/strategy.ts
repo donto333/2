@@ -107,6 +107,7 @@ export interface ResearchNode {
 
 export interface Equipment {
   id: string
+  quantity?: number
   name: string
   type: EquipmentType
   set: EquipmentSet
@@ -881,13 +882,61 @@ export function totalPower(state: StrategyState): number {
 export function ensureEquipmentState(state: StrategyState): void {
   if (!Array.isArray(state.equipmentInventory)) state.equipmentInventory = starterEquipment()
   state.equipmentInventory.forEach(item => {
+    item.quantity = Math.max(1, Math.trunc(item.quantity ?? 1))
     if (item.grade === 'mythic' && !item.specialty) item.specialty = mythicSpecialty(item.type, item.set)
   })
+  mergeEquipmentStacks(state)
   if (!state.equipmentLoadouts || typeof state.equipmentLoadouts !== 'object') state.equipmentLoadouts = {}
   if (!state.selectedEquipmentGeneralId || !state.generals.some(general => general.id === state.selectedEquipmentGeneralId)) state.selectedEquipmentGeneralId = state.generals[0]?.id ?? ''
   if (!Array.isArray(state.lastEquipmentDraw)) state.lastEquipmentDraw = []
   if (typeof state.mythicFragments !== 'number') state.mythicFragments = 0
   ensureDuelDailyState(state)
+}
+
+function equipmentStackKey(item: Equipment): string {
+  return [item.name, item.type, item.set, item.grade, item.level, item.mainStat, item.baseValue, item.skillName, item.skillDescription, item.mythicEventOnly ? 'event' : '', item.specialty ?? ''].join('|')
+}
+
+function mergeEquipmentStacks(state: StrategyState): void {
+  const stacks = new Map<string, Equipment>()
+  const redirects = new Map<string, string>()
+  const merged: Equipment[] = []
+  state.equipmentInventory.forEach(item => {
+    const existing = stacks.get(equipmentStackKey(item))
+    if (!existing) {
+      stacks.set(equipmentStackKey(item), item)
+      merged.push(item)
+      return
+    }
+    existing.quantity = (existing.quantity ?? 1) + (item.quantity ?? 1)
+    redirects.set(item.id, existing.id)
+  })
+  if (redirects.size) {
+    Object.values(state.equipmentLoadouts ?? {}).forEach(loadout => {
+      ;(Object.keys(loadout) as EquipmentType[]).forEach(type => {
+        const itemId = loadout[type]
+        const redirected = itemId ? redirects.get(itemId) : undefined
+        if (redirected) loadout[type] = redirected
+      })
+    })
+  }
+  state.equipmentInventory = merged
+}
+
+function addEquipmentToInventory(state: StrategyState, item: Equipment): Equipment {
+  const existing = state.equipmentInventory.find(candidate => equipmentStackKey(candidate) === equipmentStackKey(item))
+  if (existing) {
+    existing.quantity = (existing.quantity ?? 1) + (item.quantity ?? 1)
+    return existing
+  }
+  item.quantity = Math.max(1, Math.trunc(item.quantity ?? 1))
+  state.equipmentInventory.push(item)
+  return item
+}
+
+export function equipmentInventoryCount(state: StrategyState): number {
+  ensureEquipmentState(state)
+  return state.equipmentInventory.reduce((total, item) => total + (item.quantity ?? 1), 0)
 }
 
 export function equipmentValue(item: Equipment): number {
@@ -941,6 +990,14 @@ export function enhanceEquipment(state: StrategyState, id: string): UpgradeResul
   if (item.level >= 20) return { ok: false, message: '장비가 이미 최고 강화 레벨입니다.' }
   const cost = equipmentCost(item)
   if (!spendResources(state, cost)) return { ok: false, message: `강화 재화가 부족합니다. 은전 ${formatNumber(cost.silver ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요` }
+  const quantity = item.quantity ?? 1
+  if (quantity > 1) {
+    item.quantity = quantity - 1
+    const enhanced = { ...item, id: `${item.id}-enhanced-${Date.now()}`, quantity: 1, level: item.level + 1 }
+    addEquipmentToInventory(state, enhanced)
+    state.lastNotice = `${item.name} 1개 강화 완료 · Lv.${enhanced.level} · ${enhanced.mainStat} +${equipmentValue(enhanced)}`
+    return { ok: true, message: state.lastNotice }
+  }
   item.level += 1
   state.lastNotice = `${item.name} 강화 완료 · Lv.${item.level} · ${item.mainStat} +${equipmentValue(item)}`
   return { ok: true, message: state.lastNotice }
@@ -1041,7 +1098,7 @@ export function purchaseMythicEquipment(state: StrategyState, equipmentId: strin
   if (!template) return { ok: false, message: '해당 신화장비를 찾을 수 없습니다.' }
   state.mythicFragments -= MYTHIC_FRAGMENT_COST
   const item = { ...template, id: `${template.id}-${Date.now()}-${state.equipmentInventory.length}` }
-  state.equipmentInventory.push(item)
+  addEquipmentToInventory(state, item)
   state.lastNotice = `${item.name}을(를) 구매했습니다. 신화장비 조각 -${MYTHIC_FRAGMENT_COST}`
   return { ok: true, message: state.lastNotice, item }
 }
@@ -1052,7 +1109,7 @@ export function drawEquipment(state: StrategyState, count = 1): EquipmentDrawRes
   if (state.honor < cost) return { ok: false, message: `명망이 부족합니다. 장비 뽑기에는 ${formatNumber(cost)} 명망이 필요합니다.`, rewards: [] }
   state.honor -= cost
   const rewards = Array.from({ length: count }, (_, index) => createDrawnEquipment(index))
-  state.equipmentInventory.push(...rewards)
+  rewards.forEach(item => addEquipmentToInventory(state, item))
   state.lastEquipmentDraw = rewards
   state.lastNotice = `${count}회 장비 뽑기 완료 · ${rewards.map(item => `${EQUIPMENT_GRADE_META[item.grade].label} ${item.name}`).join(', ')}`
   return { ok: true, message: state.lastNotice, rewards }
