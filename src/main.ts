@@ -173,6 +173,7 @@ let saveRevision = 0
 let duelActive = false
 let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
+let pendingSiege: { cityId: string; result: ReturnType<typeof launchConquest> } | null = null
 
 function restoreAccessState(mode: 'member' | 'guest'): void {
   const currentSection = state.section
@@ -222,6 +223,17 @@ function duelDeckFor(opponent: DuelOpponent): ReturnType<typeof allGenerals> {
   const seed = [...opponent.id].reduce((sum, character) => sum + character.charCodeAt(0), opponent.score)
   const deck = [0, 1, 2].map(index => catalog[(seed + index * 17) % catalog.length])
   return deck.map(general => ({ ...general, level: Math.max(1, Math.min(30, Math.round(opponent.score / 1800) + (general.grade - 2))), stars: Math.max(1, Math.min(5, general.stars)) }))
+}
+
+function siegeDeckFor(cityId: string): ReturnType<typeof allGenerals> {
+  const city = state.cities.find(item => item.id === cityId)
+  const catalog = allGenerals()
+  const seed = [...cityId].reduce((sum, character) => sum + character.charCodeAt(0), (city?.level ?? 1) * 31)
+  return [0, 1, 2].map(index => {
+    const template = catalog[(seed + index * 13) % catalog.length]
+    const level = Math.max(1, Math.min(30, (city?.level ?? 1) * 5 + index * 2))
+    return { ...template, id: `siege-${cityId}-${index}`, level, stars: Math.max(1, Math.min(5, city?.level ?? 1)), skillUnlocked: true }
+  })
 }
 
 const DUMMY_DUEL_STORAGE_KEY = 'cheonharo.duel.dummy-opponents.v1'
@@ -334,6 +346,14 @@ const ui = new StrategyUI(root, {
       duelActive = false
       arena.stopBattle()
     }
+    if (pendingSiege && section !== 'battle') {
+      const siege = pendingSiege
+      pendingSiege = null
+      arena.stopBattle()
+      queueAccountSave(true)
+      void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })
+      ui.notify('공성 전투를 종료하고 전황을 저장했습니다.', 'jade')
+    }
     state.section = section
     if (section === 'battle') { duelActive = false; arena.setOpponentDeck(null); arena.setGenerals(battleGenerals()); ui.updateBattle(arena.getSnapshot()) }
     if (section === 'duel') {
@@ -416,11 +436,19 @@ const ui = new StrategyUI(root, {
   },
   onConquest: id => {
     const result = launchConquest(state, id)
-    ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) {
-      queueAccountSave()
-      void recordFactionTerritoryBattle(id, { damage: result.damage, won: true, captured: result.captured })
+      pendingSiege = { cityId: id, result }
+      duelActive = false
+      state.section = 'battle'
+      arena.setSiegeDeck(siegeDeckFor(id))
+      arena.setGenerals(battleGenerals())
+      arena.startBattle()
+      ui.render(state)
+      ui.updateBattle(arena.getSnapshot())
+      ui.notify('공성출정을 시작했습니다. 성문을 돌파하고 전황을 확인하십시오.', 'jade')
+    } else {
+      ui.render(state)
     }
   },
   onDefense: id => {
@@ -611,8 +639,13 @@ arena = new Arena(canvas, {
   onEvent: message => ui.notify(message),
   onBattleEnd: result => {
     state.battleScore = Math.max(state.battleScore, result.score)
-    const wasDuel = duelActive || arena.isDuelBattle()
-    if (result.won) {
+    const siege = pendingSiege
+    const wasSiege = Boolean(siege)
+    const wasDuel = !wasSiege && (duelActive || arena.isDuelBattle())
+    if (wasSiege && siege) {
+      state.lastNotice = siege.result.message
+      pendingSiege = null
+    } else if (result.won) {
       state.wins += 1
       state.honor += wasDuel ? 120 : 180
       state.silver += wasDuel ? 600 : 1200
@@ -622,7 +655,12 @@ arena = new Arena(canvas, {
     }
     duelActive = false
     ui.render(state)
-    ui.showBattleResult(result.won, result.score)
+    ui.showBattleResult(wasSiege ? true : result.won, result.score)
+    if (siege) {
+      queueAccountSave(true)
+      void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })
+      ui.notify(siege.result.message, siege.result.captured ? 'jade' : 'ember')
+    }
     if (pendingTicket) {
       void leaderboard.submitRun(pendingTicket, result.score, result.durationMs).then((submission: Result<unknown>) => {
         if (submission.ok) ui.notify('작전 점수가 천하 랭킹에 기록되었습니다.')

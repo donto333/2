@@ -318,6 +318,10 @@ export class Arena {
     this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
     this.duelMode = Boolean(this.configuredEnemyDeck?.length)
   }
+  setSiegeDeck(generals: General[] | null): void {
+    this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
+    this.duelMode = false
+  }
   isDuelBattle(): boolean {
     return this.duelMode
   }
