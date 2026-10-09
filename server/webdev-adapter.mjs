@@ -397,12 +397,16 @@ async function recordFactionTerritoryBattle(userId, input) {
     const rows = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1).for("update");
     const current = rows[0];
     if (!current || current.owner === faction) return;
-    const conquestProgress = input.captured ? 100 : Math.min(100, Number(current.conquestProgress) + damage);
-    const captured = conquestProgress >= 100;
+    const finalRequested = Boolean(input.captured);
+    if (finalRequested && Number(current.defense) > 0) return;
+    const conquestProgress = finalRequested ? 100 : Math.min(100, Number(current.conquestProgress) + damage);
+    // The row lock makes the first valid final-war request authoritative.
+    // A later concurrent request observes the new owner and is ignored.
+    const captured = finalRequested && Number(current.defense) <= 0;
     await tx.update(factionTerritoryStates).set({
       owner: captured ? faction : current.owner,
       conquestProgress,
-      defense: Math.max(20, Number(current.defense) - Math.ceil(damage / 2)),
+      defense: captured ? 0 : Math.max(0, Number(current.defense) - damage),
       prosperity: captured ? Math.max(30, Number(current.prosperity) - 20) : current.prosperity,
       version: sql`${factionTerritoryStates.version} + 1`,
       updatedByUserId: userId
