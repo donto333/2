@@ -319,16 +319,18 @@ function factionTerritoryView(row) {
   };
 }
 async function ensureFactionTerritories(db) {
-  const existing = await db.select({ cityId: factionTerritoryStates.cityId, defense: factionTerritoryStates.defense }).from(factionTerritoryStates);
+  const existing = await db.select({ cityId: factionTerritoryStates.cityId, defense: factionTerritoryStates.defense, conquestProgress: factionTerritoryStates.conquestProgress }).from(factionTerritoryStates);
   const known = new Set(existing.map(row => row.cityId));
-  const missing = FACTION_TERRITORY_SEED.filter(city => !known.has(city.cityId)).map(city => ({ ...city, defense: cityDefenseFloor(city.cityId) }));
+  const missing = FACTION_TERRITORY_SEED.filter(city => !known.has(city.cityId)).map(city => ({ ...city, defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[city.cityId] ?? 1) }));
   if (missing.length) {
     await db.insert(factionTerritoryStates).values(missing).onDuplicateKeyUpdate({ set: { cityId: sql`cityId` } });
   }
   for (const row of existing) {
     const floor = cityDefenseFloor(row.cityId);
-    if (Number(row.defense) > floor) {
-      await db.update(factionTerritoryStates).set({ defense: floor }).where(eq(factionTerritoryStates.cityId, row.cityId));
+    // 이전 버전이 모든 도시를 약화 하한에서 시작시킨 경우만 원래 최대치로 복구한다.
+    // 이미 공성 진전이 있는 도시는 현재 방어도를 그대로 보존한다.
+    if (Number(row.defense) === floor && Number(row.conquestProgress) === 0) {
+      await db.update(factionTerritoryStates).set({ defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[row.cityId] ?? 1) }).where(eq(factionTerritoryStates.cityId, row.cityId));
     }
   }
 }

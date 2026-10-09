@@ -14,10 +14,10 @@ describe('territory and governance', () => {
     expect(state.research).toHaveLength(58)
   })
 
-  it('assigns the requested defense and neutral dummy levels by city grade', () => {
+  it('starts cities at maximum defense and keeps the weakened floor for siege damage', () => {
     const state = createInitialState()
     for (const city of state.cities) {
-      expect(city.defense).toBe(cityBreachThreshold(city))
+      expect(city.defense).toBe(CITY_DEFENSE_BY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5])
       expect(cityBreachThreshold(city)).toBe(Math.ceil(CITY_DEFENSE_BY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5] * 0.1))
       if (city.owner === '중립') expect(city.garrisons?.every(garrison => garrison.averageLevel === DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5])).toBe(true)
       else expect(city.garrisons).toHaveLength(0)
@@ -127,7 +127,8 @@ describe('territory and governance', () => {
     result = launchConquest(state, city.id, now)
     expect(result.ok).toBe(true)
     expect(city.owner).toBe('중립')
-    expect(city.defense).toBe(cityBreachThreshold(city))
+    expect(city.defense).toBeGreaterThanOrEqual(cityBreachThreshold(city))
+    expect(city.defense).toBeLessThan(CITY_DEFENSE_BY_LEVEL[2])
     expect(city.conquestProgress).toBe(100)
     expect(result.captured).toBe(false)
     const goldBefore = state.gold
@@ -165,7 +166,8 @@ describe('territory and governance', () => {
     expect(second.ok).toBe(true)
     expect(second.captured).toBe(false)
     expect(city.owner).toBe('위나라')
-    expect(city.defense).toBe(cityBreachThreshold(city))
+    expect(city.defense).toBeGreaterThanOrEqual(cityBreachThreshold(city))
+    expect(city.defense).toBeLessThan(CITY_DEFENSE_BY_LEVEL[2])
     expect(city.garrisons).toHaveLength(2)
     const final = launchFactionBattle(state, city.id, now + FACTION_BATTLE_COOLDOWN_MS)
     expect(final.ok).toBe(true)
