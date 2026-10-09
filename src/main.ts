@@ -682,9 +682,13 @@ arena = new Arena(canvas, {
       pendingSiege = null
     } else if (result.won) {
       state.wins += 1
-      state.honor += wasDuel ? 120 : 180
-      state.silver += wasDuel ? 600 : 1200
-      state.resources.silver = state.silver
+      // 시나리오 전투는 최초 클리어 보상만 사용한다. 일반 전투 공통 보상까지
+      // 더하면 완료 시나리오 재전투에서 명망·은전이 반복 지급된다.
+      if (!wasScenario) {
+        state.honor += wasDuel ? 120 : 180
+        state.silver += wasDuel ? 600 : 1200
+        state.resources.silver = state.silver
+      }
       if (wasDuel) state.mythicFragments += 1
       if (scenarioActive && activeScenario) {
         const reward = firstClearReward(activeScenario, state.scenarioCleared)
