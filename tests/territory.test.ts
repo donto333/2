@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -89,32 +89,38 @@ describe('territory and governance', () => {
     expect(state.research.find(node => node.id === 'granary')?.unlocked).toBe(true)
   })
 
-  it('stages a frontline siege and captures a neutral city with rewards', () => {
+  it('weakens the wall and leaves capture to the final faction battle', () => {
     const state = createInitialState()
     const city = findCity(state, 'hanzhong')!
-    const beforeHonor = state.honor
     expect(conquestPower(state)).toBeGreaterThan(0)
     expect(conquestCost(city).grain).toBe(1150)
+    city.defense = 8
+    city.garrisons = [1, 2].map(index => ({ id: `neutral-${index}`, generalIds: [], averageLevel: 10, power: 1, source: 'dummy' as const, label: '중립 더미 수비대' }))
     let now = 1000
     let result = launchConquest(state, city.id, now)
     expect(result.ok).toBe(true)
     const blocked = launchConquest(state, city.id, now)
     expect(blocked.ok).toBe(false)
-    while (!result.captured) {
-      now += CONQUEST_COOLDOWN_MS
-      result = launchConquest(state, city.id, now)
-    }
-    expect(city.owner).toBe('촉한')
+    now += CONQUEST_COOLDOWN_MS
+    result = launchConquest(state, city.id, now)
+    expect(result.ok).toBe(true)
+    expect(city.owner).toBe('중립')
+    expect(city.defense).toBe(0)
     expect(city.conquestProgress).toBe(100)
-    expect(state.honor).toBeGreaterThan(beforeHonor)
-    expect(state.lastConquest?.captured).toBe(true)
+    expect(result.captured).toBe(false)
+    const goldBefore = state.gold
+    const final = launchFactionBattle(state, city.id, now + FACTION_BATTLE_COOLDOWN_MS)
+    expect(final.ok).toBe(true)
+    expect(final.won).toBe(true)
+    expect(city.owner).toBe('촉한')
+    expect(state.gold).toBe(goldBefore + FACTION_WAR_GOLD_REWARD[2])
   })
 
   it('requires every deployed garrison to be defeated before capture', () => {
     const state = createInitialState()
     const city = findCity(state, 'hanzhong')!
     city.owner = '위나라'
-    city.defense = 100
+    city.defense = 8
     const attackPower = conquestPower(state)
     city.garrisons = [1, 2].map(index => ({
       id: `player-defense-${index}`,
@@ -135,7 +141,13 @@ describe('territory and governance', () => {
     now += CONQUEST_COOLDOWN_MS
     const second = launchConquest(state, city.id, now)
     expect(second.ok).toBe(true)
-    expect(second.captured).toBe(true)
+    expect(second.captured).toBe(false)
+    expect(city.owner).toBe('위나라')
+    expect(city.defense).toBe(0)
+    expect(city.garrisons).toHaveLength(2)
+    const final = launchFactionBattle(state, city.id, now + FACTION_BATTLE_COOLDOWN_MS)
+    expect(final.ok).toBe(true)
+    expect(final.won).toBe(true)
     expect(city.owner).toBe('촉한')
     expect(city.garrisons).toEqual([])
     expect(city.defendersDefeated).toBe(0)
@@ -208,14 +220,21 @@ describe('territory and governance', () => {
     expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 20, 0)).allowed).toBe(true)
   })
 
-  it('starts faction warfare against an enemy city and throttles repeats', () => {
+  it('requires a broken wall and consumes tiered honor for faction warfare', () => {
     const state = createInitialState()
     const city = findCity(state, 'hanzhong')!
+    const blocked = launchFactionBattle(state, city.id, 2000)
+    expect(blocked.ok).toBe(false)
+    city.defense = 0
+    city.garrisons = [{ id: 'defeated', generalIds: state.formation, averageLevel: 1, power: 1, source: 'player' as const, label: '격파된 수비대' }]
+    city.defendersDefeated = 3
+    const beforeHonor = state.honor
+    const beforeGold = state.gold
     const result = launchFactionBattle(state, city.id, 2000)
     expect(result.ok).toBe(true)
+    expect(result.won).toBe(true)
     expect(city.battleLogs?.at(-1)?.attackerKind).toBe('user')
-    expect(state.factionWarScore).toBeGreaterThanOrEqual(0)
-    expect(launchFactionBattle(state, city.id, 2000).ok).toBe(false)
-    expect(launchFactionBattle(state, city.id, 2000 + FACTION_BATTLE_COOLDOWN_MS).ok).toBe(true)
+    expect(state.honor).toBe(beforeHonor - FACTION_WAR_HONOR_COST[2])
+    expect(state.gold).toBe(beforeGold + FACTION_WAR_GOLD_REWARD[2])
   })
 })
