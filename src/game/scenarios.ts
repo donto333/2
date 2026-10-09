@@ -41,13 +41,13 @@ const CHAPTERS: ChapterSeed[] = [
 
 const REWARD = (chapterIndex: number, entryIndex: number): ScenarioReward => ({
   gold: 10 + chapterIndex * 5 + entryIndex * 2,
-  honor: 80 + chapterIndex * 30,
-  silver: 500 + chapterIndex * 180 + entryIndex * 40,
-  manuals: 20 + chapterIndex * 5,
-  grain: 800 + chapterIndex * 250,
-  wood: 500 + chapterIndex * 160,
-  iron: 300 + chapterIndex * 100,
-  influence: 120 + chapterIndex * 40,
+  honor: (80 + chapterIndex * 30) * 10,
+  silver: (500 + chapterIndex * 180 + entryIndex * 40) * 10,
+  manuals: (20 + chapterIndex * 5) * 10,
+  grain: (800 + chapterIndex * 250) * 10,
+  wood: (500 + chapterIndex * 160) * 10,
+  iron: (300 + chapterIndex * 100) * 10,
+  influence: (120 + chapterIndex * 40) * 10,
 })
 
 export const SCENARIOS: ScenarioDefinition[] = CHAPTERS.flatMap((chapter, chapterIndex) => chapter.entries.map(([year, title, summary], entryIndex) => ({
