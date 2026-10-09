@@ -454,6 +454,9 @@ const ui = new StrategyUI(root, {
       arena.setSiegeDeck(siegeDeckFor(id))
       arena.setGenerals(battleGenerals())
       arena.startBattle()
+      // 전투 스냅샷을 먼저 반영해야 battleViewActive가 켜진 상태로 렌더링된다.
+      // 순서를 뒤집으면 공성 출정도 시나리오 목록으로 다시 표시된다.
+      ui.updateBattle(arena.getSnapshot())
       ui.render(state)
       ui.updateBattle(arena.getSnapshot())
       ui.notify('공성출정을 시작했습니다. 성문을 돌파하고 전황을 확인하십시오.', 'jade')

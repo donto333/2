@@ -82,6 +82,17 @@ try {
   if (!(await page.locator('.page-section--territory').textContent())?.includes('촉한 영토')) throw new Error('active faction territory label is missing')
   await page.click('[data-action="territory-refresh"]')
   if (!(await page.locator('[data-territory-sync]').textContent())?.includes('로그인 후 동기화')) throw new Error('guest territory sync fallback is missing')
+  await page.click('[data-action="city-select"][data-city="hanzhong"]')
+  await page.evaluate(() => {
+    window.__strategy.state.resources.grain = 999999
+    window.__strategy.state.resources.silver = 999999
+    window.__strategy.state.resources.iron = 999999
+    window.__strategy.ui.render(window.__strategy.state)
+  })
+  await page.click('[data-action="conquer"][data-city="hanzhong"]')
+  await page.waitForSelector('.page-section--battle')
+  if (await page.locator('.page-section--scenario').count() !== 0) throw new Error('siege conquest incorrectly opened the scenario list')
+  if (!(await page.evaluate(() => window.__strategy.arena.getSnapshot().active))) throw new Error('siege conquest did not start the 3D battle')
   await page.click('[data-action="section"][data-section="overview"]')
   await page.evaluate(() => {
     window.__strategy.ui.setAuth({ status: 'authenticated', name: '스모크 관리자' })
