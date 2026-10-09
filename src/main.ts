@@ -169,6 +169,7 @@ let saveTimer: number | null = null
 let saveInFlight = false
 let saveQueued = false
 let saveRetryCount = 0
+let saveRevision = 0
 let duelActive = false
 let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
@@ -808,6 +809,7 @@ function accountStatePayload() {
 function queueAccountSave(immediate = false): void {
   persistLocalGame()
   localSaveDirty = true
+  saveRevision += 1
   if (authView.status !== 'authenticated') return
   if (saveInFlight) {
     saveQueued = true
@@ -828,15 +830,23 @@ function queueAccountSave(immediate = false): void {
 
 async function flushAccountSave(): Promise<void> {
   if (authView.status !== 'authenticated') return
+  if (saveInFlight) {
+    saveQueued = true
+    return
+  }
+  const revisionAtStart = saveRevision
   saveInFlight = true
   try {
     await ManusAuth.mutate('account.saveGameState', accountStatePayload())
     saveRetryCount = 0
-    localSaveDirty = false
-  } catch {
+    if (saveRevision === revisionAtStart) localSaveDirty = false
+  } catch (error) {
     saveRetryCount += 1
     saveQueued = true
-    if (saveRetryCount >= 3) ui.notify('온라인 저장이 지연되고 있습니다. 로컬 저장 후 자동 재시도합니다.', 'ember')
+    if (saveRetryCount >= 3) {
+      const reason = error instanceof Error && error.message ? ` · ${error.message.slice(0, 80)}` : ''
+      ui.notify(`온라인 저장이 지연되고 있습니다. 로컬 저장 후 자동 재시도합니다.${reason}`, 'ember')
+    }
   } finally {
     saveInFlight = false
     if (saveQueued) {

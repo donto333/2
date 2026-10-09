@@ -440,7 +440,9 @@ async function updateGameState(userId, values) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   await db.insert(gameAccountStates).values({ userId, ...values }).onDuplicateKeyUpdate({ set: values });
-  return getGameState(userId);
+  // The client already owns the canonical state. Avoid a second full-row read
+  // (including large JSON inventories) after every write.
+  return { ok: true, userId };
 }
 
 // starters/web-db-user-v1/server/_core/cookies.ts
