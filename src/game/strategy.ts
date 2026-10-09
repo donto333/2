@@ -77,6 +77,14 @@ export const FACTION_CAPITALS: Record<Faction, string> = { 촉한: 'chengdu', �
 export const AI_CAPITAL_ID = 'xiangyang'
 export const LUOYANG_ID = 'luoyang'
 export const MAX_CITY_GARRISONS = 100
+export const CITY_DEFENSE_BY_LEVEL: Record<Grade, number> = { 1: 10_000, 2: 20_000, 3: 50_000, 4: 100_000, 5: 1_000_000 }
+export const DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL: Record<Grade, number> = { 1: 10, 2: 15, 3: 20, 4: 25, 5: 30 }
+export function cityDefenseForLevel(level: number): number {
+  return CITY_DEFENSE_BY_LEVEL[level as Grade] ?? CITY_DEFENSE_BY_LEVEL[5]
+}
+export function dummyGarrisonLevelForCityLevel(level: number): number {
+  return DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[level as Grade] ?? DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[5]
+}
 export const FACTION_WAR_HONOR_COST: Record<number, number> = { 1: 100, 2: 2000, 3: 3000, 4: 4000, 5: 5000 }
 export const FACTION_WAR_GOLD_REWARD: Record<number, number> = { 1: 20, 2: 40, 3: 60, 4: 80, 5: 100 }
 export const CITY_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
@@ -401,7 +409,7 @@ export function createCities(): City[] {
     { id: 'jiaozhi', name: '교지', chineseName: '交趾', region: '남방 해안', owner: '중립', level: 1, prosperity: 44, defense: 48, buildings: createBuildings(1) },
     { id: 'shixing', name: '시흥', chineseName: '始興', region: '영남 북부', owner: '중립', level: 1, prosperity: 41, defense: 47, buildings: createBuildings(1) },
     { id: 'nanhai', name: '남해', chineseName: '南海', region: '영남 남부', owner: '중립', level: 1, prosperity: 43, defense: 45, buildings: createBuildings(1) },
-  ]
+  ].map(city => ({ ...city, defense: cityDefenseForLevel(city.level) })) as City[]
 }
 
 export function ensureCityRoster(state: StrategyState): void {
@@ -410,7 +418,7 @@ export function ensureCityRoster(state: StrategyState): void {
   state.cities.push(...fresh)
 }
 function dummyDefenseLevel(city: City): number {
-  return ({ 1: 10, 2: 15, 3: 20, 4: 25, 5: 30 } as Record<number, number>)[city.level] ?? 30
+  return dummyGarrisonLevelForCityLevel(city.level)
 }
 export function createDummyCityGarrisons(city: City): CityGarrison[] {
   const targetLevel = dummyDefenseLevel(city)
@@ -787,7 +795,7 @@ export function mergeFactionTerritories(state: StrategyState, snapshots: Faction
     if (!snapshot) return
     city.owner = snapshot.owner
     city.conquestProgress = Math.max(0, Math.min(100, Math.trunc(snapshot.conquestProgress)))
-    city.defense = Math.max(0, Math.min(100, Math.trunc(snapshot.defense)))
+    city.defense = Math.max(0, Math.min(cityDefenseForLevel(city.level), Math.trunc(snapshot.defense)))
     city.prosperity = Math.max(0, Math.min(100, Math.trunc(snapshot.prosperity)))
     merged += 1
   })
@@ -1297,11 +1305,10 @@ function buildingLevel(city: City, kind: BuildingKind): number {
 }
 
 export function cityWallCapacity(city: City): number {
-  return Math.max(city.defense, Math.min(100, 42 + city.level * 8 + buildingLevel(city, 'barracks') * 8))
+  return cityDefenseForLevel(city.level)
 }
-
 function wallDamageFromPower(power: number): number {
-  return Math.max(4, Math.min(100, Math.round(power / 105)))
+  return Math.max(1, Math.min(CITY_DEFENSE_BY_LEVEL[5], Math.trunc(power)))
 }
 
 function researchUnlocked(state: StrategyState, id: string): boolean {
@@ -1376,12 +1383,12 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
   const cost = territoryBattleCost(city)
   if (!spendResources(state, cost)) return { ok: false, won: false, message: '방어전 보급품이 부족합니다.', damage: 0 }
   state.lastDefenseAt = now
-  const aiPower = city.level * 340 + 620 + cityWallCapacity(city) * 3
+  const aiPower = city.level * 340 + 620 + city.level * 180
   const defenseLine = defenseLineForCity(city)
   if (!city.garrisons?.length) city.garrisons = defenseLine
   const defeated = Math.max(0, Math.min(defenseLine.length, city.defendersDefeated ?? 0))
   const currentGarrison = defenseLine[defeated]
-  const defenderPower = currentGarrison?.power ?? (cityWallCapacity(city) * 5 + city.level * 180)
+  const defenderPower = currentGarrison?.power ?? (city.level * 5000 + city.level * 180)
   const won = aiPower >= defenderPower * 0.75
   const damage = won ? wallDamageFromPower(aiPower) : 0
   addCityBattleLog(city, { timestamp: now, attackerName: '중립 인공지능 습격대', attackerKind: 'ai', defenderName: state.faction, won, damage, note: won ? `수비병 격파 · 성벽 방어도 -${damage}` : '수비병 방어 성공 · 전선이 유지되었습니다.' })
@@ -1414,7 +1421,7 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   state.honor -= honorCost
   state.lastFactionBattleAt = now
   const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70 + researchCount(state, 'military-') * 45 + researchCount(state, 'scholar-') * 15
-  const factionPower = city.level * 250 + cityWallCapacity(city) * 4 + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
+  const factionPower = 300 + city.level * 250 + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
   const won = attackPower >= factionPower * 0.75
   addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: 0, note: won ? `최종 세력전 승리 · 명망 -${honorCost} · 금화 +${goldReward}` : `최종 세력전 패배 · 명망 -${honorCost}` })
   if (won) {
@@ -1454,7 +1461,7 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
   const advantage = power / Math.max(defenseScore, 1)
   // Repeated failed assaults weaken the wall; once it reaches the breach threshold,
   // even a low-power roster can finally break the current garrison.
-  const won = advantage >= 0.72 || city.defense <= 55
+  const won = advantage >= 0.72 || city.defense <= cityWallCapacity(city) * 0.55
   const damage = wallDamageFromPower(power)
   addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: won ? damage : 0, note: won ? '공성 성공 · 수비병 격파와 점령 진전이 반영되었습니다.' : '공성 실패 · 성벽만 약화되었습니다.' })
   if (!won) {

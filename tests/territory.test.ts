@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CITY_DEFENSE_BY_LEVEL, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -12,6 +12,15 @@ describe('territory and governance', () => {
     expect(state.cities).toHaveLength(45)
     expect(state.resources.grain).toBeGreaterThan(0)
     expect(state.research).toHaveLength(58)
+  })
+
+  it('assigns the requested defense and neutral dummy levels by city grade', () => {
+    const state = createInitialState()
+    for (const city of state.cities) {
+      expect(city.defense).toBe(CITY_DEFENSE_BY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5])
+      if (city.owner === '중립') expect(city.garrisons?.every(garrison => garrison.averageLevel === DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[city.level as 1 | 2 | 3 | 4 | 5])).toBe(true)
+      else expect(city.garrisons).toHaveLength(0)
+    }
   })
 
   it('backfills the 40 new cities into legacy five-city saves', () => {

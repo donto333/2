@@ -83,7 +83,7 @@ var factionTerritoryStates = mysqlTable("faction_territory_states", {
   cityId: varchar("cityId", { length: 64 }).primaryKey(),
   owner: mysqlEnum("owner", ["촉한", "위나라", "오나라", "중립"]).notNull(),
   conquestProgress: int("conquestProgress").default(0).notNull(),
-  defense: int("defense").default(50).notNull(),
+  defense: int("defense").default(10000).notNull(),
   prosperity: int("prosperity").default(50).notNull(),
   version: int("version").default(1).notNull(),
   updatedByUserId: int("updatedByUserId"),
@@ -223,6 +223,15 @@ async function updateUserRole(id, role, actorOpenId) {
   return getUserByOpenId(target[0].openId);
 }
 const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한", factionChosen: 0 };
+const CITY_DEFENSE_BY_LEVEL = { 1: 10000, 2: 20000, 3: 50000, 4: 100000, 5: 1000000 };
+const CITY_LEVEL_BY_ID = {
+  chengdu: 3, hanzhong: 2, xiangyang: 4, jianye: 3, xuchang: 3, luoyang: 5, ye: 4, chenliu: 2, puyang: 2, wancheng: 2,
+  jiangling: 3, yiling: 2, changsha: 3, lingling: 1, guiyang: 1, wujun: 3, kuaiji: 2, poyang: 2, hefei: 3, shouchun: 3,
+  jiujiang: 2, tianshui: 2, wuwei: 1, fucheng: 2, xindu: 1, changan: 4, meixian: 2, anding: 2, jinyang: 3, pingyuan: 2,
+  beihai: 2, langya: 2, xiapi: 3, guangling: 2, lujiang: 2, shangyong: 2, xinye: 2, jiangxia: 2, wuling: 1, badong: 2,
+  jianning: 1, yunnan: 1, jiaozhi: 1, shixing: 1, nanhai: 1
+};
+function cityDefenseForLevel(level) { return CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]; }
 const FACTION_TERRITORY_SEED = [
   ["chengdu", "촉한", 74, 82], ["hanzhong", "중립", 86, 64], ["xiangyang", "중립", 62, 58], ["jianye", "오나라", 70, 76], ["xuchang", "중립", 81, 79],
   ["luoyang", "중립", 92, 88], ["ye", "위나라", 86, 84], ["chenliu", "중립", 57, 61], ["puyang", "중립", 64, 58], ["wancheng", "중립", 70, 67],
@@ -233,7 +242,7 @@ const FACTION_TERRITORY_SEED = [
   ["beihai", "중립", 60, 61], ["langya", "중립", 63, 57], ["xiapi", "중립", 72, 70], ["guangling", "중립", 61, 65], ["lujiang", "중립", 66, 60],
   ["shangyong", "중립", 70, 52], ["xinye", "중립", 59, 58], ["jiangxia", "중립", 65, 64], ["wuling", "중립", 50, 46], ["badong", "중립", 67, 50],
   ["jianning", "중립", 54, 42], ["yunnan", "중립", 52, 39], ["jiaozhi", "중립", 48, 44], ["shixing", "중립", 47, 41], ["nanhai", "중립", 45, 43]
-].map(([cityId, owner, defense, prosperity]) => ({ cityId, owner, conquestProgress: 0, defense, prosperity, version: 1 }));
+].map(([cityId, owner, _legacyDefense, prosperity]) => ({ cityId, owner, conquestProgress: 0, defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[cityId]), prosperity, version: 1 }));
 const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.cityId));
 const NEUTRAL_AI_TICK_MS = 10 * 60 * 1000;
 const PROTECTED_CAPITAL_IDS = new Set(["chengdu", "ye", "jianye"]);
@@ -295,18 +304,22 @@ function factionTerritoryView(row) {
     cityId: row.cityId,
     owner: row.owner,
     conquestProgress: Math.max(0, Math.min(100, Number(row.conquestProgress) || 0)),
-    defense: Math.max(0, Math.min(100, Number(row.defense) || 0)),
+    defense: Math.max(0, Math.min(CITY_DEFENSE_BY_LEVEL[5], Number(row.defense) || 0)),
     prosperity: Math.max(0, Math.min(100, Number(row.prosperity) || 0)),
     version: Number(row.version) || 1,
     updatedAt: row.updatedAt
   };
 }
 async function ensureFactionTerritories(db) {
-  const existing = await db.select({ cityId: factionTerritoryStates.cityId }).from(factionTerritoryStates);
+  const existing = await db.select({ cityId: factionTerritoryStates.cityId, defense: factionTerritoryStates.defense }).from(factionTerritoryStates);
   const known = new Set(existing.map(row => row.cityId));
   const missing = FACTION_TERRITORY_SEED.filter(city => !known.has(city.cityId));
   if (missing.length) {
     await db.insert(factionTerritoryStates).values(missing).onDuplicateKeyUpdate({ set: { cityId: sql`cityId` } });
+  }
+  const legacyRows = existing.filter(row => Number(row.defense) >= 0 && Number(row.defense) <= 100);
+  for (const row of legacyRows) {
+    await db.update(factionTerritoryStates).set({ defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[row.cityId]) }).where(eq(factionTerritoryStates.cityId, row.cityId));
   }
 }
 async function advanceNeutralTerritoryAi(db, now = Date.now()) {
@@ -336,13 +349,13 @@ async function advanceNeutralTerritoryAi(db, now = Date.now()) {
       const locked = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, attack.target)).limit(1).for("update");
       const target = locked[0];
       if (!target || target.owner === "중립" || PROTECTED_CAPITAL_IDS.has(target.cityId)) continue;
-      const damage = 8 + ((now + attack.attacker.length * 17) % 8);
+      const damage = 900 + (CITY_LEVEL_BY_ID[attack.attacker] ?? 1) * 500;
       const defense = Math.max(0, Number(target.defense) - damage);
-      const captured = defense <= 20;
+      const captured = defense <= 0;
       await tx.update(factionTerritoryStates).set({
         owner: captured ? "중립" : target.owner,
         conquestProgress: captured ? 0 : Math.min(100, Number(target.conquestProgress) + damage),
-        defense: captured ? 50 : defense,
+        defense: captured ? cityDefenseForLevel(CITY_LEVEL_BY_ID[target.cityId]) : defense,
         prosperity: captured ? Math.max(25, Number(target.prosperity) - 15) : Math.max(20, Number(target.prosperity) - 3),
         version: sql`${factionTerritoryStates.version} + 1`,
         updatedByUserId: null
@@ -392,7 +405,7 @@ async function recordFactionTerritoryBattle(userId, input) {
   if (!input.won) return getFactionTerritories(userId);
   const account = await db.select({ faction: gameAccountStates.faction }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
   const faction = account[0]?.faction ?? "촉한";
-  const damage = Math.max(1, Math.min(40, Math.trunc(input.damage)));
+  const damage = Math.max(1, Math.min(CITY_DEFENSE_BY_LEVEL[5], Math.trunc(input.damage)));
   await db.transaction(async tx => {
     const rows = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1).for("update");
     const current = rows[0];
