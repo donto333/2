@@ -663,7 +663,7 @@ export class Arena {
     this.addEffect({
       object: group,
       age: 0,
-      life: 0.62,
+      life: 0.9,
       tick: effect => {
         const progress = effect.age / effect.life
         particles.forEach(particle => {

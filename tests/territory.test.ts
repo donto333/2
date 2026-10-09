@@ -177,8 +177,11 @@ describe('territory and governance', () => {
     const result = defendCity(state, city.id, 1000)
     expect(result.ok).toBe(true)
     expect(state.lastDefenseAt).toBe(1000)
+    expect(city.battleLogs).toHaveLength(1)
+    expect(city.battleLogs?.[0].attackerKind).toBe('ai')
     expect(defendCity(state, city.id, 1000).ok).toBe(false)
     expect(defendCity(state, city.id, 1000 + DEFENSE_COOLDOWN_MS).ok).toBe(true)
+    expect(city.battleLogs).toHaveLength(2)
   })
 
   it('deploys the current deck as allied city garrisons up to the 100-unit cap', () => {
@@ -210,6 +213,7 @@ describe('territory and governance', () => {
     const city = findCity(state, 'hanzhong')!
     const result = launchFactionBattle(state, city.id, 2000)
     expect(result.ok).toBe(true)
+    expect(city.battleLogs?.at(-1)?.attackerKind).toBe('user')
     expect(state.factionWarScore).toBeGreaterThanOrEqual(0)
     expect(launchFactionBattle(state, city.id, 2000).ok).toBe(false)
     expect(launchFactionBattle(state, city.id, 2000 + FACTION_BATTLE_COOLDOWN_MS).ok).toBe(true)

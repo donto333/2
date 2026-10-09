@@ -50,6 +50,7 @@ export interface City {
   conquestProgress?: number
   garrisons?: CityGarrison[]
   defendersDefeated?: number
+  battleLogs?: CityBattleLog[]
 }
 
 export interface CityGarrison {
@@ -59,6 +60,17 @@ export interface CityGarrison {
   power: number
   source: 'player' | 'dummy'
   label: string
+}
+
+export interface CityBattleLog {
+  id: string
+  timestamp: number
+  attackerName: string
+  attackerKind: 'user' | 'ai'
+  defenderName: string
+  won: boolean
+  damage: number
+  note: string
 }
 
 export const FACTION_CAPITALS: Record<Faction, string> = { 촉한: 'chengdu', 위나라: 'ye', 오나라: 'jianye' }
@@ -419,7 +431,14 @@ export function ensureCityGarrisons(state: StrategyState): void {
     if (!Array.isArray(city.garrisons)) city.garrisons = city.owner === '중립' ? createDummyCityGarrisons(city) : []
     city.garrisons = city.garrisons.slice(0, MAX_CITY_GARRISONS)
     city.defendersDefeated = Math.max(0, Math.min(city.garrisons.length, Math.trunc(city.defendersDefeated ?? 0)))
+    if (!Array.isArray(city.battleLogs)) city.battleLogs = []
+    city.battleLogs = city.battleLogs.filter(log => log && typeof log.timestamp === 'number').slice(-30)
   })
+}
+function addCityBattleLog(city: City, log: Omit<CityBattleLog, 'id'>): void {
+  city.battleLogs ??= []
+  city.battleLogs.push({ ...log, id: `${city.id}-battle-${log.timestamp}-${city.battleLogs.length}` })
+  city.battleLogs = city.battleLogs.slice(-30)
 }
 function defenseLineForCity(city: City): CityGarrison[] {
   return Array.isArray(city.garrisons) && city.garrisons.length ? city.garrisons : createDummyCityGarrisons(city)
@@ -1351,6 +1370,7 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
   const raidPower = city.level * 310 + 520
   const won = defensePower >= raidPower * 0.82
   const damage = Math.max(6, Math.round((defensePower / Math.max(raidPower, 1)) * 12))
+  addCityBattleLog(city, { timestamp: now, attackerName: '중립 인공지능 습격대', attackerKind: 'ai', defenderName: state.faction, won, damage, note: won ? '수비 성공 · 성벽을 수리했습니다.' : '수비 실패 · 성벽이 피해를 입었습니다.' })
   if (won) {
     city.defense = Math.min(100, city.defense + damage)
     city.prosperity = Math.min(100, city.prosperity + 3)
@@ -1385,6 +1405,7 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   const factionPower = (currentGarrison?.power ?? city.defense * 5 + city.level * 260) + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
   const won = attackPower >= factionPower * 0.75
   const damage = Math.max(5, Math.round((attackPower / Math.max(factionPower, 1)) * 14))
+  addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage, note: won ? '수비병 격파 · 점령 진전이 반영되었습니다.' : '수비병 방어 성공 · 전선이 유지되었습니다.' })
   if (won) {
     city.defendersDefeated = defeated + 1
     city.conquestProgress = Math.min(100, Math.round((city.defendersDefeated / defenseLine.length) * 100))
@@ -1431,6 +1452,7 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
   // even a low-power roster can finally break the current garrison.
   const won = advantage >= 0.72 || city.defense <= 55
   const damage = Math.max(8, Math.round(advantage * 18) + (advantage >= 1.25 ? 8 : 0))
+  addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: won ? damage : 0, note: won ? '공성 성공 · 수비병 격파와 점령 진전이 반영되었습니다.' : '공성 실패 · 성벽만 약화되었습니다.' })
   if (!won) {
     city.defense = Math.max(20, city.defense - Math.max(4, Math.round(damage / 2)))
     state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage: 0 }
