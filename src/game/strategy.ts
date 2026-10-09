@@ -1498,6 +1498,36 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
   return { ok: true, captured: false, message: state.lastNotice, damage }
 }
 
+/**
+ * Finalizes a 3D siege result. The pre-battle conquest check may return an
+ * accepted but losing assault so the arena can still show the siege scene.
+ * If that scene is won, apply the wall damage exactly once here.
+ */
+export function resolveConquestBattle(state: StrategyState, cityId: string, battleWon: boolean, now = Date.now()): ConquestResult {
+  const city = findCity(state, cityId)
+  if (!city) return { ok: false, captured: false, message: '해당 도시를 찾을 수 없습니다.', damage: 0 }
+  const previous = state.lastConquest?.cityId === city.id ? state.lastConquest.damage : 0
+  if (!battleWon || previous > 0) return { ok: true, captured: false, message: state.lastConquest?.cityId === city.id ? state.lastNotice : `${city.name} 공성전에서 방어도가 감소하지 않았습니다.`, damage: previous }
+  if (!Array.isArray(city.garrisons)) city.garrisons = defenseLineForCity(city)
+  const defenseLine = defenseLineForCity(city)
+  const defeated = Math.max(0, Math.min(defenseLine.length, city.defendersDefeated ?? 0))
+  const damage = wallDamageFromPower(conquestPower(state))
+  city.defendersDefeated = Math.min(defenseLine.length, defeated + 1)
+  const breachThreshold = cityBreachThreshold(city)
+  city.defense = Math.max(breachThreshold, city.defense - damage)
+  city.conquestProgress = Math.min(100, Math.round((city.defendersDefeated / Math.max(defenseLine.length, 1)) * 100))
+  const remaining = defenseLine.length - city.defendersDefeated
+  const finalReady = city.defense <= breachThreshold && remaining <= 0
+  state.lastConquestAt = now
+  state.selectedCityId = city.id
+  state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage }
+  state.lastNotice = finalReady
+    ? `${city.name} 3D 공성전 승리 · 성벽 방어도 -${damage} · 수비병 전멸 · 최종 세력전을 실행하십시오.`
+    : `${city.name} 3D 공성전 승리 · 성벽 방어도 -${damage} · ${remaining}부대 남음`
+  addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won: true, damage, note: '3D 공성전 승리 · 성벽 방어도 감소가 확정되었습니다.' })
+  return { ok: true, captured: false, message: state.lastNotice, damage }
+}
+
 function availableResource(state: StrategyState, key: ResourceKey): number {
   return key === 'silver' ? state.silver : state.resources[key]
 }

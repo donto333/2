@@ -7,6 +7,7 @@ import {
   allGenerals,
   collectIncome,
   launchConquest,
+  resolveConquestBattle,
   defendCity,
   launchFactionBattle,
   deployCityGarrison,
@@ -302,7 +303,7 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
     let retried = 0
     for (const battle of pending) {
       try {
-        const retryPayload = { ...battle, damage: Math.max(0, Math.min(100, Math.trunc(battle.damage))) }
+        const retryPayload = { ...battle, damage: Math.max(0, Math.min(1_000_000, Math.trunc(battle.damage))) }
         const snapshots = await ManusAuth.mutate('territory.recordBattle', retryPayload) as FactionTerritorySnapshot[]
         mergeFactionTerritories(state, snapshots)
         retried += 1
@@ -325,7 +326,7 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
 
 async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: number; won: boolean; captured: boolean }): Promise<void> {
   if (authView.status !== 'authenticated') return
-  const payload = { cityId, damage: Math.max(0, Math.min(100, Math.trunc(outcome.damage))), won: outcome.won, captured: outcome.captured }
+  const payload = { cityId, damage: Math.max(0, Math.min(1_000_000, Math.trunc(outcome.damage))), won: outcome.won, captured: outcome.captured }
   try {
     const snapshots = await ManusAuth.mutate('territory.recordBattle', payload) as FactionTerritorySnapshot[]
     mergeFactionTerritories(state, snapshots)
@@ -681,6 +682,13 @@ arena = new Arena(canvas, {
     const wasScenario = Boolean(scenarioActive && activeScenario)
     const wasDuel = !wasSiege && (duelActive || arena.isDuelBattle())
     if (wasSiege && siege) {
+      // The arena result is authoritative for the visible siege scene. A
+      // pre-battle check can have returned damage 0 while still opening the
+      // scene, so resolve the wall damage from the actual 3D victory once.
+      if (result.won) {
+        const resolved = resolveConquestBattle(state, siege.cityId, true)
+        siege.result = { ...siege.result, damage: resolved.damage, message: resolved.message }
+      }
       state.lastNotice = siege.result.message
       pendingSiege = null
     } else if (result.won) {
@@ -708,7 +716,7 @@ arena = new Arena(canvas, {
     duelActive = false
     if (wasScenario) queueAccountSave(true)
     ui.render(state)
-    ui.showBattleResult(wasSiege ? true : result.won, result.score)
+    ui.showBattleResult(result.won, result.score)
     if (siege) {
       queueAccountSave(true)
       void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })

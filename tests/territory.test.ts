@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CITY_DEFENSE_BY_LEVEL, CITY_PRODUCTION_MULTIPLIER, cityBreachThreshold, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CITY_DEFENSE_BY_LEVEL, CITY_PRODUCTION_MULTIPLIER, cityBreachThreshold, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, resolveConquestBattle, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -173,6 +173,21 @@ describe('territory and governance', () => {
     expect(city.owner).toBe('촉한')
     expect(city.garrisons).toEqual([])
     expect(city.defendersDefeated).toBe(0)
+  })
+
+  it('applies wall damage when the 3D siege wins after a zero-damage preflight', () => {
+    const state = createInitialState()
+    const city = findCity(state, 'hanzhong')!
+    city.defense = cityBreachThreshold(city) + 3_000
+    city.garrisons = [{ id: 'strong-dummy', generalIds: [], averageLevel: 30, power: 999999999, source: 'dummy', label: '강화 더미 수비대' }]
+    state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage: 0 }
+    const before = city.defense
+    const resolved = resolveConquestBattle(state, city.id, true, 2000)
+    expect(resolved.damage).toBeGreaterThan(0)
+    expect(city.defense).toBeLessThan(before)
+    const afterFirstResolution = city.defense
+    expect(resolveConquestBattle(state, city.id, true, 3000).damage).toBe(resolved.damage)
+    expect(city.defense).toBe(afterFirstResolution)
   })
 
   it('protects each faction capital and blocks remote conquest', () => {

@@ -41,7 +41,7 @@ export const gameRouter = router({
     list: protectedProcedure.query(({ ctx }) => getFactionTerritories(ctx.user.id)),
     recordBattle: protectedProcedure.input(z.object({
       cityId: z.string().trim().min(1).max(64),
-      damage: z.number().int().min(0).max(100),
+      damage: z.number().int().min(0).max(1000000),
       won: z.boolean(),
       captured: z.boolean(),
     }).strict()).mutation(async ({ ctx, input }) => {
