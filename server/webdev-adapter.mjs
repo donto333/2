@@ -229,7 +229,11 @@ const TERRITORY_TEST_WEAKENING_ENABLED = true;
 const TERRITORY_TEST_WEAKENING_RATIO = 0.1;
 function cityDefenseFloor(cityId) {
   const level = CITY_LEVEL_BY_ID[cityId] ?? 5;
-  return TERRITORY_TEST_WEAKENING_ENABLED ? Math.ceil((CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]) * TERRITORY_TEST_WEAKENING_RATIO) : 0;
+  return 0;
+}
+function legacyCityDefenseFloor(cityId) {
+  const level = CITY_LEVEL_BY_ID[cityId] ?? 5;
+  return Math.ceil((CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]) * TERRITORY_TEST_WEAKENING_RATIO);
 }
 const CITY_LEVEL_BY_ID = {
   chengdu: 3, hanzhong: 2, xiangyang: 4, jianye: 3, xuchang: 3, luoyang: 5, ye: 4, chenliu: 2, puyang: 2, wancheng: 2,
@@ -326,7 +330,7 @@ async function ensureFactionTerritories(db) {
     await db.insert(factionTerritoryStates).values(missing).onDuplicateKeyUpdate({ set: { cityId: sql`cityId` } });
   }
   for (const row of existing) {
-    const floor = cityDefenseFloor(row.cityId);
+    const floor = legacyCityDefenseFloor(row.cityId);
     // 이전 버전이 모든 도시를 약화 하한에서 시작시킨 경우만 원래 최대치로 복구한다.
     // 이미 공성 진전이 있는 도시는 현재 방어도를 그대로 보존한다.
     if (Number(row.defense) === floor && Number(row.conquestProgress) === 0) {

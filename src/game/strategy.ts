@@ -79,6 +79,7 @@ export const LUOYANG_ID = 'luoyang'
 export const MAX_CITY_GARRISONS = 100
 export const CITY_DEFENSE_BY_LEVEL: Record<Grade, number> = { 1: 10_000, 2: 20_000, 3: 50_000, 4: 100_000, 5: 1_000_000 }
 // 정식 출시 전 테스트 기간에는 최대 방어력의 90%를 약화하고 10%를 최저 방어도로 유지한다.
+// 구버전 저장 데이터 복구에만 사용하는 이전 10% 하한 비율이다.
 export const TERRITORY_TEST_WEAKENING_ENABLED = true
 export const TERRITORY_TEST_WEAKENING_RATIO = 0.10
 export const DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL: Record<Grade, number> = { 1: 10, 2: 15, 3: 20, 4: 25, 5: 30 }
@@ -86,8 +87,10 @@ export const CITY_PRODUCTION_MULTIPLIER: Record<Grade, number> = { 1: 1, 2: 3, 3
 export function cityDefenseForLevel(level: number): number {
   return CITY_DEFENSE_BY_LEVEL[level as Grade] ?? CITY_DEFENSE_BY_LEVEL[5]
 }
-export function cityBreachThreshold(city: Pick<City, 'level'>): number {
-  return TERRITORY_TEST_WEAKENING_ENABLED ? Math.ceil(cityDefenseForLevel(city.level) * TERRITORY_TEST_WEAKENING_RATIO) : 0
+export function cityBreachThreshold(_city: Pick<City, 'level'>): number {
+  // 약화는 방어력에 가하는 피해량을 뜻하며, 방어도 하한을 만들지 않는다.
+  // 수비병을 모두 격파한 뒤 방어도가 0이 되면 최종 세력전을 진행한다.
+  return 0
 }
 export function dummyGarrisonLevelForCityLevel(level: number): number {
   return DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[level as Grade] ?? DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL[5]
@@ -453,8 +456,8 @@ export function ensureCityGarrisons(state: StrategyState): void {
     city.defendersDefeated = Math.max(0, Math.min(city.garrisons.length, Math.trunc(city.defendersDefeated ?? 0)))
     // 구버전 저장 데이터가 약화 하한에서 시작하던 경우만 새 시즌 초기값으로 복구한다.
     // 이미 공성 진전이 있는 도시는 현재 진행도를 보존한다.
-    const weakeningFloor = cityBreachThreshold(city)
-    if (city.defense === weakeningFloor && (city.conquestProgress ?? 0) === 0) city.defense = cityWallCapacity(city)
+    const legacyWeakeningFloor = Math.ceil(cityWallCapacity(city) * TERRITORY_TEST_WEAKENING_RATIO)
+    if (city.defense === legacyWeakeningFloor && (city.conquestProgress ?? 0) === 0) city.defense = cityWallCapacity(city)
     if (!Array.isArray(city.battleLogs)) city.battleLogs = []
     city.battleLogs = city.battleLogs.filter(log => log && typeof log.timestamp === 'number').slice(-30)
   })
