@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CITY_DEFENSE_BY_LEVEL, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CITY_DEFENSE_BY_LEVEL, CITY_PRODUCTION_MULTIPLIER, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -79,6 +79,18 @@ describe('territory and governance', () => {
     expect(blocked.ok).toBe(false)
     expect(blocked.gain.grain).toBe(0)
     expect(collectIncome(state, INCOME_COOLDOWN_MS + 1).ok).toBe(true)
+  })
+
+  it('scales every city production resource by the requested grade multiplier', () => {
+    const state = createInitialState()
+    const template = findCity(state, 'hanzhong')!
+    const production = ([1, 2, 3, 4, 5] as const).map(level => cityIncome({ ...template, owner: '촉한', level, prosperity: 50, buildings: template.buildings.map(building => ({ ...building, level: 1 })) }))
+    for (const key of ['grain', 'silver', 'wood', 'iron', 'influence'] as const) {
+      expect(production[1][key]).toBe(production[0][key] * CITY_PRODUCTION_MULTIPLIER[2])
+      expect(production[2][key]).toBe(production[0][key] * CITY_PRODUCTION_MULTIPLIER[3])
+      expect(production[3][key]).toBe(production[0][key] * CITY_PRODUCTION_MULTIPLIER[4])
+      expect(production[4][key]).toBe(production[0][key] * CITY_PRODUCTION_MULTIPLIER[5])
+    }
   })
 
   it('upgrades a selected allied building and rejects enemy cities', () => {
