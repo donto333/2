@@ -799,6 +799,10 @@ arena = new Arena(canvas, {
         siege.result = { ...siege.result, damage: resolved.damage, message: resolved.message }
       }
       state.lastNotice = siege.result.message
+      // 공성 결과 뒤에는 시나리오 목록이 아니라 방금 공격한 도시의
+      // 공성 메뉴(도시 관리 카드)로 바로 돌아가도록 전투 맥락을 보존한다.
+      state.selectedCityId = siege.cityId
+      state.section = 'territory'
       pendingSiege = null
     } else if (result.won) {
       state.wins += 1
