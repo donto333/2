@@ -39,7 +39,7 @@ function passwordMatches(password, saltHex, hashHex) {
   return expected.length === actual.length && timingSafeEqual(expected, actual)
 }
 
-function postView(row, userId) {
+function postView(row, userId, isAdmin = false) {
   return {
     id: Number(row.id),
     board: row.board,
@@ -48,22 +48,29 @@ function postView(row, userId) {
     authorName: row.authorName,
     authorFaction: row.authorFaction,
     createdAt: row.createdAt,
-    canDelete: Number(row.authorUserId) === Number(userId),
+    canDelete: isAdmin || Number(row.authorUserId) === Number(userId),
   }
 }
 
 const POST_COLUMNS = 'id,board,title,content,authorUserId,authorName,authorFaction,createdAt,passwordSalt,passwordHash'
 
-export async function listBoardPosts(userId, board) {
-  const faction = await currentFaction(userId)
+export async function getBoardSettings() {
+  const [rows] = await getPool().query('SELECT postingEnabled FROM game_board_settings WHERE id=1 LIMIT 1')
+  return { postingEnabled: Boolean(rows[0]?.postingEnabled ?? true) }
+}
+
+export async function listBoardPosts(user, board) {
+  const faction = await currentFaction(user.id)
   assertVisible(board, faction)
   const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts WHERE board=? ORDER BY createdAt DESC, id DESC LIMIT 100`, [board])
-  return rows.map(row => postView(row, userId))
+  return rows.map(row => postView(row, user.id, user.role === 'admin'))
 }
 
 export async function createBoardPost(user, input) {
   const faction = await currentFaction(user.id)
   assertVisible(input.board, faction)
+  const settings = await getBoardSettings()
+  if (!settings.postingEnabled) throw new Error('관리자가 현재 게시글 작성을 제한하고 있습니다.')
   const title = input.title.trim()
   const content = input.content.trim()
   const password = input.password.trim()
@@ -76,7 +83,7 @@ export async function createBoardPost(user, input) {
     [input.board, title, content, user.id, name.slice(0, 64), faction, passwordSalt, passwordHash],
   )
   const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts WHERE id=? LIMIT 1`, [result.insertId])
-  return postView(rows[0], user.id)
+  return postView(rows[0], user.id, user.role === 'admin')
 }
 
 export async function deleteBoardPost(user, postId, password) {
@@ -87,6 +94,22 @@ export async function deleteBoardPost(user, postId, password) {
   if (!passwordMatches(password, post.passwordSalt, post.passwordHash)) throw new Error('삭제 비밀번호가 올바르지 않습니다.')
   await getPool().execute('DELETE FROM game_board_posts WHERE id=? AND authorUserId=?', [postId, user.id])
   return { ok: true, id: postId }
+}
+
+export async function listAdminBoardPosts() {
+  const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts ORDER BY createdAt DESC, id DESC LIMIT 200`)
+  return rows.map(row => postView(row, 0, true))
+}
+
+export async function deleteBoardPostAsAdmin(postId) {
+  const [result] = await getPool().execute('DELETE FROM game_board_posts WHERE id=?', [postId])
+  if (!result.affectedRows) throw new Error('게시글을 찾을 수 없습니다.')
+  return { ok: true, id: postId }
+}
+
+export async function setBoardPostingEnabled(enabled) {
+  await getPool().execute('UPDATE game_board_settings SET postingEnabled=? WHERE id=1', [enabled ? 1 : 0])
+  return { postingEnabled: Boolean(enabled) }
 }
 
 export { BOARDS }

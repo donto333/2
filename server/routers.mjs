@@ -3,7 +3,7 @@ import { adminProcedure, router, publicProcedure, protectedProcedure, getFaction
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
-import { createBoardPost, deleteBoardPost, listBoardPosts } from './board.mjs'
+import { createBoardPost, deleteBoardPost, deleteBoardPostAsAdmin, getBoardSettings, listAdminBoardPosts, listBoardPosts, setBoardPostingEnabled } from './board.mjs'
 
 // 계정 상태 숫자 한도: DB 컬럼(int / int unsigned)이 담을 수 있는 범위 안에서 넉넉하게 잡는다.
 // 예전 한도(병법서·승리·낙양 상자·신화 조각 1,000,000)를 넘은 계정은 저장 자체가 거절되었다.
@@ -37,6 +37,9 @@ export const gameRouter = router({
     }),
     listGameStates: adminProcedure.query(async () => (await listGameStates()).map(user => ({ ...accountView(user), game: { userId: user.id, honor: user.honor, silver: user.silver, gold: user.gold, manuals: user.manuals, wins: user.wins, battleScore: user.battleScore, grain: user.grain, wood: user.wood, iron: user.iron, influence: user.influence, updatedAt: user.updatedAt } }))),
     updateGameState: adminProcedure.input(z.object({ userId: z.number().int().positive(), honor: z.number().int().min(0).max(SAVE_INT_MAX), silver: z.number().int().min(0).max(SAVE_INT_MAX), gold: z.number().int().min(0).max(SAVE_INT_MAX), manuals: z.number().int().min(0).max(SAVE_INT_MAX), wins: z.number().int().min(0).max(SAVE_INT_MAX), battleScore: z.number().int().min(0).max(SAVE_INT_MAX), grain: z.number().int().min(0).max(SAVE_INT_MAX), wood: z.number().int().min(0).max(SAVE_INT_MAX), iron: z.number().int().min(0).max(SAVE_INT_MAX), influence: z.number().int().min(0).max(SAVE_INT_MAX) })).mutation(async ({ input }) => ({ userId: input.userId, game: await updateGameState(input.userId, { honor: input.honor, silver: input.silver, gold: input.gold, manuals: input.manuals, wins: input.wins, battleScore: input.battleScore, grain: input.grain, wood: input.wood, iron: input.iron, influence: input.influence }) })),
+    boardSettings: adminProcedure.query(async () => ({ settings: await getBoardSettings(), posts: await listAdminBoardPosts() })),
+    deleteBoardPost: adminProcedure.input(z.object({ id: z.number().int().positive() }).strict()).mutation(({ input }) => deleteBoardPostAsAdmin(input.id)),
+    setBoardPosting: adminProcedure.input(z.object({ enabled: z.boolean() }).strict()).mutation(({ input }) => setBoardPostingEnabled(input.enabled)),
   }),
   leaderboard: createLeaderboardRouter({ router, publicProcedure, protectedProcedure }, leaderboard),
   duel: router({
@@ -71,7 +74,7 @@ export const gameRouter = router({
     }),
   }),
   board: router({
-    list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']) })).query(({ ctx, input }) => listBoardPosts(ctx.user.id, input.board)),
+    list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']) })).query(({ ctx, input }) => listBoardPosts(ctx.user, input.board)),
     create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => deleteBoardPost(ctx.user, input.id, input.password)),
   }),
