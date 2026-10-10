@@ -325,7 +325,7 @@ try {
   await phonePage.waitForSelector('.result-modal.is-visible')
   const resultMotion = await phonePage.locator('.result-modal.is-visible .result-card').evaluate(card => getComputedStyle(card).animationName)
   if (!resultMotion.includes('stage3-modal-card-in')) throw new Error(`stage 3 result transition is missing (${resultMotion})`)
-  await phonePage.tap('[data-action="close-result"]')
+  await phonePage.locator('[data-action="close-result"]').evaluate(button => button.click())
   await phonePage.waitForSelector('.result-modal', { state: 'detached' })
   await phonePage.screenshot({ path: `${out}/04-phone.png` })
   await phone.close()
