@@ -123,6 +123,7 @@ export interface FactionTerritorySnapshot {
   conquestProgress: number
   defense: number
   prosperity: number
+  battleLogs?: CityBattleLog[]
   version?: number
   updatedAt?: string | Date
 }
@@ -815,6 +816,13 @@ export function mergeFactionTerritories(state: StrategyState, snapshots: Faction
     city.conquestProgress = Math.max(0, Math.min(100, Math.trunc(snapshot.conquestProgress)))
     city.defense = Math.max(0, Math.min(cityDefenseForLevel(city.level), Math.trunc(snapshot.defense)))
     city.prosperity = Math.max(0, Math.min(100, Math.trunc(snapshot.prosperity)))
+    if (Array.isArray(snapshot.battleLogs) && snapshot.battleLogs.length) {
+      const existing = Array.isArray(city.battleLogs) ? city.battleLogs : []
+      const knownIds = new Set(existing.map(log => log.id))
+      city.battleLogs = [...existing, ...snapshot.battleLogs.filter(log => !knownIds.has(log.id))]
+        .sort((left, right) => left.timestamp - right.timestamp)
+        .slice(-30)
+    }
     merged += 1
   })
   return merged
