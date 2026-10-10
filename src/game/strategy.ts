@@ -84,6 +84,7 @@ export const TERRITORY_TEST_WEAKENING_ENABLED = true
 export const TERRITORY_TEST_WEAKENING_RATIO = 0.10
 export const DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL: Record<Grade, number> = { 1: 10, 2: 15, 3: 20, 4: 25, 5: 30 }
 export const CITY_PRODUCTION_MULTIPLIER: Record<Grade, number> = { 1: 1, 2: 3, 3: 5, 4: 10, 5: 20 }
+export const CITY_INCOME_REWARD_MULTIPLIER = 10
 export function cityDefenseForLevel(level: number): number {
   return CITY_DEFENSE_BY_LEVEL[level as Grade] ?? CITY_DEFENSE_BY_LEVEL[5]
 }
@@ -1352,11 +1353,11 @@ export function cityIncome(city: City, state?: StrategyState): Resources {
   const tradeBonusFromTree = state ? 1 + researchCount(state, 'trade-') * 0.016 : 1
   const scholarshipBonus = state ? 1 + researchCount(state, 'scholar-') * 0.01 : 1
   return {
-    grain: Math.round((170 + farm * 210 + city.prosperity * 2.2) * productionMultiplier * grainBonus * granaryBonus * agricultureBonus),
-    silver: Math.round((120 + market * 155 + city.prosperity * 1.4) * productionMultiplier * silverBonus * tradeBonus * tradeBonusFromTree),
-    wood: Math.round((80 + workshop * 120) * productionMultiplier),
-    iron: Math.round((45 + workshop * 82) * productionMultiplier),
-    influence: Math.round((35 + market * 28 + academy * 44) * productionMultiplier * influenceBonus * tradeBonus * scholarshipBonus),
+    grain: Math.round((170 + farm * 210 + city.prosperity * 2.2) * productionMultiplier * grainBonus * granaryBonus * agricultureBonus * CITY_INCOME_REWARD_MULTIPLIER),
+    silver: Math.round((120 + market * 155 + city.prosperity * 1.4) * productionMultiplier * silverBonus * tradeBonus * tradeBonusFromTree * CITY_INCOME_REWARD_MULTIPLIER),
+    wood: Math.round((80 + workshop * 120) * productionMultiplier * CITY_INCOME_REWARD_MULTIPLIER),
+    iron: Math.round((45 + workshop * 82) * productionMultiplier * CITY_INCOME_REWARD_MULTIPLIER),
+    influence: Math.round((35 + market * 28 + academy * 44) * productionMultiplier * influenceBonus * tradeBonus * scholarshipBonus * CITY_INCOME_REWARD_MULTIPLIER),
   }
 }
 
