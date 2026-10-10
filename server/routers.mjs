@@ -3,7 +3,7 @@ import { adminProcedure, router, publicProcedure, protectedProcedure, getFaction
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
-import { createBoardPost, listBoardPosts } from './board.mjs'
+import { createBoardPost, deleteBoardPost, listBoardPosts } from './board.mjs'
 
 function accountView(user) {
   return {
@@ -52,7 +52,8 @@ export const gameRouter = router({
   }),
   board: router({
     list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']) })).query(({ ctx, input }) => listBoardPosts(ctx.user.id, input.board)),
-    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
+    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
+    delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => deleteBoardPost(ctx.user, input.id, input.password)),
   }),
   account: router({
     me: protectedProcedure.query(({ ctx }) => accountView(ctx.user)),

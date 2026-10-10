@@ -69,6 +69,7 @@ export interface BoardPost {
   authorName: string
   authorFaction: Faction
   createdAt: string | Date
+  canDelete?: boolean
 }
 
 export interface DuelOpponent {
@@ -114,7 +115,8 @@ export interface StrategyUiCallbacks {
   onAccountSave: (name: string) => void
   onRankRefresh: () => void
   onBoardRefresh: (board: BoardPost['board']) => void
-  onBoardPost: (board: BoardPost['board'], title: string, content: string) => void
+  onBoardPost: (board: BoardPost['board'], title: string, content: string, password: string) => void
+  onBoardDelete: (id: number, password: string) => void
   onStore: () => void
   onShopPurchase: (equipmentId: string) => void
   onCashShopPurchase: (productId: string) => void
@@ -955,7 +957,7 @@ export class StrategyUI {
     const tabs: BoardPost['board'][] = ['전체', state.faction]
     const posts = this.boardPosts.filter(post => post.board === this.boardTab)
     const formatDate = (value: string | Date) => new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
-    return `<section class="page-section page-section--board"><div class="section-heading section-heading--compact"><div><span class="eyebrow">COMMANDER COMMUNITY · BOARD</span><h1>진영 게시판</h1><p class="heading-copy">전체 지휘관과 ${escapeHtml(state.faction)} 진영 동료에게 작전 소식을 전하십시오.</p></div><button class="ghost-button" data-action="board-refresh">게시글 새로고침 ↻</button></div><div class="board-tabs">${tabs.map(tab => `<button class="filter-tab ${this.boardTab === tab ? 'is-active' : ''}" data-action="board-tab" data-board="${tab}">${tab} 게시판</button>`).join('')}</div><div class="board-layout"><div class="glass-card board-list"><div class="card-header"><div><span class="eyebrow">${this.boardTab} BOARD</span><h2>최근 게시글</h2></div><span class="sync-label">최대 100건</span></div>${posts.length ? posts.map(post => `<article class="board-post"><div class="board-post__meta"><span class="pill pill--jade">${escapeHtml(post.authorFaction)}</span><strong>${escapeHtml(post.authorName)}</strong><time>${formatDate(post.createdAt)}</time></div><h3>${escapeHtml(post.title)}</h3><p>${escapeHtml(post.content).replace(/\n/g, '<br>')}</p></article>`).join('') : '<div class="board-empty">아직 게시글이 없습니다. 첫 번째 작전 기록을 남겨 보십시오.</div>'}</div><div class="glass-card board-compose"><div class="card-header"><div><span class="eyebrow">WRITE DISPATCH</span><h2>새 글 작성</h2></div></div><form data-board-form><label>게시판<select name="board">${tabs.map(tab => `<option value="${tab}" ${this.boardTab === tab ? 'selected' : ''}>${tab} 게시판</option>`).join('')}</select></label><label>제목<input name="title" maxlength="120" placeholder="작전 제목을 입력하세요" required></label><label>내용<textarea name="content" rows="7" maxlength="4000" placeholder="진영에 전할 내용을 작성하세요" required></textarea></label><button class="action-button action-button--primary" type="submit">게시글 올리기 <span>→</span></button></form><p class="board-note">진영 게시판은 소속 진영 사용자만 조회하고 작성할 수 있습니다.</p></div></div></section>`
+    return `<section class="page-section page-section--board"><div class="section-heading section-heading--compact"><div><span class="eyebrow">COMMANDER COMMUNITY · BOARD</span><h1>진영 게시판</h1><p class="heading-copy">전체 지휘관과 ${escapeHtml(state.faction)} 진영 동료에게 작전 소식을 전하십시오.</p></div><button class="ghost-button" data-action="board-refresh">게시글 새로고침 ↻</button></div><div class="board-tabs">${tabs.map(tab => `<button class="filter-tab ${this.boardTab === tab ? 'is-active' : ''}" data-action="board-tab" data-board="${tab}">${tab} 게시판</button>`).join('')}</div><div class="board-layout"><div class="glass-card board-list"><div class="card-header"><div><span class="eyebrow">${this.boardTab} BOARD</span><h2>최근 게시글</h2></div><span class="sync-label">최대 100건</span></div>${posts.length ? posts.map(post => `<article class="board-post"><div class="board-post__meta"><span class="pill pill--jade">${escapeHtml(post.authorFaction)}</span><strong>${escapeHtml(post.authorName)}</strong><time>${formatDate(post.createdAt)}</time></div><h3>${escapeHtml(post.title)}</h3><p>${escapeHtml(post.content).replace(/\n/g, '<br>')}</p>${post.canDelete ? `<form class="board-delete-form" data-board-delete-form><input type="hidden" name="postId" value="${post.id}"><input name="password" type="password" minlength="4" maxlength="64" placeholder="삭제 비밀번호" required><button class="text-button" type="submit">내 글 삭제</button></form>` : ''}</article>`).join('') : '<div class="board-empty">아직 게시글이 없습니다. 첫 번째 작전 기록을 남겨 보십시오.</div>'}</div><div class="glass-card board-compose"><div class="card-header"><div><span class="eyebrow">WRITE DISPATCH</span><h2>새 글 작성</h2></div></div><form data-board-form><label>게시판<select name="board">${tabs.map(tab => `<option value="${tab}" ${this.boardTab === tab ? 'selected' : ''}>${tab} 게시판</option>`).join('')}</select></label><label>제목<input name="title" maxlength="120" placeholder="작전 제목을 입력하세요" required></label><label>내용<textarea name="content" rows="7" maxlength="4000" placeholder="진영에 전할 내용을 작성하세요" required></textarea></label><label>삭제 비밀번호<input name="password" type="password" minlength="4" maxlength="64" placeholder="4자 이상 · 삭제할 때 필요" required></label><button class="action-button action-button--primary" type="submit">게시글 올리기 <span>→</span></button></form><p class="board-note">삭제 비밀번호는 서버에 해시로 저장되며, 작성자 본인만 글을 삭제할 수 있습니다.</p></div></div></section>`
   }
   private duelSection(state: StrategyState): string {
     const formationReady = state.formation.length >= 3
@@ -1111,7 +1113,13 @@ export class StrategyUI {
     if (form.matches('[data-board-form]')) {
       event.preventDefault()
       const data = new FormData(form)
-      this.callbacks.onBoardPost((String(data.get('board') ?? '전체')) as BoardPost['board'], String(data.get('title') ?? ''), String(data.get('content') ?? ''))
+      this.callbacks.onBoardPost((String(data.get('board') ?? '전체')) as BoardPost['board'], String(data.get('title') ?? ''), String(data.get('content') ?? ''), String(data.get('password') ?? ''))
+      return
+    }
+    if (form.matches('[data-board-delete-form]')) {
+      event.preventDefault()
+      const data = new FormData(form)
+      this.callbacks.onBoardDelete(Number(data.get('postId') ?? 0), String(data.get('password') ?? ''))
       return
     }
     if (!form.matches('[data-account-form]')) return
