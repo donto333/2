@@ -427,11 +427,15 @@ async function recordFactionTerritoryBattle(userId, input) {
     const current = rows[0];
     if (!current || current.owner === faction) return;
     const finalRequested = Boolean(input.captured);
-    if (finalRequested && Number(current.defense) > cityDefenseFloor(input.cityId)) return;
-    const conquestProgress = finalRequested ? 100 : Math.min(100, Number(current.conquestProgress) + damage);
-    // The row lock makes the first valid final-war request authoritative.
+    // The client sends captured=true only after the local final faction battle
+    // has passed the zero-defense and garrison checks. Treat that successful
+    // final-war result as authoritative even when this shared row is stale
+    // from an earlier failed siege sync; otherwise the next list query can
+    // overwrite the newly captured city with the old neutral snapshot.
+    const captured = finalRequested;
+    const conquestProgress = captured ? 100 : Math.min(100, Number(current.conquestProgress) + damage);
+    // The row lock makes the first final-war request authoritative.
     // A later concurrent request observes the new owner and is ignored.
-    const captured = finalRequested && Number(current.defense) <= cityDefenseFloor(input.cityId);
     await tx.update(factionTerritoryStates).set({
       owner: captured ? faction : current.owner,
       conquestProgress,

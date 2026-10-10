@@ -483,7 +483,7 @@ const ui = new StrategyUI(root, {
     ui.notify(result.message, result.ok && result.won ? 'jade' : 'ember')
     if (result.ok) {
       queueAccountSave()
-      void recordFactionTerritoryBattle(id, { damage: result.damage, won: result.won, captured: result.won && state.cities.find(city => city.id === id)?.owner === state.faction })
+      void recordFactionTerritoryBattle(id, { damage: result.damage, won: result.won, captured: result.won })
     }
   },
   onCollectIncome: () => {
