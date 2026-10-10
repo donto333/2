@@ -401,17 +401,26 @@ async function refreshBoard(board: BoardPost['board'] = '전체'): Promise<void>
     ui.notify(error instanceof Error ? error.message : '게시판을 불러오지 못했습니다.', 'ember')
   }
 }
-async function createBoardPost(board: BoardPost['board'], title: string, content: string): Promise<void> {
+async function createBoardPost(board: BoardPost['board'], title: string, content: string, password: string): Promise<void> {
   if (authView.status !== 'authenticated') {
     ui.notify('게시글 작성은 회원 로그인 후 이용할 수 있습니다.', 'ember')
     return
   }
   try {
-    await ManusAuth.mutate('board.create', { board, title: title.trim(), content: content.trim() })
+    await ManusAuth.mutate('board.create', { board, title: title.trim(), content: content.trim(), password })
     ui.notify('게시글을 올렸습니다.', 'jade')
     await refreshBoard(board)
   } catch (error) {
     ui.notify(error instanceof Error ? error.message : '게시글 작성에 실패했습니다.', 'ember')
+  }
+}
+async function deleteBoardPost(id: number, password: string): Promise<void> {
+  try {
+    await ManusAuth.mutate('board.delete', { id, password })
+    ui.notify('게시글을 삭제했습니다.', 'jade')
+    await refreshBoard()
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시글 삭제에 실패했습니다.', 'ember')
   }
 }
 const ui = new StrategyUI(root, {
@@ -768,8 +777,11 @@ const ui = new StrategyUI(root, {
   onBoardRefresh: board => {
     void refreshBoard(board)
   },
-  onBoardPost: (board, title, content) => {
-    void createBoardPost(board, title, content)
+  onBoardPost: (board, title, content, password) => {
+    void createBoardPost(board, title, content, password)
+  },
+  onBoardDelete: (id, password) => {
+    void deleteBoardPost(id, password)
   },
   onStore: () => {
     state.section = 'shop'

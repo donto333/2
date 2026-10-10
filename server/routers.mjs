@@ -3,7 +3,7 @@ import { adminProcedure, router, publicProcedure, protectedProcedure, getFaction
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
-import { createBoardPost, listBoardPosts } from './board.mjs'
+import { createBoardPost, deleteBoardPost, listBoardPosts } from './board.mjs'
 
 // 계정 상태 숫자 한도: DB 컬럼(int / int unsigned)이 담을 수 있는 범위 안에서 넉넉하게 잡는다.
 // 예전 한도(병법서·승리·낙양 상자·신화 조각 1,000,000)를 넘은 계정은 저장 자체가 거절되었다.
@@ -72,7 +72,8 @@ export const gameRouter = router({
   }),
   board: router({
     list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']) })).query(({ ctx, input }) => listBoardPosts(ctx.user.id, input.board)),
-    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
+    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
+    delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => deleteBoardPost(ctx.user, input.id, input.password)),
   }),
   account: router({
     me: protectedProcedure.query(({ ctx }) => accountView(ctx.user)),

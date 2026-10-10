@@ -1,7 +1,7 @@
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import mysql from 'mysql2/promise'
 
 const BOARDS = ['전체', '촉한', '위나라', '오나라']
-const FACTIONS = ['촉한', '위나라', '오나라']
 let pool
 
 function getPool() {
@@ -26,7 +26,20 @@ function assertVisible(board, faction) {
   if (board !== '전체' && board !== faction) throw new Error('소속 진영 게시판만 이용할 수 있습니다.')
 }
 
-function postView(row) {
+function hashPassword(password, salt = randomBytes(16)) {
+  const passwordSalt = salt.toString('hex')
+  const passwordHash = scryptSync(password, salt, 64).toString('hex')
+  return { passwordSalt, passwordHash }
+}
+
+function passwordMatches(password, saltHex, hashHex) {
+  if (!saltHex || !hashHex) return false
+  const expected = Buffer.from(hashHex, 'hex')
+  const actual = scryptSync(password, Buffer.from(saltHex, 'hex'), expected.length)
+  return expected.length === actual.length && timingSafeEqual(expected, actual)
+}
+
+function postView(row, userId) {
   return {
     id: Number(row.id),
     board: row.board,
@@ -35,17 +48,17 @@ function postView(row) {
     authorName: row.authorName,
     authorFaction: row.authorFaction,
     createdAt: row.createdAt,
+    canDelete: Number(row.authorUserId) === Number(userId),
   }
 }
+
+const POST_COLUMNS = 'id,board,title,content,authorUserId,authorName,authorFaction,createdAt,passwordSalt,passwordHash'
 
 export async function listBoardPosts(userId, board) {
   const faction = await currentFaction(userId)
   assertVisible(board, faction)
-  const [rows] = await getPool().query(
-    'SELECT id,board,title,content,authorName,authorFaction,createdAt FROM game_board_posts WHERE board=? ORDER BY createdAt DESC, id DESC LIMIT 100',
-    [board],
-  )
-  return rows.map(postView)
+  const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts WHERE board=? ORDER BY createdAt DESC, id DESC LIMIT 100`, [board])
+  return rows.map(row => postView(row, userId))
 }
 
 export async function createBoardPost(user, input) {
@@ -53,17 +66,27 @@ export async function createBoardPost(user, input) {
   assertVisible(input.board, faction)
   const title = input.title.trim()
   const content = input.content.trim()
+  const password = input.password.trim()
   if (!title || !content) throw new Error('제목과 내용을 입력해 주세요.')
+  if (password.length < 4) throw new Error('삭제 비밀번호는 4자 이상 입력해 주세요.')
   const name = (user.name ?? '').trim() || '이름 없는 장군'
+  const { passwordSalt, passwordHash } = hashPassword(password)
   const [result] = await getPool().execute(
-    'INSERT INTO game_board_posts (board,title,content,authorUserId,authorName,authorFaction) VALUES (?,?,?,?,?,?)',
-    [input.board, title, content, user.id, name.slice(0, 64), faction],
+    'INSERT INTO game_board_posts (board,title,content,authorUserId,authorName,authorFaction,passwordSalt,passwordHash) VALUES (?,?,?,?,?,?,?,?)',
+    [input.board, title, content, user.id, name.slice(0, 64), faction, passwordSalt, passwordHash],
   )
-  const [rows] = await getPool().query(
-    'SELECT id,board,title,content,authorName,authorFaction,createdAt FROM game_board_posts WHERE id=? LIMIT 1',
-    [result.insertId],
-  )
-  return postView(rows[0])
+  const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts WHERE id=? LIMIT 1`, [result.insertId])
+  return postView(rows[0], user.id)
+}
+
+export async function deleteBoardPost(user, postId, password) {
+  const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts WHERE id=? LIMIT 1`, [postId])
+  const post = rows[0]
+  if (!post) throw new Error('게시글을 찾을 수 없습니다.')
+  if (Number(post.authorUserId) !== Number(user.id)) throw new Error('게시글 작성자만 삭제할 수 있습니다.')
+  if (!passwordMatches(password, post.passwordSalt, post.passwordHash)) throw new Error('삭제 비밀번호가 올바르지 않습니다.')
+  await getPool().execute('DELETE FROM game_board_posts WHERE id=? AND authorUserId=?', [postId, user.id])
+  return { ok: true, id: postId }
 }
 
 export { BOARDS }
