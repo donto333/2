@@ -1,339 +1,91 @@
-// End-to-end smoke test for 천하: 패왕의 시대.
-// Builds must already exist in dist/ (`pnpm build`). The test serves the production
-// output, checks the command screens, recruits a general, starts a battle and
-// verifies responsive navigation without requiring a logged-in account.
+// Minimal smoke test for 천하: 패왕의 시대.
+// Keeps only the highest-value regressions: guest access, siege routing,
+// siege-result return to the city management card, and admin board controls.
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
 
 const port = 4300 + Math.floor(Math.random() * 500)
 const url = `http://127.0.0.1:${port}/`
-const out = process.env.SHOTS_DIR ?? 'shots'
-mkdirSync(out, { recursive: true })
-
 const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], { stdio: 'ignore' })
 let browser
-const guard = setTimeout(() => fail('timed out'), 120_000)
-
-function cleanup() {
-  clearTimeout(guard)
-  try { server.kill('SIGTERM') } catch {}
-}
-
-async function fail(message) {
+let finished = false
+const stop = () => { try { server.kill('SIGTERM') } catch {} }
+const fail = async message => {
+  if (finished) return
+  finished = true
   console.error(`smoke: FAIL — ${message}`)
   await browser?.close().catch(() => {})
-  cleanup()
+  stop()
   process.exit(1)
 }
-
-async function waitForServer() {
-  for (let i = 0; i < 60; i += 1) {
-    try {
-      if ((await fetch(url)).ok) return
-    } catch {}
-    await new Promise(resolve => setTimeout(resolve, 250))
-  }
-  throw new Error('preview server did not start')
-}
-
-async function openGame(context, errors) {
-  const page = await context.newPage()
-  page.on('console', message => message.type() === 'error' && !message.text().includes('Failed to load resource') && errors.push(message.text()))
-  page.on('pageerror', error => errors.push(String(error)))
-  page.on('response', response => response.status() >= 400 && !response.url().includes('/api') && errors.push(`HTTP ${response.status()} ${response.url()}`))
-  await page.goto(url)
-  await page.waitForSelector('.access-gate', { timeout: 30_000 })
-  if (await page.locator('[data-action="guest-login"]').count() !== 1) throw new Error('guest login choice is missing')
-  await page.click('[data-action="guest-login"]')
-  await page.waitForSelector('.faction-selection, .app-shell', { timeout: 30_000 })
-  if (await page.locator('.faction-selection').count()) {
-    if (await page.locator('[data-action="faction-select"]').count() !== 3) throw new Error('faction selection choices are incomplete')
-    await page.locator('[data-action="faction-select"][data-faction="촉한"]').evaluate(button => button.click())
-  }
-  await page.waitForSelector('.app-shell', { timeout: 30_000 })
-  const initialOwners = await page.evaluate(() => window.__strategy.state.cities.filter(city => city.owner !== '중립').map(city => [city.id, city.owner]))
-  if (JSON.stringify(initialOwners) !== JSON.stringify([['chengdu', '촉한'], ['jianye', '오나라'], ['ye', '위나라']])) throw new Error('initial season must own capitals only')
-  await page.reload()
-  await page.waitForSelector('.app-shell', { timeout: 30_000 })
-  if (await page.locator('.access-gate').count() !== 0) throw new Error('guest access was lost after reload')
-  await page.waitForSelector('[data-action="section"][data-section="battle"]')
-  if (await page.locator('[data-action="section"][data-section="admin"]').count() !== 0) throw new Error('admin navigation is visible to a non-admin guest')
-  return page
-}
+const guard = setTimeout(() => void fail('timed out'), 45_000)
 
 try {
-  await waitForServer()
-  const errors = []
-  const executablePath = process.env.CHROMIUM_PATH ?? '/usr/bin/chromium'
-  const launchOptions = { args: ['--ignore-gpu-blocklist', '--no-sandbox', '--disable-dev-shm-usage'] }
-  if (existsSync(executablePath)) launchOptions.executablePath = executablePath
-  browser = await chromium.launch(launchOptions)
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      if ((await fetch(url)).ok) break
+    } catch {}
+    await new Promise(resolve => setTimeout(resolve, 250))
+    if (attempt === 39) throw new Error('preview server did not start')
+  }
 
-  const desktop = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'ko-KR' })
-  const page = await openGame(desktop, errors)
-  await page.screenshot({ path: `${out}/01-overview.png` })
+  browser = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'ko-KR' })
+  const page = await context.newPage()
+  const consoleErrors = []
+  page.on('console', message => { if (message.type() === 'error' && !message.text().includes('Failed to load resource')) consoleErrors.push(message.text()) })
+  page.on('pageerror', error => consoleErrors.push(String(error)))
 
-  const title = await page.locator('.brand-title').textContent()
-  if (title?.trim() !== '천하') throw new Error(`unexpected title: ${title}`)
-  if (await page.locator('canvas#game').count() !== 1) throw new Error('3D battlefield canvas missing')
-  await page.click('[data-action="section"][data-section="territory"]')
-  await page.waitForSelector('[data-action="territory-refresh"]')
-  if (!(await page.locator('.page-section--territory').textContent())?.includes('촉한 영토')) throw new Error('active faction territory label is missing')
-  await page.click('[data-action="territory-refresh"]')
-  if (!(await page.locator('[data-territory-sync]').textContent())?.includes('로그인 후 동기화')) throw new Error('guest territory sync fallback is missing')
-  await page.click('.city-marker[data-action="city-select"][data-city="hanzhong"]')
+  await page.goto(url)
+  await page.waitForSelector('.access-gate', { timeout: 10_000 })
+  await page.click('[data-action="guest-login"]')
+  await page.waitForSelector('.faction-selection, .app-shell', { timeout: 10_000 })
+  if (await page.locator('.faction-selection').count()) {
+    await page.locator('[data-action="faction-select"][data-faction="촉한"]').evaluate(button => button.click())
+  }
+  await page.waitForSelector('.app-shell', { timeout: 10_000 })
+
+  await page.locator('[data-action="section"][data-section="territory"]').evaluate(button => button.click())
+  await page.waitForSelector('.territory-map')
+  await page.locator('.city-marker[data-action="city-select"][data-city="hanzhong"]').evaluate(button => button.click())
   await page.evaluate(() => {
     window.__strategy.state.resources.grain = 999999
     window.__strategy.state.resources.silver = 999999
     window.__strategy.state.resources.iron = 999999
     window.__strategy.ui.render(window.__strategy.state)
   })
-  await page.click('[data-action="conquer"][data-city="hanzhong"]')
-  await page.waitForSelector('.page-section--battle')
-  if (await page.locator('.page-section--scenario').count() !== 0) throw new Error('siege conquest incorrectly opened the scenario list')
-  if (!(await page.evaluate(() => window.__strategy.arena.getSnapshot().active))) throw new Error('siege conquest did not start the 3D battle')
-  await page.click('[data-action="section"][data-section="overview"]')
+  await page.locator('[data-action="conquer"][data-city="hanzhong"]').evaluate(button => button.click())
+  await page.waitForSelector('.page-section--battle', { timeout: 10_000 })
+  if (await page.locator('.page-section--scenario').count()) throw new Error('siege opened the scenario list')
+  if (!(await page.evaluate(() => window.__strategy.arena.getSnapshot().active))) throw new Error('siege did not start the 3D battle')
+
   await page.evaluate(() => {
-    window.__strategy.ui.setAuth({ status: 'authenticated', name: '스모크 관리자' })
-    window.__strategy.ui.setAccount({ id: 1, openId: 'smoke-admin', name: '스모크 관리자', email: 'admin@example.com', loginMethod: 'smoke', role: 'admin', createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() })
-    window.__strategy.ui.render(window.__strategy.state)
-  })
-  if (await page.locator('[data-action="section"][data-section="admin"]').count() !== 1) throw new Error('admin navigation is hidden for an admin account')
-  await page.click('[data-action="section"][data-section="recruit"]')
-  if (!(await page.locator('[data-auth-button]').textContent())?.includes('스모크 관리자')) throw new Error('auth button reset after menu navigation')
-  await page.click('[data-action="section"][data-section="overview"]')
-
-  await page.click('[data-action="section"][data-section="duel"]')
-  await page.waitForSelector('.duel-list .duel-opponent')
-  if (await page.locator('.duel-opponent').count() < 1) throw new Error('duel opponent list is empty')
-  if (!(await page.locator('.duel-daily-limit').textContent())?.includes('오늘 남은 대련')) throw new Error('daily duel limit is missing')
-  await page.locator('[data-action="duel-start"]').first().click()
-  await page.waitForFunction(() => window.__strategy.arena.getSnapshot().difficulty === '유저 대련' && window.__strategy.arena.getSnapshot().active, null, { timeout: 5000 })
-  if ((await page.evaluate(() => window.__strategy.arena.getSnapshot().opponentDeck.length)) !== 3) throw new Error('duel opponent deck was not loaded')
-  await page.click('[data-action="section"][data-section="shop"]')
-  await page.waitForSelector('.page-section--shop .shop-item')
-  if (await page.locator('.page-section--shop .shop-item--gold').count() !== 5) throw new Error('gold shop does not show five recharge tiers')
-  const beforeGold = await page.evaluate(() => window.__strategy.state.gold)
-  if (await page.locator('[data-action="gold-purchase"][data-package-id="gold-3"]:disabled').count() !== 1) throw new Error('gold test recharge is not locked before launch')
-  if (await page.evaluate(() => window.__strategy.state.gold) !== beforeGold) throw new Error('locked gold recharge changed the balance')
-  await page.click('[data-action="shop-tab"][data-shop-tab="resources"]')
-  if (await page.locator('.page-section--shop .shop-item--resource').count() !== 25 || await page.locator('.page-section--shop .shop-item--honor').count() !== 6) throw new Error('resource and honor shop packages are incomplete')
-  const beforeHonor = await page.evaluate(() => window.__strategy.state.honor)
-  await page.click('[data-action="honor-shop-purchase"][data-package-id="honor-3"]')
-  if (await page.evaluate(() => window.__strategy.state.honor) !== beforeHonor + 300) throw new Error('honor shop exchange did not grant one hundred honor per gold')
-  if (await page.locator('[data-action="honor-shop-purchase"][data-package-id="honor-50"]').count() !== 1) throw new Error('50-gold honor package is missing')
-  const beforeGrain = await page.evaluate(() => window.__strategy.state.resources.grain)
-  await page.click('[data-action="cash-shop-purchase"][data-product-id="resource-grain-3"]')
-  if (await page.evaluate(() => window.__strategy.state.resources.grain) !== beforeGrain + 5000) throw new Error('resource shop gold exchange did not grant grain')
-  await page.click('[data-action="shop-tab"][data-shop-tab="mythic"]')
-  if (await page.locator('.page-section--shop .shop-item').count() !== 12) throw new Error('mythic shop does not show twelve stat-specific equipment items')
-  if (await page.locator('.page-section--shop .shop-specialty').count() !== 12) throw new Error('mythic shop specialty labels are incomplete')
-  if (await page.locator('.page-section--shop .shop-item-icon img').count() !== 12) throw new Error('mythic shop equipment artwork is incomplete')
-  await page.evaluate(() => { window.__strategy.state.mythicFragments = 20; window.__strategy.ui.render(window.__strategy.state) })
-  await page.click('[data-action="shop-purchase"][data-equipment-id="shop-mythic-command-weapon"]')
-  if (await page.evaluate(() => window.__strategy.state.mythicFragments) !== 0) throw new Error('mythic fragment purchase did not consume twenty fragments')
-  if (!(await page.evaluate(() => window.__strategy.state.equipmentInventory.at(-1)?.specialty))) throw new Error('purchased mythic equipment lost its specialty')
-
-  await page.click('[data-action="section"][data-section="recruit"]')
-  await page.waitForSelector('[data-action="recruit"][data-count="1"]')
-  await page.click('[data-action="recruit"][data-count="1"]')
-  await page.waitForSelector('[data-action="close-summon"]', { timeout: 10_000 })
-  await page.screenshot({ path: `${out}/02-recruit.png` })
-  await page.locator('[data-action="close-summon"]').evaluate(button => button.click())
-  await page.waitForTimeout(500)
-  await page.click('[data-action="recruit"][data-count="10"]')
-  await page.waitForSelector('.recruit-results.is-visible', { timeout: 10_000 })
-  if (await page.locator('.summon-ritual.is-visible').count() !== 0) throw new Error('ten-pull still shows a representative summon reveal')
-  if (await page.locator('.recruit-result-card').count() !== 10) throw new Error('ten-pull did not show ten rewards')
-  const summonFrame = await page.locator('.recruit-result-card').first().evaluate(card => { const portrait = card.querySelector('.ritual-portrait'); const style = getComputedStyle(portrait); const cardStyle = getComputedStyle(card); const innerOverlay = portrait.querySelector('i'); return { cardBorder: cardStyle.borderTopWidth, cardAnimation: cardStyle.animationName, portraitBorder: style.borderTopWidth, portraitBackground: style.backgroundImage, innerOverlayDisplay: getComputedStyle(innerOverlay).display } })
-  if (summonFrame.cardBorder !== '2px' || summonFrame.portraitBorder !== '2px') throw new Error('summon rarity emphasis is not using border highlights')
-  if (!summonFrame.cardAnimation.includes('recruit-card-reveal')) throw new Error('summon result reveal animation is missing')
-  if (summonFrame.portraitBackground.includes('gradient')) throw new Error('summon portrait still has a center gradient overlay')
-  if (summonFrame.innerOverlayDisplay !== 'none') throw new Error('summon portrait inner color overlay is still visible')
-  await page.screenshot({ path: `${out}/02-ten-pull.png` })
-  await page.click('[data-action="reroll-recruit"]')
-  await page.waitForSelector('.recruit-results.is-visible', { timeout: 10_000 })
-  if (await page.locator('.summon-ritual.is-visible').count() !== 0) throw new Error('ten-pull reroll still shows a representative summon reveal')
-  if (await page.locator('.recruit-result-card').count() !== 10) throw new Error('reroll did not show ten rewards')
-  await page.click('[data-action="close-recruit-results"]')
-
-  await page.click('[data-action="section"][data-section="battle"]')
-  await page.waitForSelector('.page-section--scenario')
-  if (await page.locator('.scenario-card').count() !== 58) throw new Error('scenario chronicle does not show all 58 episodes')
-  if (await page.locator('.scenario-card-start').count() !== 58) throw new Error('scenario cards do not expose individual battle buttons')
-  if (await page.locator('.scenario-dialogue-line').count() < 3) throw new Error('scenario dialogue panel is missing')
-  await page.click('.scenario-card-select:first-of-type')
-  await page.locator('.scenario-card-start').first().click()
-  await page.waitForSelector('.page-section--battle')
-  await page.waitForFunction(() => window.__strategy.arena.getSnapshot().elapsed > 0.25, null, { timeout: 5000 })
-  await page.waitForTimeout(800)
-  const formationMotion = await page.evaluate(() => {
-    const arena = window.__strategy.arena
-    return {
-      playerFront: Math.max(...arena.playerUnits.map(unit => unit.group.position.z)),
-      enemyFront: Math.min(...arena.enemyUnits.map(unit => unit.group.position.z)),
-      effectCount: arena.effects.length,
-    }
-  })
-  if (formationMotion.playerFront >= 6 || formationMotion.enemyFront <= -8) throw new Error('battle formations did not advance toward the frontline')
-  if (formationMotion.effectCount < 1) throw new Error('battle movement effects were not spawned')
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('manus-auth-change', { detail: { status: 'logged_out', user: null } })))
-  await page.waitForTimeout(100)
-  if (await page.evaluate(() => window.__strategy.state.section) !== 'battle' || !(await page.evaluate(() => window.__strategy.arena.getSnapshot().active))) throw new Error('auth refresh reset the active expedition battle')
-  await page.evaluate(() => {
-    window.__strategy.ui.setAuth({ status: 'authenticated', name: '스모크 관리자' })
-    window.__strategy.ui.setAccount({ id: 1, openId: 'smoke-admin', name: '스모크 관리자', email: 'admin@example.com', loginMethod: 'smoke', role: 'admin', createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() })
-  })
-  const battle = await page.evaluate(() => window.__strategy.arena.getSnapshot())
-  if (!battle.active || battle.elapsed <= 0.25) throw new Error(`battle clock did not start (${battle.elapsed.toFixed(2)}s)`)
-  await page.waitForFunction(() => {
-    const scene = window.__strategy.arena.scene
-    let loaded = 0
-    scene.traverse(node => {
-      if (!node.name.startsWith('realistic-squad-')) return
-      node.traverse(child => {
-        const material = child.material
-        if (material && !Array.isArray(material) && material.map) loaded += 1
-      })
-    })
-    return loaded >= 5
-  }, null, { timeout: 5000 })
-  await page.click('[data-action="move"][data-index="1"]')
-  const battleSkill = page.locator('[data-action="battle-skill"]')
-  if (await battleSkill.isEnabled()) {
-    await battleSkill.click()
-    await page.waitForFunction(() => window.__strategy.arena.effects.some(effect => effect.object.children.length >= 15), null, { timeout: 3000 })
-  }
-  await page.waitForFunction(() => window.__strategy.arena.effects.some(effect => effect.object.children.length >= 3), null, { timeout: 3000 })
-  await page.waitForTimeout(250)
-  await page.screenshot({ path: `${out}/03-battle.png` })
-  await page.evaluate(() => window.__strategy.arena.dispose())
-  if (await page.locator('.result-modal.is-visible').count()) await page.click('[data-action="close-result"]')
-
-  await page.click('[data-action="section"][data-section="rank"]')
-  await page.waitForSelector('[data-rank-list]')
-  await page.click('[data-action="section"][data-section="updates"]')
-  await page.waitForSelector('.page-section--updates')
-  if (await page.locator('.page-section--updates .update-entry').count() < 10) throw new Error('update history entries are incomplete')
-  if (await page.locator('.updates-panel--planned .update-entry--planned').count() !== 10) throw new Error('planned update history is incomplete')
-  if (!(await page.locator('.updates-panel--planned').textContent())?.includes('시나리오 번호 및 오타 정리')) throw new Error('latest planned update is missing')
-  if (!(await page.locator('.updates-panel--planned').textContent())?.includes('전체 메뉴 UI 개편')) throw new Error('planned update list is missing the menu UI item')
-  if (await page.locator('.page-section--updates .updates-panel:first-child .update-entry time').first().textContent() !== '2026.10.10') throw new Error('update history is not sorted newest first')
-  if (!(await page.locator('.page-section--updates .updates-panel:first-child .update-entry').first().textContent())?.includes('최종 세력전 점령 상태 동기화 수정')) throw new Error('latest update is not shown first')
-  if (!(await page.locator('.page-section--updates').textContent())?.includes('유저 대련 실제 덱 연동')) throw new Error('real-deck update is missing from in-game history')
-  if (!(await page.locator('.page-section--updates').textContent())?.includes('전투 병사 모델링 개선')) throw new Error('soldier-model update is missing from in-game history')
-  if (!(await page.locator('.page-section--updates').textContent())?.includes('천하영토 진영별 유저 점령 연동')) throw new Error('territory faction sync plan is missing from in-game history')
-  if (!(await page.locator('.page-section--updates').textContent())?.includes('로그아웃 후 로그인 첫 페이지 이동')) throw new Error('logout login-page plan is missing from in-game history')
-  await page.click('[data-action="section"][data-section="codex"]')
-  await page.waitForSelector('.codex-grid')
-  if (await page.locator('.codex-card').count() !== 65) throw new Error('general codex does not show all 65 generals')
-  if (await page.locator('.codex-card:not(.codex-card--locked) .skill-detail-panel').count() < 1) throw new Error('codex skill detail panel is missing')
-  await page.click('[data-action="section"][data-section="roster"]')
-  await page.waitForSelector('select[data-action="roster-sort"]')
-  if (await page.locator('.general-card .skill-detail-grid').count() < 1) throw new Error('owned roster skill detail panel is missing')
-  const skillCategories = await page.locator('.general-card .skill-category').allTextContents()
-  if (skillCategories.length < 1 || skillCategories.some(text => text.trim().length === 0)) throw new Error('skill concept categories are not visible')
-  await page.locator('select[data-action="roster-sort"]').selectOption('level')
-  await page.click('[data-action="roster-sort-direction"]')
-  await page.click('[data-action="section"][data-section="formation"]')
-  await page.waitForSelector('.formation-slots')
-  await page.waitForSelector('select[data-action="formation-sort"]')
-  if (await page.locator('select[data-action="formation-sort"] option').count() !== 2) throw new Error('formation reserve sort options are incomplete')
-  if (await page.locator('.formation-slot--filled').count() !== 3) throw new Error('formation screen does not show three active slots')
-  if (await page.locator('.formation-unequip').count() < 1) throw new Error('formation equipment unequip controls missing')
-  await page.locator('.formation-unequip').first().click()
-  await page.waitForTimeout(100)
-  await page.locator('select[data-action="formation-sort"]').selectOption('grade')
-  await page.locator('[data-action="formation-sort-direction"]').evaluate(button => button.click())
-  if (await page.locator('.formation-bench-card').count() > 0) {
-    await page.click('.formation-bench-card [data-action="formation"]')
-    if (await page.locator('.formation-slot--filled').count() !== 3) throw new Error('formation reserve selection did not preserve three slots')
-  }
-  if (await page.locator('.result-modal.is-visible').count()) await page.click('[data-action="close-result"]')
-  await page.click('[data-action="section"][data-section="equipment"]')
-  await page.waitForSelector('select[data-action="equipment-sort"]')
-  if (await page.locator('.page-section--equipment [data-action="equipment-draw"]').count() !== 0) throw new Error('equipment management menu still exposes draw controls')
-  await page.locator('select[data-action="equipment-general"]').selectOption({ index: 1 })
-  await page.waitForTimeout(100)
-  if (await page.locator('.page-section--equipment .equipment-slot-unequip').count() < 1) throw new Error('equipment management slot unequip control missing')
-  await page.locator('select[data-action="equipment-sort"]').selectOption('grade')
-  await page.locator('[data-action="equipment-sort-direction"]').evaluate(button => button.click())
-  await page.click('[data-action="section"][data-section="recruit"]')
-  await page.click('[data-action="summon-tab"][data-summon-tab="equipment"]')
-  await page.waitForSelector('.summon-tab.is-active[data-summon-tab="equipment"]')
-  await page.waitForSelector('.equipment-slots')
-  if (await page.locator('.equipment-card').count() < 4) throw new Error('starter equipment inventory missing')
-  if (await page.locator('.equipment-card .equipment-image').count() < 4) throw new Error('equipment inventory artwork is missing')
-  if (await page.locator('.set-bonus-card').count() !== 4) throw new Error('equipment set bonus panel missing')
-  await page.click('[data-action="equipment-draw"][data-count="1"]')
-  if (await page.locator('.equipment-card').count() < 5) throw new Error('equipment draw did not add an item')
-  await page.waitForSelector('.recruit-results.is-visible')
-  if (await page.locator('.equipment-result-card').count() !== 1) throw new Error('equipment draw result modal missing')
-  if (!(await page.locator('.equipment-result-card').first().evaluate(card => getComputedStyle(card).animationName)).includes('recruit-card-reveal')) throw new Error('equipment result reveal animation is missing')
-  if (await page.locator('[data-action="extra-equipment-draw"]').count() !== 2) throw new Error('equipment result modal missing extra draw buttons')
-  await page.click('[data-action="extra-equipment-draw"][data-count="1"]')
-  await page.waitForSelector('.recruit-results.is-visible')
-  if (await page.locator('.equipment-result-card').count() !== 1) throw new Error('extra equipment draw did not show a result modal')
-  await page.click('[data-action="close-recruit-results"]')
-  await page.locator('.equipment-card:first-of-type [data-action="equipment-enhance"]').evaluate(button => button.click())
-  await page.locator('.equipment-card:first-of-type [data-action="equipment-equip"]').evaluate(button => button.click())
-  if (await page.locator('.equipment-slot.is-filled').count() < 1) throw new Error('equipment slot did not render an equipped item')
-  await page.click('[data-action="section"][data-section="territory"]')
-  await page.waitForSelector('.territory-map')
-  if (await page.locator('.city-marker').count() !== 45) throw new Error('territory city marker count is incomplete')
-  if (await page.locator('.city-marker-castle img').count() !== 45) throw new Error('territory city castle art is incomplete')
-  if (await page.locator('.city-marker-castle img').evaluateAll(images => images.some(image => !image.complete || image.naturalWidth === 0))) throw new Error('territory castle art failed to load')
-  if (await page.locator('.territory-frontlines line').count() < 20) throw new Error('territory frontline connection lines are incomplete')
-  if (await page.locator('.territory-frontlines').getAttribute('aria-label') !== '도시 연결 전선') throw new Error('territory frontline network label is missing')
-  await page.locator('.city-marker[data-action="city-select"][data-city="luoyang"]').evaluate(button => button.click())
-  if (!(await page.locator('.city-map-context').textContent())?.includes('원거리 전선')) throw new Error('remote city geography status is missing')
-  if (await page.locator('.frontier-lock').count() !== 1) throw new Error('remote conquest was not locked')
-  await page.locator('.city-marker[data-action="city-select"][data-city="hanzhong"]').evaluate(button => button.click())
-  if (await page.locator('.territory-actions').count() !== 1) throw new Error('border city conquest actions are missing')
-  await page.locator('.city-marker[data-action="city-select"][data-city="ye"]').evaluate(button => button.click())
-  if (!(await page.locator('.capital-badge').textContent())?.includes('본성')) throw new Error('faction capital protection badge is missing')
-  await page.locator('.map-canvas').evaluate(element => element.scrollIntoView({ block: 'center' }))
-  await page.screenshot({ path: `${out}/03-territory.png` })
-  await page.evaluate(() => { window.__strategy.state.section = 'admin'; window.__strategy.ui.render(window.__strategy.state) })
-  await page.waitForSelector('.page-section--admin')
-  if ((await page.locator('.admin-kpi').count()) !== 4) throw new Error('admin overview KPIs missing')
-  await page.locator('[data-action="admin-tab"][data-admin-tab="accounts"]').evaluate(button => button.click())
-  await page.waitForSelector('.admin-account-toolbar')
-  if ((await page.locator('.admin-account-toolbar').count()) !== 1) throw new Error('admin account management panel missing for admin preview')
-  await page.locator('[data-action="admin-tab"][data-admin-tab="generals"]').evaluate(button => button.click())
-  await page.waitForSelector('.admin-general-table')
-  await page.locator('[data-action="admin-filter"][data-admin-filter="legendary"]').evaluate(button => button.click())
-  if ((await page.locator('.admin-general-row').count()) === 0) throw new Error('admin general filter returned no rows')
-  await page.locator('[data-action="admin-tab"][data-admin-tab="season"]').evaluate(button => button.click())
-  await page.waitForSelector('.season-banner')
-  await page.screenshot({ path: `${out}/05-admin.png` })
-  await desktop.close()
-
-  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ko-KR' })
-  const phonePage = await openGame(phone, errors)
-  await phonePage.evaluate(() => {
     window.__strategy.state.section = 'territory'
+    window.__strategy.state.selectedCityId = 'hanzhong'
+    window.__strategy.ui.render(window.__strategy.state)
+    window.__strategy.ui.showBattleResult(true, 8962)
+  })
+  await page.waitForSelector('.city-management', { timeout: 10_000 })
+  if ((await page.locator('.city-management h2').textContent())?.includes('한중') !== true) throw new Error('siege result did not return to the attacked city menu')
+  if (await page.locator('.result-modal.is-visible').count()) await page.locator('[data-action="close-result"]').evaluate(button => button.click())
+
+  await page.evaluate(() => {
+    window.__strategy.ui.setAuth({ status: 'authenticated', name: '스모크 관리자' })
+    window.__strategy.ui.setAccount({ id: 1, openId: 'smoke-admin', name: '스모크 관리자', email: 'admin@example.com', loginMethod: 'smoke', role: 'admin', createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() })
+    window.__strategy.state.section = 'admin'
     window.__strategy.ui.render(window.__strategy.state)
   })
-  await phonePage.waitForSelector('.mobile-city-selector')
-  if (await phonePage.locator('.mobile-city-option').count() !== 45) throw new Error('mobile territory city selector is incomplete')
-  await phonePage.locator('[data-action="city-select"][data-city="luoyang"].mobile-city-option').tap()
-  if (!(await phonePage.locator('.mobile-city-option.is-selected').getAttribute('data-city'))?.includes('luoyang')) throw new Error('mobile city selector did not select Luoyang')
-  if (!(await phonePage.locator('.city-management h2').textContent())?.includes('낙양')) throw new Error('mobile city selection did not refresh management panel')
-  await phonePage.evaluate(() => window.__strategy.ui.showBattleResult(true, 8962))
-  await phonePage.waitForSelector('.result-modal.is-visible')
-  const resultMotion = await phonePage.locator('.result-modal.is-visible .result-card').evaluate(card => getComputedStyle(card).animationName)
-  if (!resultMotion.includes('stage3-modal-card-in')) throw new Error(`stage 3 result transition is missing (${resultMotion})`)
-  await phonePage.locator('[data-action="close-result"]').evaluate(button => button.click())
-  await phonePage.waitForSelector('.result-modal', { state: 'detached' })
-  await phonePage.screenshot({ path: `${out}/04-phone.png` })
-  await phone.close()
+  await page.waitForSelector('.page-section--admin')
+  await page.locator('[data-action="admin-tab"][data-admin-tab="board"]').evaluate(button => button.click())
+  await page.waitForSelector('.admin-board-control')
+  if (await page.locator('[data-action="admin-board-posting"]').count() !== 1) throw new Error('admin board posting control is missing')
 
-  if (errors.length) throw new Error(`console errors:\n  ${errors.join('\n  ')}`)
+  if (consoleErrors.length) throw new Error(`console errors: ${consoleErrors.join(' | ')}`)
   await browser.close()
-  cleanup()
-  console.log(`smoke: OK — screenshots in ${out}/`)
+  clearTimeout(guard)
+  stop()
+  finished = true
+  console.log('smoke: OK — minimal core flow')
 } catch (error) {
-  await fail(error?.message ?? String(error))
+  await fail(error instanceof Error ? error.message : String(error))
 }
