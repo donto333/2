@@ -43,7 +43,7 @@ import {
   type FactionTerritorySnapshot,
   type Faction,
 } from './game/strategy'
-import { StrategyUI, type AccountView, type AuthView, type BoardPost, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
+import { StrategyUI, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { firstClearReward, scenarioById, type ScenarioDefinition } from './game/scenarios'
 
 const root = document.querySelector<HTMLElement>('#ui')
@@ -428,6 +428,7 @@ const ui = new StrategyUI(root, {
     if (section === 'admin') {
       void refreshAdminAccounts()
       void refreshAdminGameData()
+      void refreshAdminBoard()
     }
   },
   onRecruit: count => {
@@ -731,6 +732,15 @@ const ui = new StrategyUI(root, {
   },
   onAdminGameDataSave: data => {
     void saveAdminGameData(data)
+  },
+  onAdminBoardRefresh: () => {
+    void refreshAdminBoard()
+  },
+  onAdminBoardPostingToggle: enabled => {
+    void setAdminBoardPosting(enabled)
+  },
+  onAdminBoardDelete: id => {
+    void deleteAdminBoardPost(id)
   },
 })
 
@@ -1061,6 +1071,36 @@ async function saveAccountName(name: string): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : '계정 정보 저장에 실패했습니다.'
     ui.notify(message, 'ember')
+  }
+}
+
+async function refreshAdminBoard(): Promise<void> {
+  try {
+    const result = await ManusAuth.query('admin.boardSettings') as AdminBoardState
+    ui.setAdminBoard(result)
+    ui.render(state)
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시판 운영 정보를 불러오지 못했습니다.', 'ember')
+  }
+}
+
+async function setAdminBoardPosting(enabled: boolean): Promise<void> {
+  try {
+    await ManusAuth.mutate('admin.setBoardPosting', { enabled })
+    await refreshAdminBoard()
+    ui.notify(enabled ? '일반 사용자의 게시글 작성을 허용했습니다.' : '일반 사용자의 게시글 작성을 제한했습니다.')
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시판 작성 제한 설정에 실패했습니다.', 'ember')
+  }
+}
+
+async function deleteAdminBoardPost(id: number): Promise<void> {
+  try {
+    await ManusAuth.mutate('admin.deleteBoardPost', { id })
+    await refreshAdminBoard()
+    ui.notify('관리자 권한으로 게시글을 삭제했습니다.', 'jade')
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '관리자 게시글 삭제에 실패했습니다.', 'ember')
   }
 }
 
