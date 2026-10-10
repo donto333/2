@@ -174,6 +174,7 @@ let saveInFlight = false
 let saveQueued = false
 let saveRetryCount = 0
 let saveRevision = 0
+let authGeneration = 0
 let duelActive = false
 let scenarioActive = false
 let activeScenario: ScenarioDefinition | null = null
@@ -187,7 +188,9 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   Object.assign(state, fresh)
   state.section = currentSection
   gameAccess = mode
-  restoreLocalGame(mode === 'guest' ? GUEST_GAME_SAVE_KEY : LOCAL_GAME_SAVE_KEY)
+  // 회원 데이터는 계정별 서버 원장을 기준으로 한다. 공용 회원 로컬 저장본을
+  // 먼저 복원하면 다른 계정의 진행 상태가 새 계정에 재사용될 수 있다.
+  if (mode === 'guest') restoreLocalGame(GUEST_GAME_SAVE_KEY)
   ensureCityRoster(state)
   const normalizedTerritories = normalizeInitialSeasonTerritories(state)
   ensureResearchRoster(state)
@@ -195,7 +198,18 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   const receivedDailyGold = ensurePrelaunchDailyGold(state)
   const migratedStarter = migrateLegacyStarterRoster(state)
   if (receivedDailyGold || migratedStarter || normalizedTerritories) persistLocalGame()
-  localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories) && mode === 'member'
+  localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories) && mode === 'guest'
+}
+
+function resetAccountSavePipeline(): void {
+  if (saveTimer !== null) {
+    window.clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  saveQueued = false
+  saveRetryCount = 0
+  saveRevision += 1
+  localSaveDirty = false
 }
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
@@ -749,6 +763,8 @@ window.setInterval(() => {
 
 window.addEventListener('manus-auth-change', (event: Event) => {
   const detail = (event as CustomEvent<{ status: AuthView['status']; user: { name: string | null } | null }>).detail
+  authGeneration += 1
+  resetAccountSavePipeline()
   authView = { status: detail.status, name: detail.user?.name ?? null }
   if (authView.status !== 'authenticated') {
     accountView = null
@@ -778,6 +794,8 @@ window.addEventListener('manus-auth-change', (event: Event) => {
 })
 
 void ManusAuth.prepare().then(session => {
+  authGeneration += 1
+  resetAccountSavePipeline()
   authView = { status: session.status, name: session.user?.name ?? null }
   ui.setAuth(authView)
   if (authView.status === 'authenticated') {
@@ -817,10 +835,13 @@ async function refreshAccount(): Promise<void> {
     ui.render(state)
     return
   }
+  const requestGeneration = authGeneration
   try {
     const account = await ManusAuth.query('account.me') as AccountView
     const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null }
-    if (!localSaveDirty) {
+    // 계정이 바뀐 동안 도착한 이전 계정 응답은 현재 상태에 적용하지 않는다.
+    if (requestGeneration !== authGeneration || authView.status !== 'authenticated') return
+    {
       Object.assign(state, { honor: game.honor, silver: game.silver, gold: typeof game.gold === 'number' ? game.gold : state.gold, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
       if (game.faction) state.faction = game.faction
       state.factionConfirmed = game.factionChosen === true || game.factionChosen === 1
@@ -842,7 +863,7 @@ async function refreshAccount(): Promise<void> {
       if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
       if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
       if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
-      state.mythicFragments = Math.max(0, Math.trunc(state.mythicFragments), Math.trunc(game.mythicFragments ?? 0))
+      state.mythicFragments = Math.max(0, Math.trunc(game.mythicFragments ?? 0))
       state.duelAttemptsToday = Math.max(0, Math.trunc(game.duelAttemptsToday ?? state.duelAttemptsToday))
       if (typeof game.duelDayKey === 'string') state.duelDayKey = game.duelDayKey
       if (typeof game.prelaunchGoldDayKey === 'string') state.prelaunchGoldDayKey = game.prelaunchGoldDayKey
