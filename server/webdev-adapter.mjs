@@ -439,7 +439,10 @@ async function recordFactionTerritoryBattle(userId, input) {
     await tx.update(factionTerritoryStates).set({
       owner: captured ? faction : current.owner,
       conquestProgress,
-      defense: captured ? 0 : Math.max(cityDefenseFloor(input.cityId), Number(current.defense) - damage),
+      // A newly captured city starts its next defense cycle at full wall strength.
+      // Keeping defense at 0 lets the neutral AI tick capture it back to neutral
+      // immediately after the successful final faction battle is synchronized.
+      defense: captured ? cityDefenseForLevel(CITY_LEVEL_BY_ID[input.cityId] ?? 1) : Math.max(cityDefenseFloor(input.cityId), Number(current.defense) - damage),
       prosperity: captured ? Math.max(30, Number(current.prosperity) - 20) : current.prosperity,
       version: sql`${factionTerritoryStates.version} + 1`,
       updatedByUserId: userId
