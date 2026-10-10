@@ -310,8 +310,17 @@ try {
   await page.screenshot({ path: `${out}/05-admin.png` })
   await desktop.close()
 
-  const phone = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ko-KR' })
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ko-KR' })
   const phonePage = await openGame(phone, errors)
+  await phonePage.evaluate(() => {
+    window.__strategy.state.section = 'territory'
+    window.__strategy.ui.render(window.__strategy.state)
+  })
+  await phonePage.waitForSelector('.mobile-city-selector')
+  if (await phonePage.locator('.mobile-city-option').count() !== 45) throw new Error('mobile territory city selector is incomplete')
+  await phonePage.locator('[data-action="city-select"][data-city="luoyang"].mobile-city-option').tap()
+  if (!(await phonePage.locator('.mobile-city-option.is-selected').getAttribute('data-city'))?.includes('luoyang')) throw new Error('mobile city selector did not select Luoyang')
+  if (!(await phonePage.locator('.city-management h2').textContent())?.includes('낙양')) throw new Error('mobile city selection did not refresh management panel')
   await phonePage.evaluate(() => window.__strategy.ui.showBattleResult(true, 8962))
   await phonePage.waitForSelector('.result-modal.is-visible')
   const resultMotion = await phonePage.locator('.result-modal.is-visible .result-card').evaluate(card => getComputedStyle(card).animationName)

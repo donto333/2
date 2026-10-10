@@ -492,3 +492,28 @@
   .update-entry--planned .update-entry-copy h3 { font-size: 12px; line-height: 1.45; }
   .update-entry--planned .update-entry-copy p { font-size: 10px; line-height: 1.65; }
 }
+
+/* Mobile territory navigation: separate city selection from crowded map markers. */
+.mobile-city-selector{display:none}
+@media (max-width:760px){
+  .page-section--territory .map-canvas{height:560px;min-height:560px;aspect-ratio:auto;background-size:100% 100%;touch-action:pan-y}
+  .page-section--territory .city-marker{transform:translate(-50%,-50%) scale(.62)}
+  .page-section--territory .city-marker:hover,.page-section--territory .city-marker.is-selected{transform:translate(-50%,-50%) scale(.7)}
+  .mobile-city-selector{display:block;margin-top:12px;padding:13px 10px;border:1px solid rgba(82,224,196,.2);background:rgba(7,20,22,.58)}
+  .mobile-city-selector-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 2px 10px}
+  .mobile-city-selector-head small{color:var(--muted);font-size:8px;text-align:right}
+  .mobile-city-selector-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .mobile-city-option{display:grid;grid-template-columns:7px 1fr auto;align-items:center;gap:5px;min-width:0;min-height:40px;padding:7px 6px;border:1px solid rgba(178,226,209,.14);background:rgba(12,32,33,.82);color:var(--white);text-align:left;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .mobile-city-option strong{overflow:hidden;font-size:10px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+  .mobile-city-option small{color:var(--muted);font-size:8px;white-space:nowrap}
+  .mobile-city-option-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 6px rgba(246,197,109,.42)}
+  .mobile-city-option.is-ally .mobile-city-option-dot{background:var(--jade);box-shadow:0 0 6px rgba(82,224,196,.5)}
+  .mobile-city-option.is-enemy .mobile-city-option-dot{background:var(--ember);box-shadow:0 0 6px rgba(255,128,102,.45)}
+  .mobile-city-option.is-selected{border-color:var(--jade);background:rgba(82,224,196,.14);box-shadow:inset 0 0 0 1px rgba(82,224,196,.18)}
+  .mobile-city-option:active{transform:scale(.97);background:rgba(82,224,196,.2)}
+}
+@media (max-width:390px){
+  .mobile-city-selector-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mobile-city-selector-head{align-items:flex-start;flex-direction:column;gap:4px}
+  .mobile-city-selector-head small{text-align:left}
+}
