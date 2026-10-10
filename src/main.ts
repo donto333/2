@@ -46,7 +46,7 @@ import {
   type FactionTerritorySnapshot,
   type Faction,
 } from './game/strategy'
-import { StrategyUI, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
+import { StrategyUI, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 
@@ -389,6 +389,16 @@ async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: n
     ui.notify('전투 결과는 로컬에 반영되었습니다. 서버 기록은 다음 영토 동기화에서 자동 재시도합니다.', 'jade')
   }
 }
+async function refreshCityDamageRankings(cityId: string): Promise<void> {
+  ui.setCityDamageRankings(cityId, [])
+  if (authView.status !== 'authenticated' || !cityId) return
+  try {
+    const rankings = await ManusAuth.query('territory.damageRanking', { cityId }) as CityDamageRanking[]
+    ui.setCityDamageRankings(cityId, rankings)
+  } catch {
+    ui.setCityDamageRankings(cityId, [])
+  }
+}
 async function refreshBoard(board: BoardPost['board'] = '전체'): Promise<void> {
   if (authView.status !== 'authenticated') {
     ui.notify('게시판은 회원 로그인 후 이용할 수 있습니다.', 'ember')
@@ -459,6 +469,7 @@ const ui = new StrategyUI(root, {
       void refreshDuelOpponents()
     }
     if (section === 'board') void refreshBoard()
+    if (section === 'territory') void refreshCityDamageRankings(state.selectedCityId)
     ui.render(state)
     if (section === 'account') void refreshAccount()
     if (section === 'admin') {
@@ -546,6 +557,9 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
+  },
+  onCityDamageRankingRefresh: id => {
+    void refreshCityDamageRankings(id)
   },
   onTerritoryRefresh: () => {
     void refreshFactionTerritories(true)
