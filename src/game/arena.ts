@@ -117,6 +117,8 @@ export class Arena {
   private nextPatternAt = 0
   private selectedUnit = 0
   private skillCooldown = 0
+  private enemySkillCooldown = 3.5
+  private enemySkillIndex = 0
   private lastPulse = 0
   private lastVolley = -1
   private disposed = false
@@ -130,6 +132,8 @@ export class Arena {
   private readonly effects: ArenaEffect[] = []
   private readonly activeBuffs: ActiveBattleEffect[] = []
   private readonly activeDebuffs: ActiveBattleEffect[] = []
+  private readonly enemyActiveBuffs: ActiveBattleEffect[] = []
+  private readonly enemyActiveDebuffs: ActiveBattleEffect[] = []
   private readonly cameraBase = new THREE.Vector3(0, 22, 29)
   private readonly cameraLookAt = new THREE.Vector3(0, 0, -3)
   private cameraShake = 0
@@ -868,6 +872,8 @@ export class Arena {
     this.patternIndex = 0
     this.nextPatternAt = 2.8
     this.skillCooldown = 0
+    this.enemySkillCooldown = 3.5
+    this.enemySkillIndex = 0
     this.lastPulse = 0
     this.lastVolley = -1
     this.lastCombatPulse = 0
@@ -877,6 +883,8 @@ export class Arena {
     this.difficultyMultiplier = this.duelMode ? 1 : this.scenarioDifficultyMultiplier
     this.activeBuffs.splice(0)
     this.activeDebuffs.splice(0)
+    this.enemyActiveBuffs.splice(0)
+    this.enemyActiveDebuffs.splice(0)
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
     if (this.configuredEnemyDeck?.length === 3) {
       this.enemyDeck = this.configuredEnemyDeck.map(general => ({ ...general }))
@@ -890,7 +898,7 @@ export class Arena {
         if (chosen.length < 2 && chosen.some(item => item.role === general.role)) continue
         chosen.push(general)
       }
-      this.enemyDeck = chosen.length === 3 ? chosen : shuffled.slice(0, 3)
+      this.enemyDeck = (chosen.length === 3 ? chosen : shuffled.slice(0, 3)).map(general => ({ ...general, skillUnlocked: true }))
     }
     this.enemyDeck.forEach((general, index) => {
       const position = new THREE.Vector3(-4.4 + index * 4.4, 0, -8 - index * 0.9)
@@ -1017,8 +1025,35 @@ export class Arena {
     this.callbacks.onEvent(`${unit.general.name} · ${unit.general.skillName} 발동 · ${impact.message} · ${effectDefinition(loadout.buff).name} + ${effectDefinition(loadout.debuff).name}${cleansed ? ` · 상태이상 ${cleansed}개 치료` : ''} · ${consumedCombo ? `${consumedCombo}연계 증폭 · ` : ''}적 사기 -${amplifiedDamage}`)
   }
 
+  private castEnemySkill(): void {
+    if (!this.battleActive || this.enemySkillCooldown > 0) return
+    const livingEnemies = this.enemyUnits.filter(unit => unit.troops > 0 && unit.general.skillUnlocked)
+    const caster = livingEnemies[this.enemySkillIndex % Math.max(1, livingEnemies.length)]
+    if (!caster) {
+      this.enemySkillCooldown = 1.5
+      return
+    }
+    this.enemySkillIndex += 1
+    const impact = this.skillImpact(caster.general)
+    const loadout = effectLoadout(caster.general.id, caster.general.role)
+    this.applyEffectTo(this.enemyActiveBuffs, loadout.buff)
+    this.applyEffectTo(this.enemyActiveDebuffs, loadout.debuff)
+    const skillDamage = Math.round(impact.moraleDamage * this.difficultyMultiplier * (hasBattleEffect(this.enemyActiveBuffs, 'dragon-might') ? 1.18 : 1))
+    const target = this.playerUnits.find(unit => unit.troops > 0)
+    if (target) this.dealTroopDamage(target, skillDamage * 2, `${caster.general.name}의 ${caster.general.skillName}`, ember)
+    caster.model.userData.skillPulse = 1
+    this.spawnSkillBurst(new THREE.Vector3(caster.group.position.x, 1.1, caster.group.position.z), this.skillColor(caster.general))
+    this.cameraShake = Math.min(0.55, this.cameraShake + 0.16)
+    this.enemySkillCooldown = Math.max(5, impact.cooldown * 1.15)
+    this.callbacks.onEvent(`적 AI ${caster.general.name} · ${caster.general.skillName} 자동 발동 · ${effectDefinition(loadout.buff).name} + ${effectDefinition(loadout.debuff).name} · 아군 병력 피해 ${skillDamage * 2}`)
+  }
+
   private applyEffect(kind: 'buff' | 'debuff', id: BattleEffectId): void {
     const collection = kind === 'buff' ? this.activeBuffs : this.activeDebuffs
+    this.applyEffectTo(collection, id)
+  }
+
+  private applyEffectTo(collection: ActiveBattleEffect[], id: BattleEffectId): void {
     const definition = effectDefinition(id)
     const existing = collection.find(effect => effect.id === id)
     if (existing) {
@@ -1159,7 +1194,9 @@ export class Arena {
       const target = defenders.find(unit => unit.troops > 0)
       if (!target) return
       const baseDamage = 20 + attacker.general.attack * 0.34 + attacker.general.martial * 0.24 + attacker.general.leadership * 0.1
-      const damage = baseDamage * (enemySide ? this.difficultyMultiplier : 1)
+      const enemyBuffMultiplier = hasBattleEffect(this.enemyActiveBuffs, 'dragon-might') ? 1.18 : 1
+      const playerSuppression = !enemySide && hasBattleEffect(this.enemyActiveDebuffs, 'confusion') ? 0.88 : 1
+      const damage = baseDamage * (enemySide ? this.difficultyMultiplier * enemyBuffMultiplier : playerSuppression)
       attacker.attackTimer = Math.max(0.72, 1.85 - attacker.general.speed * 0.008)
       attacker.attackMotion = 1
       this.dealTroopDamage(target, damage, attacker.general.name, enemySide ? ember : jade)
@@ -1236,8 +1273,10 @@ export class Arena {
     this.updateCamera(delta)
     if (!this.battleActive) return
     this.skillCooldown = Math.max(0, this.skillCooldown - delta)
+    this.enemySkillCooldown = Math.max(0, this.enemySkillCooldown - delta)
     this.battleElapsed += delta
     this.autoCombat(delta)
+    this.castEnemySkill()
     this.tacticGauge = Math.min(100, this.tacticGauge + delta * 0.8 * (hasBattleEffect(this.activeBuffs, 'war-chant') ? 1.25 : 1))
     this.guardTimer = Math.max(0, this.guardTimer - delta)
     this.comboTimer = Math.max(0, this.comboTimer - delta)
@@ -1317,7 +1356,7 @@ export class Arena {
   }
 
   private tickBattleEffects(delta: number): void {
-    for (const collection of [this.activeBuffs, this.activeDebuffs]) {
+    for (const collection of [this.activeBuffs, this.activeDebuffs, this.enemyActiveBuffs, this.enemyActiveDebuffs]) {
       for (let index = collection.length - 1; index >= 0; index -= 1) {
         const effect = collection[index]
         effect.remaining = Math.max(0, effect.remaining - delta)
