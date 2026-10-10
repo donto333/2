@@ -125,6 +125,7 @@ export class Arena {
   private configuredEnemyDeck: General[] | null = null
   private duelMode = false
   private difficultyMultiplier = 0.86
+  private scenarioDifficultyMultiplier = 0.86
   private lastCombatPulse = 0
   private readonly effects: ArenaEffect[] = []
   private readonly activeBuffs: ActiveBattleEffect[] = []
@@ -321,6 +322,9 @@ export class Arena {
   setSiegeDeck(generals: General[] | null): void {
     this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
     this.duelMode = false
+  }
+  setScenarioDifficulty(multiplier: number): void {
+    this.scenarioDifficultyMultiplier = Math.max(0.86, Math.min(1.8, multiplier))
   }
   isDuelBattle(): boolean {
     return this.duelMode
@@ -870,7 +874,7 @@ export class Arena {
     this.cameraIntro = 1.35
     this.cameraVictory = 0
     this.cameraShake = 0.12
-    this.difficultyMultiplier = this.duelMode ? 1 : 0.86
+    this.difficultyMultiplier = this.duelMode ? 1 : this.scenarioDifficultyMultiplier
     this.activeBuffs.splice(0)
     this.activeDebuffs.splice(0)
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))

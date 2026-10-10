@@ -14,6 +14,14 @@ export interface ScenarioDialogueLine {
   text: string
 }
 
+export interface ScenarioDifficulty {
+  stage: number
+  tier: 1 | 2 | 3 | 4 | 5
+  label: string
+  enemyLevel: number
+  pressure: number
+}
+
 export interface ScenarioDefinition {
   id: string
   chapter: string
@@ -24,6 +32,7 @@ export interface ScenarioDefinition {
   dialogue: ScenarioDialogueLine[]
   deck: string[]
   reward: ScenarioReward
+  difficulty: ScenarioDifficulty
 }
 
 type ChapterSeed = { chapter: string; era: string; deck: string[]; entries: Array<[number, string, string]> }
@@ -64,7 +73,22 @@ export const SCENARIOS: ScenarioDefinition[] = CHAPTERS.flatMap((chapter, chapte
   ],
   deck: chapter.deck,
   reward: REWARD(chapterIndex, entryIndex),
-})))
+}))).map((scenario, index) => {
+  const stage = index + 1
+  const tier = Math.min(5, Math.floor(index / 12) + 1) as 1 | 2 | 3 | 4 | 5
+  const labels = ['초급', '중급', '고급', '극상', '전설']
+  const tierBase = [0.86, 1.02, 1.18, 1.36, 1.55][tier - 1]
+  return {
+    ...scenario,
+    difficulty: {
+      stage,
+      tier,
+      label: labels[tier - 1],
+      enemyLevel: 8 + Math.floor(index * 1.35),
+      pressure: Number((tierBase + (index % 12) * 0.012).toFixed(3)),
+    },
+  }
+})
 
 export function scenarioById(id: string): ScenarioDefinition | undefined {
   return SCENARIOS.find(scenario => scenario.id === id)

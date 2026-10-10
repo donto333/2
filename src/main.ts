@@ -519,6 +519,7 @@ const ui = new StrategyUI(root, {
       pendingSiege = { cityId: id, result }
       duelActive = false
       state.section = 'battle'
+      arena.setScenarioDifficulty(0.86)
       arena.setSiegeDeck(siegeDeckFor(id))
       arena.setGenerals(battleGenerals())
       arena.startBattle()
@@ -581,20 +582,22 @@ const ui = new StrategyUI(root, {
     const catalog = allGenerals()
     const deck = scenario.deck.map((name, index) => {
       const base = catalog.find(general => general.name === name) ?? catalog[index % catalog.length]
-      return { ...base, level: Math.max(base.level, 6 + Number(scenario.chapter.charAt(2)) * 2 + index * 2), skillUnlocked: true }
+      return { ...base, level: Math.max(base.level, scenario.difficulty.enemyLevel + index * 2), skillUnlocked: true }
     })
+    arena.setScenarioDifficulty(scenario.difficulty.pressure)
     arena.setOpponentDeck(deck)
     arena.setGenerals(battleGenerals())
     arena.startBattle()
     ui.updateBattle(arena.getSnapshot())
     ui.render(state)
     ui.updateBattle(arena.getSnapshot())
-    ui.notify(`${scenario.year}년 ${scenario.title} · 대화형 시나리오 전투를 시작합니다.`, 'jade')
+    ui.notify(`${scenario.year}년 ${scenario.title} · ${scenario.difficulty.label} ${scenario.difficulty.stage}단계 · 적 레벨 ${scenario.difficulty.enemyLevel}`, 'jade')
   },
   onBattleStart: () => {
     scenarioActive = false
     activeScenario = null
     duelActive = false
+    arena.setScenarioDifficulty(0.86)
     arena.setOpponentDeck(null)
     state.section = 'battle'
     arena.setGenerals(battleGenerals())
@@ -640,6 +643,7 @@ const ui = new StrategyUI(root, {
     }
     duelActive = true
     state.section = 'battle'
+    arena.setScenarioDifficulty(0.86)
     arena.setOpponentDeck(deck)
     arena.setGenerals(battleGenerals())
     arena.startBattle()
