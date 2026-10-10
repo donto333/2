@@ -121,6 +121,7 @@ export interface FactionTerritorySnapshot {
   conquestProgress: number
   defense: number
   prosperity: number
+  battleLogs?: CityBattleLog[]
   version?: number
   updatedAt?: string | Date
   /** 서버에 저장된 진영 공용 수비대 (server/021_city_garrisons.sql). 구버전 서버에는 없다. */
@@ -873,6 +874,15 @@ export function mergeFactionTerritories(state: StrategyState, snapshots: Faction
     city.prosperity = Math.max(0, Math.min(100, Math.trunc(snapshot.prosperity)))
     mergeServerGarrisons(state, city, snapshot, wasAlly)
     mergeLastRaid(state, city, snapshot)
+    if (Array.isArray(snapshot.battleLogs) && snapshot.battleLogs.length) {
+      const existing = Array.isArray(city.battleLogs) ? city.battleLogs : []
+      const knownIds = new Set(existing.map(log => log.id))
+      // 같은 습격이 lastRaid로 이미 기록됐으면(같은 시각의 AI 기록) 다시 넣지 않는다.
+      const knownAiTimes = new Set(existing.filter(log => log.attackerKind === 'ai').map(log => log.timestamp))
+      city.battleLogs = [...existing, ...snapshot.battleLogs.filter(log => !knownIds.has(log.id) && !(log.attackerKind === 'ai' && knownAiTimes.has(log.timestamp)))]
+        .sort((left, right) => left.timestamp - right.timestamp)
+        .slice(-30)
+    }
     merged += 1
   })
   return merged

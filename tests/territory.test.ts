@@ -71,6 +71,16 @@ describe('territory and governance', () => {
     expect(findCity(state, 'xiangyang')?.buildings.find(building => building.id === 'farm')?.level).toBe(4)
   })
 
+  it('merges server neutral AI battle logs into the selected city history', () => {
+    const state = createInitialState()
+    const merged = mergeFactionTerritories(state, [{
+      cityId: 'chengdu', owner: '촉한', conquestProgress: 0, defense: 9000, prosperity: 48,
+      battleLogs: [{ id: 'server-ai-17', timestamp: 1000, attackerName: '중립 인공지능 습격대 · hanzhong', attackerKind: 'ai', defenderName: '촉한', won: true, damage: 1500, note: '성벽 방어도 -1500' }],
+    }])
+    expect(merged).toBe(1)
+    expect(findCity(state, 'chengdu')?.battleLogs?.at(-1)).toMatchObject({ attackerKind: 'ai', damage: 1500, note: '성벽 방어도 -1500' })
+  })
+
   it('collects production from owned cities without collecting enemy yields', () => {
     const state = createInitialState()
     const before = { ...state.resources }
