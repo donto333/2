@@ -43,7 +43,7 @@ import {
   type FactionTerritorySnapshot,
   type Faction,
 } from './game/strategy'
-import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
+import { StrategyUI, type AccountView, type AuthView, type BoardPost, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { firstClearReward, scenarioById, type ScenarioDefinition } from './game/scenarios'
 
 const root = document.querySelector<HTMLElement>('#ui')
@@ -353,9 +353,37 @@ async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: n
     ui.notify('전투 결과는 로컬에 반영되었습니다. 서버 기록은 다음 영토 동기화에서 자동 재시도합니다.', 'jade')
   }
 }
-
+async function refreshBoard(board: BoardPost['board'] = '전체'): Promise<void> {
+  if (authView.status !== 'authenticated') {
+    ui.notify('게시판은 회원 로그인 후 이용할 수 있습니다.', 'ember')
+    return
+  }
+  try {
+    const posts = await ManusAuth.query('board.list', { board }) as BoardPost[]
+    ui.setBoardPosts(posts, board)
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시판을 불러오지 못했습니다.', 'ember')
+  }
+}
+async function createBoardPost(board: BoardPost['board'], title: string, content: string): Promise<void> {
+  if (authView.status !== 'authenticated') {
+    ui.notify('게시글 작성은 회원 로그인 후 이용할 수 있습니다.', 'ember')
+    return
+  }
+  try {
+    await ManusAuth.mutate('board.create', { board, title: title.trim(), content: content.trim() })
+    ui.notify('게시글을 올렸습니다.', 'jade')
+    await refreshBoard(board)
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시글 작성에 실패했습니다.', 'ember')
+  }
+}
 const ui = new StrategyUI(root, {
   onSection: (section: Section) => {
+    if (section === 'board' && authView.status !== 'authenticated') {
+      ui.notify('진영 게시판은 회원 로그인 후 이용할 수 있습니다.', 'ember')
+      return
+    }
     if (section === 'admin' && accountView?.role !== 'admin') {
       state.section = 'overview'
       ui.render(state)
@@ -385,6 +413,7 @@ const ui = new StrategyUI(root, {
       installDummyDuelOpponents()
       void refreshDuelOpponents()
     }
+    if (section === 'board') void refreshBoard()
     ui.render(state)
     if (section === 'account') void refreshAccount()
     if (section === 'admin') {
@@ -640,6 +669,12 @@ const ui = new StrategyUI(root, {
   },
   onRankRefresh: () => {
     void refreshLeaderboard()
+  },
+  onBoardRefresh: board => {
+    void refreshBoard(board)
+  },
+  onBoardPost: (board, title, content) => {
+    void createBoardPost(board, title, content)
   },
   onStore: () => {
     state.section = 'shop'

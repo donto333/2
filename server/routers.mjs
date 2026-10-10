@@ -3,6 +3,7 @@ import { adminProcedure, router, publicProcedure, protectedProcedure, getFaction
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
+import { createBoardPost, listBoardPosts } from './board.mjs'
 
 function accountView(user) {
   return {
@@ -48,6 +49,10 @@ export const gameRouter = router({
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 영토 전투를 기록할 수 없습니다.')
       return recordFactionTerritoryBattle(ctx.user.id, input)
     }),
+  }),
+  board: router({
+    list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']) })).query(({ ctx, input }) => listBoardPosts(ctx.user.id, input.board)),
+    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
   }),
   account: router({
     me: protectedProcedure.query(({ ctx }) => accountView(ctx.user)),

@@ -61,6 +61,16 @@ export interface RankEntry {
   score: number
 }
 
+export interface BoardPost {
+  id: number
+  board: '전체' | Faction
+  title: string
+  content: string
+  authorName: string
+  authorFaction: Faction
+  createdAt: string | Date
+}
+
 export interface DuelOpponent {
   id: string
   displayName: string
@@ -103,6 +113,8 @@ export interface StrategyUiCallbacks {
   onAccountRefresh: () => void
   onAccountSave: (name: string) => void
   onRankRefresh: () => void
+  onBoardRefresh: (board: BoardPost['board']) => void
+  onBoardPost: (board: BoardPost['board'], title: string, content: string) => void
   onStore: () => void
   onShopPurchase: (equipmentId: string) => void
   onCashShopPurchase: (productId: string) => void
@@ -119,6 +131,8 @@ export class StrategyUI {
   private readonly root: HTMLElement
   private readonly callbacks: StrategyUiCallbacks
   private ranks: RankEntry[] = []
+  private boardPosts: BoardPost[] = []
+  private boardTab: BoardPost['board'] = '전체'
   private duelOpponents: DuelOpponent[] = []
   private latestBattle: BattleSnapshot | null = null
   private recruitAnimationActive = false
@@ -235,6 +249,11 @@ export class StrategyUI {
     this.ranks = ranks
     const panel = this.root.querySelector<HTMLElement>('[data-rank-list]')
     if (panel) panel.innerHTML = this.rankRows()
+  }
+  setBoardPosts(posts: BoardPost[], board: BoardPost['board']): void {
+    this.boardPosts = posts
+    this.boardTab = board
+    if (this.renderedState?.section === 'board') this.render(this.renderedState)
   }
 
   setDuelOpponents(opponents: DuelOpponent[]): void {
@@ -414,6 +433,7 @@ export class StrategyUI {
           ${this.navButton('duel', '⚔', '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
           ${this.navButton('shop', '◈', '상점', state.section, `${state.gold}금화`)}
           ${this.navButton('rank', '≋', '천하 랭킹', state.section)}
+          ${this.navButton('board', '▰', '진영 게시판', state.section)}
           ${this.navButton('updates', '✎', '업데이트 기록', state.section, 'NEW')}
           ${this.navButton('account', '◎', '계정 관리', state.section)}
           ${this.isAdmin() ? '<div class="sidebar-rule"></div><div class="sidebar-label">운영</div>' : ''}
@@ -444,6 +464,7 @@ export class StrategyUI {
     if (state.section === 'duel') return this.duelSection(state)
     if (state.section === 'shop') return this.shopSection(state)
     if (state.section === 'rank') return this.rankSection(state)
+    if (state.section === 'board') return this.boardSection(state)
     if (state.section === 'updates') return this.updatesSection()
     if (state.section === 'account') return this.accountSection()
     if (state.section === 'admin') return this.isAdmin() ? this.adminSection(state) : this.overviewSection(state)
@@ -930,6 +951,12 @@ export class StrategyUI {
     return `<section class="page-section page-section--rank"><div class="section-heading section-heading--compact"><div><span class="eyebrow">THE CELESTIAL LADDER · 05</span><h1>천하 랭킹</h1><p class="heading-copy">가장 높은 곳에 당신의 군기를 세우십시오.</p></div><button class="ghost-button" data-action="rank-refresh">순위 새로고침 ↻</button></div><div class="rank-layout"><div class="glass-card rank-hero"><div class="rank-hero-bg">★</div><span class="pill pill--jade">ACCOUNT BOARD · WAR-SCORE-V1</span><h2>옥패의 전장</h2><p>로그인 계정으로 기록되는 작전 점수입니다.<br>현재 시즌은 클라이언트 보고형 캐주얼 랭킹으로 운영됩니다.</p><div class="my-record"><span>나의 최고 기록</span><strong>${formatNumber(state.battleScore)}</strong><small>지난 7회 작전 · ${state.wins}승</small></div><div class="auth-status" data-auth-status>로그인하면 리더보드와 전적을 이어갑니다.</div></div><div class="glass-card rank-table"><div class="card-header"><div><span class="eyebrow">TOP COMMANDERS</span><h3>상위 지휘관</h3></div><span class="sync-label">LIVE SYNC</span></div><div data-rank-list>${this.rankRows()}</div><div class="rank-footnote">* 순위 데이터는 저장된 체크포인트 Preview 또는 공개 배포에서 동기화됩니다.</div></div></div><div class="integration-strip"><div><span class="integration-icon">◎</span><div><strong>온라인 기능 준비됨</strong><p>Manus 로그인 · 계정 리더보드 · Stripe 샌드박스</p></div></div><button class="text-button" data-action="store">테스트 상점 보기 →</button></div></section>`
   }
 
+  private boardSection(state: StrategyState): string {
+    const tabs: BoardPost['board'][] = ['전체', state.faction]
+    const posts = this.boardPosts.filter(post => post.board === this.boardTab)
+    const formatDate = (value: string | Date) => new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+    return `<section class="page-section page-section--board"><div class="section-heading section-heading--compact"><div><span class="eyebrow">COMMANDER COMMUNITY · BOARD</span><h1>진영 게시판</h1><p class="heading-copy">전체 지휘관과 ${escapeHtml(state.faction)} 진영 동료에게 작전 소식을 전하십시오.</p></div><button class="ghost-button" data-action="board-refresh">게시글 새로고침 ↻</button></div><div class="board-tabs">${tabs.map(tab => `<button class="filter-tab ${this.boardTab === tab ? 'is-active' : ''}" data-action="board-tab" data-board="${tab}">${tab} 게시판</button>`).join('')}</div><div class="board-layout"><div class="glass-card board-list"><div class="card-header"><div><span class="eyebrow">${this.boardTab} BOARD</span><h2>최근 게시글</h2></div><span class="sync-label">최대 100건</span></div>${posts.length ? posts.map(post => `<article class="board-post"><div class="board-post__meta"><span class="pill pill--jade">${escapeHtml(post.authorFaction)}</span><strong>${escapeHtml(post.authorName)}</strong><time>${formatDate(post.createdAt)}</time></div><h3>${escapeHtml(post.title)}</h3><p>${escapeHtml(post.content).replace(/\n/g, '<br>')}</p></article>`).join('') : '<div class="board-empty">아직 게시글이 없습니다. 첫 번째 작전 기록을 남겨 보십시오.</div>'}</div><div class="glass-card board-compose"><div class="card-header"><div><span class="eyebrow">WRITE DISPATCH</span><h2>새 글 작성</h2></div></div><form data-board-form><label>게시판<select name="board">${tabs.map(tab => `<option value="${tab}" ${this.boardTab === tab ? 'selected' : ''}>${tab} 게시판</option>`).join('')}</select></label><label>제목<input name="title" maxlength="120" placeholder="작전 제목을 입력하세요" required></label><label>내용<textarea name="content" rows="7" maxlength="4000" placeholder="진영에 전할 내용을 작성하세요" required></textarea></label><button class="action-button action-button--primary" type="submit">게시글 올리기 <span>→</span></button></form><p class="board-note">진영 게시판은 소속 진영 사용자만 조회하고 작성할 수 있습니다.</p></div></div></section>`
+  }
   private duelSection(state: StrategyState): string {
     const formationReady = state.formation.length >= 3
     const opponents = this.duelOpponents.length ? this.duelOpponents : [{ id: 'dummy-1', displayName: '훈련용 더미 덱', score: 16800, isDummy: true }]
@@ -1009,6 +1036,8 @@ export class StrategyUI {
     else if (action === 'logout') this.callbacks.onLogout()
     else if (action === 'account-refresh') this.callbacks.onAccountRefresh()
     else if (action === 'rank-refresh') this.callbacks.onRankRefresh()
+    else if (action === 'board-refresh') this.callbacks.onBoardRefresh((button.dataset.board ?? this.boardTab) as BoardPost['board'])
+    else if (action === 'board-tab') this.callbacks.onBoardRefresh((button.dataset.board ?? '전체') as BoardPost['board'])
     else if (action === 'store') this.callbacks.onStore()
     else if (action === 'shop-purchase') this.callbacks.onShopPurchase(button.dataset.equipmentId ?? 'shop-mythic-martial-weapon')
     else if (action === 'cash-shop-purchase') this.callbacks.onCashShopPurchase(button.dataset.productId ?? '')
@@ -1079,6 +1108,12 @@ export class StrategyUI {
   }
   private handleSubmit = (event: SubmitEvent): void => {
     const form = event.target as HTMLFormElement
+    if (form.matches('[data-board-form]')) {
+      event.preventDefault()
+      const data = new FormData(form)
+      this.callbacks.onBoardPost((String(data.get('board') ?? '전체')) as BoardPost['board'], String(data.get('title') ?? ''), String(data.get('content') ?? ''))
+      return
+    }
     if (!form.matches('[data-account-form]')) return
     event.preventDefault()
     const input = form.elements.namedItem('name') as HTMLInputElement | null
