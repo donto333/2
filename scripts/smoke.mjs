@@ -82,7 +82,7 @@ try {
   if (!(await page.locator('.page-section--territory').textContent())?.includes('촉한 영토')) throw new Error('active faction territory label is missing')
   await page.click('[data-action="territory-refresh"]')
   if (!(await page.locator('[data-territory-sync]').textContent())?.includes('로그인 후 동기화')) throw new Error('guest territory sync fallback is missing')
-  await page.click('[data-action="city-select"][data-city="hanzhong"]')
+  await page.click('.city-marker[data-action="city-select"][data-city="hanzhong"]')
   await page.evaluate(() => {
     window.__strategy.state.resources.grain = 999999
     window.__strategy.state.resources.silver = 999999
@@ -286,12 +286,12 @@ try {
   if (await page.locator('.city-marker-castle img').evaluateAll(images => images.some(image => !image.complete || image.naturalWidth === 0))) throw new Error('territory castle art failed to load')
   if (await page.locator('.territory-frontlines line').count() < 20) throw new Error('territory frontline connection lines are incomplete')
   if (await page.locator('.territory-frontlines').getAttribute('aria-label') !== '도시 연결 전선') throw new Error('territory frontline network label is missing')
-  await page.locator('[data-action="city-select"][data-city="luoyang"]').evaluate(button => button.click())
+  await page.locator('.city-marker[data-action="city-select"][data-city="luoyang"]').evaluate(button => button.click())
   if (!(await page.locator('.city-map-context').textContent())?.includes('원거리 전선')) throw new Error('remote city geography status is missing')
   if (await page.locator('.frontier-lock').count() !== 1) throw new Error('remote conquest was not locked')
-  await page.locator('[data-action="city-select"][data-city="hanzhong"]').evaluate(button => button.click())
+  await page.locator('.city-marker[data-action="city-select"][data-city="hanzhong"]').evaluate(button => button.click())
   if (await page.locator('.territory-actions').count() !== 1) throw new Error('border city conquest actions are missing')
-  await page.locator('[data-action="city-select"][data-city="ye"]').evaluate(button => button.click())
+  await page.locator('.city-marker[data-action="city-select"][data-city="ye"]').evaluate(button => button.click())
   if (!(await page.locator('.capital-badge').textContent())?.includes('본성')) throw new Error('faction capital protection badge is missing')
   await page.locator('.map-canvas').evaluate(element => element.scrollIntoView({ block: 'center' }))
   await page.screenshot({ path: `${out}/03-territory.png` })
