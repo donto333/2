@@ -76,6 +76,14 @@ export interface AdminBoardState {
   postingEnabled: boolean
   posts: BoardPost[]
 }
+export interface CityDamageRanking {
+  userId: number
+  faction: Faction
+  displayName: string
+  totalDamage: number
+  battleCount: number
+  updatedAt: string | Date
+}
 
 export interface DuelOpponent {
   id: string
@@ -97,6 +105,7 @@ export interface StrategyUiCallbacks {
   onEquipmentUnequip: (generalId: string, type: EquipmentType) => void
   onEquipmentSelectGeneral: (id: string) => void
   onCitySelect: (id: string) => void
+  onCityDamageRankingRefresh: (cityId: string) => void
   onTerritoryRefresh: () => void
   onConquest: (id: string) => void
   onDefense: (id: string) => void
@@ -157,6 +166,8 @@ export class StrategyUI {
   private adminGameAccounts: GameAccountView[] = []
   private adminGameDataError: string | null = null
   private adminBoard: AdminBoardState = { postingEnabled: true, posts: [] }
+  private cityDamageRankings: CityDamageRanking[] = []
+  private cityDamageRankingCityId = ''
   private rosterSort: RosterSort = 'power'
   private rosterSortDescending = true
   private formationSort: FormationSort = 'power'
@@ -258,6 +269,12 @@ export class StrategyUI {
 
   setAdminBoard(state: AdminBoardState): void {
     this.adminBoard = state
+  }
+
+  setCityDamageRankings(cityId: string, rankings: CityDamageRanking[]): void {
+    this.cityDamageRankingCityId = cityId
+    this.cityDamageRankings = rankings
+    if (this.renderedState?.section === 'territory') this.render(this.renderedState)
   }
 
   setRanks(ranks: RankEntry[]): void {
@@ -704,7 +721,13 @@ export class StrategyUI {
     const panelClass = canManage ? 'city-management--owned' : 'city-management--frontline'
     const capitalBadge = capitalFaction ? `<span class="capital-badge">${capitalFaction} 본성 · 점령 불가</span>` : ''
     const frontierNote = canManage ? '내정 핵심지 · 방어선 유지' : eligibility.allowed ? `접경 전선 · ${eligibility.reason}` : '원거리 전선 · 진군 경로 차단'
-    return `<div class="glass-card city-management ${panelClass}"><div class="city-management-head"><div><span class="eyebrow">도시 관리 · ${city.region}</span><h2>${city.name}${city.id === 'luoyang' ? this.luoyangRulesMenu() : ''}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><div class="city-management-status"><span class="city-level">Lv.${city.level}</span>${capitalBadge}</div></div><div class="city-map-context"><span>삼국지 지리 전선</span><strong>${frontierNote}</strong><small>인접 도시 ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '독립 성 · 연결 전선 없음'}</small></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div><p class="wall-status">성벽 능력 ${wallCapacity} · 현재 방어도 ${city.defense}/${wallCapacity} · 방어도 0 도달 및 수비병 전멸 후 최종 세력전</p>${conquest}${this.battleLogCard(city)}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">ESTIMATED YIELD</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${RESOURCE_META[key].icon} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">CIVIL WORKS</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">병영을 강화하면 성벽 능력과 방어도 회복 상한이 상승합니다.</p>' : '<p class="management-tip management-tip--warn">수비병을 모두 격파하고 방어도를 0까지 낮춘 뒤 최종 세력전을 실행하십시오.</p>'}</div>`
+    return `<div class="glass-card city-management ${panelClass}"><div class="city-management-head"><div><span class="eyebrow">도시 관리 · ${city.region}</span><h2>${city.name}${city.id === 'luoyang' ? this.luoyangRulesMenu() : ''}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><div class="city-management-status"><span class="city-level">Lv.${city.level}</span>${capitalBadge}</div></div><div class="city-map-context"><span>삼국지 지리 전선</span><strong>${frontierNote}</strong><small>인접 도시 ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '독립 성 · 연결 전선 없음'}</small></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div><p class="wall-status">성벽 능력 ${wallCapacity} · 현재 방어도 ${city.defense}/${wallCapacity} · 방어도 0 도달 및 수비병 전멸 후 최종 세력전</p>${conquest}${this.cityDamageRankingCard(city)}${this.battleLogCard(city)}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">ESTIMATED YIELD</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${RESOURCE_META[key].icon} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">CIVIL WORKS</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">병영을 강화하면 성벽 능력과 방어도 회복 상한이 상승합니다.</p>' : '<p class="management-tip management-tip--warn">수비병을 모두 격파하고 방어도를 0까지 낮춘 뒤 최종 세력전을 실행하십시오.</p>'}</div>`
+  }
+
+  private cityDamageRankingCard(city: City): string {
+    const rankings = this.cityDamageRankingCityId === city.id ? this.cityDamageRankings : []
+    const rows = rankings.length ? rankings.map((entry, index) => `<li><span class="damage-rank-number">${index + 1}</span><strong>${escapeHtml(entry.displayName)}</strong><small>${escapeHtml(entry.faction)} · ${entry.battleCount}회 참여</small><b>${formatNumber(entry.totalDamage)}</b></li>`).join('') : '<li class="city-damage-ranking-empty">아직 기록된 공성 피해 기여가 없습니다.</li>'
+    return `<details class="city-damage-ranking" open><summary><span><span class="eyebrow">SIEGE CONTRIBUTION</span><strong>공성 피해 기여 랭킹</strong></span><b>상위 ${rankings.length}명</b></summary><p>이 도시의 성벽 방어도를 가장 많이 깎은 유저 순위입니다.</p><ol>${rows}</ol></details>`
   }
 
   private battleLogCard(city: City): string {
@@ -1030,7 +1053,11 @@ export class StrategyUI {
       this.equipmentSortDescending = !this.equipmentSortDescending
       if (this.renderedState) this.render(this.renderedState)
     }
-    else if (action === 'city-select') this.callbacks.onCitySelect(button.dataset.city ?? '')
+    else if (action === 'city-select') {
+      const cityId = button.dataset.city ?? ''
+      this.callbacks.onCitySelect(cityId)
+      this.callbacks.onCityDamageRankingRefresh(cityId)
+    }
     else if (action === 'territory-refresh') this.callbacks.onTerritoryRefresh()
     else if (action === 'conquer') this.callbacks.onConquest(button.dataset.city ?? '')
     else if (action === 'defense') this.callbacks.onDefense(button.dataset.city ?? '')
