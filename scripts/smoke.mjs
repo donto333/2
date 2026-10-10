@@ -66,6 +66,7 @@ try {
     window.__strategy.ui.showBattleResult(true, 8962)
   })
   await page.waitForSelector('.city-management', { timeout: 10_000 })
+  await page.waitForSelector('.city-damage-ranking', { timeout: 10_000 })
   if ((await page.locator('.city-management h2').textContent())?.includes('한중') !== true) throw new Error('siege result did not return to the attacked city menu')
   if (await page.locator('.result-modal.is-visible').count()) await page.locator('[data-action="close-result"]').evaluate(button => button.click())
 
