@@ -409,7 +409,7 @@ async function advanceNeutralTerritoryAi(db, now = Date.now()) {
       await tx.insert(neutralAiBattleLogs).values({
         cityId: target.cityId,
         occurredAt: new Date(now),
-        attackerName: `중립 인공지능 습격대 · ${attack.attacker}`,
+        attackerName: "중립 인공지능 습격대",
         attackerKind: "ai",
         defenderName: target.owner,
         won: 1,
