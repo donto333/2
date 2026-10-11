@@ -47,27 +47,27 @@ try {
 
   await page.locator('[data-action="section"][data-section="territory"]').evaluate(button => button.click())
   await page.waitForSelector('.territory-map')
-  await page.locator('.city-marker[data-action="city-select"][data-city="hanzhong"]').evaluate(button => button.click())
+  await page.locator('.city-marker[data-action="city-select"][data-city="fucheng"]').evaluate(button => button.click())
   await page.evaluate(() => {
     window.__strategy.state.resources.grain = 999999
     window.__strategy.state.resources.silver = 999999
     window.__strategy.state.resources.iron = 999999
     window.__strategy.ui.render(window.__strategy.state)
   })
-  await page.locator('[data-action="conquer"][data-city="hanzhong"]').evaluate(button => button.click())
+  await page.locator('[data-action="conquer"][data-city="fucheng"]').evaluate(button => button.click())
   await page.waitForSelector('.page-section--battle', { timeout: 10_000 })
   if (await page.locator('.page-section--scenario').count()) throw new Error('siege opened the scenario list')
   if (!(await page.evaluate(() => window.__strategy.arena.getSnapshot().active))) throw new Error('siege did not start the 3D battle')
 
   await page.evaluate(() => {
     window.__strategy.state.section = 'territory'
-    window.__strategy.state.selectedCityId = 'hanzhong'
+    window.__strategy.state.selectedCityId = 'fucheng'
     window.__strategy.ui.render(window.__strategy.state)
     window.__strategy.ui.showBattleResult(true, 8962)
   })
   await page.waitForSelector('.city-management', { timeout: 10_000 })
   await page.waitForSelector('.city-damage-ranking', { timeout: 10_000 })
-  if ((await page.locator('.city-management h2').textContent())?.includes('한중') !== true) throw new Error('siege result did not return to the attacked city menu')
+  if ((await page.locator('.city-management h2').textContent())?.includes('부성') !== true) throw new Error('siege result did not return to the attacked city menu')
   if (await page.locator('.result-modal.is-visible').count()) await page.locator('[data-action="close-result"]').evaluate(button => button.click())
 
   await page.evaluate(() => {

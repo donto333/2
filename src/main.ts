@@ -1,7 +1,10 @@
 import './styles/main.css'
+import './styles/theme-color.css'
+import './styles/territory-map.css'
 import { ManusAuth } from '../manus-auth.js'
 import { createLeaderboardClient, type Result, type RunTicket } from '../leaderboard.js'
 import { Arena } from './game/arena'
+import { isSteamDesktop, syncSteamAchievements } from './platform/steam'
 import {
   createInitialState,
   allGenerals,
@@ -56,6 +59,12 @@ const GUEST_GAME_SAVE_KEY = 'cheonharo.strategy.save.guest.v2'
 const GUEST_ACCESS_KEY = 'cheonharo.access.guest.v1'
 const PENDING_TERRITORY_BATTLES_KEY = 'cheonharo.territory.pending-battles.v1'
 const state: StrategyState = createInitialState()
+
+// Steam 데스크톱 버전: 진행도에 따라 업적을 해금한다 (웹에서는 아무 일도 하지 않음).
+function syncSteam(): void {
+  syncSteamAchievements({ wins: state.wins, generalCount: state.generals.length, scenarioClearedCount: state.scenarioCleared.length })
+}
+if (isSteamDesktop()) window.setInterval(syncSteam, 5000)
 let localSaveDirty = false
 
 type PendingTerritoryBattle = { cityId: string; damage: number; won: boolean; captured: boolean }
@@ -338,6 +347,34 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
   }
 }
 
+// 수비대·방어전은 진영 공용이라 서버가 기준이다. 서버가 판정한 결과로 로컬 화면을 맞춘다.
+async function syncFactionGarrison(cityId: string, garrison: { id: string; power: number; averageLevel: number; label: string }): Promise<void> {
+  if (authView.status !== 'authenticated') return
+  try {
+    const snapshots = await ManusAuth.mutate('territory.deployGarrison', { cityId, garrisonId: garrison.id.slice(0, 96), power: Math.max(0, Math.min(2_000_000, Math.round(garrison.power))), averageLevel: Math.max(1, Math.min(999, Math.round(garrison.averageLevel))), label: garrison.label.slice(0, 40) }) as FactionTerritorySnapshot[]
+    mergeFactionTerritories(state, snapshots)
+    persistLocalGame()
+    ui.render(state)
+  } catch (error) {
+    ui.notify(`수비병 서버 등록 보류 · ${error instanceof Error ? error.message.slice(0, 60) : '연결 지연'}`, 'ember')
+  }
+}
+
+async function syncFactionDefense(cityId: string): Promise<void> {
+  if (authView.status !== 'authenticated') return
+  try {
+    const response = await ManusAuth.mutate('territory.recordDefense', { cityId }) as { outcome: { attackerWon: boolean; damage: number } | null; territories: FactionTerritorySnapshot[] }
+    mergeFactionTerritories(state, response.territories)
+    persistLocalGame()
+    ui.render(state)
+    if (response.outcome) {
+      ui.notify(response.outcome.attackerWon ? `서버 판정 · 방어 실패 · 성벽 방어도 -${response.outcome.damage}` : '서버 판정 · 방어 성공 · 성벽 방어도 유지', response.outcome.attackerWon ? 'ember' : 'jade')
+    }
+  } catch {
+    // 구버전 서버이거나 연결이 지연되면 로컬 결과만 남는다. 다음 영토 동기화 때 서버 값으로 맞춰진다.
+  }
+}
+
 async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: number; won: boolean; captured: boolean }): Promise<void> {
   if (authView.status !== 'authenticated') return
   const payload = { cityId, damage: Math.max(0, Math.min(1_000_000, Math.trunc(outcome.damage))), won: outcome.won, captured: outcome.captured }
@@ -445,6 +482,7 @@ const ui = new StrategyUI(root, {
   onRecruit: count => {
     const result = recruit(state, count)
     ui.render(state)
+    if (result.ok) syncSteam()
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
     if (result.ok && count === 10) ui.showRecruitResults(result.rewards)
@@ -537,13 +575,21 @@ const ui = new StrategyUI(root, {
     const result = defendCity(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok && result.won ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
+    if (result.ok) {
+      queueAccountSave()
+      void syncFactionDefense(id)
+    }
   },
   onGarrisonDeploy: id => {
     const result = deployCityGarrison(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
+    if (result.ok) {
+      queueAccountSave()
+      const city = state.cities.find(entry => entry.id === id)
+      const garrison = city?.garrisons?.at(-1)
+      if (garrison) void syncFactionGarrison(id, garrison)
+    }
   },
   onFactionBattle: id => {
     const result = launchFactionBattle(state, id)
@@ -813,6 +859,7 @@ arena = new Arena(canvas, {
     ui.updateBattle(arena.getSnapshot())
     ui.render(state)
     ui.showBattleResult(result.won, result.score)
+    syncSteam()
     if (siege) {
       queueAccountSave(true)
       void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })
@@ -974,18 +1021,26 @@ async function refreshAccount(): Promise<void> {
   }
 }
 
+// 서버(server/routers.mjs SAVE_INT_MAX)와 같은 한도. 값 하나가 한도를 넘어도 저장 전체가
+// 거절되지 않도록 보낼 때 범위 안으로 맞춘다.
+const SAVE_INT_MAX = 2_000_000_000
+function saveInt(value: number, max = SAVE_INT_MAX): number {
+  const number = Math.trunc(Number(value))
+  return Number.isFinite(number) ? Math.max(0, Math.min(max, number)) : 0
+}
+
 function accountStatePayload() {
   return {
-    honor: Math.trunc(state.honor),
-    silver: Math.trunc(state.silver),
-    gold: Math.trunc(state.gold),
-    manuals: Math.trunc(state.manuals),
-    wins: Math.trunc(state.wins),
-    battleScore: Math.trunc(state.battleScore),
-    grain: Math.trunc(state.resources.grain),
-    wood: Math.trunc(state.resources.wood),
-    iron: Math.trunc(state.resources.iron),
-    influence: Math.trunc(state.resources.influence),
+    honor: saveInt(state.honor),
+    silver: saveInt(state.silver),
+    gold: saveInt(state.gold),
+    manuals: saveInt(state.manuals),
+    wins: saveInt(state.wins),
+    battleScore: saveInt(state.battleScore),
+    grain: saveInt(state.resources.grain),
+    wood: saveInt(state.resources.wood),
+    iron: saveInt(state.resources.iron),
+    influence: saveInt(state.resources.influence),
     faction: state.faction,
     factionChosen: state.factionConfirmed,
     generalData: JSON.stringify(state.generals),
@@ -995,19 +1050,31 @@ function accountStatePayload() {
     selectedCityId: state.selectedCityId,
     incomeCollectedAt: state.lastIncomeCollectedAt === undefined ? null : String(state.lastIncomeCollectedAt),
     conquestAt: state.lastConquestAt === undefined ? null : String(state.lastConquestAt),
-    luoyangBoxes: Math.trunc(state.luoyangBoxes),
-    lastLuoyangReward: state.lastLuoyangReward === undefined ? null : Math.trunc(state.lastLuoyangReward),
+    luoyangBoxes: saveInt(state.luoyangBoxes),
+    lastLuoyangReward: state.lastLuoyangReward === undefined ? null : saveInt(state.lastLuoyangReward, 100),
     luoyangRewardWeekKey: state.luoyangRewardWeekKey ?? null,
-    factionWarScore: Math.trunc(state.factionWarScore),
+    factionWarScore: saveInt(state.factionWarScore),
     equipmentData: JSON.stringify(state.equipmentInventory),
     equipmentLoadoutsData: JSON.stringify(state.equipmentLoadouts),
     selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
-    mythicFragments: Math.trunc(state.mythicFragments),
-    duelAttemptsToday: Math.trunc(state.duelAttemptsToday),
+    mythicFragments: saveInt(state.mythicFragments),
+    duelAttemptsToday: saveInt(state.duelAttemptsToday, 5),
     duelDayKey: state.duelDayKey,
     prelaunchGoldDayKey: state.prelaunchGoldDayKey,
     scenarioData: JSON.stringify(state.scenarioCleared),
   }
+}
+
+// 서버 입력 검증(zod) 오류는 JSON 배열로 온다. 원문 대신 어느 항목이 문제인지만 보여 준다.
+function describeSaveError(message: string): string {
+  try {
+    const issues = JSON.parse(message) as Array<{ path?: unknown[]; code?: string }>
+    if (Array.isArray(issues) && issues.length) {
+      const fields = [...new Set(issues.map(issue => (issue.path ?? []).join('.') || issue.code || '?'))]
+      return `저장 값 확인 필요: ${fields.join(', ').slice(0, 80)}`
+    }
+  } catch { /* 일반 오류 메시지 */ }
+  return message.slice(0, 80)
 }
 
 function queueAccountSave(immediate = false): void {
@@ -1048,7 +1115,7 @@ async function flushAccountSave(): Promise<void> {
     saveRetryCount += 1
     saveQueued = true
     if (saveRetryCount >= 3) {
-      const reason = error instanceof Error && error.message ? ` · ${error.message.slice(0, 80)}` : ''
+      const reason = error instanceof Error && error.message ? ` · ${describeSaveError(error.message)}` : ''
       ui.notify(`온라인 저장이 지연되고 있습니다. 로컬 저장 후 자동 재시도합니다.${reason}`, 'ember')
     }
   } finally {

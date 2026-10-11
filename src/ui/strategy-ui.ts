@@ -1,6 +1,7 @@
-import { CITY_ADJACENCY, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
+import { CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, BattleTroopStatus } from '../game/arena'
 import { SCENARIOS, scenarioById } from '../game/scenarios'
+import { TerritoryMapController, type MapCity } from './territory-map'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
 const equipmentImage = (type: EquipmentType): string => `/assets/equipment/${type}.webp`
@@ -8,17 +9,18 @@ type RosterSort = 'power' | 'level' | 'grade' | 'name' | 'role'
 type EquipmentSort = 'grade' | 'level' | 'name'
 type FormationSort = 'power' | 'grade'
 
+// 도시 위치: 삼국시대 치소의 실제 경위도를 지도 그림 좌표(%)로 옮긴 값.
+// scripts/map/geo-fit.py가 해안·섬·강·분지 기준점 18곳으로 그림의 원근 왜곡을 맞춰 계산한다.
 const CITY_MAP_POSITIONS: Readonly<Record<string, { x: number; y: number }>> = {
-  chengdu: { x: 30, y: 66 }, hanzhong: { x: 37, y: 52 }, fucheng: { x: 31, y: 73 }, xindu: { x: 27, y: 68 },
-  tianshui: { x: 34, y: 37 }, wuwei: { x: 21, y: 22 }, wancheng: { x: 52, y: 45 }, xiangyang: { x: 57, y: 52 },
-  jiangling: { x: 57, y: 62 }, yiling: { x: 49, y: 59 }, changsha: { x: 63, y: 74 }, lingling: { x: 56, y: 84 },
-  guiyang: { x: 47, y: 79 }, luoyang: { x: 59, y: 36 }, ye: { x: 68, y: 23 }, chenliu: { x: 68, y: 41 },
-  puyang: { x: 76, y: 31 }, xuchang: { x: 63, y: 47 }, hefei: { x: 74, y: 55 }, shouchun: { x: 67, y: 51 },
-  jiujiang: { x: 65, y: 66 }, poyang: { x: 70, y: 71 }, jianye: { x: 78, y: 58 }, wujun: { x: 82, y: 66 }, kuaiji: { x: 79, y: 75 },
-  changan: { x: 48, y: 25 }, meixian: { x: 42, y: 29 }, anding: { x: 38, y: 24 }, jinyang: { x: 66, y: 16 }, pingyuan: { x: 77, y: 24 },
-  beihai: { x: 85, y: 31 }, langya: { x: 84, y: 42 }, xiapi: { x: 79, y: 47 }, guangling: { x: 82, y: 53 }, lujiang: { x: 76, y: 64 },
-  shangyong: { x: 48, y: 47 }, xinye: { x: 55, y: 45 }, jiangxia: { x: 67, y: 56 }, wuling: { x: 53, y: 72 }, badong: { x: 43, y: 66 },
-  jianning: { x: 34, y: 84 }, yunnan: { x: 26, y: 90 }, jiaozhi: { x: 48, y: 95 }, shixing: { x: 60, y: 88 }, nanhai: { x: 68, y: 94 },
+  chengdu: { x: 29.8, y: 44.7 }, xindu: { x: 30.1, y: 44.2 }, fucheng: { x: 31.8, y: 42.0 }, hanzhong: { x: 37.5, y: 37.2 }, badong: { x: 44.8, y: 48.2 },
+  jianning: { x: 27.4, y: 65.8 }, yunnan: { x: 17.0, y: 63.3 }, jiaozhi: { x: 32.9, y: 85.7 }, nanhai: { x: 58.6, y: 81.9 }, shixing: { x: 59.1, y: 75.6 },
+  guiyang: { x: 57.0, y: 72.2 }, lingling: { x: 52.3, y: 69.6 }, changsha: { x: 56.1, y: 63.1 }, wuling: { x: 51.9, y: 58.9 }, jiangling: { x: 53.2, y: 53.3 },
+  yiling: { x: 50.3, y: 51.0 }, jiangxia: { x: 59.7, y: 53.1 }, xiangyang: { x: 52.7, y: 44.9 }, xinye: { x: 53.3, y: 42.3 }, wancheng: { x: 53.8, y: 39.8 },
+  shangyong: { x: 46.6, y: 43.1 }, xuchang: { x: 58.0, y: 33.6 }, luoyang: { x: 53.8, y: 30.8 }, chenliu: { x: 60.8, y: 29.7 }, puyang: { x: 61.9, y: 25.0 },
+  ye: { x: 60.2, y: 22.3 }, jinyang: { x: 52.9, y: 17.3 }, pingyuan: { x: 66.3, y: 19.9 }, beihai: { x: 75.1, y: 22.0 }, langya: { x: 73.0, y: 29.3 },
+  xiapi: { x: 71.5, y: 33.2 }, guangling: { x: 76.4, y: 40.9 }, jianye: { x: 74.3, y: 42.5 }, wujun: { x: 80.9, y: 45.7 }, kuaiji: { x: 81.5, y: 51.8 },
+  hefei: { x: 69.2, y: 44.0 }, shouchun: { x: 67.7, y: 40.6 }, lujiang: { x: 69.4, y: 46.5 }, jiujiang: { x: 65.4, y: 54.4 }, poyang: { x: 67.9, y: 56.6 },
+  changan: { x: 41.9, y: 33.0 }, meixian: { x: 38.9, y: 32.6 }, anding: { x: 37.0, y: 26.1 }, tianshui: { x: 32.4, y: 29.0 }, wuwei: { x: 23.9, y: 14.4 },
 }
 // 모바일은 원본 지리 좌표를 그대로 축소하면 성채와 도시명이 겹치므로,
 // 기존 위·경도 순서를 보존한 9열 격자에 재배치해 모든 도시를 읽을 수 있게 한다.
@@ -27,6 +29,23 @@ const MOBILE_CITY_MAP_POSITIONS: Readonly<Record<string, { x: number; y: number 
     .sort((left, right) => CITY_MAP_POSITIONS[left].y - CITY_MAP_POSITIONS[right].y || CITY_MAP_POSITIONS[left].x - CITY_MAP_POSITIONS[right].x)
     .map((cityId, index) => [cityId, { x: 6 + (index % 9) * 11, y: 8 + Math.floor(index / 9) * 20.5 }]),
 )
+
+// 후한 말 13주(州) 이름표 위치 (같은 방식으로 계산)
+const MAP_REGION_LABELS: ReadonlyArray<{ id: string; name: string; hanja: string; x: number; y: number }> = [
+  { id: 'liangzhou', name: '양주', hanja: '涼州', x: 22.2, y: 17.8 },
+  { id: 'yongzhou', name: '옹주', hanja: '雍州', x: 38.2, y: 28.4 },
+  { id: 'bingzhou', name: '병주', hanja: '幷州', x: 52.2, y: 14.5 },
+  { id: 'jizhou', name: '기주', hanja: '冀州', x: 63.4, y: 17.7 },
+  { id: 'qingzhou', name: '청주', hanja: '青州', x: 72.0, y: 21.2 },
+  { id: 'sili', name: '사례', hanja: '司隷', x: 50.4, y: 30.3 },
+  { id: 'yanzhou', name: '연주', hanja: '兗州', x: 65.8, y: 26.1 },
+  { id: 'yuzhou', name: '예주', hanja: '豫州', x: 61.6, y: 35.6 },
+  { id: 'xuzhou', name: '서주', hanja: '徐州', x: 73.6, y: 34.0 },
+  { id: 'yangzhou', name: '양주', hanja: '揚州', x: 72.1, y: 49.9 },
+  { id: 'jingzhou', name: '형주', hanja: '荊州', x: 52.1, y: 56.5 },
+  { id: 'yizhou', name: '익주', hanja: '益州', x: 32.6, y: 52.4 },
+  { id: 'jiaozhou', name: '교주', hanja: '交州', x: 48.1, y: 81.0 },
+]
 
 export interface AuthView {
   status: 'authenticated' | 'logged_out' | 'offline'
@@ -153,6 +172,8 @@ export interface StrategyUiCallbacks {
   onAdminBoardDelete: (id: number) => void
 }
 
+type CityFilter = 'all' | 'front' | 'ally' | 'enemy' | 'neutral'
+
 export class StrategyUI {
   private readonly root: HTMLElement
   private readonly callbacks: StrategyUiCallbacks
@@ -193,6 +214,14 @@ export class StrategyUI {
   private territorySyncText = '서버 원장 대기'
   private scenarioSelectedId = SCENARIOS[0]?.id ?? ''
   private battleViewActive = false
+  // 영토 지도: 확대·이동 상태는 다시 그려도 유지된다.
+  private readonly territoryMap = new TerritoryMapController(id => {
+    this.citySheetOpen = true
+    this.callbacks.onCitySelect(id)
+  })
+  private citySheetOpen = false
+  private cityFilter: CityFilter = 'all'
+  private cityQuery = ''
 
   constructor(root: HTMLElement, callbacks: StrategyUiCallbacks) {
     this.root = root
@@ -201,6 +230,10 @@ export class StrategyUI {
     root.addEventListener('change', this.handleChange)
     root.addEventListener('submit', this.handleSubmit)
     root.addEventListener('scroll', this.handleScroll, true)
+    root.addEventListener('input', this.handleInput)
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && this.territoryMap.fullscreen) this.territoryMap.setFullscreen(false)
+    })
   }
 
   render(state: StrategyState): void {
@@ -222,6 +255,7 @@ export class StrategyUI {
     if (state.section !== 'equipment') this.equipmentScrollTop = 0
     if (state.section !== 'battle') this.battleViewActive = false
     this.root.innerHTML = this.shell(state)
+    this.attachTerritoryMap(state)
     const shell = this.root.querySelector<HTMLElement>('.app-shell')
     if (shell) {
       shell.classList.add('is-entering')
@@ -687,14 +721,82 @@ export class StrategyUI {
     const contested = state.cities.filter(city => city.owner !== state.faction).length
     const incomeWait = incomeCooldownRemaining(state)
     const incomeLabel = incomeWait ? `금일 수확 완료 · ${Math.ceil(incomeWait / 3600000)}시간 후` : '금일 내정 수확'
-    return `<section class="page-section page-section--territory"><div class="section-heading section-heading--compact"><div><span class="eyebrow">DOMAIN &amp; GOVERNANCE · 04</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">서버 원장 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="resource-strip glass-card">${this.resourceTokens(state)}</div><div class="conquest-overview glass-card"><div><span class="eyebrow">CONQUEST FRONT</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">THREE KINGDOMS DOMAIN</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div><div class="map-canvas"><div class="map-river"></div>${this.frontlineLines(state)}${this.frontlineLines(state, true)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}<span class="map-label map-label--north">중원</span><span class="map-label map-label--south">강동</span><span class="map-label map-label--west">익주</span></div><div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div>${this.mobileCitySelector(state)}</div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
+    return `<section class="page-section page-section--territory${this.citySheetOpen ? ' is-sheet-open' : ''}"><div class="section-heading section-heading--compact"><div><span class="eyebrow">DOMAIN &amp; GOVERNANCE · 04</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">서버 원장 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="resource-strip glass-card">${this.resourceTokens(state)}</div><div class="conquest-overview glass-card"><div><span class="eyebrow">CONQUEST FRONT</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">THREE KINGDOMS DOMAIN</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div>${this.mapViewport(state)}<div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div>${this.mobileCitySelector(state)}</div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
+  }
+
+  private mapCities(state: StrategyState): MapCity[] {
+    const capitals = new Set(Object.values(FACTION_CAPITALS))
+    const own = FACTION_CAPITALS[state.faction]
+    return state.cities.map(city => {
+      const pos = CITY_MAP_POSITIONS[city.id] ?? { x: 50, y: 50 }
+      const group = this.cityGroup(city, state)
+      const priority = (city.id === own ? 90 : capitals.has(city.id) ? 80 : 0) + (group === 'ally' ? 40 : group === 'front' ? 30 : 0) + city.level * 5
+      return { id: city.id, name: city.name, x: pos.x, y: pos.y, priority }
+    })
+  }
+
+  /** 아군 / 전선(아군 도시와 맞닿은 다른 세력·중립 도시) / 적 / 중립 */
+  private cityGroup(city: City, state: StrategyState): Exclude<CityFilter, 'all'> {
+    if (city.owner === state.faction) return 'ally'
+    const touchesAlly = (CITY_ADJACENCY[city.id] ?? []).some(id => state.cities.find(c => c.id === id)?.owner === state.faction)
+    if (touchesAlly) return 'front'
+    return city.owner === '중립' ? 'neutral' : 'enemy'
+  }
+
+  private mapViewport(state: StrategyState): string {
+    const home = FACTION_CAPITALS[state.faction]
+    return `<div class="map-viewport" data-map-viewport data-lod="far"><div class="map-world map-canvas" data-map-world><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}${MAP_REGION_LABELS.map(region => `<span class="map-label map-label--province" style="left:${region.x}%;top:${region.y}%">${region.name}<small>${region.hanja}</small></span>`).join('')}</div><div class="map-controls"><button type="button" data-map-action="zoom-in" data-map-zoom-in aria-label="확대">＋</button><button type="button" data-map-action="zoom-out" data-map-zoom-out aria-label="축소">－</button><button type="button" data-map-action="home" data-home="${home}" aria-label="내 영토로">⌖</button><button type="button" data-map-action="fullscreen" aria-label="지도 전체 화면">${this.territoryMap.fullscreen ? '✕' : '⛶'}</button></div><div class="map-hint"><span class="hint-touch">두 손가락으로 확대 · 끌어서 이동 · 눌러서 도시 선택</span><span class="hint-mouse">휠로 확대 · 끌어서 이동 · 눌러서 도시 선택</span></div></div>`
+  }
+
+  private attachTerritoryMap(state: StrategyState): void {
+    const viewport = this.root.querySelector<HTMLElement>('[data-map-viewport]')
+    if (state.section !== 'territory' || !viewport) {
+      this.territoryMap.detach()
+      if (this.territoryMap.fullscreen) this.territoryMap.setFullscreen(false)
+      this.citySheetOpen = false
+      return
+    }
+    this.territoryMap.attach(viewport, this.mapCities(state), state.selectedCityId, FACTION_CAPITALS[state.faction])
+    this.applyCityFinder()
   }
 
   private mobileCitySelector(state: StrategyState): string {
-    return `<div class="mobile-city-selector" aria-label="모바일 도시 선택"><div class="mobile-city-selector-head"><span class="eyebrow">CITY SELECT</span><small>지도에서 겹친 도시는 아래 목록에서 선택할 수 있습니다.</small></div><div class="mobile-city-selector-grid">${state.cities.map(city => {
-      const ownerClass = city.owner === state.faction ? 'is-ally' : city.owner === '중립' ? 'is-neutral' : 'is-enemy'
-      return `<button class="mobile-city-option ${ownerClass} ${state.selectedCityId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}"><span class="mobile-city-option-dot"></span><strong>${city.name}</strong><small>Lv.${city.level}</small></button>`
-    }).join('')}</div></div>`
+    const order: Record<Exclude<CityFilter, 'all'>, number> = { front: 0, ally: 1, enemy: 2, neutral: 3 }
+    const rows = state.cities
+      .map(city => ({ city, group: this.cityGroup(city, state) }))
+      .sort((a, b) => order[a.group] - order[b.group] || b.city.level - a.city.level || a.city.name.localeCompare(b.city.name, 'ko'))
+    const counts = { all: rows.length, front: 0, ally: 0, enemy: 0, neutral: 0 }
+    rows.forEach(row => { counts[row.group] += 1 })
+    const labels: Record<CityFilter, string> = { all: '전체', front: '전선', ally: '내 도시', enemy: '적', neutral: '중립' }
+    const groupLabel: Record<Exclude<CityFilter, 'all'>, string> = { front: '전선', ally: '아군', enemy: '적', neutral: '중립' }
+    const chips = (['all', 'front', 'ally', 'enemy', 'neutral'] as CityFilter[]).map(key => `<button type="button" class="city-filter-chip city-filter-chip--${key}" data-action="city-filter" data-filter="${key}">${labels[key]} <b>${counts[key]}</b></button>`).join('')
+    const list = rows.map(({ city, group }) => `<button type="button" class="city-finder-row is-${group} ${state.selectedCityId === city.id ? 'is-selected' : ''}" data-action="city-find" data-city="${city.id}" data-group="${group}" data-name="${escapeHtml(city.name)}"><span class="city-finder-dot"></span><strong>${escapeHtml(city.name)}</strong><small>${groupLabel[group]} · ${escapeHtml(city.owner)}</small><em>Lv.${city.level}</em></button>`).join('')
+    return `<div class="mobile-city-selector city-finder" data-city-finder><div class="city-finder-head"><span class="eyebrow">CITY FINDER</span><small data-city-finder-count>${rows.length}개 도시</small></div><input class="city-finder-search" type="search" placeholder="도시 이름 검색" value="${escapeHtml(this.cityQuery)}" data-city-search enterkeyhint="search"><div class="city-finder-filters">${chips}</div><div class="city-finder-list">${list}</div><p class="city-finder-empty" data-city-finder-empty hidden>조건에 맞는 도시가 없습니다.</p></div>`
+  }
+
+  /** 검색어·필터를 목록에 바로 반영한다(화면 전체를 다시 그리지 않음). */
+  private applyCityFinder(): void {
+    const finder = this.root.querySelector<HTMLElement>('[data-city-finder]')
+    if (!finder) return
+    const query = this.cityQuery.trim()
+    let shown = 0
+    finder.querySelectorAll<HTMLElement>('.city-finder-row').forEach(row => {
+      const visible = (this.cityFilter === 'all' || row.dataset.group === this.cityFilter) && (!query || (row.dataset.name ?? '').includes(query))
+      row.hidden = !visible
+      if (visible) shown += 1
+    })
+    finder.querySelectorAll<HTMLElement>('.city-filter-chip').forEach(chip => chip.classList.toggle('is-active', chip.dataset.filter === this.cityFilter))
+    const count = finder.querySelector<HTMLElement>('[data-city-finder-count]')
+    if (count) count.textContent = `${shown}개 도시`
+    const empty = finder.querySelector<HTMLElement>('[data-city-finder-empty]')
+    if (empty) empty.hidden = shown > 0
+  }
+
+  private handleInput = (event: Event): void => {
+    const input = event.target as HTMLInputElement
+    if (!input.matches('[data-city-search]')) return
+    this.cityQuery = input.value
+    this.applyCityFinder()
   }
 
   private frontlineLines(state: StrategyState, mobile = false): string {
@@ -729,6 +831,13 @@ export class StrategyUI {
     return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="eager"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong></button>`
   }
 
+  /** 전투 기록 결과 표시: 중립 습격은 방어하는 우리 입장(방어 성공/실패), 유저 공격은 공격 성공/실패 */
+  private battleLogBadge(log: { won: boolean; attackerKind: 'user' | 'ai' }): string {
+    const good = log.attackerKind === 'ai' ? !log.won : log.won
+    const label = log.attackerKind === 'ai' ? (log.won ? '방어 실패' : '방어 성공') : (log.won ? '공격 성공' : '공격 실패')
+    return `<span class="city-battle-log-result ${good ? 'is-win' : 'is-loss'}">${label}</span>`
+  }
+
   private cityManagementCard(city: City, income: ReturnType<typeof cityIncome>, state: StrategyState): string {
     const canManage = city.owner === state.faction
     const capitalFaction = capitalFactionForCity(city.id)
@@ -741,7 +850,7 @@ export class StrategyUI {
     const panelClass = canManage ? 'city-management--owned' : 'city-management--frontline'
     const capitalBadge = capitalFaction ? `<span class="capital-badge">${capitalFaction} 본성 · 점령 불가</span>` : ''
     const frontierNote = canManage ? '내정 핵심지 · 방어선 유지' : eligibility.allowed ? `접경 전선 · ${eligibility.reason}` : '원거리 전선 · 진군 경로 차단'
-    return `<div class="glass-card city-management ${panelClass}"><div class="city-management-head"><div><span class="eyebrow">도시 관리 · ${city.region}</span><h2>${city.name}${city.id === 'luoyang' ? this.luoyangRulesMenu() : ''}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><div class="city-management-status"><span class="city-level">Lv.${city.level}</span>${capitalBadge}</div></div><div class="city-map-context"><span>삼국지 지리 전선</span><strong>${frontierNote}</strong><small>인접 도시 ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '독립 성 · 연결 전선 없음'}</small></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div><p class="wall-status">성벽 능력 ${wallCapacity} · 현재 방어도 ${city.defense}/${wallCapacity} · 방어도 0 도달 및 수비병 전멸 후 최종 세력전</p>${conquest}${this.cityDamageRankingCard(city)}${this.battleLogCard(city)}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">ESTIMATED YIELD</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${RESOURCE_META[key].icon} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">CIVIL WORKS</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">병영을 강화하면 성벽 능력과 방어도 회복 상한이 상승합니다.</p>' : '<p class="management-tip management-tip--warn">수비병을 모두 격파하고 방어도를 0까지 낮춘 뒤 최종 세력전을 실행하십시오.</p>'}</div>`
+    return `<div class="glass-card city-management ${panelClass}"><div class="city-sheet-bar"><span class="city-sheet-grip"></span><button class="city-sheet-close" data-action="city-sheet-close" aria-label="도시 정보 닫기">✕</button></div><div class="city-management-head"><div><span class="eyebrow">도시 관리 · ${city.region}</span><h2>${city.name}${city.id === 'luoyang' ? this.luoyangRulesMenu() : ''}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><div class="city-management-status"><span class="city-level">Lv.${city.level}</span>${capitalBadge}</div></div><div class="city-map-context"><span>삼국지 지리 전선</span><strong>${frontierNote}</strong><small>인접 도시 ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '독립 성 · 연결 전선 없음'}</small></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div><p class="wall-status">성벽 능력 ${wallCapacity} · 현재 방어도 ${city.defense}/${wallCapacity} · 방어도 0 도달 및 수비병 전멸 후 최종 세력전</p>${conquest}${this.cityDamageRankingCard(city)}${this.battleLogCard(city)}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">ESTIMATED YIELD</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${RESOURCE_META[key].icon} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">CIVIL WORKS</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">병영을 강화하면 성벽 능력과 방어도 회복 상한이 상승합니다.</p>' : '<p class="management-tip management-tip--warn">수비병을 모두 격파하고 방어도를 0까지 낮춘 뒤 최종 세력전을 실행하십시오.</p>'}</div>`
   }
 
   private cityDamageRankingCard(city: City): string {
@@ -749,10 +858,9 @@ export class StrategyUI {
     const rows = rankings.length ? rankings.map((entry, index) => `<li><span class="damage-rank-number">${index + 1}</span><strong>${escapeHtml(entry.displayName)}</strong><small>${escapeHtml(entry.faction)} · ${entry.battleCount}회 참여</small><b>${formatNumber(entry.totalDamage)}</b></li>`).join('') : '<li class="city-damage-ranking-empty">아직 기록된 공성 피해 기여가 없습니다.</li>'
     return `<details class="city-damage-ranking" open><summary><span><span class="eyebrow">SIEGE CONTRIBUTION</span><strong>공성 피해 기여 랭킹</strong></span><b>상위 ${rankings.length}명</b></summary><p>이 도시의 성벽 방어도를 가장 많이 깎은 유저 순위입니다.</p><ol>${rows}</ol></details>`
   }
-
   private battleLogCard(city: City): string {
     const logs = [...(city.battleLogs ?? [])].reverse()
-    const entries = logs.length ? logs.map(log => `<li class="city-battle-log-entry"><span class="city-battle-log-result ${log.won ? 'is-win' : 'is-loss'}">${log.won ? '승리' : '패배'}</span><div><strong>${escapeHtml(log.attackerName)} → ${escapeHtml(log.defenderName)}</strong><small>${log.attackerKind === 'ai' ? '인공지능 공격' : '유저 공격'} · 피해 ${formatNumber(log.damage)} · ${escapeHtml(log.note)}</small></div><time>${new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(log.timestamp)}</time></li>`).join('') : '<li class="city-battle-log-empty">아직 기록된 전투가 없습니다. 수비덱을 배치한 뒤 공격을 받으면 이곳에 기록됩니다.</li>'
+    const entries = logs.length ? logs.map(log => `<li class="city-battle-log-entry">${this.battleLogBadge(log)}<div><strong>${escapeHtml(log.attackerName)} → ${escapeHtml(log.defenderName)}</strong><small>${log.attackerKind === 'ai' ? '인공지능 공격' : '유저 공격'} · 피해 ${formatNumber(log.damage)} · ${escapeHtml(log.note)}</small></div><time>${new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(log.timestamp)}</time></li>`).join('') : '<li class="city-battle-log-empty">아직 기록된 전투가 없습니다. 수비덱을 배치한 뒤 공격을 받으면 이곳에 기록됩니다.</li>'
     return `<details class="city-battle-log" ${logs.length ? 'open' : ''}><summary><span><span class="eyebrow">CITY BATTLE LOG</span><strong>성 전투 기록</strong></span><b>${logs.length}건</b></summary><p>이 성의 공성전·세력전과 인공지능 습격 결과를 최근 30건까지 보관합니다.</p><ul>${entries}</ul></details>`
   }
 
@@ -1089,9 +1197,23 @@ export class StrategyUI {
       if (this.renderedState) this.render(this.renderedState)
     }
     else if (action === 'city-select') {
+      this.citySheetOpen = true
       const cityId = button.dataset.city ?? ''
       this.callbacks.onCitySelect(cityId)
       this.callbacks.onCityDamageRankingRefresh(cityId)
+    }
+    else if (action === 'city-find') {
+      const id = button.dataset.city ?? ''
+      this.citySheetOpen = true
+      this.territoryMap.queueFocus(id)
+      if (this.territoryMap.fullscreen) this.territoryMap.setFullscreen(false)
+      this.callbacks.onCitySelect(id)
+      this.root.querySelector('[data-map-viewport]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+    else if (action === 'city-filter') { this.cityFilter = (button.dataset.filter as CityFilter) || 'all'; this.applyCityFinder() }
+    else if (action === 'city-sheet-close') {
+      this.citySheetOpen = false
+      this.root.querySelector('.page-section--territory')?.classList.remove('is-sheet-open')
     }
     else if (action === 'territory-refresh') this.callbacks.onTerritoryRefresh()
     else if (action === 'conquer') this.callbacks.onConquest(button.dataset.city ?? '')

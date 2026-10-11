@@ -1,9 +1,13 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
 import { createBoardPost, deleteBoardPost, deleteBoardPostAsAdmin, getBoardSettings, listAdminBoardPosts, listBoardPosts, setBoardPostingEnabled } from './board.mjs'
+
+// 계정 상태 숫자 한도: DB 컬럼(int / int unsigned)이 담을 수 있는 범위 안에서 넉넉하게 잡는다.
+// 예전 한도(병법서·승리·낙양 상자·신화 조각 1,000,000)를 넘은 계정은 저장 자체가 거절되었다.
+export const SAVE_INT_MAX = 2_000_000_000
 
 function accountView(user) {
   return {
@@ -32,10 +36,7 @@ export const gameRouter = router({
       return accountView(updated)
     }),
     listGameStates: adminProcedure.query(async () => (await listGameStates()).map(user => ({ ...accountView(user), game: { userId: user.id, honor: user.honor, silver: user.silver, gold: user.gold, manuals: user.manuals, wins: user.wins, battleScore: user.battleScore, grain: user.grain, wood: user.wood, iron: user.iron, influence: user.influence, updatedAt: user.updatedAt } }))),
-    updateGameState: adminProcedure.input(z.object({ userId: z.number().int().positive(), honor: z.number().int().min(0).max(100000000), silver: z.number().int().min(0).max(100000000), gold: z.number().int().min(0).max(100000000), manuals: z.number().int().min(0).max(1000000), wins: z.number().int().min(0).max(1000000), battleScore: z.number().int().min(0).max(1000000000), grain: z.number().int().min(0).max(1000000000), wood: z.number().int().min(0).max(1000000000), iron: z.number().int().min(0).max(1000000000), influence: z.number().int().min(0).max(100000000) })).mutation(async ({ input }) => ({ userId: input.userId, game: await updateGameState(input.userId, { honor: input.honor, silver: input.silver, gold: input.gold, manuals: input.manuals, wins: input.wins, battleScore: input.battleScore, grain: input.grain, wood: input.wood, iron: input.iron, influence: input.influence }) })),
-    boardSettings: adminProcedure.query(async () => ({ settings: await getBoardSettings(), posts: await listAdminBoardPosts() })),
-    deleteBoardPost: adminProcedure.input(z.object({ id: z.number().int().positive() }).strict()).mutation(({ input }) => deleteBoardPostAsAdmin(input.id)),
-    setBoardPosting: adminProcedure.input(z.object({ enabled: z.boolean() }).strict()).mutation(({ input }) => setBoardPostingEnabled(input.enabled)),
+    updateGameState: adminProcedure.input(z.object({ userId: z.number().int().positive(), honor: z.number().int().min(0).max(SAVE_INT_MAX), silver: z.number().int().min(0).max(SAVE_INT_MAX), gold: z.number().int().min(0).max(SAVE_INT_MAX), manuals: z.number().int().min(0).max(SAVE_INT_MAX), wins: z.number().int().min(0).max(SAVE_INT_MAX), battleScore: z.number().int().min(0).max(SAVE_INT_MAX), grain: z.number().int().min(0).max(SAVE_INT_MAX), wood: z.number().int().min(0).max(SAVE_INT_MAX), iron: z.number().int().min(0).max(SAVE_INT_MAX), influence: z.number().int().min(0).max(SAVE_INT_MAX) })).mutation(async ({ input }) => ({ userId: input.userId, game: await updateGameState(input.userId, { honor: input.honor, silver: input.silver, gold: input.gold, manuals: input.manuals, wins: input.wins, battleScore: input.battleScore, grain: input.grain, wood: input.wood, iron: input.iron, influence: input.influence }) })),
   }),
   leaderboard: createLeaderboardRouter({ router, publicProcedure, protectedProcedure }, leaderboard),
   duel: router({
@@ -58,21 +59,37 @@ export const gameRouter = router({
     list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']) })).query(({ ctx, input }) => listBoardPosts(ctx.user, input.board)),
     create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => deleteBoardPost(ctx.user, input.id, input.password)),
+    deployGarrison: protectedProcedure.input(z.object({
+      cityId: z.string().trim().min(1).max(64),
+      garrisonId: z.string().trim().min(1).max(96),
+      power: z.number().int().min(0).max(2_000_000),
+      averageLevel: z.number().int().min(1).max(999),
+      label: z.string().trim().min(1).max(40),
+    }).strict()).mutation(async ({ ctx, input }) => {
+      if (ctx.user.isCron) throw new Error('예약 실행 계정은 수비병을 세울 수 없습니다.')
+      return deployFactionGarrison(ctx.user.id, input)
+    }),
+    recordDefense: protectedProcedure.input(z.object({
+      cityId: z.string().trim().min(1).max(64),
+    }).strict()).mutation(async ({ ctx, input }) => {
+      if (ctx.user.isCron) throw new Error('예약 실행 계정은 방어전을 지휘할 수 없습니다.')
+      return recordFactionDefense(ctx.user.id, input)
+    }),
   }),
   account: router({
     me: protectedProcedure.query(({ ctx }) => accountView(ctx.user)),
     gameState: protectedProcedure.query(({ ctx }) => getGameState(ctx.user.id)),
     saveGameState: protectedProcedure.input(z.object({
-      honor: z.number().int().min(0).max(100000000),
-      silver: z.number().int().min(0).max(100000000),
-      gold: z.number().int().min(0).max(100000000).optional(),
-      manuals: z.number().int().min(0).max(1000000),
-      wins: z.number().int().min(0).max(1000000),
-      battleScore: z.number().int().min(0).max(1000000000),
-      grain: z.number().int().min(0).max(1000000000),
-      wood: z.number().int().min(0).max(1000000000),
-      iron: z.number().int().min(0).max(1000000000),
-      influence: z.number().int().min(0).max(100000000),
+      honor: z.number().int().min(0).max(SAVE_INT_MAX),
+      silver: z.number().int().min(0).max(SAVE_INT_MAX),
+      gold: z.number().int().min(0).max(SAVE_INT_MAX).optional(),
+      manuals: z.number().int().min(0).max(SAVE_INT_MAX),
+      wins: z.number().int().min(0).max(SAVE_INT_MAX),
+      battleScore: z.number().int().min(0).max(SAVE_INT_MAX),
+      grain: z.number().int().min(0).max(SAVE_INT_MAX),
+      wood: z.number().int().min(0).max(SAVE_INT_MAX),
+      iron: z.number().int().min(0).max(SAVE_INT_MAX),
+      influence: z.number().int().min(0).max(SAVE_INT_MAX),
       generalData: z.string().max(500000).optional(),
       formationData: z.string().max(2000).optional(),
       // 도시별 최근 전투 기록(도시당 최대 30건)을 포함해도 저장되도록 TEXT 컬럼 범위에 맞춘다.
@@ -84,11 +101,11 @@ export const gameRouter = router({
       selectedCityId: z.string().max(64).nullable().optional(),
       faction: z.enum(['촉한', '위나라', '오나라']).optional(),
       factionChosen: z.boolean().optional(),
-      factionWarScore: z.number().int().min(0).max(100000000).optional(),
-      luoyangBoxes: z.number().int().min(0).max(1000000).optional(),
+      factionWarScore: z.number().int().min(0).max(SAVE_INT_MAX).optional(),
+      luoyangBoxes: z.number().int().min(0).max(SAVE_INT_MAX).optional(),
       lastLuoyangReward: z.number().int().min(0).max(100).nullable().optional(),
       luoyangRewardWeekKey: z.string().max(16).nullable().optional(),
-      mythicFragments: z.number().int().min(0).max(1000000).optional(),
+      mythicFragments: z.number().int().min(0).max(SAVE_INT_MAX).optional(),
       duelAttemptsToday: z.number().int().min(0).max(5).optional(),
       duelDayKey: z.string().max(16).nullable().optional(),
       prelaunchGoldDayKey: z.string().max(16).nullable().optional(),

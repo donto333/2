@@ -1,7 +1,8 @@
 import express from 'express'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createExpressMiddleware } from '@trpc/server/adapters/express'
-import { registerOAuthRoutes, createContext, webdevRouter, router, publicPlatformConfig } from './webdev-adapter.mjs'
+import { registerOAuthRoutes, createContext, webdevRouter, router, publicPlatformConfig, ENV, OAUTH_STATE_COOKIE, ONE_YEAR_MS, sdk } from './webdev-adapter.mjs'
+import { registerDesktopAuthRoutes } from './desktop-auth.mjs'
 
 export function createGameApp(gameRouter, { leaderboard } = {}) {
   const app = express()
@@ -27,7 +28,16 @@ export function createGameApp(gameRouter, { leaderboard } = {}) {
     res.setHeader('Cache-Control', 'no-store')
     res.json(publicPlatformConfig())
   })
-  registerOAuthRoutes(app)
+  // Steam 데스크톱 앱: 기본 브라우저에서 로그인한 결과를 앱으로 넘긴다.
+  const desktopAuth = registerDesktopAuthRoutes(app, {
+    secret: () => ENV.cookieSecret,
+    appId: () => ENV.appId,
+    portalUrl: () => publicPlatformConfig().oauthPortalUrl,
+    oauthStateCookie: OAUTH_STATE_COOKIE,
+    createSessionToken: (openId, options) => sdk.createSessionToken(openId, options),
+    sessionMaxAgeMs: ONE_YEAR_MS,
+  })
+  registerOAuthRoutes(app, { afterLogin: desktopAuth.afterLogin })
   // Browser mutations use Webdev's JSON tRPC transport. Do not enable CORS or
   // accept form/text bodies: cross-origin forms must not create a Checkout or
   // mutate a player's save using the SameSite=None session cookie.

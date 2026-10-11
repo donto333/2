@@ -1,0 +1,258 @@
+/*
+ * 천하 컬러 테마 — "칠기와 금박"
+ * main.css(따뜻한 색으로 변환됨) 위에 얹는 층. 색·배경·테두리·그림자만 바꾸고
+ * 배치(layout)는 건드리지 않는다. 모든 선택자는 body로 시작해 main.css의 같은 규칙보다 우선한다.
+ *
+ * 팔레트
+ *   주홍 칠기  --lacquer       주요 버튼·선택 상태
+ *   금박       --gold          테두리·강조 글자
+ *   비취       --jade          성공·준비 완료
+ *   하늘       --sky           보조 정보
+ *   먹·갈색    --panel         반투명 패널 (전장이 비쳐 보이도록 얇게)
+ */
+:root {
+  --lacquer: #b8322a;
+  --lacquer-hi: #dc4d3c;
+  --lacquer-deep: #7a1c17;
+  --gold: #f0c26a;
+  --gold-hi: #ffe3a3;
+  --gold-line: rgba(240, 194, 106, .55);
+  --gold-faint: rgba(240, 194, 106, .2);
+  --bronze: #a8773a;
+  --jade: #4fcf98;
+  --sky: #6cb8ee;
+  --cream: #f8eedb;
+  --cream-soft: #e6d6b8;
+  --panel: rgba(44, 26, 16, .58);
+  --panel-strong: rgba(48, 27, 16, .82);
+  --panel-edge: inset 0 1px 0 rgba(255, 227, 163, .14), inset 0 0 0 1px rgba(240, 194, 106, .1);
+  --lacquer-shadow: 0 6px 18px rgba(80, 14, 10, .45);
+}
+
+/* ── 전장 장면: 더 밝고 선명하게 ─────────────────────────── */
+body #game { filter: saturate(1.2) contrast(1.04) brightness(1.08); }
+body .ambient-vignette {
+  background: radial-gradient(circle at 54% 40%, transparent 38%, rgba(40, 16, 6, .1) 70%, rgba(30, 12, 4, .38) 100%);
+}
+body .app-shell {
+  background: linear-gradient(90deg, rgba(36, 16, 8, .55), transparent 26%, transparent 78%, rgba(36, 16, 8, .18));
+}
+
+/* ── 상단 바: 검은 옻칠 판 + 금박 테두리 ───────────────────── */
+body .topbar {
+  background: linear-gradient(180deg, rgba(42, 20, 12, .9), rgba(58, 28, 16, .78));
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, transparent, var(--gold) 18%, var(--gold-hi) 50%, var(--gold) 82%, transparent) 1;
+  box-shadow: 0 6px 24px rgba(30, 10, 4, .35);
+}
+body .brand-title { color: var(--gold-hi); text-shadow: 0 2px 6px rgba(80, 20, 8, .6); }
+body .brand-seal {
+  background: radial-gradient(circle at 35% 30%, var(--lacquer-hi), var(--lacquer-deep));
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(42, 20, 12, .9), 0 0 0 3px var(--gold-line), var(--lacquer-shadow);
+}
+body .season-dot { background: var(--jade); box-shadow: 0 0 8px rgba(79, 207, 152, .7); }
+body .topbar-resource {
+  background: linear-gradient(180deg, rgba(28, 14, 8, .78), rgba(46, 24, 14, .7));
+  border-color: rgba(240, 194, 106, .38);
+  box-shadow: inset 0 1px 0 rgba(255, 227, 163, .12);
+}
+body .topbar-resource strong { color: var(--cream); }
+body .topbar-resource--gold i, body .topbar-resource--gold strong { color: #ffd45a; }
+body .topbar-resource--silver i { color: #dfe7ef; }
+body .topbar-resource--honor i { color: #ff9b6a; }
+body .topbar-resource--influence i { color: #c7a2ff; }
+body .topbar-resource--grain i { color: #f5d36b; }
+body .topbar-resource--wood i { color: #9ad07a; }
+body .topbar-resource--iron i { color: #9cc8ec; }
+body .auth-button {
+  background: linear-gradient(180deg, rgba(184, 50, 42, .9), rgba(122, 28, 23, .92));
+  border-color: var(--gold-line);
+  color: var(--cream);
+}
+
+/* ── 사이드바: 주홍 칠기 기둥 ──────────────────────────────── */
+body .sidebar {
+  background: linear-gradient(180deg, rgba(64, 24, 15, .78), rgba(42, 18, 11, .74) 55%, rgba(30, 14, 9, .8));
+  backdrop-filter: blur(8px) saturate(1.15);
+  border-right: 1px solid var(--gold-line);
+  box-shadow: inset -1px 0 0 rgba(255, 227, 163, .08), 6px 0 24px rgba(30, 8, 4, .3);
+}
+body .sidebar-label { color: var(--gold); letter-spacing: .2em; }
+body .sidebar-rule { background: linear-gradient(90deg, transparent, var(--gold-line), transparent); }
+body .nav-button { color: var(--cream-soft); border-color: transparent; }
+body .nav-button:hover { background: linear-gradient(90deg, rgba(240, 194, 106, .14), rgba(240, 194, 106, .02)); color: var(--cream); }
+body .nav-button.is-active {
+  background: linear-gradient(180deg, var(--lacquer-hi), var(--lacquer) 55%, var(--lacquer-deep));
+  border-color: var(--gold);
+  color: #fff6e3;
+  box-shadow: inset 0 1px 0 rgba(255, 220, 170, .45), inset 0 0 0 1px rgba(255, 227, 163, .25), var(--lacquer-shadow);
+  text-shadow: 0 1px 2px rgba(60, 10, 6, .6);
+}
+body .nav-button.is-active .nav-icon { color: var(--gold-hi); }
+body .nav-icon { color: var(--gold); }
+body .profile-orb {
+  background: radial-gradient(circle at 36% 30%, #ffe3a3, #c9902e 60%, #7a4c14);
+  border-color: var(--gold-hi);
+}
+
+/* ── 패널: 얇은 먹빛 판 + 금박 안쪽 선 ─────────────────────── */
+body .glass-card,
+body .command-hero {
+  background: linear-gradient(160deg, rgba(58, 32, 18, .72), rgba(34, 20, 12, .68));
+  border-color: rgba(240, 194, 106, .34);
+  box-shadow: var(--panel-edge), 0 14px 40px rgba(24, 8, 2, .28);
+  backdrop-filter: blur(6px) saturate(1.1);
+}
+body .glass-card:hover { border-color: rgba(240, 194, 106, .55); }
+body .command-hero {
+  background:
+    linear-gradient(110deg, rgba(122, 28, 23, .55), rgba(58, 30, 16, .5) 45%, rgba(30, 18, 10, .32)),
+    radial-gradient(circle at 85% 30%, rgba(255, 210, 120, .16), transparent 45%);
+}
+body .card-header h3, body .section-heading h2, body .command-hero h2 { color: var(--cream); text-shadow: 0 2px 10px rgba(40, 12, 4, .55); }
+body .section-heading h1, body .page-section h1 { text-shadow: 0 3px 14px rgba(40, 12, 4, .6); }
+body .eyebrow { color: #ffb066; }
+body .heading-copy, body .notice-text { color: var(--cream-soft); }
+body .stat-label { color: #e6c890; }
+body .stat-delta { color: var(--jade); }
+body .pill--jade { color: #7ff0bd; background: rgba(79, 207, 152, .14); border-color: rgba(79, 207, 152, .5); }
+
+/* ── 버튼 ──────────────────────────────────────────────────── */
+body .action-button--primary,
+body .tactic-button--primary {
+  background: linear-gradient(180deg, var(--lacquer-hi), var(--lacquer) 52%, var(--lacquer-deep));
+  border: 1px solid var(--gold);
+  color: #fff6e3;
+  text-shadow: 0 1px 2px rgba(60, 10, 6, .65);
+  box-shadow: inset 0 1px 0 rgba(255, 220, 170, .5), inset 0 0 0 2px rgba(122, 28, 23, .5), inset 0 0 0 3px rgba(255, 227, 163, .22), var(--lacquer-shadow);
+}
+body .action-button--primary:hover,
+body .tactic-button--primary:hover {
+  background: linear-gradient(180deg, #ee6250, var(--lacquer-hi) 52%, var(--lacquer));
+  box-shadow: inset 0 1px 0 rgba(255, 230, 190, .6), inset 0 0 0 2px rgba(122, 28, 23, .45), inset 0 0 0 3px rgba(255, 227, 163, .3), 0 8px 24px rgba(184, 50, 42, .45);
+}
+body .action-button--primary:disabled,
+body .action-button--primary[disabled] { filter: grayscale(.55) brightness(.8); }
+body .action-button--outline,
+body .ghost-button,
+body .tactic-button {
+  background: linear-gradient(180deg, rgba(52, 28, 16, .72), rgba(30, 16, 9, .7));
+  border-color: var(--gold-line);
+  color: var(--gold-hi);
+  box-shadow: inset 0 1px 0 rgba(255, 227, 163, .12);
+}
+body .action-button--outline:hover,
+body .ghost-button:hover,
+body .tactic-button:hover { border-color: var(--gold); background: linear-gradient(180deg, rgba(84, 44, 22, .8), rgba(46, 24, 13, .78)); }
+body .action-button--quiet { color: var(--cream-soft); }
+body .tactic-button--guard { border-color: rgba(108, 184, 238, .6); }
+body .tactic-button--charge { border-color: rgba(220, 77, 60, .7); }
+body .tactic-button--feint { border-color: rgba(79, 207, 152, .6); }
+body .skill-button {
+  background: radial-gradient(circle at 35% 30%, rgba(255, 227, 163, .25), transparent 50%), linear-gradient(180deg, #8a2a1f, #4a160f);
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 2px rgba(255, 227, 163, .2), var(--lacquer-shadow);
+}
+
+/* ── 탭·필터 ───────────────────────────────────────────────── */
+body .summon-tab, body .shop-tab, body .filter-tab, body .admin-tab { border-color: var(--gold-faint); color: var(--cream-soft); }
+body .summon-tab.is-active, body .shop-tab.is-active, body .filter-tab.is-active, body .admin-tab.is-active {
+  background: linear-gradient(180deg, var(--lacquer-hi), var(--lacquer));
+  border-color: var(--gold);
+  color: #fff6e3;
+}
+
+/* ── 알림 ──────────────────────────────────────────────────── */
+body .toast {
+  background: linear-gradient(180deg, rgba(66, 30, 16, .96), rgba(40, 18, 10, .96));
+  border: 1px solid var(--gold-line);
+  color: var(--cream);
+  box-shadow: inset 0 1px 0 rgba(255, 227, 163, .15), 0 16px 40px rgba(20, 6, 2, .45);
+}
+body .toast[data-tone='ember'] { border-color: rgba(220, 77, 60, .8); background: linear-gradient(180deg, rgba(110, 26, 18, .96), rgba(64, 16, 10, .96)); }
+
+/* ── 지도 ──────────────────────────────────────────────────── */
+body .map-canvas { filter: saturate(1.15) brightness(1.05); }
+
+/* ── 가독성 ──────────────────────────────────────────────────
+ * 글자 크기는 scripts/theme/readable-type.py로 main.css에서 올렸다(최소 11~13px).
+ * 여기서는 대비가 부족했던 글자(측정 기준 WCAG 4.5:1 미만)를 보강한다. */
+:root { --cream-soft: #f0e3c8; }
+body { -webkit-font-smoothing: antialiased; }
+
+/* 전장 배경 위에 바로 놓이는 제목·설명 */
+body .section-heading,
+body .section-heading p,
+body .heading-copy { text-shadow: 0 1px 2px rgba(20, 8, 2, .85), 0 0 12px rgba(20, 8, 2, .55); }
+body .heading-copy { color: #f4e8d0; }
+body .eyebrow { color: #ffc27a; font-weight: 700; text-shadow: 0 1px 2px rgba(20, 8, 2, .9); }
+
+/* 보조 글자: 너무 흐린 갈색·회색을 밝힌다 */
+body .muted, body .stat-label, body .sidebar-label, body .brand-subtitle,
+body .notice-meta, body .formation-footer, body .section-footnote { color: #e2cfa8; }
+body .sidebar-label { color: var(--gold); }
+body .card-header span, body .card-header small { color: #e8d2a6; }
+
+/* 지도: 도시 이름·지역 이름을 지도 그림 위에서 읽히게 */
+body .city-marker strong {
+  color: #fff7e6;
+  text-shadow: 0 1px 1px #000, 0 0 3px rgba(0, 0, 0, .95), 0 0 6px rgba(0, 0, 0, .7);
+  font-weight: 700;
+}
+body .city-marker-level { color: #2a1206; font-weight: 800; }
+body .map-label { color: #fff2d6; text-shadow: 0 1px 2px #000, 0 0 8px rgba(0, 0, 0, .8); }
+
+/* 진영 표식(금빛 원) 안의 글자 */
+body .profile-orb { color: #4a1e0c; font-weight: 800; }
+
+/* 버튼 글자 굵기 */
+body .action-button, body .ghost-button, body .nav-button, body .tactic-button, body .mini-action { font-weight: 600; }
+/* 지도 도시 이름 뒤에 얇은 먹빛 띠를 깔아 성채 그림 위에서도 읽히게 한다 */
+body .city-marker strong { background: rgba(24, 10, 4, .62); padding: 0 4px; border-radius: 3px; }
+/* 무장 카드 그림 위 등급·성급 표식 */
+body .codex-grade, body .codex-state, body .general-card .star-row, body .grade-chip { text-shadow: 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, .8); }
+body .grade-tag, body .deploy-tag {
+  background: rgba(24, 10, 4, .72);
+  border-radius: 4px;
+  padding: 2px 6px;
+  text-shadow: 0 1px 1px #000;
+}
+body .grade-tag b, body .grade-tag strong { color: #ffe3a3; }
+body .grade-tag span, body .grade-tag small { color: #f6e6c6; }
+body .deploy-tag { color: #9df2c6; border: 1px solid rgba(79, 207, 152, .55); }
+/* 마지막 보정: 영문 소제목·보조 라벨·메뉴 아이콘을 한 단계 더 밝게 */
+:root { --muted: #dcc9a4; }
+body .eyebrow { color: #ffd59a; }
+body .nav-icon { color: #f7cf80; }
+body .codex-lock-note, body .rate-footnote, body .empty-result p, body .empty-result span { color: #ead7b2; }
+
+/* 휴대폰 하단 메뉴: 15개 버튼(3줄). 본문 아래 여백(132px) 안에서 128px로 키우고 이름은 11px 한 줄로 */
+@media (max-width: 760px) {
+  body .sidebar { height: 128px; min-height: 128px; gap: 3px; background: linear-gradient(180deg, rgba(64, 24, 15, .96), rgba(36, 15, 9, .97)); border-top: 1px solid var(--gold-line); border-right: 0; }
+  body .nav-button { font-size: 11px; line-height: 1.15; gap: 2px; padding: 4px 1px; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  body .nav-button > span:not(.nav-icon) { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  body .nav-icon { font-size: 15px; }
+}
+
+/* ── 무장 사진 ──────────────────────────────────────────────
+ * 원본 사진(generals-realistic-webp)이 어둡고 푸른 톤이라(얼굴 영역 평균 밝기 약 35%)
+ * 화면에서 밝기·대비·채도를 올린다. 작은 화면·실외에서 더 어둡게 보이므로 휴대폰은 한 단계 더.
+ * 미영입 도감 카드(.codex-card--locked)의 흐린 효과는 부모에 걸려 있어 그대로 유지된다. */
+/* main.css에 'filter: none !important'가 있어 같은 수준(!important + 더 구체적인 선택자)으로 덮는다 */
+body .general-portrait.has-portrait, body .art-spark.has-portrait, body .ritual-portrait.has-portrait, body .has-portrait {
+  filter: brightness(1.18) contrast(1.06) saturate(1.1) !important;
+}
+@media (max-width: 760px) {
+  body .general-portrait.has-portrait, body .art-spark.has-portrait, body .ritual-portrait.has-portrait, body .has-portrait {
+    filter: brightness(1.28) contrast(1.08) saturate(1.12) !important;
+  }
+}
+/* 필터는 테두리(등급 색)까지 밝게 만들므로, 테두리를 그만큼 미리 어둡게 해 등급 색을 그대로 보이게 한다 */
+body .general-portrait.has-portrait, body .ritual-portrait.has-portrait { border-color: color-mix(in srgb, var(--accent), black 18%) !important; }
+@media (max-width: 760px) {
+  body .general-portrait.has-portrait, body .ritual-portrait.has-portrait { border-color: color-mix(in srgb, var(--accent), black 24%) !important; }
+}
+/* 사진이 없던 시절의 마름모 장식 틀이 얼굴 위에 겹쳐 그려지던 것을 없앤다 */
+body .general-portrait.has-portrait::before,
+body .ritual-portrait.has-portrait::before { display: none; }
