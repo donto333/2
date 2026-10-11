@@ -347,6 +347,34 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
   }
 }
 
+// 수비대·방어전은 진영 공용이라 서버가 기준이다. 서버가 판정한 결과로 로컬 화면을 맞춘다.
+async function syncFactionGarrison(cityId: string, garrison: { id: string; power: number; averageLevel: number; label: string }): Promise<void> {
+  if (authView.status !== 'authenticated') return
+  try {
+    const snapshots = await ManusAuth.mutate('territory.deployGarrison', { cityId, garrisonId: garrison.id.slice(0, 96), power: Math.max(0, Math.min(2_000_000, Math.round(garrison.power))), averageLevel: Math.max(1, Math.min(999, Math.round(garrison.averageLevel))), label: garrison.label.slice(0, 40) }) as FactionTerritorySnapshot[]
+    mergeFactionTerritories(state, snapshots)
+    persistLocalGame()
+    ui.render(state)
+  } catch (error) {
+    ui.notify(`수비병 서버 등록 보류 · ${error instanceof Error ? error.message.slice(0, 60) : '연결 지연'}`, 'ember')
+  }
+}
+
+async function syncFactionDefense(cityId: string): Promise<void> {
+  if (authView.status !== 'authenticated') return
+  try {
+    const response = await ManusAuth.mutate('territory.recordDefense', { cityId }) as { outcome: { attackerWon: boolean; damage: number } | null; territories: FactionTerritorySnapshot[] }
+    mergeFactionTerritories(state, response.territories)
+    persistLocalGame()
+    ui.render(state)
+    if (response.outcome) {
+      ui.notify(response.outcome.attackerWon ? `서버 판정 · 방어 실패 · 성벽 방어도 -${response.outcome.damage}` : '서버 판정 · 방어 성공 · 성벽 방어도 유지', response.outcome.attackerWon ? 'ember' : 'jade')
+    }
+  } catch {
+    // 구버전 서버이거나 연결이 지연되면 로컬 결과만 남는다. 다음 영토 동기화 때 서버 값으로 맞춰진다.
+  }
+}
+
 async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: number; won: boolean; captured: boolean }): Promise<void> {
   if (authView.status !== 'authenticated') return
   const payload = { cityId, damage: Math.max(0, Math.min(1_000_000, Math.trunc(outcome.damage))), won: outcome.won, captured: outcome.captured }
@@ -493,13 +521,21 @@ const ui = new StrategyUI(root, {
     const result = defendCity(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok && result.won ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
+    if (result.ok) {
+      queueAccountSave()
+      void syncFactionDefense(id)
+    }
   },
   onGarrisonDeploy: id => {
     const result = deployCityGarrison(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
+    if (result.ok) {
+      queueAccountSave()
+      const city = state.cities.find(entry => entry.id === id)
+      const garrison = city?.garrisons?.at(-1)
+      if (garrison) void syncFactionGarrison(id, garrison)
+    }
   },
   onFactionBattle: id => {
     const result = launchFactionBattle(state, id)

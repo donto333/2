@@ -1,4 +1,5 @@
 import { createRequire as createCityRoutesRequire } from 'node:module';
+import { neutralRaidPower, resolveNeutralRaid } from './neutral-raid.mjs';
 const cityRoutes = createCityRoutesRequire(import.meta.url)('./city-routes.json');
 // starters/web-db-user-v1/shared/const.ts
 var COOKIE_NAME = "webdev_app_session";
@@ -90,6 +91,8 @@ var factionTerritoryStates = mysqlTable("faction_territory_states", {
   prosperity: int("prosperity").default(50).notNull(),
   version: int("version").default(1).notNull(),
   updatedByUserId: int("updatedByUserId"),
+  garrisonsData: mediumtext("garrisonsData"),
+  lastRaidData: text("lastRaidData"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
 var factionTerritoryAiState = mysqlTable("faction_territory_ai_state", {
@@ -315,8 +318,56 @@ async function getGameState(userId) {
   const result = await db.select().from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
   return gameStateView(result[0] ?? { userId, ...defaultGameState, updatedAt: new Date() });
 }
+// ── 수비대·습격 기록 (server/021_city_garrisons.sql) ──
+const MAX_CITY_GARRISONS = 100;
+function parseGarrisons(row) {
+  try {
+    const data = row?.garrisonsData ? JSON.parse(row.garrisonsData) : null;
+    const list = Array.isArray(data?.list) ? data.list.filter(g => g && typeof g.id === "string" && Number.isFinite(Number(g.power))).slice(0, MAX_CITY_GARRISONS) : [];
+    const defeated = Math.max(0, Math.min(list.length, Math.trunc(Number(data?.defeated) || 0)));
+    return { list, defeated };
+  } catch {
+    return { list: [], defeated: 0 };
+  }
+}
+function serializeGarrisons(garrisons) {
+  return garrisons.list.length ? JSON.stringify({ list: garrisons.list, defeated: garrisons.defeated }) : null;
+}
+function parseLastRaid(row) {
+  try { return row?.lastRaidData ? JSON.parse(row.lastRaidData) : null; } catch { return null; }
+}
+/** 중립 습격대가 이 도시를 칠 때의 전력: 맞닿은 중립 도시 중 가장 높은 레벨 기준 */
+function strongestNeutralNeighborLevel(cityId, byCityId) {
+  const levels = (CITY_ADJACENCY[cityId] ?? []).filter(id => (byCityId.get(id)?.owner ?? "중립") === "중립").map(id => CITY_LEVEL_BY_ID[id] ?? 1);
+  return levels.length ? Math.max(...levels) : 0;
+}
+/** 잠근(row FOR UPDATE) 도시에 습격 한 번을 적용할 값 묶음을 만든다. */
+function applyRaidToRow(target, attackerCityId, attackerLevel, now, { allowCapture = true, updatedByUserId = null } = {}) {
+  const garrisons = parseGarrisons(target);
+  const raidPower = neutralRaidPower(attackerLevel);
+  const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.list.map(g => Number(g.power)), defeated: garrisons.defeated, defense: Number(target.defense), allowCapture });
+  const defender = result.defenderIndex >= 0 ? garrisons.list[result.defenderIndex] : null;
+  const lastRaid = { at: now, attackerCityId, attackerLevel, raidPower, attackerWon: result.attackerWon, damage: result.damage, defenderLabel: defender?.label ?? null, captured: result.captured };
+  const set = {
+    lastRaidData: JSON.stringify(lastRaid),
+    version: sql`${factionTerritoryStates.version} + 1`,
+    updatedByUserId
+  };
+  if (result.attackerWon) {
+    set.owner = result.captured ? "중립" : target.owner;
+    set.conquestProgress = result.captured ? 0 : Math.min(100, Number(target.conquestProgress) + result.damage);
+    set.defense = result.captured ? cityDefenseForLevel(CITY_LEVEL_BY_ID[target.cityId]) : result.defense;
+    set.prosperity = result.captured ? Math.max(25, Number(target.prosperity) - 15) : Math.max(20, Number(target.prosperity) - 3);
+    set.garrisonsData = result.captured ? null : serializeGarrisons({ list: garrisons.list, defeated: result.defeated });
+  }
+  return { set, result, lastRaid };
+}
+
 function factionTerritoryView(row) {
+  const garrisons = parseGarrisons(row);
   return {
+    garrisons: { list: garrisons.list.map(({ id, power, averageLevel, label }) => ({ id, power: Number(power), averageLevel: Number(averageLevel) || 1, label: String(label ?? "") })), defeated: garrisons.defeated },
+    lastRaid: parseLastRaid(row),
     cityId: row.cityId,
     owner: row.owner,
     conquestProgress: Math.max(0, Math.min(100, Number(row.conquestProgress) || 0)),
@@ -369,17 +420,9 @@ async function advanceNeutralTerritoryAi(db, now = Date.now()) {
       const locked = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, attack.target)).limit(1).for("update");
       const target = locked[0];
       if (!target || target.owner === "중립" || PROTECTED_CAPITAL_IDS.has(target.cityId)) continue;
-      const damage = 900 + (CITY_LEVEL_BY_ID[attack.attacker] ?? 1) * 500;
-      const defense = Math.max(0, Number(target.defense) - damage);
-      const captured = defense <= 0;
-      await tx.update(factionTerritoryStates).set({
-        owner: captured ? "중립" : target.owner,
-        conquestProgress: captured ? 0 : Math.min(100, Number(target.conquestProgress) + damage),
-        defense: captured ? cityDefenseForLevel(CITY_LEVEL_BY_ID[target.cityId]) : defense,
-        prosperity: captured ? Math.max(25, Number(target.prosperity) - 15) : Math.max(20, Number(target.prosperity) - 3),
-        version: sql`${factionTerritoryStates.version} + 1`,
-        updatedByUserId: null
-      }).where(eq(factionTerritoryStates.cityId, target.cityId));
+      // 수비대가 있으면 실제로 싸운다. 수비대가 이기면 방어도는 깎이지 않는다(neutral-raid.mjs).
+      const { set } = applyRaidToRow(target, attack.attacker, CITY_LEVEL_BY_ID[attack.attacker] ?? 1, now);
+      await tx.update(factionTerritoryStates).set(set).where(eq(factionTerritoryStates.cityId, target.cityId));
     }
   });
   return attacks.length;
@@ -448,11 +491,59 @@ async function recordFactionTerritoryBattle(userId, input) {
       // immediately after the successful final faction battle is synchronized.
       defense: captured ? cityDefenseForLevel(CITY_LEVEL_BY_ID[input.cityId] ?? 1) : Math.max(cityDefenseFloor(input.cityId), Number(current.defense) - damage),
       prosperity: captured ? Math.max(30, Number(current.prosperity) - 20) : current.prosperity,
+      // 주인이 바뀌면 이전 진영의 수비대는 사라진다.
+      ...(captured ? { garrisonsData: null } : {}),
       version: sql`${factionTerritoryStates.version} + 1`,
       updatedByUserId: userId
     }).where(eq(factionTerritoryStates.cityId, input.cityId));
   });
   return getFactionTerritories(userId);
+}
+async function userFaction(db, userId) {
+  const account = await db.select({ faction: gameAccountStates.faction }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
+  return account[0]?.faction ?? "촉한";
+}
+/** 아군 도시에 수비대를 세운다(진영 공용). 클라이언트의 deployCityGarrison과 같은 규칙: 새로 세우면 격파 기록이 초기화된다. */
+async function deployFactionGarrison(userId, input) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (!FACTION_TERRITORY_IDS.has(input.cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
+  await ensureFactionTerritories(db);
+  const faction = await userFaction(db, userId);
+  await db.transaction(async tx => {
+    const rows = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1).for("update");
+    const current = rows[0];
+    if (!current || current.owner !== faction) throw new Error("아군 도시에서만 수비병을 세울 수 있습니다.");
+    const garrisons = parseGarrisons(current);
+    if (garrisons.list.some(g => g.id === input.garrisonId)) return;
+    if (garrisons.list.length >= MAX_CITY_GARRISONS) throw new Error(`수비병은 한 도시에 최대 ${MAX_CITY_GARRISONS}부대까지 세울 수 있습니다.`);
+    garrisons.list.push({ id: input.garrisonId, userId, power: input.power, averageLevel: input.averageLevel, label: input.label });
+    garrisons.defeated = 0;
+    await tx.update(factionTerritoryStates).set({ garrisonsData: serializeGarrisons(garrisons), version: sql`${factionTerritoryStates.version} + 1`, updatedByUserId: userId }).where(eq(factionTerritoryStates.cityId, input.cityId));
+  });
+  return getFactionTerritories(userId);
+}
+/** 유저가 지휘한 방어전: 서버가 직접 판정한다(클라이언트 결과를 믿지 않음). 방어전으로는 도시를 잃지 않는다. */
+async function recordFactionDefense(userId, input) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (!FACTION_TERRITORY_IDS.has(input.cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
+  await ensureFactionTerritories(db);
+  await advanceNeutralTerritoryAi(db);
+  const faction = await userFaction(db, userId);
+  let outcome = null;
+  await db.transaction(async tx => {
+    const all = await tx.select().from(factionTerritoryStates);
+    const byCityId = new Map(all.map(row => [row.cityId, row]));
+    const rows = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1).for("update");
+    const current = rows[0];
+    if (!current || current.owner !== faction) return;
+    const attackerLevel = strongestNeutralNeighborLevel(current.cityId, byCityId) || (CITY_LEVEL_BY_ID[current.cityId] ?? 1);
+    const { set, result } = applyRaidToRow(current, "drill", attackerLevel, Date.now(), { allowCapture: false, updatedByUserId: userId });
+    await tx.update(factionTerritoryStates).set(set).where(eq(factionTerritoryStates.cityId, current.cityId));
+    outcome = result;
+  });
+  return { outcome, territories: await getFactionTerritories(userId) };
 }
 async function listGameStates() {
   const db = await getDb();
@@ -1014,6 +1105,8 @@ export {
   protectedProcedure,
   updateGameState,
   recordFactionTerritoryBattle,
+  deployFactionGarrison,
+  recordFactionDefense,
   updateUserRole,
   updateUserName,
   publicPlatformConfig,

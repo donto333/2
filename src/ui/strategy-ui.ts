@@ -758,6 +758,13 @@ export class StrategyUI {
     return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="eager"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong></button>`
   }
 
+  /** 전투 기록 결과 표시: 중립 습격은 방어하는 우리 입장(방어 성공/실패), 유저 공격은 공격 성공/실패 */
+  private battleLogBadge(log: { won: boolean; attackerKind: 'user' | 'ai' }): string {
+    const good = log.attackerKind === 'ai' ? !log.won : log.won
+    const label = log.attackerKind === 'ai' ? (log.won ? '방어 실패' : '방어 성공') : (log.won ? '공격 성공' : '공격 실패')
+    return `<span class="city-battle-log-result ${good ? 'is-win' : 'is-loss'}">${label}</span>`
+  }
+
   private cityManagementCard(city: City, income: ReturnType<typeof cityIncome>, state: StrategyState): string {
     const canManage = city.owner === state.faction
     const capitalFaction = capitalFactionForCity(city.id)
@@ -775,7 +782,7 @@ export class StrategyUI {
 
   private battleLogCard(city: City): string {
     const logs = [...(city.battleLogs ?? [])].reverse()
-    const entries = logs.length ? logs.map(log => `<li class="city-battle-log-entry"><span class="city-battle-log-result ${log.won ? 'is-win' : 'is-loss'}">${log.won ? '승리' : '패배'}</span><div><strong>${escapeHtml(log.attackerName)} → ${escapeHtml(log.defenderName)}</strong><small>${log.attackerKind === 'ai' ? '인공지능 공격' : '유저 공격'} · 피해 ${formatNumber(log.damage)} · ${escapeHtml(log.note)}</small></div><time>${new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(log.timestamp)}</time></li>`).join('') : '<li class="city-battle-log-empty">아직 기록된 전투가 없습니다. 수비덱을 배치한 뒤 공격을 받으면 이곳에 기록됩니다.</li>'
+    const entries = logs.length ? logs.map(log => `<li class="city-battle-log-entry">${this.battleLogBadge(log)}<div><strong>${escapeHtml(log.attackerName)} → ${escapeHtml(log.defenderName)}</strong><small>${log.attackerKind === 'ai' ? '인공지능 공격' : '유저 공격'} · 피해 ${formatNumber(log.damage)} · ${escapeHtml(log.note)}</small></div><time>${new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(log.timestamp)}</time></li>`).join('') : '<li class="city-battle-log-empty">아직 기록된 전투가 없습니다. 수비덱을 배치한 뒤 공격을 받으면 이곳에 기록됩니다.</li>'
     return `<details class="city-battle-log" ${logs.length ? 'open' : ''}><summary><span><span class="eyebrow">CITY BATTLE LOG</span><strong>성 전투 기록</strong></span><b>${logs.length}건</b></summary><p>이 성의 공성전·세력전과 인공지능 습격 결과를 최근 30건까지 보관합니다.</p><ul>${entries}</ul></details>`
   }
 

@@ -1,4 +1,5 @@
 import cityRoutes from '../../server/city-routes.json'
+import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
@@ -120,6 +121,10 @@ export interface FactionTerritorySnapshot {
   prosperity: number
   version?: number
   updatedAt?: string | Date
+  /** 서버에 저장된 진영 공용 수비대 (server/021_city_garrisons.sql). 구버전 서버에는 없다. */
+  garrisons?: { list: Array<{ id: string; power: number; averageLevel: number; label: string }>; defeated: number }
+  /** 가장 최근 중립 습격 결과 */
+  lastRaid?: { at: number; attackerCityId: string; attackerLevel: number; raidPower: number; attackerWon: boolean; damage: number; defenderLabel: string | null; captured: boolean } | null
 }
 
 export interface ResearchNode {
@@ -812,13 +817,57 @@ export function mergeFactionTerritories(state: StrategyState, snapshots: Faction
   state.cities.forEach(city => {
     const snapshot = byCityId.get(city.id)
     if (!snapshot) return
+    const wasAlly = city.owner === state.faction
     city.owner = snapshot.owner
     city.conquestProgress = Math.max(0, Math.min(100, Math.trunc(snapshot.conquestProgress)))
     city.defense = Math.max(0, Math.min(cityDefenseForLevel(city.level), Math.trunc(snapshot.defense)))
     city.prosperity = Math.max(0, Math.min(100, Math.trunc(snapshot.prosperity)))
+    mergeServerGarrisons(state, city, snapshot, wasAlly)
+    mergeLastRaid(state, city, snapshot)
     merged += 1
   })
   return merged
+}
+
+/** 아군 도시의 수비대는 서버(진영 공용)가 기준이다. 다른 진영·중립 도시의 공성 진행(격파 수)은 건드리지 않는다. */
+function mergeServerGarrisons(state: StrategyState, city: City, snapshot: FactionTerritorySnapshot, wasAlly: boolean): void {
+  if (!snapshot.garrisons) return // 구버전 서버: 로컬 수비대 유지
+  if (city.owner === state.faction) {
+    const local = new Map((city.garrisons ?? []).map(garrison => [garrison.id, garrison]))
+    city.garrisons = snapshot.garrisons.list.slice(0, MAX_CITY_GARRISONS).map(garrison => ({
+      id: garrison.id,
+      generalIds: local.get(garrison.id)?.generalIds ?? [],
+      averageLevel: garrison.averageLevel,
+      power: garrison.power,
+      source: 'player' as const,
+      label: garrison.label,
+    }))
+    city.defendersDefeated = Math.max(0, Math.min(city.garrisons.length, Math.trunc(snapshot.garrisons.defeated)))
+  } else if (wasAlly) {
+    // 아군 도시를 잃었다: 우리 수비대는 사라지고 새 주인의 수비 라인이 선다.
+    city.garrisons = city.owner === '중립' ? createDummyCityGarrisons(city) : []
+    city.defendersDefeated = 0
+  }
+}
+
+function raidAttackerName(cityId: string, state: StrategyState): string {
+  if (cityId === 'drill') return '중립 인공지능 습격대'
+  const attacker = state.cities.find(city => city.id === cityId)
+  return attacker ? `${attacker.name} 중립 습격대` : '중립 인공지능 습격대'
+}
+
+/** 서버 자동 습격 결과를 우리 도시 전투 기록에 한 번만 남긴다. */
+function mergeLastRaid(state: StrategyState, city: City, snapshot: FactionTerritorySnapshot): void {
+  const raid = snapshot.lastRaid
+  if (!raid || typeof raid.at !== 'number' || raid.attackerCityId === 'drill') return
+  if (city.owner !== state.faction && !raid.captured) return
+  city.battleLogs ??= []
+  if (city.battleLogs.some(log => log.attackerKind === 'ai' && log.timestamp === raid.at)) return
+  const note = !raid.attackerWon
+    ? `${raid.defenderLabel ?? '수비대'} 방어 성공 · 성벽 방어도 유지`
+    : raid.captured ? `수비 실패 · 도시를 빼앗겼습니다 (성벽 -${raid.damage})`
+    : `${raid.defenderLabel ? `${raid.defenderLabel} 격파 · ` : '수비대 없음 · '}성벽 방어도 -${raid.damage}`
+  addCityBattleLog(city, { timestamp: raid.at, attackerName: raidAttackerName(raid.attackerCityId, state), attackerKind: 'ai', defenderName: state.faction, won: raid.attackerWon, damage: raid.damage, note })
 }
 
 export function allGenerals(): General[] {
@@ -1394,6 +1443,16 @@ function territoryBattleCost(city: City): Partial<Record<ResourceKey, number>> {
   return { grain: 280 + city.level * 90, silver: 220 + city.level * 80, iron: 100 + city.level * 55 }
 }
 
+/** 이 도시를 칠 수 있는 중립 습격대의 레벨: 맞닿은 중립 도시 중 가장 높은 레벨 (없으면 도시 자신의 레벨). 서버와 같은 기준. */
+export function neutralRaidLevelFor(state: StrategyState, cityId: string): number {
+  const levels = (CITY_ADJACENCY[cityId] ?? []).map(id => findCity(state, id)).filter((city): city is City => Boolean(city) && city!.owner === '중립').map(city => city.level)
+  return levels.length ? Math.max(...levels) : (findCity(state, cityId)?.level ?? 1)
+}
+
+/**
+ * 방어전: 중립 습격대가 아군 도시를 친다. 판정은 서버 자동 습격과 같은 규칙(server/neutral-raid.mjs).
+ * 결과의 won은 '우리 수비대가 막아냈는가'이다. 방어전으로는 도시를 잃지 않는다.
+ */
 export function defendCity(state: StrategyState, cityId: string, now = Date.now()): TerritoryBattleResult {
   const city = findCity(state, cityId)
   if (!city) return { ok: false, won: false, message: '해당 도시를 찾을 수 없습니다.', damage: 0 }
@@ -1403,26 +1462,25 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
   const cost = territoryBattleCost(city)
   if (!spendResources(state, cost)) return { ok: false, won: false, message: '방어전 보급품이 부족합니다.', damage: 0 }
   state.lastDefenseAt = now
-  const aiPower = city.level * 340 + 620 + city.level * 180
-  const defenseLine = defenseLineForCity(city)
-  if (!city.garrisons?.length) city.garrisons = defenseLine
-  const defeated = Math.max(0, Math.min(defenseLine.length, city.defendersDefeated ?? 0))
-  const currentGarrison = defenseLine[defeated]
-  const defenderPower = currentGarrison?.power ?? (city.level * 5000 + city.level * 180)
-  const won = aiPower >= defenderPower * 0.75
-  const damage = won ? wallDamageFromPower(aiPower) : 0
-  addCityBattleLog(city, { timestamp: now, attackerName: '중립 인공지능 습격대', attackerKind: 'ai', defenderName: state.faction, won, damage, note: won ? `수비병 격파 · 성벽 방어도 -${damage}` : '수비병 방어 성공 · 전선이 유지되었습니다.' })
-  if (won) {
-    city.defendersDefeated = defeated + 1
-    const breachThreshold = cityBreachThreshold(city)
-    city.defense = Math.max(breachThreshold, city.defense - damage)
+  const garrisons = (city.garrisons ?? []).filter(garrison => garrison.source === 'player')
+  const raidPower = neutralRaidPower(neutralRaidLevelFor(state, city.id))
+  const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.map(garrison => garrison.power), defeated: city.defendersDefeated ?? 0, defense: city.defense, allowCapture: false })
+  const defender = result.defenderIndex >= 0 ? garrisons[result.defenderIndex] : undefined
+  const held = !result.attackerWon
+  city.garrisons = garrisons
+  city.defendersDefeated = result.defeated
+  city.defense = result.defense
+  if (held) {
     state.factionWarScore += 100
-    state.lastNotice = `${city.name} 인공지능 습격 방어 성공 · 수비병 ${city.defendersDefeated}/${defenseLine.length} 격파 · 성벽 방어도 -${damage}`
+    state.lastNotice = `${city.name} 방어 성공 · ${defender?.label ?? '수비대'}가 습격대(전력 ${formatNumber(raidPower)})를 막았습니다 · 성벽 방어도 유지 · 세력전 공헌 +100`
   } else {
     city.prosperity = Math.max(20, city.prosperity - 4)
-    state.lastNotice = `${city.name} 수비병이 인공지능 습격을 막아냈습니다. 성벽 방어도 ${city.defense}`
+    state.lastNotice = defender
+      ? `${city.name} 방어 실패 · ${defender.label} 격파 · 성벽 방어도 -${formatNumber(result.damage)} · 남은 수비대 ${result.remaining}`
+      : `${city.name} 수비대가 없어 성벽이 습격당했습니다 · 성벽 방어도 -${formatNumber(result.damage)} · 아군 진형을 수비병으로 세우십시오`
   }
-  return { ok: true, won, message: state.lastNotice, damage }
+  addCityBattleLog(city, { timestamp: now, attackerName: '중립 인공지능 습격대', attackerKind: 'ai', defenderName: state.faction, won: result.attackerWon, damage: result.damage, note: held ? `${defender?.label ?? '수비대'} 방어 성공 · 성벽 방어도 유지` : defender ? `${defender.label} 격파 · 성벽 방어도 -${result.damage}` : `수비대 없음 · 성벽 방어도 -${result.damage}` })
+  return { ok: true, won: held, message: state.lastNotice, damage: result.damage }
 }
 
 export function launchFactionBattle(state: StrategyState, cityId: string, now = Date.now()): TerritoryBattleResult {

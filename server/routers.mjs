@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getFactionTerritories, getGameState, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getFactionTerritories, getGameState, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -47,6 +47,22 @@ export const gameRouter = router({
     }).strict()).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 영토 전투를 기록할 수 없습니다.')
       return recordFactionTerritoryBattle(ctx.user.id, input)
+    }),
+    deployGarrison: protectedProcedure.input(z.object({
+      cityId: z.string().trim().min(1).max(64),
+      garrisonId: z.string().trim().min(1).max(96),
+      power: z.number().int().min(0).max(2_000_000),
+      averageLevel: z.number().int().min(1).max(999),
+      label: z.string().trim().min(1).max(40),
+    }).strict()).mutation(async ({ ctx, input }) => {
+      if (ctx.user.isCron) throw new Error('예약 실행 계정은 수비병을 세울 수 없습니다.')
+      return deployFactionGarrison(ctx.user.id, input)
+    }),
+    recordDefense: protectedProcedure.input(z.object({
+      cityId: z.string().trim().min(1).max(64),
+    }).strict()).mutation(async ({ ctx, input }) => {
+      if (ctx.user.isCron) throw new Error('예약 실행 계정은 방어전을 지휘할 수 없습니다.')
+      return recordFactionDefense(ctx.user.id, input)
     }),
   }),
   account: router({
