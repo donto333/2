@@ -497,7 +497,7 @@
 .mobile-city-selector{display:none}
 @media (max-width:760px){
   /* 모바일 지도는 서쪽 산맥 여백을 덜어내고 본토 영역을 가로로 확대한다. */
-  .page-section--territory .map-canvas{width:calc(100% + 24px);margin-left:-12px;height:620px;min-height:620px;aspect-ratio:auto;background-size:118% 100%;background-position:78% center;touch-action:pan-y}
+  .page-section--territory .map-canvas{width:calc(100% + 24px);margin-left:-12px;height:620px;min-height:620px;aspect-ratio:auto;background-size:130% 100%;background-position:55% center;touch-action:pan-y}
   .page-section--territory .city-marker{transform:translate(-50%,-50%) scale(.62)}
   .page-section--territory .city-marker:hover,.page-section--territory .city-marker.is-selected{transform:translate(-50%,-50%) scale(.7)}
   .mobile-city-selector{display:block;margin-top:12px;padding:13px 10px;border:1px solid rgba(82,224,196,.2);background:rgba(7,20,22,.58)}
