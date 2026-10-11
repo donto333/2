@@ -760,7 +760,7 @@ function getQueryParam(req, key) {
   const value = req.query[key];
   return typeof value === "string" ? value : void 0;
 }
-function registerOAuthRoutes(app) {
+function registerOAuthRoutes(app, { afterLogin } = {}) {
   app.get("/api/oauth/callback", async (req, res) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
@@ -795,6 +795,8 @@ function registerOAuthRoutes(app) {
       });
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      // Steam 데스크톱 앱 로그인(server/desktop-auth.mjs)이면 앱으로 돌려보낸다.
+      if (afterLogin && await afterLogin(req, res, { openId: userInfo.openId, name: userInfo.name || "" })) return;
       res.redirect(302, "/");
     } catch (error) {
       console.error("[OAuth] Callback failed", error instanceof Error ? error.message : "unknown error");
@@ -993,6 +995,10 @@ function publicPlatformConfig(env = process.env) {
   };
 }
 export {
+  ENV,
+  OAUTH_STATE_COOKIE,
+  ONE_YEAR_MS,
+  sdk,
   createContext,
   adminProcedure,
   getDb,

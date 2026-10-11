@@ -8,11 +8,12 @@
 //  3. 게임 화면의 Steam 업적 요청을 IPC로 받아 Steamworks에 전달한다
 'use strict'
 
-const { app, BrowserWindow, ipcMain, net, protocol, shell, session } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, net, protocol, shell, session } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const steam = require('./steam.cjs')
+const browserLogin = require('./browser-login.cjs')
 
 const APP_SCHEME = 'app'
 const APP_HOST = 'cheonharo'
@@ -132,7 +133,7 @@ function registerIpc(config) {
 // ---------------------------------------------------------------------------
 // 창 만들기
 // ---------------------------------------------------------------------------
-function createWindow(config) {
+function createWindow(config, hooks = {}) {
   const win = new BrowserWindow({
     width: 1600,
     height: 900,
@@ -171,7 +172,9 @@ function createWindow(config) {
     return { action: 'deny' }
   })
   // 같은 창 안에서는 https 이동(로그인 포털 → 서버 콜백)과 app:// 만 허용한다.
+  // Manus 로그인 포털로 가는 이동은 기본 브라우저 로그인으로 바꾼다(Google이 앱 안 로그인을 막기 때문).
   win.webContents.on('will-navigate', (event, url) => {
+    if (hooks.interceptLogin?.(url)) { event.preventDefault(); return }
     if (url.startsWith(LOCAL_ORIGIN + '/') || /^https:\/\//i.test(url)) return
     event.preventDefault()
   })
@@ -184,12 +187,40 @@ async function start() {
   registerAppProtocol()
   registerIpc(config)
 
-  // 일부 로그인 페이지는 Electron 표기가 들어간 User-Agent를 차단하므로 일반 Chrome 표기로 맞춘다.
-  const userAgent = session.defaultSession.getUserAgent().replace(/\s*Electron\/\S+/, '').replace(/\s*cheonharo-desktop\/\S+/i, '')
-  session.defaultSession.setUserAgent(userAgent)
-
-  const win = createWindow(config)
   const online = config.mode !== 'offline' && await probeOnline(config)
+  const onlineOrigin = online ? new URL(config.onlineUrl).origin : ''
+  const desktopLogin = online && await browserLogin.supportsDesktopLogin(net.fetch, onlineOrigin)
+  let pendingLogin = null
+  let win = null
+
+  // 로그인 포털(…/app-auth)로 이동하려 하면 기본 브라우저 로그인을 시작한다.
+  function interceptLogin(url) {
+    if (!desktopLogin) return false // 구버전 서버: 기존처럼 창 안에서 로그인
+    let target
+    try { target = new URL(url) } catch { return false }
+    if (target.origin === onlineOrigin || !/\/app-auth\/?$/.test(target.pathname)) return false
+    pendingLogin?.cancel()
+    const title = win.getTitle()
+    win.setTitle('천하: 패왕의 시대 — 브라우저에서 로그인하는 중…')
+    const login = browserLogin.startBrowserLogin({ origin: onlineOrigin, fetch: net.fetch, openExternal: target2 => shell.openExternal(target2) })
+    pendingLogin = login
+    login.promise.then(async result => {
+      await browserLogin.applySession(session.defaultSession, onlineOrigin, result)
+      await win.loadURL(config.onlineUrl).catch(() => {})
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }).catch(error => {
+      if (error?.message === 'login_cancelled') return
+      console.warn(`[cheonharo] 브라우저 로그인 실패: ${error?.message || error}`)
+      void dialog.showMessageBox(win, { type: 'warning', title: '로그인', message: '로그인을 완료하지 못했습니다.', detail: '게임에서 로그인을 다시 시도해 주세요.' })
+    }).finally(() => {
+      if (pendingLogin === login) pendingLogin = null
+      win.setTitle(title)
+    })
+    return true
+  }
+
+  win = createWindow(config, { interceptLogin })
   const offlineUrl = `${LOCAL_ORIGIN}/index.html`
 
   if (online) {

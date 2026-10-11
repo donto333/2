@@ -29,6 +29,7 @@
       "main.cjs",
       "preload.cjs",
       "steam.cjs",
+      "browser-login.cjs",
       "cheonharo.config.json",
       "steam-achievements.json",
       "build/icon.png",

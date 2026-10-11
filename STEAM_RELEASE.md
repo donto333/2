@@ -44,6 +44,21 @@ steam/upload.ps1            SteamPipe 업로드 스크립트
 
 `mode`: `auto`(서버 확인 후 결정) · `offline`(항상 오프라인). 실행 인자 `--offline`, `--online`, `--fullscreen`도 쓸 수 있다.
 
+## 로그인 (기본 브라우저 방식)
+
+Google은 앱 안에 들어 있는 창(Electron)에서의 Google 계정 로그인을 차단한다. 그래서 Steam 앱에서는 로그인만 PC의 기본 브라우저에서 한다.
+
+1. 게임에서 로그인 버튼 → 기본 브라우저(Chrome/Edge)가 열리고 Manus 로그인 화면이 나온다.
+2. 로그인을 마치면 브라우저에 "로그인 완료 — 게임 창으로 돌아가세요"가 뜬다.
+3. 게임 창이 자동으로 로그인 상태로 새로 고쳐진다.
+
+동작 방식: 데스크톱 앱 로그인 표준(RFC 8252 loopback + PKCE). 브라우저는 5분짜리 1회용 티켓만 앱(127.0.0.1)에 넘기고, 앱만 아는 비밀값이 있어야 티켓을 로그인 상태로 바꿀 수 있다.
+
+- 서버: `server/desktop-auth.mjs` (새 파일), `server/app.mjs`, `server/webdev-adapter.mjs`(OAuth 콜백에 한 줄 연결)
+- 앱: `desktop/browser-login.cjs`, `desktop/main.cjs`
+- **서버에 이 기능이 배포되기 전**에는 앱이 이를 감지하고 예전처럼 창 안에서 로그인한다(이 경우 Google 로그인은 막힘).
+- 웹 버전의 로그인 흐름은 바뀌지 않는다.
+
 ## Steam 업적
 
 | 게임 ID | 조건 | 테스트 App ID 480에서 쓰는 이름 |
@@ -97,7 +112,7 @@ npm run dist:win                # desktop/release/win-unpacked/ 생성
 
 - [ ] 실제 App ID 반영, 업적 등록·게시
 - [ ] 온라인 서버(`onlineUrl`)가 Steam 출시 기간 동안 계속 살아 있는지
-- [ ] Steam 데스크톱 창 안에서 Manus 로그인이 끝까지 되는지 (로그인 포털이 앱 안 창을 막으면 오프라인 위주로 출시하거나 Steam 로그인 연동을 검토)
+- [ ] 서버 변경(데스크톱 로그인)을 Manus에 배포하고, Steam 앱에서 기본 브라우저 로그인이 끝까지 되는지
 - [ ] 웹 버전을 서버에 다시 배포했는지 (온라인 모드 업적)
 - [ ] 스토어 페이지: 캡슐 이미지, 스크린샷 5장 이상, 트레일러, 설명, 연령 등급 설문
 - [ ] 결제·가챠 요소가 있으면 Steam 정책(외부 결제 금지, 확률 공개 등)에 맞는지
