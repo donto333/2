@@ -143,9 +143,9 @@ export class Arena {
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.05
-    this.scene.background = new THREE.Color(0x0b1518)
-    this.scene.fog = new THREE.FogExp2(0x18262a, 0.019)
+    this.renderer.toneMappingExposure = 1.12
+    this.scene.background = new THREE.Color(0x2a1810) // 컬러 테마: 따뜻한 해질녘
+    this.scene.fog = new THREE.FogExp2(0x4a3020, 0.016)
     this.camera.position.copy(this.cameraBase)
     this.camera.lookAt(this.cameraLookAt)
     this.buildLighting()
@@ -159,7 +159,7 @@ export class Arena {
   }
 
   private buildLighting(): void {
-    const sky = new THREE.HemisphereLight(0x9bb7b3, 0x151313, 2.15)
+    const sky = new THREE.HemisphereLight(0xf0d2a8, 0x2a1c12, 2.3)
     this.scene.add(sky)
     const sun = new THREE.DirectionalLight(0xffd7a0, 5.2)
     sun.position.set(-14, 28, 12)
@@ -534,7 +534,7 @@ export class Arena {
     const group = new THREE.Group()
     group.position.set(0, 3.15, 0)
     group.renderOrder = 8
-    const background = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.11), new THREE.MeshBasicMaterial({ color: 0x101719, transparent: true, opacity: 0.78, depthTest: false, depthWrite: false }))
+    const background = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.11), new THREE.MeshBasicMaterial({ color: 0x1c120c, transparent: true, opacity: 0.78, depthTest: false, depthWrite: false }))
     const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.065), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.96, depthTest: false, depthWrite: false }))
     background.position.z = 0.02
     fill.position.set(-0.79, 0, 0.03)

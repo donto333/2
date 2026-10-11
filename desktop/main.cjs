@@ -140,7 +140,7 @@ function createWindow(config, hooks = {}) {
     minWidth: 1024,
     minHeight: 600,
     show: false,
-    backgroundColor: '#101a1d',
+    backgroundColor: '#2a1810',
     title: '천하: 패왕의 시대',
     icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: true,

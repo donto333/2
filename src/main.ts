@@ -1,4 +1,5 @@
 import './styles/main.css'
+import './styles/theme-color.css'
 import { ManusAuth } from '../manus-auth.js'
 import { createLeaderboardClient, type Result, type RunTicket } from '../leaderboard.js'
 import { Arena } from './game/arena'
