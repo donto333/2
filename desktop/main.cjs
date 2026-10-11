@@ -28,7 +28,7 @@ function readJson(file) {
 }
 
 function loadConfig() {
-  const defaults = { onlineUrl: 'https://cheonharo-ldzrvuvj.manus.game/', mode: 'auto', steamAppId: 480, healthTimeoutMs: 5000, fullscreen: false }
+  const defaults = { onlineUrl: 'https://cheonharo-wv7unoxx.manus.game/', mode: 'auto', steamAppId: 480, healthTimeoutMs: 5000, fullscreen: false }
   const bundled = readJson(path.join(__dirname, 'cheonharo.config.json'))
   const besideExe = app.isPackaged ? readJson(path.join(path.dirname(process.execPath), 'cheonharo.config.json')) : {}
   const config = { ...defaults, ...bundled, ...besideExe }

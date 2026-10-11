@@ -34,7 +34,7 @@ steam/upload.ps1            SteamPipe 업로드 스크립트
 
 ```json
 {
-  "onlineUrl": "https://cheonharo-ldzrvuvj.manus.game/",
+  "onlineUrl": "https://cheonharo-wv7unoxx.manus.game/",
   "mode": "auto",
   "steamAppId": 480,
   "healthTimeoutMs": 5000,
