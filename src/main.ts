@@ -905,6 +905,9 @@ arena = new Arena(canvas, {
     activeScenario = null
     duelActive = false
     if (wasScenario) queueAccountSave(true)
+    // Arena가 비활성 상태가 된 것을 먼저 UI에 전달한다. 시나리오·대련처럼
+    // state.section이 battle로 남는 전투도 결과 모달 전에 전체화면을 종료한다.
+    ui.updateBattle(arena.getSnapshot())
     ui.render(state)
     ui.showBattleResult(result, state.lastNotice)
     syncSteam()
