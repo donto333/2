@@ -1,0 +1,47 @@
+name: 웹 미리보기 (GitHub Pages)
+
+# main에 올릴 때마다 오프라인 플레이용 웹 게임을 https://donto333.github.io/2/ 에 배포한다.
+# 휴대폰 브라우저에서 바로 열어 볼 수 있다. (온라인 로그인·랭킹은 동작하지 않는 미리보기)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: 웹 게임 빌드
+        run: pnpm run manus:build-source
+      - name: Pages 하위 경로 보정
+        run: node scripts/pages-rebase.mjs dist "/${{ github.event.repository.name }}/"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
