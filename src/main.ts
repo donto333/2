@@ -2,6 +2,7 @@ import './styles/main.css'
 import { ManusAuth } from '../manus-auth.js'
 import { createLeaderboardClient, type Result, type RunTicket } from '../leaderboard.js'
 import { Arena } from './game/arena'
+import { isSteamDesktop, syncSteamAchievements } from './platform/steam'
 import {
   createInitialState,
   allGenerals,
@@ -56,6 +57,12 @@ const GUEST_GAME_SAVE_KEY = 'cheonharo.strategy.save.guest.v2'
 const GUEST_ACCESS_KEY = 'cheonharo.access.guest.v1'
 const PENDING_TERRITORY_BATTLES_KEY = 'cheonharo.territory.pending-battles.v1'
 const state: StrategyState = createInitialState()
+
+// Steam 데스크톱 버전: 진행도에 따라 업적을 해금한다 (웹에서는 아무 일도 하지 않음).
+function syncSteam(): void {
+  syncSteamAchievements({ wins: state.wins, generalCount: state.generals.length, scenarioClearedCount: state.scenarioCleared.length })
+}
+if (isSteamDesktop()) window.setInterval(syncSteam, 5000)
 let localSaveDirty = false
 
 type PendingTerritoryBattle = { cityId: string; damage: number; won: boolean; captured: boolean }
@@ -395,6 +402,7 @@ const ui = new StrategyUI(root, {
   onRecruit: count => {
     const result = recruit(state, count)
     ui.render(state)
+    if (result.ok) syncSteam()
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
     if (result.ok && count === 10) ui.showRecruitResults(result.rewards)
@@ -731,6 +739,7 @@ arena = new Arena(canvas, {
     if (wasScenario) queueAccountSave(true)
     ui.render(state)
     ui.showBattleResult(result.won, result.score)
+    syncSteam()
     if (siege) {
       queueAccountSave(true)
       void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })

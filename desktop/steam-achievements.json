@@ -1,0 +1,17 @@
+{
+  "_comment": "게임 안 업적 ID 목록. 실제 App ID를 받으면 Steamworks 파트너 사이트에 같은 API 이름으로 업적을 등록하세요. appIdOverrides는 테스트 App ID(480 Spacewar)에서 Spacewar 업적 이름으로 바꿔 시험하기 위한 것입니다.",
+  "achievements": [
+    { "id": "FIRST_VICTORY", "name": "첫 승리", "description": "전투에서 처음으로 승리한다." },
+    { "id": "VETERAN_100", "name": "백전노장", "description": "전투에서 100번 승리한다." },
+    { "id": "RECRUIT_10", "name": "인재 등용", "description": "무장 10명을 거느린다." },
+    { "id": "SCENARIO_FIRST", "name": "역사의 한 장", "description": "시나리오 전투를 처음 클리어한다." }
+  ],
+  "appIdOverrides": {
+    "480": {
+      "FIRST_VICTORY": "ACH_WIN_ONE_GAME",
+      "VETERAN_100": "ACH_WIN_100_GAMES",
+      "RECRUIT_10": "ACH_TRAVEL_FAR_ACCUM",
+      "SCENARIO_FIRST": "ACH_TRAVEL_FAR_SINGLE"
+    }
+  }
+}
