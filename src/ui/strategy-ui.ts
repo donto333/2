@@ -9,18 +9,36 @@ type RosterSort = 'power' | 'level' | 'grade' | 'name' | 'role'
 type EquipmentSort = 'grade' | 'level' | 'name'
 type FormationSort = 'power' | 'grade'
 
+// 도시 위치: 삼국시대 치소의 실제 경위도를 지도 그림 좌표(%)로 옮긴 값.
+// scripts/map/geo-fit.py가 해안·섬·강·분지 기준점 18곳으로 그림의 원근 왜곡을 맞춰 계산한다.
 const CITY_MAP_POSITIONS: Readonly<Record<string, { x: number; y: number }>> = {
-  chengdu: { x: 30, y: 66 }, hanzhong: { x: 37, y: 52 }, fucheng: { x: 31, y: 73 }, xindu: { x: 27, y: 68 },
-  tianshui: { x: 34, y: 37 }, wuwei: { x: 21, y: 22 }, wancheng: { x: 52, y: 45 }, xiangyang: { x: 57, y: 52 },
-  jiangling: { x: 57, y: 62 }, yiling: { x: 49, y: 59 }, changsha: { x: 63, y: 74 }, lingling: { x: 56, y: 84 },
-  guiyang: { x: 47, y: 79 }, luoyang: { x: 59, y: 36 }, ye: { x: 68, y: 23 }, chenliu: { x: 68, y: 41 },
-  puyang: { x: 76, y: 31 }, xuchang: { x: 63, y: 47 }, hefei: { x: 74, y: 55 }, shouchun: { x: 67, y: 51 },
-  jiujiang: { x: 65, y: 66 }, poyang: { x: 70, y: 71 }, jianye: { x: 78, y: 58 }, wujun: { x: 82, y: 66 }, kuaiji: { x: 79, y: 75 },
-  changan: { x: 48, y: 25 }, meixian: { x: 42, y: 29 }, anding: { x: 38, y: 24 }, jinyang: { x: 66, y: 16 }, pingyuan: { x: 77, y: 24 },
-  beihai: { x: 85, y: 31 }, langya: { x: 84, y: 42 }, xiapi: { x: 79, y: 47 }, guangling: { x: 82, y: 53 }, lujiang: { x: 76, y: 64 },
-  shangyong: { x: 48, y: 47 }, xinye: { x: 55, y: 45 }, jiangxia: { x: 67, y: 56 }, wuling: { x: 53, y: 72 }, badong: { x: 43, y: 66 },
-  jianning: { x: 34, y: 84 }, yunnan: { x: 26, y: 90 }, jiaozhi: { x: 48, y: 95 }, shixing: { x: 60, y: 88 }, nanhai: { x: 68, y: 94 },
+  chengdu: { x: 29.8, y: 44.7 }, xindu: { x: 30.1, y: 44.2 }, fucheng: { x: 31.8, y: 42.0 }, hanzhong: { x: 37.5, y: 37.2 }, badong: { x: 44.8, y: 48.2 },
+  jianning: { x: 27.4, y: 65.8 }, yunnan: { x: 17.0, y: 63.3 }, jiaozhi: { x: 32.9, y: 85.7 }, nanhai: { x: 58.6, y: 81.9 }, shixing: { x: 59.1, y: 75.6 },
+  guiyang: { x: 57.0, y: 72.2 }, lingling: { x: 52.3, y: 69.6 }, changsha: { x: 56.1, y: 63.1 }, wuling: { x: 51.9, y: 58.9 }, jiangling: { x: 53.2, y: 53.3 },
+  yiling: { x: 50.3, y: 51.0 }, jiangxia: { x: 59.7, y: 53.1 }, xiangyang: { x: 52.7, y: 44.9 }, xinye: { x: 53.3, y: 42.3 }, wancheng: { x: 53.8, y: 39.8 },
+  shangyong: { x: 46.6, y: 43.1 }, xuchang: { x: 58.0, y: 33.6 }, luoyang: { x: 53.8, y: 30.8 }, chenliu: { x: 60.8, y: 29.7 }, puyang: { x: 61.9, y: 25.0 },
+  ye: { x: 60.2, y: 22.3 }, jinyang: { x: 52.9, y: 17.3 }, pingyuan: { x: 66.3, y: 19.9 }, beihai: { x: 75.1, y: 22.0 }, langya: { x: 73.0, y: 29.3 },
+  xiapi: { x: 71.5, y: 33.2 }, guangling: { x: 76.4, y: 40.9 }, jianye: { x: 74.3, y: 42.5 }, wujun: { x: 80.9, y: 45.7 }, kuaiji: { x: 81.5, y: 51.8 },
+  hefei: { x: 69.2, y: 44.0 }, shouchun: { x: 67.7, y: 40.6 }, lujiang: { x: 69.4, y: 46.5 }, jiujiang: { x: 65.4, y: 54.4 }, poyang: { x: 67.9, y: 56.6 },
+  changan: { x: 41.9, y: 33.0 }, meixian: { x: 38.9, y: 32.6 }, anding: { x: 37.0, y: 26.1 }, tianshui: { x: 32.4, y: 29.0 }, wuwei: { x: 23.9, y: 14.4 },
 }
+
+// 후한 말 13주(州) 이름표 위치 (같은 방식으로 계산)
+const MAP_REGION_LABELS: ReadonlyArray<{ id: string; name: string; hanja: string; x: number; y: number }> = [
+  { id: 'liangzhou', name: '양주', hanja: '涼州', x: 22.2, y: 17.8 },
+  { id: 'yongzhou', name: '옹주', hanja: '雍州', x: 38.2, y: 28.4 },
+  { id: 'bingzhou', name: '병주', hanja: '幷州', x: 52.2, y: 14.5 },
+  { id: 'jizhou', name: '기주', hanja: '冀州', x: 63.4, y: 17.7 },
+  { id: 'qingzhou', name: '청주', hanja: '青州', x: 72.0, y: 21.2 },
+  { id: 'sili', name: '사례', hanja: '司隷', x: 50.4, y: 30.3 },
+  { id: 'yanzhou', name: '연주', hanja: '兗州', x: 65.8, y: 26.1 },
+  { id: 'yuzhou', name: '예주', hanja: '豫州', x: 61.6, y: 35.6 },
+  { id: 'xuzhou', name: '서주', hanja: '徐州', x: 73.6, y: 34.0 },
+  { id: 'yangzhou', name: '양주', hanja: '揚州', x: 72.1, y: 49.9 },
+  { id: 'jingzhou', name: '형주', hanja: '荊州', x: 52.1, y: 56.5 },
+  { id: 'yizhou', name: '익주', hanja: '益州', x: 32.6, y: 52.4 },
+  { id: 'jiaozhou', name: '교주', hanja: '交州', x: 48.1, y: 81.0 },
+]
 
 export interface AuthView {
   status: 'authenticated' | 'logged_out' | 'offline'
@@ -656,7 +674,7 @@ export class StrategyUI {
 
   private mapViewport(state: StrategyState): string {
     const home = FACTION_CAPITALS[state.faction]
-    return `<div class="map-viewport" data-map-viewport data-lod="far"><div class="map-world map-canvas" data-map-world><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}<span class="map-label map-label--north">중원</span><span class="map-label map-label--south">강동</span><span class="map-label map-label--west">익주</span></div><div class="map-controls"><button type="button" data-map-action="zoom-in" data-map-zoom-in aria-label="확대">＋</button><button type="button" data-map-action="zoom-out" data-map-zoom-out aria-label="축소">－</button><button type="button" data-map-action="home" data-home="${home}" aria-label="내 영토로">⌖</button><button type="button" data-map-action="fullscreen" aria-label="지도 전체 화면">${this.territoryMap.fullscreen ? '✕' : '⛶'}</button></div><div class="map-hint"><span class="hint-touch">두 손가락으로 확대 · 끌어서 이동 · 눌러서 도시 선택</span><span class="hint-mouse">휠로 확대 · 끌어서 이동 · 눌러서 도시 선택</span></div></div>`
+    return `<div class="map-viewport" data-map-viewport data-lod="far"><div class="map-world map-canvas" data-map-world><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}${MAP_REGION_LABELS.map(region => `<span class="map-label map-label--province" style="left:${region.x}%;top:${region.y}%">${region.name}<small>${region.hanja}</small></span>`).join('')}</div><div class="map-controls"><button type="button" data-map-action="zoom-in" data-map-zoom-in aria-label="확대">＋</button><button type="button" data-map-action="zoom-out" data-map-zoom-out aria-label="축소">－</button><button type="button" data-map-action="home" data-home="${home}" aria-label="내 영토로">⌖</button><button type="button" data-map-action="fullscreen" aria-label="지도 전체 화면">${this.territoryMap.fullscreen ? '✕' : '⛶'}</button></div><div class="map-hint"><span class="hint-touch">두 손가락으로 확대 · 끌어서 이동 · 눌러서 도시 선택</span><span class="hint-mouse">휠로 확대 · 끌어서 이동 · 눌러서 도시 선택</span></div></div>`
   }
 
   private attachTerritoryMap(state: StrategyState): void {

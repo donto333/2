@@ -395,7 +395,7 @@ export function createCities(): City[] {
     { id: 'poyang', name: '파양', chineseName: '鄱陽', region: '강동 호수길', owner: '중립', level: 2, prosperity: 62, defense: 59, buildings: createBuildings(1) },
     { id: 'hefei', name: '합비', chineseName: '合肥', region: '회남 전선', owner: '중립', level: 3, prosperity: 64, defense: 88, buildings: createBuildings(2) },
     { id: 'shouchun', name: '수춘', chineseName: '壽春', region: '회남 중심', owner: '중립', level: 3, prosperity: 68, defense: 79, buildings: createBuildings(2) },
-    { id: 'jiujiang', name: '구강', chineseName: '九江', region: '회수 수운', owner: '중립', level: 2, prosperity: 57, defense: 55, buildings: createBuildings(1) },
+    { id: 'jiujiang', name: '시상', chineseName: '柴桑', region: '장강 수운 · 오의 거점', owner: '중립', level: 2, prosperity: 57, defense: 55, buildings: createBuildings(1) },
     { id: 'tianshui', name: '천수', chineseName: '天水', region: '농서 동문', owner: '중립', level: 2, prosperity: 53, defense: 71, buildings: createBuildings(1) },
     { id: 'wuwei', name: '무위', chineseName: '武威', region: '하서 회랑', owner: '중립', level: 1, prosperity: 42, defense: 61, buildings: createBuildings(1) },
     { id: 'fucheng', name: '부성', chineseName: '涪城', region: '익주 북방', owner: '중립', level: 2, prosperity: 51, defense: 58, buildings: createBuildings(1) },
@@ -426,8 +426,14 @@ export function createCities(): City[] {
 }
 
 export function ensureCityRoster(state: StrategyState): void {
+  const template = new Map(createCities().map(city => [city.id, city]))
+  // 저장된 도시도 이름·한자·지역 설명은 최신 정의를 따른다(예: 구강 九江 → 시상 柴桑 지명 정정).
+  state.cities.forEach(city => {
+    const latest = template.get(city.id)
+    if (latest) { city.name = latest.name; city.chineseName = latest.chineseName; city.region = latest.region }
+  })
   const existing = new Set(state.cities.map(city => city.id))
-  const fresh = createCities().filter(city => !existing.has(city.id))
+  const fresh = [...template.values()].filter(city => !existing.has(city.id))
   state.cities.push(...fresh)
 }
 function dummyDefenseLevel(city: City): number {

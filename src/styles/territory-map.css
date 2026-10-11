@@ -48,7 +48,26 @@ body .map-viewport .map-world.map-canvas {
   --map-inv: 1;
 }
 body .map-viewport .map-world .territory-frontlines line { vector-effect: non-scaling-stroke; stroke-width: 2px; }
-body .map-viewport .map-world .map-label { transform: scale(var(--map-inv)); transform-origin: center; }
+/* 13주(州) 이름표: 실제 위치 중심에 놓고 화면 크기 고정. 가까이 확대하면 도시 이름을 가리지 않게 흐리게 */
+body .map-viewport .map-label--province {
+  position: absolute;
+  z-index: 1;
+  transform: translate(-50%, -50%) scale(var(--map-inv));
+  transform-origin: center;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  color: rgba(255, 228, 168, .9);
+  font: 700 16px/1.1 'Noto Serif KR', 'Nanum Myeongjo', 'Batang', serif;
+  letter-spacing: .32em;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 1px 2px #000, 0 0 8px rgba(30, 10, 2, .9);
+  transition: opacity .25s;
+}
+body .map-viewport .map-label--province small { font-size: 11px; letter-spacing: .2em; color: rgba(255, 228, 168, .75); }
+body .map-viewport[data-lod='mid'] .map-label--province { opacity: .88; }
+body .map-viewport[data-lod='near'] .map-label--province { opacity: .35; }
 
 /* ── 도시 표식: 화면 크기 고정, 누르기는 창이 받아 가장 가까운 도시를 고른다 ── */
 body .map-viewport .city-marker,
