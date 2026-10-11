@@ -4,3 +4,6 @@ shots/
 
 # Local generated media exports
 exports/
+# Assets restored from assets.lock.json
+/assets/share/favicon.png
+/assets/share/og.png
