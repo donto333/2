@@ -495,6 +495,7 @@
 
 /* Mobile territory navigation: separate city selection from crowded map markers. */
 .mobile-city-selector{display:none}
+.territory-frontlines--mobile{display:none}
 @media (max-width:760px){
   /* 모바일 지도는 서쪽 산맥 여백을 덜어내고 본토 영역을 가로로 확대한다. */
   .page-section--territory .map-canvas{width:calc(100vw - 24px);max-width:none;margin-left:calc((100% - 100vw + 24px)/2);height:620px;min-height:620px;aspect-ratio:auto;background-size:145% 100%;background-position:100% center;background-repeat:no-repeat;touch-action:pan-y}
