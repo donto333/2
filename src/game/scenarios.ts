@@ -74,8 +74,9 @@ export const SCENARIOS: ScenarioDefinition[] = CHAPTERS.flatMap((chapter, chapte
   deck: chapter.deck,
   reward: REWARD(chapterIndex, entryIndex),
 }))).map((scenario, index) => {
-  const stage = index + 1
-  const tier = Math.min(5, Math.floor(index / 12) + 1) as 1 | 2 | 3 | 4 | 5
+  const chapterIndex = Number(scenario.chapter.split('.')[1]) - 1
+  const stage = chapterIndex + 1
+  const tier = Math.min(5, Math.floor(chapterIndex * 5 / 8) + 1) as 1 | 2 | 3 | 4 | 5
   const labels = ['초급', '중급', '고급', '극상', '전설']
   const tierBase = [0.86, 1.02, 1.18, 1.36, 1.55][tier - 1]
   return {
@@ -84,7 +85,7 @@ export const SCENARIOS: ScenarioDefinition[] = CHAPTERS.flatMap((chapter, chapte
       stage,
       tier,
       label: labels[tier - 1],
-      enemyLevel: 8 + Math.floor(index * 1.35),
+      enemyLevel: Math.round(1 + (chapterIndex * 29) / 7),
       pressure: Number((tierBase + (index % 12) * 0.012).toFixed(3)),
     },
   }

@@ -22,13 +22,17 @@ describe('scenario replay rewards', () => {
     const opening = SCENARIOS[0].difficulty
     const finale = SCENARIOS.at(-1)!.difficulty
     expect(opening.stage).toBe(1)
-    expect(finale.stage).toBe(58)
+    expect(finale.stage).toBe(8)
     expect(opening.tier).toBe(1)
     expect(finale.tier).toBe(5)
-    expect(finale.enemyLevel).toBeGreaterThan(opening.enemyLevel)
+    expect(opening.enemyLevel).toBe(1)
+    expect(finale.enemyLevel).toBe(30)
     expect(finale.pressure).toBeGreaterThan(opening.pressure)
-    for (let index = 1; index < SCENARIOS.length; index += 1) {
-      expect(SCENARIOS[index].difficulty.enemyLevel).toBeGreaterThanOrEqual(SCENARIOS[index - 1].difficulty.enemyLevel)
+    for (let chapter = 1; chapter <= 8; chapter += 1) {
+      const entries = SCENARIOS.filter(scenario => scenario.difficulty.stage === chapter)
+      expect(entries.length).toBeGreaterThan(0)
+      expect(entries.every(scenario => scenario.difficulty.enemyLevel === entries[0].difficulty.enemyLevel)).toBe(true)
+      if (chapter > 1) expect(entries[0].difficulty.enemyLevel).toBeGreaterThan(SCENARIOS.filter(scenario => scenario.difficulty.stage === chapter - 1)[0].difficulty.enemyLevel)
     }
   })
 })

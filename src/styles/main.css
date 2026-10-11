@@ -552,3 +552,20 @@
   .app-shell--battle .troop-status{margin-top:5px;padding:5px 4px}.app-shell--battle .troop-status-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}.app-shell--battle .troop-status-card{padding:4px 3px}.app-shell--battle .troop-status-head b{font-size:6px}.app-shell--battle .troop-status-head small{font-size:5px}.app-shell--battle .troop-health-track{height:2px;margin-top:3px}
   .app-shell--battle .battle-command{min-height:58px;margin-top:5px;padding:5px 4px;display:block}.app-shell--battle .command-selected{display:none}.app-shell--battle .command-actions{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;width:100%}.app-shell--battle .tactic-button,.app-shell--battle .skill-button,.app-shell--battle .battle-start{width:100%;height:48px}.app-shell--battle .tactic-button span,.app-shell--battle .skill-button span{font-size:15px}.app-shell--battle .tactic-button small,.app-shell--battle .skill-button small,.app-shell--battle .battle-start{font-size:6px;line-height:1.1}.app-shell--battle .battle-start{padding:3px}
 }
+
+/* Battle roster HUD: larger portraits and opponent roster on the left command panel. */
+.app-shell--battle .hud-side:first-child{min-width:390px}
+.app-shell--battle .hud-enemy-label{margin-top:7px;color:var(--ember);font:600 7px Sora,sans-serif;letter-spacing:.14em;text-transform:uppercase}
+.app-shell--battle .hud-units--enemy{margin-top:4px}
+.app-shell--battle .hud-unit>.hud-portrait{width:50px;height:58px;font-size:24px}
+.app-shell--battle .hud-unit{min-width:68px;min-height:72px;display:grid;justify-items:center;gap:2px;padding:5px 6px}
+.app-shell--battle .hud-unit small{font-size:9px}
+.app-shell--battle .hud-unit b{font-size:8px}
+.app-shell--battle .hud-unit--enemy{border-color:rgba(255,128,102,.28);background:rgba(255,128,102,.06)}
+@media (max-width:760px){
+  .app-shell--battle .hud-side:first-child{min-width:0}
+  .app-shell--battle .hud-enemy-label{margin-top:3px;font-size:5px}
+  .app-shell--battle .hud-unit{min-width:46px;min-height:52px;padding:3px 2px}
+  .app-shell--battle .hud-unit>.hud-portrait{width:40px;height:46px;font-size:18px}
+  .app-shell--battle .hud-unit small{font-size:6px}.app-shell--battle .hud-unit b{font-size:5px}
+}
