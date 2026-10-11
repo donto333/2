@@ -498,8 +498,10 @@
 @media (max-width:760px){
   /* 모바일 지도는 서쪽 산맥 여백을 덜어내고 본토 영역을 가로로 확대한다. */
   .page-section--territory .map-canvas{width:calc(100vw - 24px);max-width:none;margin-left:calc((100% - 100vw + 24px)/2);height:620px;min-height:620px;aspect-ratio:auto;background-size:145% 100%;background-position:100% center;background-repeat:no-repeat;touch-action:pan-y}
-  .page-section--territory .city-marker{transform:translate(-50%,-50%) scale(.62)}
-  .page-section--territory .city-marker:hover,.page-section--territory .city-marker.is-selected{transform:translate(-50%,-50%) scale(.7)}
+  .page-section--territory .territory-frontlines:not(.territory-frontlines--mobile){display:none}
+  .page-section--territory .territory-frontlines--mobile{display:block}
+  .page-section--territory .city-marker{left:var(--mobile-left)!important;top:var(--mobile-top)!important;transform:translate(-50%,-50%) scale(.42)}
+  .page-section--territory .city-marker:hover,.page-section--territory .city-marker.is-selected{transform:translate(-50%,-50%) scale(.48)}
   .mobile-city-selector{display:block;margin-top:12px;padding:13px 10px;border:1px solid rgba(82,224,196,.2);background:rgba(7,20,22,.58)}
   .mobile-city-selector-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 2px 10px}
   .mobile-city-selector-head small{color:var(--muted);font-size:8px;text-align:right}

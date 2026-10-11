@@ -20,6 +20,13 @@ const CITY_MAP_POSITIONS: Readonly<Record<string, { x: number; y: number }>> = {
   shangyong: { x: 48, y: 47 }, xinye: { x: 55, y: 45 }, jiangxia: { x: 67, y: 56 }, wuling: { x: 53, y: 72 }, badong: { x: 43, y: 66 },
   jianning: { x: 34, y: 84 }, yunnan: { x: 26, y: 90 }, jiaozhi: { x: 48, y: 95 }, shixing: { x: 60, y: 88 }, nanhai: { x: 68, y: 94 },
 }
+// 모바일은 원본 지리 좌표를 그대로 축소하면 성채와 도시명이 겹치므로,
+// 기존 위·경도 순서를 보존한 9열 격자에 재배치해 모든 도시를 읽을 수 있게 한다.
+const MOBILE_CITY_MAP_POSITIONS: Readonly<Record<string, { x: number; y: number }>> = Object.fromEntries(
+  Object.keys(CITY_MAP_POSITIONS)
+    .sort((left, right) => CITY_MAP_POSITIONS[left].y - CITY_MAP_POSITIONS[right].y || CITY_MAP_POSITIONS[left].x - CITY_MAP_POSITIONS[right].x)
+    .map((cityId, index) => [cityId, { x: 6 + (index % 9) * 11, y: 8 + Math.floor(index / 9) * 20.5 }]),
+)
 
 export interface AuthView {
   status: 'authenticated' | 'logged_out' | 'offline'
@@ -680,7 +687,7 @@ export class StrategyUI {
     const contested = state.cities.filter(city => city.owner !== state.faction).length
     const incomeWait = incomeCooldownRemaining(state)
     const incomeLabel = incomeWait ? `금일 수확 완료 · ${Math.ceil(incomeWait / 3600000)}시간 후` : '금일 내정 수확'
-    return `<section class="page-section page-section--territory"><div class="section-heading section-heading--compact"><div><span class="eyebrow">DOMAIN &amp; GOVERNANCE · 04</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">서버 원장 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="resource-strip glass-card">${this.resourceTokens(state)}</div><div class="conquest-overview glass-card"><div><span class="eyebrow">CONQUEST FRONT</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">THREE KINGDOMS DOMAIN</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div><div class="map-canvas"><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}<span class="map-label map-label--north">중원</span><span class="map-label map-label--south">강동</span><span class="map-label map-label--west">익주</span></div><div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div>${this.mobileCitySelector(state)}</div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
+    return `<section class="page-section page-section--territory"><div class="section-heading section-heading--compact"><div><span class="eyebrow">DOMAIN &amp; GOVERNANCE · 04</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">서버 원장 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="resource-strip glass-card">${this.resourceTokens(state)}</div><div class="conquest-overview glass-card"><div><span class="eyebrow">CONQUEST FRONT</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">THREE KINGDOMS DOMAIN</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div><div class="map-canvas"><div class="map-river"></div>${this.frontlineLines(state)}${this.frontlineLines(state, true)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}<span class="map-label map-label--north">중원</span><span class="map-label map-label--south">강동</span><span class="map-label map-label--west">익주</span></div><div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div>${this.mobileCitySelector(state)}</div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
   }
 
   private mobileCitySelector(state: StrategyState): string {
@@ -690,7 +697,8 @@ export class StrategyUI {
     }).join('')}</div></div>`
   }
 
-  private frontlineLines(state: StrategyState): string {
+  private frontlineLines(state: StrategyState, mobile = false): string {
+    const positions = mobile ? MOBILE_CITY_MAP_POSITIONS : CITY_MAP_POSITIONS
     const cities = new Map(state.cities.map(city => [city.id, city]))
     const drawn = new Set<string>()
     const lines: string[] = []
@@ -699,8 +707,8 @@ export class StrategyUI {
         const key = [fromId, toId].sort().join(':')
         if (drawn.has(key)) return
         drawn.add(key)
-        const from = CITY_MAP_POSITIONS[fromId]
-        const to = CITY_MAP_POSITIONS[toId]
+        const from = positions[fromId]
+        const to = positions[toId]
         if (!from || !to) return
         const fromCity = cities.get(fromId)
         const toCity = cities.get(toId)
@@ -709,13 +717,14 @@ export class StrategyUI {
         lines.push(`<line class="${className}" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" />`)
       })
     })
-    return `<svg class="territory-frontlines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="도시 연결 전선">${lines.join('')}</svg>`
+    return `<svg class="territory-frontlines${mobile ? ' territory-frontlines--mobile' : ''}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="도시 연결 전선">${lines.join('')}</svg>`
   }
 
   private cityMarker(city: City, selectedId: string, faction: StrategyState['faction']): string {
     const ownerClass = city.owner === faction ? 'is-ally' : city.owner === '중립' ? 'is-neutral' : 'is-enemy'
     const mapPosition = CITY_MAP_POSITIONS[city.id] ?? { x: 50, y: 50 }
-    const position = `left:${mapPosition.x}%;top:${mapPosition.y}%`
+    const mobilePosition = MOBILE_CITY_MAP_POSITIONS[city.id] ?? { x: 50, y: 50 }
+    const position = `left:${mapPosition.x}%;top:${mapPosition.y}%;--mobile-left:${mobilePosition.x}%;--mobile-top:${mobilePosition.y}%`
     const castle = city.level >= 3 ? 'castle-city-major' : city.level === 2 ? 'castle-city-medium' : 'castle-city-minor'
     return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="eager"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong></button>`
   }
@@ -959,6 +968,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.11', '모바일 도시 겹침 해소 및 재배치', '모바일 영토 지도에서 45개 도시를 9열 격자로 재배치하고 모바일 전선을 같은 좌표로 연결해 성채·도시명·선택 영역이 서로 겹치지 않도록 개선했습니다.', '완료', 'gold'],
       ['2026.10.11', '모바일 영토 지도 서쪽 산맥 크롭', '첨부 화면의 빨간 표시선 기준으로 원본 배경의 서쪽 산맥 영역을 더 직접적으로 잘라내고, 동쪽 해안은 유지한 채 남은 중국 본토를 모바일 화면 너비로 확대합니다.', '완료', 'gold'],
       ['2026.10.11', '장비 관리 무장 선택 정렬 개선', '장비 관리의 장착 무장 선택 목록을 장비 효과가 반영된 실제 전투력 높은 순으로 정렬하고, 등급·레벨·이름을 보조 기준으로 적용했습니다.', '완료', 'gold'],
       ['2026.10.11', '적 AI 스킬 자동 사용', '시나리오·공성·일반 전투의 적 AI가 해금된 장수 스킬을 전투 중 자동으로 사용하고, 재사용 대기·버프·디버프·스킬 이펙트를 적용하도록 개선했습니다.', '완료', 'gold'],
