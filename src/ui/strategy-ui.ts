@@ -451,7 +451,7 @@ export class StrategyUI {
 
   private shell(state: StrategyState): string {
     return `
-      <div class="app-shell">
+      <div class="app-shell${state.section === 'battle' ? ' app-shell--battle' : ''}">
         <header class="topbar">
           <div class="brand-lockup"><div class="brand-seal"><span>✦</span></div><div><div class="brand-title">천하</div><div class="brand-subtitle">패왕의 시대 · 전술 사령부</div></div></div>
           <div class="topbar-center"><span class="season-dot"></span><span>제1장 · 황혼의 관문</span><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold"><i>◈</i><small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver"><i>◎</i><small>은전</small><strong>${formatNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor"><i>✦</i><small>명망</small><strong>${formatNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence"><i>⌁</i><small>영향력</small><strong>${formatNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain"><i>◉</i><small>식량</small><strong>${formatNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood"><i>♣</i><small>목재</small><strong>${formatNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron"><i>◆</i><small>철</small><strong>${formatNumber(state.resources.iron)}</strong></span></div></div>
@@ -968,6 +968,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.11', '전투 전체화면·간결 UI 적용', '전투 중 좌측 메뉴를 숨겨 3D 전장을 넓게 표시하고, 상단 안내 문구를 제거했으며, 전투 정보는 간결한 상단 HUD로 압축했습니다. 전투 커맨드는 스크롤 없이 화면 하단에 고정 표시됩니다.', '완료', 'gold'],
       ['2026.10.11', 'PC 영토 연결선 표시 오류 수정', '모바일 전용 도시 재배치 전선이 PC 지도에 함께 표시되던 문제를 수정해 PC는 실제 지리 좌표 전선만, 모바일은 모바일 좌표 전선만 표시하도록 분리했습니다.', '완료', 'gold'],
       ['2026.10.11', '모바일 도시 겹침 해소 및 재배치', '모바일 영토 지도에서 45개 도시를 9열 격자로 재배치하고 모바일 전선을 같은 좌표로 연결해 성채·도시명·선택 영역이 서로 겹치지 않도록 개선했습니다.', '완료', 'gold'],
       ['2026.10.11', '모바일 영토 지도 서쪽 산맥 크롭', '첨부 화면의 빨간 표시선 기준으로 원본 배경의 서쪽 산맥 영역을 더 직접적으로 잘라내고, 동쪽 해안은 유지한 채 남은 중국 본토를 모바일 화면 너비로 확대합니다.', '완료', 'gold'],
