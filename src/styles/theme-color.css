@@ -174,3 +174,63 @@ body .toast[data-tone='ember'] { border-color: rgba(220, 77, 60, .8); background
 
 /* ── 지도 ──────────────────────────────────────────────────── */
 body .map-canvas { filter: saturate(1.15) brightness(1.05); }
+
+/* ── 가독성 ──────────────────────────────────────────────────
+ * 글자 크기는 scripts/theme/readable-type.py로 main.css에서 올렸다(최소 11~13px).
+ * 여기서는 대비가 부족했던 글자(측정 기준 WCAG 4.5:1 미만)를 보강한다. */
+:root { --cream-soft: #f0e3c8; }
+body { -webkit-font-smoothing: antialiased; }
+
+/* 전장 배경 위에 바로 놓이는 제목·설명 */
+body .section-heading,
+body .section-heading p,
+body .heading-copy { text-shadow: 0 1px 2px rgba(20, 8, 2, .85), 0 0 12px rgba(20, 8, 2, .55); }
+body .heading-copy { color: #f4e8d0; }
+body .eyebrow { color: #ffc27a; font-weight: 700; text-shadow: 0 1px 2px rgba(20, 8, 2, .9); }
+
+/* 보조 글자: 너무 흐린 갈색·회색을 밝힌다 */
+body .muted, body .stat-label, body .sidebar-label, body .brand-subtitle,
+body .notice-meta, body .formation-footer, body .section-footnote { color: #e2cfa8; }
+body .sidebar-label { color: var(--gold); }
+body .card-header span, body .card-header small { color: #e8d2a6; }
+
+/* 지도: 도시 이름·지역 이름을 지도 그림 위에서 읽히게 */
+body .city-marker strong {
+  color: #fff7e6;
+  text-shadow: 0 1px 1px #000, 0 0 3px rgba(0, 0, 0, .95), 0 0 6px rgba(0, 0, 0, .7);
+  font-weight: 700;
+}
+body .city-marker-level { color: #2a1206; font-weight: 800; }
+body .map-label { color: #fff2d6; text-shadow: 0 1px 2px #000, 0 0 8px rgba(0, 0, 0, .8); }
+
+/* 진영 표식(금빛 원) 안의 글자 */
+body .profile-orb { color: #4a1e0c; font-weight: 800; }
+
+/* 버튼 글자 굵기 */
+body .action-button, body .ghost-button, body .nav-button, body .tactic-button, body .mini-action { font-weight: 600; }
+/* 지도 도시 이름 뒤에 얇은 먹빛 띠를 깔아 성채 그림 위에서도 읽히게 한다 */
+body .city-marker strong { background: rgba(24, 10, 4, .62); padding: 0 4px; border-radius: 3px; }
+/* 무장 카드 그림 위 등급·성급 표식 */
+body .codex-grade, body .codex-state, body .general-card .star-row, body .grade-chip { text-shadow: 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, .8); }
+body .grade-tag, body .deploy-tag {
+  background: rgba(24, 10, 4, .72);
+  border-radius: 4px;
+  padding: 2px 6px;
+  text-shadow: 0 1px 1px #000;
+}
+body .grade-tag b, body .grade-tag strong { color: #ffe3a3; }
+body .grade-tag span, body .grade-tag small { color: #f6e6c6; }
+body .deploy-tag { color: #9df2c6; border: 1px solid rgba(79, 207, 152, .55); }
+/* 마지막 보정: 영문 소제목·보조 라벨·메뉴 아이콘을 한 단계 더 밝게 */
+:root { --muted: #dcc9a4; }
+body .eyebrow { color: #ffd59a; }
+body .nav-icon { color: #f7cf80; }
+body .codex-lock-note, body .rate-footnote, body .empty-result p, body .empty-result span { color: #ead7b2; }
+
+/* 휴대폰 하단 메뉴: 15개 버튼(3줄). 본문 아래 여백(132px) 안에서 128px로 키우고 이름은 11px 한 줄로 */
+@media (max-width: 760px) {
+  body .sidebar { height: 128px; min-height: 128px; gap: 3px; background: linear-gradient(180deg, rgba(64, 24, 15, .96), rgba(36, 15, 9, .97)); border-top: 1px solid var(--gold-line); border-right: 0; }
+  body .nav-button { font-size: 11px; line-height: 1.15; gap: 2px; padding: 4px 1px; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  body .nav-button > span:not(.nav-icon) { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  body .nav-icon { font-size: 15px; }
+}
