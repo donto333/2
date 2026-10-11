@@ -4,3 +4,5 @@ shots/
 
 # Local generated media exports
 exports/
+__pycache__/
+*.pyc
