@@ -582,7 +582,7 @@ const ui = new StrategyUI(root, {
     const catalog = allGenerals()
     const deck = scenario.deck.map((name, index) => {
       const base = catalog.find(general => general.name === name) ?? catalog[index % catalog.length]
-      return { ...base, level: Math.max(base.level, scenario.difficulty.enemyLevel + index * 2), skillUnlocked: true }
+      return { ...base, level: scenario.difficulty.enemyLevel, skillUnlocked: true }
     })
     arena.setScenarioDifficulty(scenario.difficulty.pressure)
     arena.setOpponentDeck(deck)
