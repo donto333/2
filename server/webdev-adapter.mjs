@@ -1,3 +1,5 @@
+import { createRequire as createCityRoutesRequire } from 'node:module';
+const cityRoutes = createCityRoutesRequire(import.meta.url)('./city-routes.json');
 // starters/web-db-user-v1/shared/const.ts
 var COOKIE_NAME = "webdev_app_session";
 var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
@@ -258,14 +260,16 @@ const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.ci
 const NEUTRAL_AI_TICK_MS = 10 * 60 * 1000;
 const PROTECTED_CAPITAL_IDS = new Set(["chengdu", "ye", "jianye"]);
 const LUOYANG_CITY_ID = "luoyang";
-const CITY_ADJACENCY = {
-  chengdu: ["hanzhong", "fucheng", "xindu"], hanzhong: ["chengdu", "fucheng", "tianshui", "xiangyang", "yiling", "shangyong"], fucheng: ["chengdu", "hanzhong", "xindu", "yiling", "badong"], xindu: ["chengdu", "fucheng"], tianshui: ["wuwei", "hanzhong", "meixian", "anding"], wuwei: ["tianshui"],
-  luoyang: [], ye: ["chenliu", "puyang", "jinyang"], chenliu: ["ye", "puyang", "xuchang"], puyang: ["ye", "chenliu", "pingyuan"],
-  xuchang: ["chenliu", "wancheng", "shouchun", "xiapi"], wancheng: ["xuchang", "xiangyang", "jiangling", "xinye"], xiangyang: ["hanzhong", "wancheng", "jiangling", "shangyong", "xinye", "jiangxia"], jiangling: ["xiangyang", "wancheng", "yiling", "changsha", "jiangxia", "wuling"],
-  yiling: ["jiangling", "changsha", "guiyang", "hanzhong", "fucheng", "badong"], changsha: ["jiangling", "yiling", "lingling", "guiyang"], lingling: ["changsha", "guiyang", "wuling"], guiyang: ["lingling", "changsha", "yiling", "shixing"],
-  shouchun: ["xuchang", "hefei", "jiujiang"], hefei: ["shouchun", "jiujiang", "jianye", "lujiang"], jiujiang: ["hefei", "shouchun", "poyang", "jiangling", "lujiang"], poyang: ["jiujiang", "jianye", "changsha", "kuaiji"], jianye: ["hefei", "poyang", "wujun", "guangling", "lujiang"], wujun: ["jianye", "kuaiji"], kuaiji: ["wujun", "poyang"],
-  changan: ["meixian", "anding", "jinyang"], meixian: ["changan", "tianshui"], anding: ["meixian", "tianshui"], jinyang: ["changan", "ye", "pingyuan"], pingyuan: ["jinyang", "puyang", "beihai"], beihai: ["pingyuan", "langya"], langya: ["beihai", "xiapi"], xiapi: ["langya", "xuchang", "guangling"], guangling: ["xiapi", "jianye", "lujiang"], lujiang: ["guangling", "jiujiang", "jianye", "hefei"], shangyong: ["hanzhong", "xiangyang", "xinye"], xinye: ["shangyong", "wancheng", "xiangyang"], jiangxia: ["xiangyang", "jiangling", "guangling"], wuling: ["jiangling", "changsha", "lingling"], badong: ["yiling", "fucheng"], jianning: ["fucheng", "yunnan"], yunnan: ["jianning", "jiaozhi"], jiaozhi: ["yunnan", "shixing"], shixing: ["jiaozhi", "guiyang", "nanhai"], nanhai: ["shixing"]
-};
+// 도시 진군로: server/city-routes.json(클라이언트와 같은 원본)에서 양방향 인접 목록을 만든다.
+const CITY_ADJACENCY = (() => {
+  const map = {};
+  for (const id of cityRoutes.isolated ?? []) map[id] = [];
+  for (const [a, b] of cityRoutes.edges) {
+    (map[a] ??= []).push(b);
+    (map[b] ??= []).push(a);
+  }
+  return map;
+})();
 function luoyangSeoulParts(now = Date.now()) {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date(now));
   const value = Object.fromEntries(parts.filter(part => part.type !== "literal").map(part => [part.type, part.value]));

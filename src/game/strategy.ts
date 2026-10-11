@@ -1,3 +1,4 @@
+import cityRoutes from '../../server/city-routes.json'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
@@ -97,23 +98,18 @@ export function dummyGarrisonLevelForCityLevel(level: number): number {
 }
 export const FACTION_WAR_HONOR_COST: Record<number, number> = { 1: 100, 2: 2000, 3: 3000, 4: 4000, 5: 5000 }
 export const FACTION_WAR_GOLD_REWARD: Record<number, number> = { 1: 20, 2: 40, 3: 60, 4: 80, 5: 100 }
-export const CITY_ADJACENCY: Readonly<Record<string, readonly string[]>> = {
-  chengdu: ['hanzhong', 'fucheng', 'xindu'], hanzhong: ['chengdu', 'fucheng', 'tianshui', 'xiangyang', 'yiling'],
-  fucheng: ['chengdu', 'hanzhong', 'xindu', 'yiling'], xindu: ['chengdu', 'fucheng'], tianshui: ['wuwei', 'hanzhong'], wuwei: ['tianshui'],
-  luoyang: [], ye: ['chenliu', 'puyang', 'jinyang'],
-  chenliu: ['ye', 'puyang', 'xuchang'], puyang: ['ye', 'chenliu', 'pingyuan'],
-  xuchang: ['chenliu', 'wancheng', 'shouchun', 'xiapi'], wancheng: ['xuchang', 'xiangyang', 'jiangling', 'xinye'],
-  xiangyang: ['hanzhong', 'wancheng', 'jiangling'], jiangling: ['xiangyang', 'wancheng', 'yiling', 'changsha'],
-  yiling: ['jiangling', 'changsha', 'guiyang', 'hanzhong', 'fucheng'], changsha: ['jiangling', 'yiling', 'lingling', 'guiyang'],
-  lingling: ['changsha', 'guiyang'], guiyang: ['lingling', 'changsha', 'yiling'],
-  shouchun: ['xuchang', 'hefei', 'jiujiang'], hefei: ['shouchun', 'jiujiang', 'jianye', 'lujiang'],
-  jiujiang: ['hefei', 'shouchun', 'poyang', 'jiangling', 'lujiang'], poyang: ['jiujiang', 'jianye', 'changsha', 'kuaiji'],
-  jianye: ['hefei', 'poyang', 'wujun', 'guangling'], wujun: ['jianye', 'kuaiji'], kuaiji: ['wujun', 'poyang'],
-  changan: ['meixian', 'anding', 'jinyang'], meixian: ['changan', 'tianshui'], anding: ['meixian', 'tianshui'], jinyang: ['changan', 'ye', 'pingyuan'],
-  pingyuan: ['jinyang', 'puyang', 'beihai'], beihai: ['pingyuan', 'langya'], langya: ['beihai', 'xiapi'], xiapi: ['langya', 'xuchang', 'guangling'],
-  guangling: ['xiapi', 'jianye', 'lujiang'], lujiang: ['guangling', 'jiujiang', 'jianye'], shangyong: ['hanzhong', 'xiangyang', 'xinye'],
-  xinye: ['shangyong', 'wancheng', 'xiangyang'], jiangxia: ['xiangyang', 'jiangling', 'guangling'], wuling: ['jiangling', 'changsha'],
-  badong: ['yiling', 'fucheng'], jianning: ['fucheng', 'yunnan'], yunnan: ['jianning', 'jiaozhi'], jiaozhi: ['yunnan', 'shixing'], shixing: ['jiaozhi', 'guiyang', 'nanhai'], nanhai: ['shixing'],
+// 도시 진군로: server/city-routes.json(클라이언트·서버 공용 단일 원본)에서 만든 양방향 인접 목록.
+// 낙양은 일요일 저녁에 모든 진영이 직접 출정하는 독립 전선이라 연결이 없다.
+export const CITY_ADJACENCY: Readonly<Record<string, readonly string[]>> = buildAdjacency(cityRoutes.edges as Array<[string, string]>, cityRoutes.isolated)
+
+export function buildAdjacency(edges: ReadonlyArray<readonly [string, string]>, isolated: readonly string[] = []): Record<string, string[]> {
+  const map: Record<string, string[]> = {}
+  for (const id of isolated) map[id] = []
+  for (const [a, b] of edges) {
+    (map[a] ??= []).push(b)
+    ;(map[b] ??= []).push(a)
+  }
+  return map
 }
 
 export interface FactionTerritorySnapshot {

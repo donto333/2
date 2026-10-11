@@ -45,13 +45,16 @@ describe('territory and governance', () => {
     expect(findCity(progressed, 'hanzhong')?.owner).toBe('촉한')
   })
 
-  it('opens the requested frontline links between Bu-seong, Hanzhong, Yiling, Poyang, and Kuaiji', () => {
+  it('follows the historical routes: Jinniu road, Three Gorges, Wu inland road', () => {
     const state = createInitialState()
-    findCity(state, 'hanzhong')!.owner = state.faction
-    expect(conquestEligibility(state, 'yiling').allowed).toBe(true)
-    findCity(state, 'hanzhong')!.owner = '중립'
+    // 금우도: 부성 → 한중
     findCity(state, 'fucheng')!.owner = state.faction
+    expect(conquestEligibility(state, 'hanzhong').allowed).toBe(true)
+    // 삼협: 이릉은 파동을 거쳐야 한다(부성에서 바로 갈 수 없음)
+    expect(conquestEligibility(state, 'yiling').allowed).toBe(false)
+    findCity(state, 'badong')!.owner = state.faction
     expect(conquestEligibility(state, 'yiling').allowed).toBe(true)
+    // 오의 내륙길: 회계 → 파양
     findCity(state, 'kuaiji')!.owner = state.faction
     expect(conquestEligibility(state, 'poyang').allowed).toBe(true)
   })
@@ -113,7 +116,7 @@ describe('territory and governance', () => {
 
   it('weakens the wall and leaves capture to the final faction battle', () => {
     const state = createInitialState()
-    const city = findCity(state, 'hanzhong')!
+    const city = findCity(state, 'fucheng')!
     expect(conquestPower(state)).toBeGreaterThan(0)
     expect(conquestCost(city).grain).toBe(1150)
     city.defense = 8
@@ -141,7 +144,7 @@ describe('territory and governance', () => {
 
   it('requires every deployed garrison to be defeated before capture', () => {
     const state = createInitialState()
-    const city = findCity(state, 'hanzhong')!
+    const city = findCity(state, 'fucheng')!
     city.owner = '위나라'
     city.defense = 8
     const attackPower = conquestPower(state)
@@ -197,7 +200,8 @@ describe('territory and governance', () => {
     expect(conquestEligibility(state, 'chengdu').allowed).toBe(false)
     expect(conquestEligibility(state, 'ye').reason).toContain('위나라의 본성')
     expect(conquestEligibility(state, 'luoyang').allowed).toBe(false)
-    expect(conquestEligibility(state, 'hanzhong').allowed).toBe(true)
+    expect(conquestEligibility(state, 'fucheng').allowed).toBe(true)
+    expect(conquestEligibility(state, 'hanzhong').allowed).toBe(false) // 부성을 거쳐야 하는 원거리
     const beforeGrain = state.resources.grain
     expect(launchConquest(state, 'ye', 1000).ok).toBe(false)
     expect(launchConquest(state, 'luoyang', 1000).ok).toBe(false)
@@ -209,8 +213,9 @@ describe('territory and governance', () => {
     const xiangyang = findCity(state, 'xiangyang')!
     xiangyang.owner = state.faction
     xiangyang.conquestProgress = 100
-    expect(conquestEligibility(state, 'wancheng').allowed).toBe(true)
+    expect(conquestEligibility(state, 'xinye').allowed).toBe(true)
     expect(conquestEligibility(state, 'jiangling').allowed).toBe(true)
+    expect(conquestEligibility(state, 'wancheng').allowed).toBe(false) // 신야를 거쳐야 한다
     expect(conquestEligibility(state, 'puyang').allowed).toBe(false)
   })
 
@@ -261,7 +266,7 @@ describe('territory and governance', () => {
 
   it('requires a broken wall and consumes tiered honor for faction warfare', () => {
     const state = createInitialState()
-    const city = findCity(state, 'hanzhong')!
+    const city = findCity(state, 'fucheng')!
     const blocked = launchFactionBattle(state, city.id, 2000)
     expect(blocked.ok).toBe(false)
     city.defense = 0
