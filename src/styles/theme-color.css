@@ -256,3 +256,21 @@ body .general-portrait.has-portrait, body .ritual-portrait.has-portrait { border
 /* 사진이 없던 시절의 마름모 장식 틀이 얼굴 위에 겹쳐 그려지던 것을 없앤다 */
 body .general-portrait.has-portrait::before,
 body .ritual-portrait.has-portrait::before { display: none; }
+
+/* ── 그림 아이콘 (src/ui/icons.ts) ───────────────────────────── */
+body .gi { display: inline-block; flex: none; width: 1.25em; height: 1.25em; vertical-align: -0.25em; overflow: visible; filter: drop-shadow(0 1px 1px rgba(30, 8, 2, .55)); }
+body .gi--inline { width: 1.15em; height: 1.15em; vertical-align: -0.22em; margin-right: 1px; }
+body .topbar-resource .gi { width: 20px; height: 20px; }
+body .nav-icon { display: inline-grid; place-items: center; }
+body .nav-icon .gi { width: 24px; height: 24px; }
+body .nav-button:not(.is-active) .nav-icon .gi { opacity: .92; }
+body .nav-button.is-active .nav-icon .gi { filter: drop-shadow(0 0 4px rgba(255, 214, 120, .75)) drop-shadow(0 1px 1px rgba(30, 8, 2, .6)); transform: scale(1.06); }
+body .resource-token > span { display: inline-grid; place-items: center; }
+body .resource-token > span .gi { width: 26px; height: 26px; }
+body .shop-item-icon .gi { width: 44px; height: 44px; }
+body .building-glyph { display: grid; place-items: center; }
+body .building-glyph .gi { width: 28px; height: 28px; }
+@media (max-width: 760px) {
+  body .nav-icon .gi { width: 22px; height: 22px; }
+  body .topbar-resource .gi { width: 18px; height: 18px; }
+}

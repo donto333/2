@@ -1,6 +1,7 @@
 import { CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, BattleTroopStatus } from '../game/arena'
 import { SCENARIOS, scenarioById } from '../game/scenarios'
+import { ensureIconSprite, icon } from './icons'
 import { TerritoryMapController, type MapCity } from './territory-map'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
@@ -212,6 +213,7 @@ export class StrategyUI {
     if (state.section !== 'equipment') this.equipmentScrollTop = 0
     if (state.section !== 'battle') this.battleViewActive = false
     this.root.innerHTML = this.shell(state)
+    ensureIconSprite()
     this.attachTerritoryMap(state)
     const shell = this.root.querySelector<HTMLElement>('.app-shell')
     if (shell) {
@@ -430,28 +432,28 @@ export class StrategyUI {
       <div class="app-shell">
         <header class="topbar">
           <div class="brand-lockup"><div class="brand-seal"><span>✦</span></div><div><div class="brand-title">천하</div><div class="brand-subtitle">패왕의 시대 · 전술 사령부</div></div></div>
-          <div class="topbar-center"><span class="season-dot"></span><span>제1장 · 황혼의 관문</span><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold"><i>◈</i><small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver"><i>◎</i><small>은전</small><strong>${formatNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor"><i>✦</i><small>명망</small><strong>${formatNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence"><i>⌁</i><small>영향력</small><strong>${formatNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain"><i>◉</i><small>식량</small><strong>${formatNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood"><i>♣</i><small>목재</small><strong>${formatNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron"><i>◆</i><small>철</small><strong>${formatNumber(state.resources.iron)}</strong></span></div></div>
+          <div class="topbar-center"><span class="season-dot"></span><span>제1장 · 황혼의 관문</span><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold">${icon('gold')}<small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver">${icon('silver')}<small>은전</small><strong>${formatNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor">${icon('honor')}<small>명망</small><strong>${formatNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence">${icon('influence')}<small>영향력</small><strong>${formatNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain">${icon('grain')}<small>식량</small><strong>${formatNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood">${icon('wood')}<small>목재</small><strong>${formatNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron">${icon('iron')}<small>철</small><strong>${formatNumber(state.resources.iron)}</strong></span></div></div>
           <div class="topbar-actions"><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}">${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : this.auth.status === 'offline' ? '오프라인 모드' : 'Manus 로그인'}</button></div>
         </header>
         <aside class="sidebar">
           <div class="sidebar-label">본진</div>
-          ${this.navButton('overview', '◈', '본영', state.section)}
-          ${this.navButton('recruit', '✦', '모집 · 장비', state.section, state.lastRecruit ? 'NEW' : '')}
-          ${this.navButton('roster', '◇', '보유 무장', state.section, `${state.generals.length}`)}
-          ${this.navButton('codex', '▤', '무장 도감', state.section, `${allGenerals().length}`)}
-          ${this.navButton('formation', '⌘', '출전 편성', state.section, `${state.formation.length}/3`)}
-          ${this.navButton('equipment', '⚒', '장비 관리', state.section, `${equipmentInventoryCount(state)}`)}
-          ${this.navButton('territory', '⌂', '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === state.faction).length}`)}
-          ${this.navButton('research', '✧', '기술 연구', state.section)}
+          ${this.navButton('overview', icon('overview'), '본영', state.section)}
+          ${this.navButton('recruit', icon('recruit'), '모집 · 장비', state.section, state.lastRecruit ? 'NEW' : '')}
+          ${this.navButton('roster', icon('roster'), '보유 무장', state.section, `${state.generals.length}`)}
+          ${this.navButton('codex', icon('codex'), '무장 도감', state.section, `${allGenerals().length}`)}
+          ${this.navButton('formation', icon('formation'), '출전 편성', state.section, `${state.formation.length}/3`)}
+          ${this.navButton('equipment', icon('equipment'), '장비 관리', state.section, `${equipmentInventoryCount(state)}`)}
+          ${this.navButton('territory', icon('territory'), '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === state.faction).length}`)}
+          ${this.navButton('research', icon('research'), '기술 연구', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">작전</div>
-          ${this.navButton('battle', '⚔', '시나리오', state.section)}
-          ${this.navButton('duel', '⚔', '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
-          ${this.navButton('shop', '◈', '상점', state.section, `${state.gold}금화`)}
-          ${this.navButton('rank', '≋', '천하 랭킹', state.section)}
-          ${this.navButton('updates', '✎', '업데이트 기록', state.section, 'NEW')}
-          ${this.navButton('account', '◎', '계정 관리', state.section)}
+          ${this.navButton('battle', icon('battle'), '시나리오', state.section)}
+          ${this.navButton('duel', icon('duel'), '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
+          ${this.navButton('shop', icon('shop'), '상점', state.section, `${state.gold}금화`)}
+          ${this.navButton('rank', icon('rank'), '천하 랭킹', state.section)}
+          ${this.navButton('updates', icon('updates'), '업데이트 기록', state.section, 'NEW')}
+          ${this.navButton('account', icon('account'), '계정 관리', state.section)}
           ${this.isAdmin() ? '<div class="sidebar-rule"></div><div class="sidebar-label">운영</div>' : ''}
-          ${this.isAdmin() ? this.navButton('admin', '▣', '관리자 센터', state.section, 'LIVE') : ''}
+          ${this.isAdmin() ? this.navButton('admin', icon('admin'), '관리자 센터', state.section, 'LIVE') : ''}
           <div class="sidebar-spacer"></div>
           <div class="sidebar-profile"><div class="profile-orb">${state.faction.slice(0, 1)}</div><div><strong>${state.faction} 진영</strong><small>옥패 07 · Lv.12</small></div></div>
         </aside>
@@ -640,7 +642,7 @@ export class StrategyUI {
 
   private resourceTokens(state: StrategyState): string {
     const values = { ...state.resources, silver: state.silver }
-    return (['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<div class="resource-token" style="--resource-color:${RESOURCE_META[key].color}"><span>${RESOURCE_META[key].icon}</span><div><small>${RESOURCE_META[key].label}</small><strong>${formatNumber(values[key])}</strong></div></div>`).join('')
+    return (['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<div class="resource-token" style="--resource-color:${RESOURCE_META[key].color}"><span>${icon(key)}</span><div><small>${RESOURCE_META[key].label}</small><strong>${formatNumber(values[key])}</strong></div></div>`).join('')
   }
 
   private territorySection(state: StrategyState): string {
@@ -793,7 +795,7 @@ export class StrategyUI {
   private conquestCard(city: City, state: StrategyState, siege: number, eligibility: ReturnType<typeof conquestEligibility>): string {
     const cost = conquestCost(city)
     const power = conquestPower(state)
-    const costText = `▦ ${formatNumber(cost.grain ?? 0)} · ◈ ${formatNumber(cost.silver ?? 0)} · ◆ ${formatNumber(cost.iron ?? 0)}`
+    const costText = `${icon('grain', 'gi--inline')} ${formatNumber(cost.grain ?? 0)} · ${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
     const garrisonCount = city.garrisons?.length ?? 3
     const defeated = Math.min(garrisonCount, city.defendersDefeated ?? 0)
     const remaining = Math.max(0, garrisonCount - defeated)
@@ -812,9 +814,9 @@ export class StrategyUI {
   }
   private buildingRow(city: City, building: CityBuilding, canManage: boolean): string {
     const cost = buildingCost(building)
-    const costText = `◈ ${formatNumber(cost.silver ?? 0)} · ⌁ ${formatNumber(cost.wood ?? 0)} · ◆ ${formatNumber(cost.iron ?? 0)}`
+    const costText = `${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('wood', 'gi--inline')} ${formatNumber(cost.wood ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
     const maxed = building.level >= building.maxLevel
-    return `<div class="building-row"><div class="building-glyph">${building.kind === 'agriculture' ? '▦' : building.kind === 'commerce' ? '◇' : building.kind === 'barracks' ? '⚔' : building.kind === 'workshop' ? '◆' : '✧'}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed ? 'disabled' : ''}>${maxed ? '최고 단계' : `강화 · ${costText}`}</button></div>`
+    return `<div class="building-row"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed ? 'disabled' : ''}>${maxed ? '최고 단계' : `강화 · ${costText}`}</button></div>`
   }
 
   private researchSection(state: StrategyState): string {
@@ -982,15 +984,15 @@ export class StrategyUI {
 
   private shopSection(state: StrategyState): string {
     const statLabels: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
-    const goldCards = GOLD_PACKAGES.map(goldPackage => `<article class="shop-item shop-item--gold glass-card"><div class="shop-item-icon shop-item-icon--gold">◈</div><div class="shop-item-copy"><span class="pill pill--mythic">금화 충전</span><h2>${escapeHtml(goldPackage.name)}</h2><p>${escapeHtml(goldPackage.description)}</p><small>금화 +${goldPackage.gold}개 · 1개당 1,500원</small></div><button class="action-button action-button--primary" data-action="gold-purchase" data-package-id="${goldPackage.id}" ${GOLD_PURCHASE_ENABLED ? '' : 'disabled'}>${GOLD_PURCHASE_ENABLED ? `₩ ${goldPackage.priceKRW.toLocaleString('ko-KR')} · 충전` : '정식 출시 전 구매 잠금'}</button></article>`).join('')
-    const resourceCards = RESOURCE_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--resource glass-card"><div class="shop-item-icon shop-item-icon--resource">${RESOURCE_META[product.resource].icon}</div><div class="shop-item-copy"><span class="pill pill--resource">자원 패키지</span><h2>${escapeHtml(RESOURCE_META[product.resource].label)} ${product.goldCost}금화</h2><p>${escapeHtml(product.description)}</p><small>${RESOURCE_META[product.resource].label} +${formatNumber(product.amount)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="cash-shop-purchase" data-product-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
-    const honorCards = HONOR_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--honor glass-card"><div class="shop-item-icon shop-item-icon--gold">★</div><div class="shop-item-copy"><span class="pill pill--resource">명망 패키지</span><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.description)}</p><small>명망 +${formatNumber(product.honor)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="honor-shop-purchase" data-package-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
+    const goldCards = GOLD_PACKAGES.map(goldPackage => `<article class="shop-item shop-item--gold glass-card"><div class="shop-item-icon shop-item-icon--gold">${icon('gold')}</div><div class="shop-item-copy"><span class="pill pill--mythic">금화 충전</span><h2>${escapeHtml(goldPackage.name)}</h2><p>${escapeHtml(goldPackage.description)}</p><small>금화 +${goldPackage.gold}개 · 1개당 1,500원</small></div><button class="action-button action-button--primary" data-action="gold-purchase" data-package-id="${goldPackage.id}" ${GOLD_PURCHASE_ENABLED ? '' : 'disabled'}>${GOLD_PURCHASE_ENABLED ? `₩ ${goldPackage.priceKRW.toLocaleString('ko-KR')} · 충전` : '정식 출시 전 구매 잠금'}</button></article>`).join('')
+    const resourceCards = RESOURCE_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--resource glass-card"><div class="shop-item-icon shop-item-icon--resource">${icon(product.resource)}</div><div class="shop-item-copy"><span class="pill pill--resource">자원 패키지</span><h2>${escapeHtml(RESOURCE_META[product.resource].label)} ${product.goldCost}금화</h2><p>${escapeHtml(product.description)}</p><small>${RESOURCE_META[product.resource].label} +${formatNumber(product.amount)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="cash-shop-purchase" data-product-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
+    const honorCards = HONOR_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--honor glass-card"><div class="shop-item-icon shop-item-icon--gold">${icon('honor')}</div><div class="shop-item-copy"><span class="pill pill--resource">명망 패키지</span><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.description)}</p><small>명망 +${formatNumber(product.honor)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="honor-shop-purchase" data-package-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
     const mythicCards = MYTHIC_SHOP_EQUIPMENT.map(item => { const specialty = equipmentSpecialty(item); return `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon"><img class="equipment-image--mythic" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /></div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small>${specialty ? `<strong class="shop-specialty">특기 · ${escapeHtml(specialty.label)} · ${escapeHtml(specialty.description)}</strong>` : ''}</div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>` }).join('')
     const cards = this.shopTab === 'gold' ? goldCards : this.shopTab === 'resources' ? resourceCards + honorCards : mythicCards
     const description = this.shopTab === 'gold' ? '금화 1개를 1,500원 기준으로 충전해 자원 패키지를 교환하십시오.' : this.shopTab === 'resources' ? '금화로 영토·강화·연구에 필요한 자원 패키지를 교환합니다.' : '유저 대련 승리로 얻은 신화장비 조각으로 장비를 교환합니다.'
     const notice = this.shopTab === 'gold' ? '정식 출시 전 혜택' : this.shopTab === 'resources' ? '자원 패키지 안내' : '대련 승리 보상'
     const noticeText = this.shopTab === 'gold' ? '정식 출시 전에는 매일 금화 100개를 지급합니다. 금화 테스트 충전은 정식 출시 지시 전까지 잠겨 있습니다.' : this.shopTab === 'resources' ? '기존 현금 자원 패키지는 삭제하고, 자원 25종과 명망 3·5·10·20·50·100금화 패키지를 제공합니다. 금화 1개는 명망 100개로 교환됩니다.' : '유저 대련에서 승리할 때마다 신화장비 조각 1개를 획득합니다. 신화 장비 뽑기는 제공하지 않습니다.'
-    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">CELESTIAL MARKET · SHOP</span><h1>상점</h1><p class="heading-copy">${description}</p></div><div class="shop-balances glass-card"><div><span>보유 금화</span><strong>◈ ${formatNumber(state.gold)}</strong></div><div><span>보유 명망</span><strong>★ ${formatNumber(state.honor)}</strong></div><div><span>신화 조각</span><strong>✦ ${state.mythicFragments}</strong></div></div></div><div class="shop-tabs" role="tablist"><button class="shop-tab ${this.shopTab === 'gold' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="gold">금화 충전 <small>5종</small></button><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">자원·명망 <small>31종</small></button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비 <small>12종</small></button></div><div class="shop-notice glass-card"><strong>${notice}</strong><span>${noticeText}</span></div><div class="shop-grid">${cards}</div></section>`
+    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">CELESTIAL MARKET · SHOP</span><h1>상점</h1><p class="heading-copy">${description}</p></div><div class="shop-balances glass-card"><div><span>보유 금화</span><strong>${icon('gold', 'gi--inline')} ${formatNumber(state.gold)}</strong></div><div><span>보유 명망</span><strong>${icon('honor', 'gi--inline')} ${formatNumber(state.honor)}</strong></div><div><span>신화 조각</span><strong>${icon('mythic', 'gi--inline')} ${state.mythicFragments}</strong></div></div></div><div class="shop-tabs" role="tablist"><button class="shop-tab ${this.shopTab === 'gold' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="gold">금화 충전 <small>5종</small></button><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">자원·명망 <small>31종</small></button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비 <small>12종</small></button></div><div class="shop-notice glass-card"><strong>${notice}</strong><span>${noticeText}</span></div><div class="shop-grid">${cards}</div></section>`
   }
 
   private updatesSection(): string {
