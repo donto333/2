@@ -939,18 +939,26 @@ async function refreshAccount(): Promise<void> {
   }
 }
 
+// 서버(server/routers.mjs SAVE_INT_MAX)와 같은 한도. 값 하나가 한도를 넘어도 저장 전체가
+// 거절되지 않도록 보낼 때 범위 안으로 맞춘다.
+const SAVE_INT_MAX = 2_000_000_000
+function saveInt(value: number, max = SAVE_INT_MAX): number {
+  const number = Math.trunc(Number(value))
+  return Number.isFinite(number) ? Math.max(0, Math.min(max, number)) : 0
+}
+
 function accountStatePayload() {
   return {
-    honor: Math.trunc(state.honor),
-    silver: Math.trunc(state.silver),
-    gold: Math.trunc(state.gold),
-    manuals: Math.trunc(state.manuals),
-    wins: Math.trunc(state.wins),
-    battleScore: Math.trunc(state.battleScore),
-    grain: Math.trunc(state.resources.grain),
-    wood: Math.trunc(state.resources.wood),
-    iron: Math.trunc(state.resources.iron),
-    influence: Math.trunc(state.resources.influence),
+    honor: saveInt(state.honor),
+    silver: saveInt(state.silver),
+    gold: saveInt(state.gold),
+    manuals: saveInt(state.manuals),
+    wins: saveInt(state.wins),
+    battleScore: saveInt(state.battleScore),
+    grain: saveInt(state.resources.grain),
+    wood: saveInt(state.resources.wood),
+    iron: saveInt(state.resources.iron),
+    influence: saveInt(state.resources.influence),
     faction: state.faction,
     factionChosen: state.factionConfirmed,
     generalData: JSON.stringify(state.generals),
@@ -960,19 +968,31 @@ function accountStatePayload() {
     selectedCityId: state.selectedCityId,
     incomeCollectedAt: state.lastIncomeCollectedAt === undefined ? null : String(state.lastIncomeCollectedAt),
     conquestAt: state.lastConquestAt === undefined ? null : String(state.lastConquestAt),
-    luoyangBoxes: Math.trunc(state.luoyangBoxes),
-    lastLuoyangReward: state.lastLuoyangReward === undefined ? null : Math.trunc(state.lastLuoyangReward),
+    luoyangBoxes: saveInt(state.luoyangBoxes),
+    lastLuoyangReward: state.lastLuoyangReward === undefined ? null : saveInt(state.lastLuoyangReward, 100),
     luoyangRewardWeekKey: state.luoyangRewardWeekKey ?? null,
-    factionWarScore: Math.trunc(state.factionWarScore),
+    factionWarScore: saveInt(state.factionWarScore),
     equipmentData: JSON.stringify(state.equipmentInventory),
     equipmentLoadoutsData: JSON.stringify(state.equipmentLoadouts),
     selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
-    mythicFragments: Math.trunc(state.mythicFragments),
-    duelAttemptsToday: Math.trunc(state.duelAttemptsToday),
+    mythicFragments: saveInt(state.mythicFragments),
+    duelAttemptsToday: saveInt(state.duelAttemptsToday, 5),
     duelDayKey: state.duelDayKey,
     prelaunchGoldDayKey: state.prelaunchGoldDayKey,
     scenarioData: JSON.stringify(state.scenarioCleared),
   }
+}
+
+// 서버 입력 검증(zod) 오류는 JSON 배열로 온다. 원문 대신 어느 항목이 문제인지만 보여 준다.
+function describeSaveError(message: string): string {
+  try {
+    const issues = JSON.parse(message) as Array<{ path?: unknown[]; code?: string }>
+    if (Array.isArray(issues) && issues.length) {
+      const fields = [...new Set(issues.map(issue => (issue.path ?? []).join('.') || issue.code || '?'))]
+      return `저장 값 확인 필요: ${fields.join(', ').slice(0, 80)}`
+    }
+  } catch { /* 일반 오류 메시지 */ }
+  return message.slice(0, 80)
 }
 
 function queueAccountSave(immediate = false): void {
@@ -1013,7 +1033,7 @@ async function flushAccountSave(): Promise<void> {
     saveRetryCount += 1
     saveQueued = true
     if (saveRetryCount >= 3) {
-      const reason = error instanceof Error && error.message ? ` · ${error.message.slice(0, 80)}` : ''
+      const reason = error instanceof Error && error.message ? ` · ${describeSaveError(error.message)}` : ''
       ui.notify(`온라인 저장이 지연되고 있습니다. 로컬 저장 후 자동 재시도합니다.${reason}`, 'ember')
     }
   } finally {
