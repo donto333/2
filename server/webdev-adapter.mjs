@@ -83,7 +83,8 @@ var gameAccountStates = mysqlTable("game_account_states", {
   selectedCityId: varchar("selectedCityId", { length: 64 }),
   incomeCollectedAt: varchar("incomeCollectedAt", { length: 32 }),
   conquestAt: varchar("conquestAt", { length: 32 }),
-  scenarioData: mediumtext("scenarioData")
+  scenarioData: mediumtext("scenarioData"),
+  missionData: mediumtext("missionData")
 });
 var factionTerritoryStates = mysqlTable("faction_territory_states", {
   cityId: varchar("cityId", { length: 64 }).primaryKey(),
@@ -318,7 +319,7 @@ function parseStateJson(value) {
   }
 }
 function gameStateView(row) {
-  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, grantLedger: _grantLedger, ...base } = row;
+  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, missionData, grantLedger: _grantLedger, ...base } = row;
   return {
     ...base,
     generals: parseStateJson(generalData),
@@ -328,6 +329,7 @@ function gameStateView(row) {
     equipmentInventory: parseStateJson(equipmentData),
     equipmentLoadouts: parseStateJson(equipmentLoadoutsData),
     scenarioCleared: parseStateJson(scenarioData),
+    missions: parseStateJson(missionData),
     selectedEquipmentGeneralId: row.selectedEquipmentGeneralId ?? null,
     selectedCityId: row.selectedCityId ?? null,
     lastIncomeCollectedAt: row.incomeCollectedAt ? Number(row.incomeCollectedAt) : undefined,
@@ -489,6 +491,16 @@ async function grantLuoyangBox(db, userId, now = Date.now()) {
     await tx.update(gameAccountStates).set({ luoyangBoxes: sql`${gameAccountStates.luoyangBoxes} + 1`, mythicStones: sql`${gameAccountStates.mythicStones} + 1`, lastLuoyangReward: reward, gold: sql`${gameAccountStates.gold} + ${reward}`, luoyangRewardWeekKey: settlement.weekKey }).where(eq(gameAccountStates.userId, userId));
     return true;
   });
+}
+/** 낙양전 기록: 최근 12주 승자와 낙양 누적 공헌(진영별 성벽 피해·출정 수, 상위 장수 5명) */
+async function getLuoyangHistory() {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await settleLuoyangWeek(db);
+  const weeks = await db.select({ weekKey: luoyangWeeklyResults.weekKey, winnerFaction: luoyangWeeklyResults.winnerFaction }).from(luoyangWeeklyResults).orderBy(desc(luoyangWeeklyResults.weekKey)).limit(12);
+  const factions = await db.select({ faction: cityDamageRankings.faction, damage: sql`SUM(${cityDamageRankings.totalDamage})`.mapWith(Number), battles: sql`SUM(${cityDamageRankings.battleCount})`.mapWith(Number) }).from(cityDamageRankings).where(eq(cityDamageRankings.cityId, LUOYANG_CITY_ID)).groupBy(cityDamageRankings.faction);
+  const top = await db.select({ displayName: cityDamageRankings.displayName, faction: cityDamageRankings.faction, totalDamage: cityDamageRankings.totalDamage }).from(cityDamageRankings).where(eq(cityDamageRankings.cityId, LUOYANG_CITY_ID)).orderBy(desc(cityDamageRankings.totalDamage)).limit(5);
+  return { weeks, factions, top };
 }
 /** 낙양 주간 보상 확인: 지급 대상이면 지급하고, 현재 보상 주차와 금액을 돌려준다(클라이언트가 반영) */
 async function getLuoyangReward(userId) {
@@ -1251,6 +1263,7 @@ export {
   getGameState,
   getFactionTerritories,
   getLuoyangReward,
+  getLuoyangHistory,
   grantCurrency,
   listDuelOpponents,
   listGameStates,

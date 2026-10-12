@@ -1,4 +1,5 @@
 import { OFFICIAL_LAUNCH } from '../../server/launch.mjs'
+import { DAILY_BONUS, DAILY_BONUS_ID, MISSIONS, dailyBonusReady, ensureMissions, missionStatus, rewardText, type MissionDef } from '../game/missions'
 import { effectsSetting, qualitySetting, setEffectsSetting, setQualitySetting, type EffectsSetting, type QualitySetting } from '../game/settings'
 import { RESEARCH_BRANCHES, RESEARCH_MINUTES, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
 import { templateGeneral, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
@@ -10,6 +11,7 @@ import { TerritoryMapController, type MapCity } from './territory-map'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
 const equipmentImage = (type: EquipmentType): string => `/assets/equipment/${type}.webp`
+const STAT_LABEL: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
 type RosterSort = 'power' | 'level' | 'grade' | 'name' | 'role'
 type EquipmentSort = 'grade' | 'level' | 'name'
 type FormationSort = 'power' | 'grade'
@@ -57,6 +59,12 @@ function compactNumber(value: number): string {
 function authButtonInner(auth: { status: string; name?: string | null }): string {
   if (auth.status === 'authenticated') return `<span class="auth-name">${escapeHtml(auth.name ?? '장군')}</span><span class="auth-out">로그아웃</span>`
   return auth.status === 'offline' ? '오프라인 모드' : 'Manus 로그인'
+}
+
+export interface LuoyangHistory {
+  weeks: Array<{ weekKey: string; winnerFaction: '촉한' | '위나라' | '오나라' | null }>
+  factions: Array<{ faction: '촉한' | '위나라' | '오나라'; damage: number; battles: number }>
+  top: Array<{ displayName: string; faction: string; totalDamage: number }>
 }
 
 export interface AuthView {
@@ -155,6 +163,7 @@ export interface StrategyUiCallbacks {
   onBuildingUpgrade: (cityId: string, buildingId: string) => void
   onResearch: (id: string) => void
   onResearchCancel: () => void
+  onMissionClaim: (id: string) => void
   /** 전투 효과 설정이 바뀜 */
   onEffectsSetting?: () => void
   onResearchRush: () => void
@@ -219,6 +228,7 @@ export class StrategyUI {
   private adminGameDataError: string | null = null
   private adminBoard: AdminBoardState = { postingEnabled: true, posts: [] }
   private cityDamageRankings: CityDamageRanking[] = []
+  private luoyangHistory: LuoyangHistory | null = null
   private cityDamageRankingCityId = ''
   private rosterSort: RosterSort = 'power'
   private rosterSortDescending = true
@@ -366,6 +376,40 @@ export class StrategyUI {
 
   setAdminBoard(state: AdminBoardState): void {
     this.adminBoard = state
+  }
+
+  /** 신화장비 강화 성공 연출 */
+  showMythicEnhance(item: Equipment): void {
+    document.querySelector('.mythic-enhance-fx')?.remove()
+    const overlay = document.createElement('div')
+    overlay.className = 'mythic-enhance-fx'
+    overlay.innerHTML = `<div class="mythic-enhance-fx__ring"></div><div class="mythic-enhance-fx__card"><img src="${equipmentImage(item.type)}" alt="" width="96" height="96"><span>신화 강화 성공</span><strong>${escapeHtml(item.name)} · Lv.${item.level}</strong><em>${STAT_LABEL[item.mainStat] ?? item.mainStat} +${equipmentValue(item)}</em></div>`
+    document.body.appendChild(overlay)
+    overlay.addEventListener('click', () => overlay.remove())
+    window.setTimeout(() => overlay.classList.add('is-leaving'), 1900)
+    window.setTimeout(() => overlay.remove(), 2400)
+  }
+
+  setLuoyangHistory(history: LuoyangHistory): void {
+    this.luoyangHistory = history
+    if (this.renderedState?.section === 'territory') this.render(this.renderedState)
+  }
+
+  /** 낙양전 기록 카드 */
+  private luoyangHistoryCard(state: StrategyState): string {
+    const history = this.luoyangHistory
+    if (!history) return '<div class="glass-card luoyang-history"><div class="card-header"><div><span class="eyebrow">낙양전 기록</span><h3>역대 낙양 주인</h3></div></div><p class="luoyang-history__empty">로그인하면 역대 낙양전 결과와 진영별 공헌을 볼 수 있습니다.</p></div>'
+    const totals = new Map(history.factions.map(row => [row.faction, row]))
+    const max = Math.max(1, ...history.factions.map(row => Number(row.damage) || 0))
+    const factions = (['촉한', '위나라', '오나라'] as const).map(faction => {
+      const row = totals.get(faction)
+      const damage = Number(row?.damage) || 0
+      const wins = history.weeks.filter(week => week.winnerFaction === faction).length
+      return `<li class="${faction === state.faction ? 'is-mine' : ''}"><span>${faction}${faction === state.faction ? ' (내 진영)' : ''}</span><i><b style="width:${damage / max * 100}%"></b></i><em>성벽 피해 ${formatNumber(damage)} · 출정 ${formatNumber(Number(row?.battles) || 0)} · 최근 ${wins}승</em></li>`
+    }).join('')
+    const weeks = history.weeks.length ? history.weeks.map(week => `<li><span>${week.weekKey.slice(5).replace('-', '월 ')}일</span><b class="${week.winnerFaction === state.faction ? 'is-mine' : ''}">${week.winnerFaction ?? '주인 없음'}</b></li>`).join('') : '<li><span>아직 결과가 없습니다</span></li>'
+    const top = history.top.length ? history.top.map((row, index) => `<li><span>${index + 1}. ${escapeHtml(row.displayName)}</span><small>${row.faction} · ${formatNumber(Number(row.totalDamage) || 0)}</small></li>`).join('') : ''
+    return `<div class="glass-card luoyang-history"><div class="card-header"><div><span class="eyebrow">낙양전 기록</span><h3>역대 낙양 주인 · 진영 공헌</h3></div><span class="rate-note">최근 12주</span></div><ul class="luoyang-history__factions">${factions}</ul><div class="luoyang-history__cols"><div><h4>주간 승자</h4><ul class="luoyang-history__weeks">${weeks}</ul></div>${top ? `<div><h4>공헌 상위 장수</h4><ul class="luoyang-history__top">${top}</ul></div>` : ''}</div></div>`
   }
 
   setCityDamageRankings(cityId: string, rankings: CityDamageRanking[]): void {
@@ -698,8 +742,25 @@ export class StrategyUI {
   private overviewSection(state: StrategyState): string {
     return `<section class="page-section page-section--overview"><div class="section-heading"><div><span class="eyebrow">THE WARRIOR'S PATH · 01</span><h1>다음 한 수를<br><em>준비하십시오.</em></h1><p class="heading-copy">무장을 영입하고, 성장을 증명하고,<br>당신의 이름을 전장에 새깁니다.</p></div><button class="ghost-button" data-action="section" data-section="rank">천하 전적 보기 <span>↗</span></button></div>
       <div class="command-hero"><div class="hero-copy"><span class="pill pill--jade">오늘의 작전</span><h2>황혼의 관문</h2><p>협곡 너머에서 적의 깃발이 감지되었습니다.<br>정예 무장을 편성하고 선제 기동을 지휘하세요.</p><div class="hero-actions"><button class="action-button action-button--primary" data-action="section" data-section="battle">시나리오 입장 <span>→</span></button><button class="action-button action-button--quiet" data-action="section" data-section="recruit">무장 모집 <span>✦</span></button></div></div><div class="hero-stat"><span class="stat-label">작전 전투력</span><strong>${formatNumber(totalPower(state))}</strong><span class="stat-delta">▲ 12.4% <small>지난 작전 대비</small></span><div class="hero-sigil">✦</div></div></div>
+      ${this.missionCard(state)}
       <div class="overview-grid"><div class="glass-card formation-card"><div class="card-header"><div><span class="eyebrow">CURRENT FORMATION</span><h3>출전 진형</h3></div><button class="text-button" data-action="section" data-section="roster">편성 변경</button></div><div class="formation-row">${state.formation.map(id => { const general = state.generals.find(item => item.id === id); return general ? this.miniGeneral(general) : '' }).join('')}</div><div class="formation-footer"><span><i class="status-dot"></i> 출전 준비 완료</span><span class="muted">${state.formation.length}/3 슬롯</span></div></div><div class="glass-card notice-card"><div class="card-header"><div><span class="eyebrow">FIELD INTEL</span><h3>전장 기록</h3></div><span class="intel-icon">⌁</span></div><p class="notice-text">${state.lastNotice}</p><div class="notice-meta"><span>마지막 기록 · 방금 전</span><button class="text-button" data-action="section" data-section="battle">작전 보기 →</button></div></div></div>
       <div class="section-footnote"><span class="footnote-line"></span><span>제1장 · 옥패의 계절</span><span class="footnote-line"></span></div></section>`
+  }
+
+  /** 본영: 일일·주간 임무 */
+  private missionCard(state: StrategyState): string {
+    const missions = ensureMissions(state)
+    const row = (mission: MissionDef) => {
+      const status = missionStatus(state, mission)
+      const progress = Math.min(mission.goal, missions.progress[mission.id] ?? 0)
+      const button = status === 'claimed' ? '<span class="mission-done">받음</span>' : `<button class="mini-action ${status === 'ready' ? 'mini-action--research' : ''}" data-action="mission-claim" data-mission="${mission.id}" ${status === 'ready' ? '' : 'disabled'}>${status === 'ready' ? '보상 받기' : `${progress}/${mission.goal}`}</button>`
+      return `<li class="mission-row is-${status}"><div><strong>${mission.label}</strong><small>${rewardText(mission.reward)}</small><span class="mission-bar"><i style="width:${progress / mission.goal * 100}%"></i></span></div>${button}</li>`
+    }
+    const daily = MISSIONS.filter(mission => mission.scope === 'daily')
+    const weekly = MISSIONS.filter(mission => mission.scope === 'weekly')
+    const bonusDone = missions.claimed.includes(DAILY_BONUS_ID)
+    const bonus = `<div class="mission-bonus ${dailyBonusReady(state) ? 'is-ready' : ''}"><span>일일 임무 모두 완료 · ${rewardText(DAILY_BONUS)}</span>${bonusDone ? '<span class="mission-done">받음</span>' : `<button class="mini-action mini-action--research" data-action="mission-claim" data-mission="${DAILY_BONUS_ID}" ${dailyBonusReady(state) ? '' : 'disabled'}>추가 보상</button>`}</div>`
+    return `<div class="glass-card mission-card"><div class="card-header"><div><span class="eyebrow">일일 · 주간 임무</span><h3>오늘의 임무</h3></div><span class="rate-note">일일은 매일 0시, 주간은 월요일 0시(한국 시간)에 새로 시작</span></div><div class="mission-cols"><div><h4>일일</h4><ul>${daily.map(row).join('')}</ul>${bonus}</div><div><h4>주간</h4><ul>${weekly.map(row).join('')}</ul></div></div></div>`
   }
 
   private summoningSection(state: StrategyState): string {
@@ -765,7 +826,7 @@ export class StrategyUI {
     const grade = EQUIPMENT_GRADE_META[item.grade]
     const set = EQUIPMENT_SET_META[item.set]
     const specialty = equipmentSpecialty(item)
-    return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}" style="--grade:${grade.color}"><div class="equipment-card-top"><span class="equipment-type"><img loading="lazy" decoding="async" width="21" height="21" src="${equipmentImage(item.type)}" alt="" /> ${EQUIPMENT_TYPE_META[item.type].label}</span><span class="equipment-grade">${grade.label}${(item.quantity ?? 1) > 1 ? ` · x${item.quantity}` : ''}</span></div><img loading="lazy" decoding="async" width="72" height="72" class="equipment-image ${item.grade === 'mythic' ? 'equipment-image--mythic' : ''}" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /><h4>${item.name}</h4><p>${set.label} · ${item.skillName}</p><div class="equipment-stat"><b>${item.mainStat}</b><strong>+${equipmentValue(item)}</strong><span>Lv.${item.level}/20</span></div><small>${item.skillDescription}</small>${specialty ? `<div class="equipment-specialty"><b>특기 · ${escapeHtml(specialty.label)}</b><span>${escapeHtml(specialty.description)}</span></div>` : ''}<div class="equipment-card-actions">${item.grade === 'mythic' ? `<button class="mini-action mini-action--mythic" data-action="equipment-enhance" data-equipment-id="${item.id}" title="신화장비는 낙양 강화석으로만 강화합니다(낙양 점령 1회당 1개)" ${item.level >= 20 || (this.renderedState?.mythicStones ?? 0) < 1 ? 'disabled' : ''}>${item.level >= 20 ? '최고 단계' : `강화 · 낙양 강화석 1 (보유 ${this.renderedState?.mythicStones ?? 0})`}</button>` : `<button class="mini-action" data-action="equipment-enhance" data-equipment-id="${item.id}">강화 · 은전 ${formatNumber(equipmentCost(item, this.renderedState ?? undefined).silver ?? 0)}</button>`}${equipped ? `<button class="mini-action" data-action="equipment-unequip" data-equipment-type="${item.type}" data-general-id="${generalId}">장착 해제</button>` : `<button class="mini-action" data-action="equipment-equip" data-equipment-id="${item.id}" data-general-id="${generalId}">장착</button>`}</div></article>`
+    return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}" style="--grade:${grade.color}"><div class="equipment-card-top"><span class="equipment-type"><img loading="lazy" decoding="async" width="21" height="21" src="${equipmentImage(item.type)}" alt="" /> ${EQUIPMENT_TYPE_META[item.type].label}</span><span class="equipment-grade">${grade.label}${(item.quantity ?? 1) > 1 ? ` · x${item.quantity}` : ''}</span></div><img loading="lazy" decoding="async" width="72" height="72" class="equipment-image ${item.grade === 'mythic' ? 'equipment-image--mythic' : ''}" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /><h4>${item.name}</h4><p>${set.label} · ${item.skillName}</p><div class="equipment-stat"><b>${STAT_LABEL[item.mainStat] ?? item.mainStat}</b><strong>+${equipmentValue(item)}</strong><span>Lv.${item.level}/20</span></div><small>${item.skillDescription}</small>${specialty ? `<div class="equipment-specialty"><b>특기 · ${escapeHtml(specialty.label)}</b><span>${escapeHtml(specialty.description)}</span></div>` : ''}<div class="equipment-card-actions">${item.grade === 'mythic' ? `<div class="mythic-preview">${item.level >= 20 ? `최고 단계 · ${STAT_LABEL[item.mainStat] ?? item.mainStat} +${equipmentValue(item)}` : `강화 시 ${STAT_LABEL[item.mainStat] ?? item.mainStat} +${equipmentValue(item)} → <b>+${equipmentValue({ ...item, level: item.level + 1 })}</b> · 최대(Lv.20) +${equipmentValue({ ...item, level: 20 })}`}</div><button class="mini-action mini-action--mythic" data-action="equipment-enhance" data-equipment-id="${item.id}" title="신화장비는 낙양 강화석으로만 강화합니다(낙양 점령 1회당 1개)" ${item.level >= 20 || (this.renderedState?.mythicStones ?? 0) < 1 ? 'disabled' : ''}>${item.level >= 20 ? '최고 단계' : `강화 · 낙양 강화석 1 (보유 ${this.renderedState?.mythicStones ?? 0})`}</button>` : `<button class="mini-action" data-action="equipment-enhance" data-equipment-id="${item.id}">강화 · 은전 ${formatNumber(equipmentCost(item, this.renderedState ?? undefined).silver ?? 0)}</button>`}${equipped ? `<button class="mini-action" data-action="equipment-unequip" data-equipment-type="${item.type}" data-general-id="${generalId}">장착 해제</button>` : `<button class="mini-action" data-action="equipment-equip" data-equipment-id="${item.id}" data-general-id="${generalId}">장착</button>`}</div></article>`
   }
 
   private equipmentMiniCard(item: Equipment): string {
@@ -999,7 +1060,7 @@ export class StrategyUI {
     const panelClass = canManage ? 'city-management--owned' : 'city-management--frontline'
     const capitalBadge = capitalFaction ? `<span class="capital-badge">${capitalFaction} 본성 · 점령 불가</span>` : ''
     const frontierNote = canManage ? '내정 핵심지 · 방어선 유지' : eligibility.allowed ? `접경 전선 · ${eligibility.reason}` : '원거리 전선 · 진군 경로 차단'
-    return `<div class="glass-card city-management ${panelClass}"><div class="city-sheet-bar"><span class="city-sheet-grip"></span><button class="city-sheet-close" data-action="city-sheet-close" aria-label="도시 정보 닫기">✕</button></div><div class="city-management-head"><div><span class="eyebrow">도시 관리 · ${city.region}</span><h2>${city.name}${city.id === 'luoyang' ? this.luoyangRulesMenu() : ''}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><div class="city-management-status"><span class="city-level">Lv.${city.level}</span>${capitalBadge}</div></div><div class="city-map-context"><span>삼국지 지리 전선</span><strong>${frontierNote}</strong><small>인접 도시 ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '독립 성 · 연결 전선 없음'}</small></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div><p class="wall-status">성벽 능력 ${wallCapacity} · 현재 방어도 ${city.defense}/${wallCapacity} · 방어도 0 도달 및 수비병 전멸 후 최종 세력전</p>${conquest}${this.cityDamageRankingCard(city)}${this.battleLogCard(city)}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">ESTIMATED YIELD</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${RESOURCE_META[key].icon} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">CIVIL WORKS</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">병영을 강화하면 성벽 능력과 방어도 회복 상한이 상승합니다.</p>' : '<p class="management-tip management-tip--warn">수비병을 모두 격파하고 방어도를 0까지 낮춘 뒤 최종 세력전을 실행하십시오.</p>'}</div>`
+    return `<div class="glass-card city-management ${panelClass}"><div class="city-sheet-bar"><span class="city-sheet-grip"></span><button class="city-sheet-close" data-action="city-sheet-close" aria-label="도시 정보 닫기">✕</button></div><div class="city-management-head"><div><span class="eyebrow">도시 관리 · ${city.region}</span><h2>${city.name}${city.id === 'luoyang' ? this.luoyangRulesMenu() : ''}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><div class="city-management-status"><span class="city-level">Lv.${city.level}</span>${capitalBadge}</div></div><div class="city-map-context"><span>삼국지 지리 전선</span><strong>${frontierNote}</strong><small>인접 도시 ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '독립 성 · 연결 전선 없음'}</small></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div><p class="wall-status">성벽 능력 ${wallCapacity} · 현재 방어도 ${city.defense}/${wallCapacity} · 방어도 0 도달 및 수비병 전멸 후 최종 세력전</p>${conquest}${city.id === 'luoyang' ? this.luoyangHistoryCard(state) : ''}${this.cityDamageRankingCard(city)}${this.battleLogCard(city)}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">ESTIMATED YIELD</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${RESOURCE_META[key].icon} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">CIVIL WORKS</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">병영을 강화하면 성벽 능력과 방어도 회복 상한이 상승합니다.</p>' : '<p class="management-tip management-tip--warn">수비병을 모두 격파하고 방어도를 0까지 낮춘 뒤 최종 세력전을 실행하십시오.</p>'}</div>`
   }
 
   private cityDamageRankingCard(city: City): string {
@@ -1279,6 +1340,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.13', '임무 · 알림 · 낙양전 기록 · 신화 강화', '본영에 일일 임무 5개(모두 받으면 추가 보상)와 주간 임무 4개가 생겼습니다. 기술 연구가 끝났을 때 다른 탭을 보고 있으면 브라우저 알림과 탭 제목으로 알려 드립니다. 영토의 낙양을 고르면 최근 12주 낙양 주인과 진영별 공헌, 공헌 상위 장수를 볼 수 있습니다. 신화장비 카드에 강화 후 능력과 최대 능력이 미리 보이고, 강화에 성공하면 축하 연출이 나옵니다. 장비 능력 이름도 한글(통솔·무력·모략·속도)로 바꿨습니다.', '완료', 'gold'],
       ['2026.10.13', '전투 연출 강화', '맞으면 병사들이 조금씩 다르게 뒤로 밀리며 젖혀지고(기병은 크게), 병력이 줄어든 만큼 병사가 뒤로 쓰러지며 사라집니다. 승리하면 무장들이 무기를 연달아 치켜들고 금빛 기둥이 솟으며, 진 쪽은 뒤로 물러나 흐려집니다. 병종 상성(기병>궁병>창병>기병)이 유리하면 "상성 우위!"가 뜨고, 무장 버튼에 같은 레인 적장과의 상성이 표시됩니다. 관우(청룡언월도)·장비(장팔사모)·조운·마초(창)·전위·장료(극)·허저·서황(대도) 등 이름난 무장은 고유 무기를 듭니다.', '완료', 'jade'],
       ['2026.10.13', '안정성 · 성능 개선', '금화·신화장비 조각·낙양 강화석은 이제 서버가 기준입니다(일일 금화, 시나리오 최초 클리어, 세력전 승리, 유저 대련 보상은 서버가 확인한 뒤 지급). 낙양전 시간은 기기 시간대와 무관하게 한국 시간 일요일 20:00~24:00로 맞췄습니다. 계정 관리에 그래픽 품질·전투 효과 설정을 추가했고, 전투 중 화면이 버벅이면 효과를 자동으로 줄입니다. 첫 전투 진입 때 멈칫하지 않도록 모델을 미리 준비합니다.', '완료', 'jade'],
       ['2026.10.13', '신화장비 강화 · 낙양 강화석', '신화장비는 이제 은전·철로 강화할 수 없고, 낙양 강화석으로만 강화합니다. 강화석 1개로 1회(+1단계) 강화하며, 주간 낙양전에서 낙양을 점령한 진영의 유저가 점령 1회(주 1회)마다 1개를 받습니다. 보유 개수는 장비 관리 화면에서 확인할 수 있습니다.', '완료', 'gold'],
@@ -1434,6 +1496,7 @@ export class StrategyUI {
     else if (action === 'research') this.callbacks.onResearch(button.dataset.research ?? '')
     else if (action === 'setting-quality') { setQualitySetting((button.dataset.value ?? 'auto') as QualitySetting); this.notify('그래픽 품질을 바꿨습니다. 새로고침하면 적용됩니다.', 'jade'); if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'setting-effects') { setEffectsSetting((button.dataset.value ?? 'auto') as EffectsSetting); this.callbacks.onEffectsSetting?.(); if (this.renderedState) this.render(this.renderedState) }
+    else if (action === 'mission-claim') this.callbacks.onMissionClaim(button.dataset.mission ?? '')
     else if (action === 'research-cancel') this.callbacks.onResearchCancel()
     else if (action === 'research-rush') this.callbacks.onResearchRush()
     else if (action === 'scenario-select') { this.scenarioSelectedId = button.dataset.scenarioId ?? this.scenarioSelectedId; if (this.renderedState) this.render(this.renderedState) }

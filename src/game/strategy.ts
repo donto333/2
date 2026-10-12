@@ -1,3 +1,4 @@
+import type { MissionState } from './missions'
 import { createResearch, normalizeResearch, researchMods, researchCostText, startResearch } from './research'
 import cityRoutes from '../../server/city-routes.json'
 import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
@@ -223,6 +224,8 @@ export interface StrategyState {
   mythicFragments: number
   /** 낙양 강화석: 주간 낙양전 승리 진영 유저에게 주 1개. 신화장비 강화는 이것으로만(1개 = 1회) */
   mythicStones: number
+  /** 일일·주간 임무 진행(missions.ts) */
+  missions?: MissionState
   duelAttemptsToday: number
   duelDayKey: string
   prelaunchGoldDayKey: string

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -47,6 +47,7 @@ export const gameRouter = router({
   }),
   territory: router({
     list: protectedProcedure.query(({ ctx }) => getFactionTerritories(ctx.user.id)),
+    luoyangHistory: protectedProcedure.query(() => getLuoyangHistory()),
     recordBattle: protectedProcedure.input(z.object({
       cityId: z.string().trim().min(1).max(64),
       damage: z.number().int().min(0).max(1000000),
@@ -125,6 +126,7 @@ export const gameRouter = router({
       incomeCollectedAt: z.string().max(32).nullable().optional(),
       conquestAt: z.string().max(32).nullable().optional(),
       scenarioData: z.string().max(100000).optional(),
+      missionData: z.string().max(20000).optional(),
     })).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 게임 상태를 저장할 수 없습니다.')
       return updateGameState(ctx.user.id, input)
