@@ -604,6 +604,7 @@ async function recordFactionDefense(userId, input) {
     outcome = result;
   });
   return { outcome, territories: await getFactionTerritories(userId) };
+}
 async function getCityDamageRankings(cityId) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");

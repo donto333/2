@@ -7,7 +7,7 @@ export type IconName =
   | 'gold' | 'silver' | 'honor' | 'influence' | 'grain' | 'wood' | 'iron' | 'manuals' | 'mythic'
   // 메뉴
   | 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research'
-  | 'battle' | 'duel' | 'shop' | 'rank' | 'updates' | 'account' | 'admin'
+  | 'battle' | 'duel' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin' | 'balance'
 
 const INK = '#2b1307'
 const S = `stroke="${INK}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"`
@@ -75,6 +75,10 @@ const SYMBOLS: Record<IconName, string> = {
   shop: `<path d="M11 9.5c-4.5 3-7 7.5-6 12 1 4.5 5 6.5 11 6.5s10-2 11-6.5c1-4.5-1.5-9-6-12z" fill="url(#gg-red)" ${S}/><path d="M10.5 9.5h11l-2-3.5h-7z" fill="url(#gg-red)" ${S}/><path d="M10 9.5h12" stroke="url(#gg-gold)" stroke-width="2.6" stroke-linecap="round"/><path d="M10 9.5h12" stroke="${INK}" stroke-width="1" stroke-linecap="round" opacity=".5"/><circle cx="16" cy="19.5" r="4.6" fill="url(#gg-gold)" stroke="${INK}" stroke-width="1.3"/><rect x="14.6" y="18.1" width="2.8" height="2.8" fill="${INK}"/>`,
   // 천하 랭킹: 청동 솥(정)
   rank: `<path d="M8.5 9V5.5h3V9M20.5 9V5.5h3V9" fill="none" ${S}/><path d="M4 9h24c0 7-4.5 12-12 12S4 16 4 9z" fill="url(#gg-bronze)" ${S}/><g fill="url(#gg-bronze)" ${S}><path d="M8.5 19l-2 9h3l2.5-7.5z"/><path d="M23.5 19l2 9h-3l-2.5-7.5z"/><path d="M14.5 21l-.5 7h4l-.5-7z"/></g><path d="M7 12.5h18" stroke="#f6cf92" stroke-width="1.3" stroke-linecap="round" opacity=".9"/><path d="M12 15.5l2 1.5 2-1.5 2 1.5 2-1.5" fill="none" stroke="#633915" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>`,
+  // 진영 게시판: 방(榜)을 붙인 게시 목판
+  board: `<path d="M8 28V12M24 28V12" stroke="${INK}" stroke-width="2" stroke-linecap="round"/><path d="M3.5 7.5h25l-2 3.5h-21z" fill="url(#gg-red)" ${S}/><rect x="5.5" y="11" width="21" height="12" rx="1" fill="url(#gg-wood)" ${S}/><rect x="8" y="12.8" width="7" height="8.4" fill="url(#gg-paper)" stroke="${INK}" stroke-width="1"/><rect x="17" y="12.8" width="7" height="8.4" fill="url(#gg-paper)" stroke="${INK}" stroke-width="1"/><g stroke="#7a5a2a" stroke-width="1" stroke-linecap="round"><path d="M9.8 15h3.4M9.8 17h3.4M9.8 19h2.2M18.8 15h3.4M18.8 17h3.4"/></g><circle cx="22.4" cy="19.4" r="1.3" fill="#c0392b"/>`,
+  // 밸런스 테스트: 천칭
+  balance: `<path d="M16 4v22" stroke="${INK}" stroke-width="1.8" stroke-linecap="round"/><path d="M5 9h22" stroke="url(#gg-gold)" stroke-width="2.6" stroke-linecap="round"/><path d="M5 9h22" stroke="${INK}" stroke-width="1" stroke-linecap="round" opacity=".45"/><circle cx="16" cy="4.5" r="2" fill="url(#gg-gold)" stroke="${INK}" stroke-width="1.1"/><path d="M6 9l-3.5 8M6 9l3.5 8M26 9l-3.5 8M26 9l3.5 8" stroke="${INK}" stroke-width="1" fill="none"/><path d="M1.8 17h8.4a4.2 3.3 0 0 1-8.4 0zM21.8 17h8.4a4.2 3.3 0 0 1-8.4 0z" fill="url(#gg-bronze)" ${S}/><path d="M10 28h12l-2-2.5h-8z" fill="url(#gg-red)" ${S}/>`,
   // 업데이트 기록: 종
   updates: `<path d="M16 3v3" stroke="${INK}" stroke-width="1.5" stroke-linecap="round"/><path d="M13 3h6" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/><path d="M9.5 9.5a6.5 6.5 0 0 1 13 0V20l3 4.5h-19l3-4.5z" fill="url(#gg-bronze)" ${S}/><path d="M9.5 15h13M9.5 18h13" stroke="#633915" stroke-width="1.1" opacity=".8"/><circle cx="16" cy="27" r="2.2" fill="url(#gg-gold)" stroke="${INK}" stroke-width="1.2"/><path d="M12.5 8.5c.6-1.5 1.8-2.4 3.2-2.7" fill="none" stroke="#fff3c0" stroke-width="1.3" stroke-linecap="round"/><path d="M27 7.5l2-1.5M27.5 11h2.5M5 7.5L3 6M4.5 11H2" stroke="#f2c14e" stroke-width="1.4" stroke-linecap="round"/>`,
   // 계정 관리: 초상 패와 인장

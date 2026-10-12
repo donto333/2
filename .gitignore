@@ -6,3 +6,6 @@ shots/
 exports/
 __pycache__/
 *.pyc
+# Assets restored from assets.lock.json
+/assets/share/favicon.png
+/assets/share/og.png
