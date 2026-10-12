@@ -593,3 +593,27 @@ body .summon-banner__slide--solo { animation: none; opacity: 1; }
 }
 @keyframes cutin-fade { 0%, 100% { opacity: 0; } 15%, 80% { opacity: 1; } }
 @media (max-width: 600px) { .skill-cutin__portrait { width: 50vw; left: 0; } .skill-cutin--enemy .skill-cutin__portrait { right: 0; } .skill-cutin__text { left: 46%; right: 4%; } .skill-cutin--enemy .skill-cutin__text { left: 4%; right: 46%; } .skill-cutin__text strong { font-size: clamp(18px, 6vw, 26px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .skill-cutin__text small { font-size: 12px; } }
+
+/* ── 상단바: 로그인 버튼이 재화를 가리지 않게 ─────────────────── */
+@media (min-width: 761px) {
+  body .topbar { justify-content: flex-start; gap: 16px; }
+  body .brand-lockup { flex: 0 0 auto; }
+  body .topbar-center { flex: 1 1 auto; min-width: 0; }
+  body .topbar-center > span:not(.season-dot):not(.topbar-divider) { white-space: nowrap; }
+  body .topbar-resources { flex: 1 1 auto; min-width: 0; }
+  body .topbar-actions { flex: 0 0 auto; margin-left: auto; }
+  body .topbar-actions .auth-button { position: static; display: inline-flex; align-items: center; gap: 8px; max-width: 230px; padding: 9px 12px; white-space: nowrap; font-size: 13px; line-height: 1.2; }
+}
+body .auth-button .auth-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 130px; }
+body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px solid rgba(255, 227, 163, .35); font-weight: 700; }
+/* 화면이 좁아지면 장(章) 이름을 숨겨 재화 칸에 자리를 준다 */
+@media (min-width: 761px) and (max-width: 1500px) {
+  body .topbar-center > span:not(.season-dot):not(.topbar-divider), body .topbar-center .topbar-divider { display: none; }
+}
+@media (min-width: 761px) and (max-width: 1280px) {
+  body .brand-subtitle { display: none; }
+  body .topbar-resource small { display: none; }
+}
+@media (max-width: 760px) {
+  body .auth-button .auth-name { max-width: 90px; }
+}

@@ -43,6 +43,20 @@ const MAP_REGION_LABELS: ReadonlyArray<{ id: string; name: string; hanja: string
   { id: 'jiaozhou', name: '교주', hanja: '交州', x: 48.1, y: 81.0 },
 ]
 
+/** 상단 재화: 10만 이상은 만·억 단위로 짧게(정확한 값은 마우스를 올리면 보인다) */
+function compactNumber(value: number): string {
+  const n = Math.floor(value)
+  if (n < 100_000) return formatNumber(n)
+  if (n < 100_000_000) return `${(n / 10_000).toFixed(n < 1_000_000 ? 1 : 0).replace(/\.0$/, '')}만`
+  return `${(n / 100_000_000).toFixed(1).replace(/\.0$/, '')}억`
+}
+
+/** 로그인 버튼 안쪽: 이름은 길면 말줄임, 로그아웃은 항상 보인다 */
+function authButtonInner(auth: { status: string; name?: string | null }): string {
+  if (auth.status === 'authenticated') return `<span class="auth-name">${escapeHtml(auth.name ?? '장군')}</span><span class="auth-out">로그아웃</span>`
+  return auth.status === 'offline' ? '오프라인 모드' : 'Manus 로그인'
+}
+
 export interface AuthView {
   status: 'authenticated' | 'logged_out' | 'offline'
   name: string | null
@@ -283,7 +297,8 @@ export class StrategyUI {
     if (auth.status !== 'authenticated') this.account = null
     const button = this.root.querySelector<HTMLElement>('[data-auth-button]')
     if (button) {
-      button.textContent = auth.status === 'authenticated' ? `${auth.name ?? '장군'} · 로그아웃` : auth.status === 'offline' ? '오프라인 모드' : 'Manus 로그인'
+      button.innerHTML = authButtonInner(auth)
+      button.title = auth.status === 'authenticated' ? `${auth.name ?? '장군'} · 로그아웃` : ''
       button.dataset.action = auth.status === 'authenticated' ? 'logout' : 'login'
     }
     const status = this.root.querySelector<HTMLElement>('[data-auth-status]')
@@ -586,9 +601,9 @@ export class StrategyUI {
       <div class="app-shell${state.section === 'battle' && this.battleViewActive ? ' app-shell--battle' : ''}">
         <header class="topbar">
           <div class="brand-lockup"><div class="brand-seal brand-seal--img"><img src="/assets/ui/brand-seal.svg" alt="천하 인장" width="40" height="40" draggable="false"></div><div><div class="brand-title">천하</div><div class="brand-subtitle">패왕의 시대 · 전술 사령부</div></div></div>
-          <div class="topbar-center"><span class="season-dot"></span><span>제1장 · 황혼의 관문</span><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold">${icon('gold')}<small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver">${icon('silver')}<small>은전</small><strong>${formatNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor">${icon('honor')}<small>명망</small><strong>${formatNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence">${icon('influence')}<small>영향력</small><strong>${formatNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain">${icon('grain')}<small>식량</small><strong>${formatNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood">${icon('wood')}<small>목재</small><strong>${formatNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron">${icon('iron')}<small>철</small><strong>${formatNumber(state.resources.iron)}</strong></span></div></div>
+          <div class="topbar-center"><span class="season-dot"></span><span>제1장 · 황혼의 관문</span><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold">${icon('gold')}<small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver">${icon('silver')}<small>은전</small><strong title="${formatNumber(state.silver)}">${compactNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor">${icon('honor')}<small>명망</small><strong title="${formatNumber(state.honor)}">${compactNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence">${icon('influence')}<small>영향력</small><strong title="${formatNumber(state.resources.influence)}">${compactNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain">${icon('grain')}<small>식량</small><strong title="${formatNumber(state.resources.grain)}">${compactNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood">${icon('wood')}<small>목재</small><strong title="${formatNumber(state.resources.wood)}">${compactNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron">${icon('iron')}<small>철</small><strong title="${formatNumber(state.resources.iron)}">${compactNumber(state.resources.iron)}</strong></span></div></div>
           ${state.section === 'battle' && this.battleViewActive ? this.battleTopControls() : ''}
-          <div class="topbar-actions"><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}">${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : this.auth.status === 'offline' ? '오프라인 모드' : 'Manus 로그인'}</button></div>
+          <div class="topbar-actions"><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}" title="${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : ''}">${authButtonInner(this.auth)}</button></div>
         </header>
         <aside class="sidebar">
           ${this.navGroup('본진')}
@@ -1195,6 +1210,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.12', '상단바 정리', '로그인 버튼이 재화 칸을 가리던 문제를 고쳤습니다. 10만 이상인 재화는 만·억 단위로 짧게 보이고(마우스를 올리면 정확한 값), 긴 이름은 말줄임으로 줄이며 로그아웃은 항상 보입니다.', '완료', 'jade'],
       ['2026.10.12', '실사 3D 모델 적용', '여포·조조·제갈량 전용 모델과 기병·창병·궁병 장수 모델, 실사 전장 지형을 넣었습니다. 서로 달랐던 크기·방향을 맞춰 말은 모두 같은 크기, 병사는 같은 키로 보이며, 무장은 대기·걷기·질주·공격·스킬 동작을 합니다. 부대 병사도 실사 모델로 바뀌고 적군은 붉은 기운으로 구분됩니다. 모델은 전투를 시작할 때 불러오며, 그동안은 기존 모형으로 바로 싸울 수 있습니다.', '완료', 'gold'],
       ['2026.10.12', '전투 화면 전면 개편', '노을 하늘과 겹겹의 산맥, 멀리 성채가 보이는 넓은 전장으로 바꿨습니다. 무장마다 고유 무기(청룡언월도·방천화극·장팔사모·깃털 부채 등)와 갑옷·망토·말을 새로 만들고, 부대마다 병사 수십 명이 대열을 이루며 양 진영 뒤에 대군과 깃발이 늘어섭니다. 빛번짐·색보정, 포물선 화살 사격, 스킬을 쓰면 무장 실사 초상이 화면을 가로지르는 컷인 연출을 넣었습니다. 휴대폰에서는 자동으로 가벼운 설정을 씁니다.', '완료', 'gold'],
       ['2026.10.12', '왼쪽 메뉴 새 디자인', '메뉴를 한 줄 목록으로 바꾸고 본진·육성·전투·소통 네 묶음으로 나눴습니다. 옻칠한 나무판 위에 금박 분류 패를 달고, 선택한 메뉴는 금테 두른 붉은 칠기 패로 보입니다. 화면의 한자 표기는 모두 한글로 바꿨습니다.', '완료', 'gold'],
