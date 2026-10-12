@@ -9,14 +9,6 @@ import { createBoardPost, deleteBoardPost, deleteBoardPostAsAdmin, getBoardSetti
 // 예전 한도(병법서·승리·낙양 상자·신화 조각 1,000,000)를 넘은 계정은 저장 자체가 거절되었다.
 export const SAVE_INT_MAX = 2_000_000_000
 
-// 계정 상태 숫자 한도: DB 컬럼(int / int unsigned)이 담을 수 있는 범위 안에서 넉넉하게 잡는다.
-// 예전 한도(병법서·승리·낙양 상자·신화 조각 1,000,000)를 넘은 계정은 저장 자체가 거절되었다.
-export const SAVE_INT_MAX = 2_000_000_000
-
-// 계정 상태 숫자 한도: DB 컬럼(int / int unsigned)이 담을 수 있는 범위 안에서 넉넉하게 잡는다.
-// 예전 한도(병법서·승리·낙양 상자·신화 조각 1,000,000)를 넘은 계정은 저장 자체가 거절되었다.
-export const SAVE_INT_MAX = 2_000_000_000
-
 function accountView(user) {
   return {
     id: user.id,
