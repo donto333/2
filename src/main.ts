@@ -1166,6 +1166,10 @@ window.setInterval(() => {
 window.setInterval(() => {
   const snapshot = arena.getSnapshot()
   if (snapshot.active || state.section === 'battle') ui.updateBattle(snapshot)
+  // 전투 화면이 아니면 3D 전장 대신 배경 사진을 보여 준다
+  const inBattle = state.section === 'battle' || snapshot.active
+  arena.setSceneVisible(inBattle)
+  document.body.classList.toggle('has-photo-backdrop', !inBattle)
 }, 160)
 
 window.addEventListener('manus-auth-change', (event: Event) => {

@@ -909,3 +909,6 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
   body .app-shell--battle .bt-tactic em { top: 50%; transform: translateY(-50%); right: 10px; }
   body .app-shell--battle .bt-controls .battle-start { margin-top: 8px; }
 }
+
+/* ── 전투 밖 화면 배경: 3D 전장 대신 황혼의 관문 그림 ── */
+body.has-photo-backdrop::before { content: ''; position: fixed; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(180deg, rgba(18, 9, 4, .30), rgba(18, 9, 4, .52) 55%, rgba(18, 9, 4, .72)), url('/assets/battlefield/huanghun-gate.webp') center 35% / cover no-repeat; }

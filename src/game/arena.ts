@@ -1342,10 +1342,19 @@ export class Arena {
     }
   }
 
+  /** 전투 밖 화면에서는 3D 전장을 그리지 않는다(배경 사진이 대신 보이고 그래픽 부담도 준다) */
+  private sceneVisible = true
+  setSceneVisible(on: boolean): void {
+    if (this.sceneVisible === on) return
+    this.sceneVisible = on
+    this.renderer.domElement.style.visibility = on ? '' : 'hidden'
+  }
+
   private animate = (): void => {
     if (this.disposed) return
     requestAnimationFrame(this.animate)
     this.clock.update()
+    if (!this.sceneVisible && !this.battleActive) { this.clock.getDelta(); return }
     const delta = Math.min(this.clock.getDelta(), 0.05)
     this.update(delta)
     this.environment.update(this.clock.getElapsed(), delta)
