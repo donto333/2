@@ -776,3 +776,5 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .notice-popup__card li span{color:#d9cfbb;font-size:12.5px;line-height:1.55}
 .notice-popup__actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .tutorial-reward .mini-action{flex:0 0 auto;min-width:96px}
+[data-bt-time].is-urgent{color:#ff8a6a !important;font-weight:700;animation:bt-urgent 1s ease-in-out infinite}
+@keyframes bt-urgent{50%{opacity:.55}}

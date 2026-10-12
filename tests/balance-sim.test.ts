@@ -59,3 +59,16 @@ describe('열람 권한', () => {
     expect(balanceAccess(true, { role: 'user', email: 'Op@X.com' }, 'op@x.com')).toMatchObject({ allowed: true })
   })
 })
+
+describe('레벨 차 난이도 곡선', () => {
+  it('lets skilled play overcome a level gap that careless play cannot', async () => {
+    const make = (accuracy: number) => { const config = defaultConfig(); config.settings.runs = 30; config.settings.accuracy = accuracy; config.enemy.forEach(slot => { slot.level += 15 }); return config }
+    const skilled = await runBatch(make(0.9), undefined, { rng: seeded(9) })
+    const careless = await runBatch(make(0.3), undefined, { rng: seeded(9) })
+    expect(skilled.winRate).toBeGreaterThan(careless.winRate + 0.3)
+  })
+  it('loses without any input', async () => {
+    const config = defaultConfig(); config.settings.runs = 10; config.settings.accuracy = 0
+    expect((await runBatch(config, undefined, { rng: seeded(4) })).winRate).toBe(0)
+  })
+})

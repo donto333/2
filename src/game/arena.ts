@@ -773,6 +773,10 @@ export class Arena {
         this.cameraShake = Math.min(0.48, this.cameraShake + 0.1)
         break
       }
+      case 'timeWarn':
+        this.floatText(new THREE.Vector3(0, 5.2, -4), `남은 ${event.left}초!`, '#ff8a6a', 1.5)
+        this.cameraShake = Math.min(0.4, this.cameraShake + 0.1)
+        break
       case 'collapse':
         this.cameraShake = Math.min(0.7, this.cameraShake + 0.35)
         break

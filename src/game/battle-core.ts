@@ -23,9 +23,9 @@ export const BATTLE_RULES = {
   moralePerEnemyLevel: 0.02,
   moraleDrain: 0.4,
   moraleDrainPerTroopPct: 0.3,
-  threatDecay: 1.2,
-  threatWrong: 12,
-  threatNoAnswer: 6,
+  threatDecay: 0.6,
+  threatWrong: 14,
+  threatNoAnswer: 9,
   threatEnemySkill: 5,
   noAnswerTroopDamage: 60,
   collapseTroopLoss: 0.2,
@@ -41,6 +41,14 @@ export const BATTLE_RULES = {
   enemySkillTroopPerMorale: 4,
   drCap: 0.45,
   takenCap: 0.4,
+  /** 레벨 차 완화: 적이 아군보다 1레벨 높을 때마다 적이 주는 병력 피해를 이만큼 나눠 줄인다(낭떠러지 대신 완만한 곡선) */
+  gapDamage: 0.007,
+  /** 열세 보상: 적이 높을수록 예고 파훼 사기 피해 증가(1레벨당, 최대 25레벨분) — 잘하면 뒤집을 수 있게 */
+  gapBreakBonus: 0.025,
+  /** 예고를 파훼하면 그 레인 무장 병력을 이 비율만큼 회복 */
+  breakHeal: 0.01,
+  /** 3막 남은 시간 경고(초) */
+  timeWarnAt: 20,
 }
 
 export interface PatternDef { id: string; label: string; lanes: number[]; kind: 'lane' | 'pincer' | 'guard'; minPhase: number; warning: string }
@@ -89,6 +97,7 @@ export type CoreEvent =
   | { kind: 'phase'; phase: number }
   | { kind: 'enemySkillWarn'; lane: number; name: string }
   | { kind: 'collapse'; count: number }
+  | { kind: 'timeWarn'; left: number }
   | { kind: 'unitDown'; side: Side; lane: number }
   | { kind: 'end'; result: BattleResult }
 
@@ -180,6 +189,9 @@ export class BattleCore {
   private autoBreakNext = false
   private enemyMaxTotal: number
   private readonly moraleScale: number
+  /** 적 평균 레벨 − 아군 평균 레벨 */
+  readonly levelGap: number
+  private timeWarned = false
   private readonly moraleBonus: number
   private readonly rng: () => number
   readonly research: BattleResearch
@@ -203,6 +215,8 @@ export class BattleCore {
     this.enemyMaxTotal = Math.max(1, this.enemies.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const enemyLevel = this.enemies.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.enemies.length)
     this.moraleScale = Math.min(2, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1))
+    const playerLevel = this.players.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.players.length)
+    this.levelGap = clamp(enemyLevel - playerLevel, -40, 60)
     this.moraleMax = Math.round(BATTLE_RULES.moraleByPhase[0] * this.moraleScale) + this.moraleBonus
     this.morale = this.moraleMax
     this.gauge = Math.min(100, this.research.startGauge ?? 0)
@@ -356,6 +370,11 @@ export class BattleCore {
     return { dr: Math.min(BATTLE_RULES.drCap, dr), taken: Math.min(BATTLE_RULES.takenCap, taken) }
   }
 
+  /** 레벨 차 완화(적 피해에 곱함): 적이 높을수록 조금씩 덜 아프게 → 실력으로 메울 여지 */
+  private gapScale(): number {
+    return this.levelGap > 0 ? 1 / (1 + this.levelGap * BATTLE_RULES.gapDamage) : 1
+  }
+
   private pressure(): number {
     return BATTLE_RULES.pressureStart + (BATTLE_RULES.pressureEnd - BATTLE_RULES.pressureStart) * Math.min(1, this.t / BATTLE_RULES.pressureRamp)
   }
@@ -431,7 +450,7 @@ export class BattleCore {
       attacker.attackTimer = interval
       let multiplier = 1 + this.attackBonus(attacker)
       if (attacker.side === 'enemy') {
-        multiplier *= this.pressure()
+        multiplier *= this.pressure() * this.gapScale()
         if (hasBattleEffect(this.debuffs, 'confusion') || hasBattleEffect(this.debuffs, 'blind')) multiplier *= 0.9
         if (hasBattleEffect(this.debuffs, 'rage')) multiplier *= 1.1
       }
@@ -530,6 +549,10 @@ export class BattleCore {
       this.combo = Math.min(8, this.combo + 1)
       this.maxCombo = Math.max(this.maxCombo, this.combo)
       let morale = 6 + this.combo * 2
+      // 열세일수록 파훼가 더 크게 먹힌다(최대 25레벨분)
+      if (this.levelGap > 0) morale = Math.round(morale * (1 + Math.min(25, this.levelGap) * BATTLE_RULES.gapBreakBonus))
+      const breaker = this.players[lane]
+      if (breaker && breaker.troops > 0) this.heal(breaker, breaker.maxTroops * BATTLE_RULES.breakHeal)
       const flank = lane === 0 || lane === 2
       const flankUnit = this.players[lane]
       if (flank && flankUnit && this.passive(flankUnit) === 'flankMorale') morale += flankUnit.def.passive?.value ?? 4
@@ -558,7 +581,7 @@ export class BattleCore {
     this.lastCommandFailed = true
     this.events.push({ kind: 'answer', lane: -1, success: false })
     const lanes = open.def.kind === 'guard' ? [1, 1] : open.def.lanes
-    lanes.forEach(lane => { const target = this.targetFor(this.players, lane); if (target) this.dealDamage(target, BATTLE_RULES.noAnswerTroopDamage, open.def.label, null) })
+    lanes.forEach(lane => { const target = this.targetFor(this.players, lane); if (target) this.dealDamage(target, BATTLE_RULES.noAnswerTroopDamage * (1 + this.phase * 0.5), open.def.label, null) })
     this.raiseThreat(BATTLE_RULES.threatNoAnswer, 'none')
     this.log(`${open.def.label}에 대응하지 못했습니다 · 위협도 ${Math.round(this.threat)}`, 'ember')
   }
@@ -716,6 +739,14 @@ export class BattleCore {
     this.firstSkillUsed = true
     this.lastSkillId = unit.general.id
     if (stripped) notes.unshift(`적 강화 ${stripped}개 제거`)
+    // 치유·수호형도 승리에 이바지하도록: 쓰면 연계 +1과 작은 사기 피해(군심 고양)
+    if (unit.def.type === '치유' || unit.def.type === '수호') {
+      this.combo = Math.min(8, this.combo + 1)
+      this.maxCombo = Math.max(this.maxCombo, this.combo)
+      const rally = 6 + this.combo
+      this.drainMorale(rally)
+      notes.push(`군심 고양 · 연계 ${this.combo} · 적 사기 −${rally}`)
+    }
     this.events.push({ kind: 'skill', side: 'player', lane, name, morale, type: unit.def.type, target: this.skillFocus(this.enemies, unit) })
     this.log(`${unit.general.name} · 「${name}」${morale > 0 ? ` · 적 사기 −${morale}` : ''}${notes.length ? ` · ${notes.join(' · ')}` : ''}`, 'jade')
     return true
@@ -858,6 +889,11 @@ export class BattleCore {
       + (hasBattleEffect(this.debuffs, 'fear') ? 1.5 : 0)
       + (hasBattleEffect(this.debuffs, 'bleed') ? 1.3 : 0)
     this.drainMorale(drain * dt)
+    if (!this.timeWarned && this.t >= BATTLE_RULES.timeLimit - BATTLE_RULES.timeWarnAt) {
+      this.timeWarned = true
+      this.events.push({ kind: 'timeWarn', left: BATTLE_RULES.timeWarnAt })
+      this.log(`남은 시간 ${BATTLE_RULES.timeWarnAt}초 · 적 사기를 서둘러 무너뜨리십시오`, 'ember')
+    }
     this.checkPhase()
     this.checkEnd()
   }
@@ -897,7 +933,9 @@ export class BattleCore {
     const playerTroops = this.players.reduce((sum, unit) => sum + unit.troops, 0)
     const maxTroops = Math.max(1, this.players.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const troopRatio = playerTroops / maxTroops
-    const stars = won ? 1 + (troopRatio >= 0.5 ? 1 : 0) + (this.collapses === 0 ? 1 : 0) : 0
+    // 별: 승리 1 + 병력 60% 이상 1 + (전열 붕괴 없음 그리고 예고 파훼율 60% 이상) 1
+    const breakRate = this.patternsSeen ? this.breaks / this.patternsSeen : 1
+    const stars = won ? 1 + (troopRatio >= 0.6 ? 1 : 0) + (this.collapses === 0 && breakRate >= 0.6 ? 1 : 0) : 0
     // 랭킹 점수는 시즌이 바뀔 때까지 기존 공식을 유지한다(병력은 2배가 되었으므로 절반으로 환산).
     const score = Math.max(0, Math.round(4200 + this.maxCombo * 240 + (100 - this.threat) * 18 + playerTroops / BATTLE_RULES.troopScale * 1.4
       + this.players.reduce((sum, unit) => sum + unit.general.level * 41 + unit.general.leadership + unit.general.martial + unit.general.stratagem + unit.general.speed, 0)))

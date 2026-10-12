@@ -533,6 +533,7 @@ export class StrategyUI {
     const width = (selector: string, value: number) => { const node = q(selector); if (node) node.style.width = `${Math.max(0, Math.min(100, value))}%` }
     set('[data-bt-status]', snapshot.status)
     set('[data-bt-time]', snapshot.active || snapshot.result ? `남은 ${Math.ceil(snapshot.timeLeft)}초` : '제한 90초')
+    q('[data-bt-time]')?.classList.toggle('is-urgent', snapshot.active && snapshot.timeLeft <= 20)
     set('[data-bt-phase]', `${snapshot.phaseName}`)
     set('[data-bt-morale-text]', `적 사기 ${snapshot.moraleValue} / ${snapshot.moraleMax}`)
     width('[data-bt-morale]', snapshot.morale)
