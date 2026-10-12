@@ -190,7 +190,7 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
   let count = base.length
   let yaw = 0
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.18 })
-  let mesh = new THREE.InstancedMesh(soldierGeometry(kind, team), material, count)
+  let mesh: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material> = new THREE.InstancedMesh(soldierGeometry(kind, team), material, count)
   mesh.castShadow = quality === 'high'
   mesh.frustumCulled = false
   const tintAll = (target: THREE.InstancedMesh, realistic: boolean) => {
