@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       allowedHosts: ['.manuspre.computer', '.manus.computer', '.manus-asia.computer', '.manuscomputer.ai', '.manusvm.computer', 'localhost', '127.0.0.1'],
       proxy: { '/api': { target: 'http://127.0.0.1:3001', changeOrigin: false } },
     },
-    build: { target: 'es2022', assetsInlineLimit: 0, chunkSizeWarningLimit: 4600, sourcemap: false },
+    build: { target: 'es2022', rollupOptions: { input: { main: 'index.html', balance: 'balance.html' } }, assetsInlineLimit: 0, chunkSizeWarningLimit: 4600, sourcemap: false },
     test: { environment: 'node', include: ['tests/**/*.test.{ts,mjs}'] },
   }
 })

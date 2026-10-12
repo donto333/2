@@ -48,7 +48,7 @@ import {
 } from './game/strategy'
 import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
-import { autoEquip, autoFormation, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
+import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -225,17 +225,7 @@ function resetAccountSavePipeline(): void {
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
   return state.formation.map(id => {
     const general = findGeneral(state, id)
-    if (!general) return null
-    const bonus = equipmentBonus(state, id)
-    return {
-      ...general,
-      leadership: general.leadership + bonus.leadership,
-      martial: general.martial + bonus.martial,
-      stratagem: general.stratagem + bonus.stratagem,
-      speed: general.speed + bonus.speed,
-      attack: general.attack + Math.round(bonus.martial * 0.45),
-      defense: general.defense + Math.round(bonus.leadership * 0.35),
-    }
+    return general ? withEquipmentStats(general, equipmentBonus(state, id)) : null
   }).filter((general): general is NonNullable<typeof general> => Boolean(general))
 }
 

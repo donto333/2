@@ -1050,25 +1050,51 @@ export function equipmentValue(item: Equipment): number {
   return Math.round(item.baseValue * (1 + (item.level - 1) * 0.14))
 }
 
-export function equipmentBonus(state: StrategyState, generalId: string): Record<EquipmentStat, number> {
-  ensureEquipmentState(state)
+/** 장비 목록이 주는 능력치(주 능력치·신화 특성·세트 효과). 게임과 밸런스 테스트가 같이 쓴다. */
+export function equipmentBonusFromItems(items: Equipment[]): Record<EquipmentStat, number> {
   const bonus: Record<EquipmentStat, number> = { leadership: 0, martial: 0, stratagem: 0, speed: 0 }
-  const loadout = state.equipmentLoadouts[generalId] ?? {}
   const setCounts: Partial<Record<EquipmentSet, number>> = {}
-  Object.values(loadout).forEach(itemId => {
-    const item = state.equipmentInventory.find(candidate => candidate.id === itemId)
-    if (item) {
-      bonus[item.mainStat] += equipmentValue(item)
-      const specialty = equipmentSpecialty(item)
-      if (specialty) bonus[specialty.stat] += specialty.value
-      setCounts[item.set] = (setCounts[item.set] ?? 0) + 1
-    }
+  items.forEach(item => {
+    bonus[item.mainStat] += equipmentValue(item)
+    const specialty = equipmentSpecialty(item)
+    if (specialty) bonus[specialty.stat] += specialty.value
+    setCounts[item.set] = (setCounts[item.set] ?? 0) + 1
   })
   ;(Object.entries(setCounts) as Array<[EquipmentSet, number]>).forEach(([set, count]) => {
     if (count >= 2) bonus[EQUIPMENT_SET_META[set].stat] += 10
     if (count >= 3) bonus[EQUIPMENT_SET_META[set].stat] += 8
   })
   return bonus
+}
+
+export function equipmentBonus(state: StrategyState, generalId: string): Record<EquipmentStat, number> {
+  ensureEquipmentState(state)
+  const loadout = state.equipmentLoadouts[generalId] ?? {}
+  const items = Object.values(loadout).map(itemId => state.equipmentInventory.find(candidate => candidate.id === itemId)).filter((item): item is Equipment => Boolean(item))
+  return equipmentBonusFromItems(items)
+}
+
+/** 전투에 들어가는 무장 능력치: 장비 보너스를 더하고 공격·방어에도 일부 반영한다. */
+export function withEquipmentStats(general: General, bonus: Record<EquipmentStat, number>): General {
+  return {
+    ...general,
+    leadership: general.leadership + bonus.leadership,
+    martial: general.martial + bonus.martial,
+    stratagem: general.stratagem + bonus.stratagem,
+    speed: general.speed + bonus.speed,
+    attack: general.attack + Math.round(bonus.martial * 0.45),
+    defense: general.defense + Math.round(bonus.leadership * 0.35),
+  }
+}
+
+/** 지정한 종류·세트·등급·강화 레벨의 장비 한 개(밸런스 테스트용) */
+export function makeEquipment(type: EquipmentType, set: EquipmentSet, grade: EquipmentGrade, level = 1): Equipment {
+  const setMeta = EQUIPMENT_SET_META[set]
+  return {
+    id: `test-${type}-${set}-${grade}-${level}`, name: `${EQUIPMENT_GRADE_META[grade].label} ${setMeta.label} ${EQUIPMENT_TYPE_META[type].label}`,
+    type, set, grade, level: Math.max(1, Math.min(20, Math.trunc(level))), mainStat: setMeta.stat, baseValue: EQUIPMENT_GRADE_META[grade].base,
+    skillName: setMeta.skillName, skillDescription: setMeta.skillDescription, specialty: grade === 'mythic' ? mythicSpecialty(type, set) : undefined,
+  }
 }
 
 export function equipmentSetCounts(state: StrategyState, generalId: string): Partial<Record<EquipmentSet, number>> {

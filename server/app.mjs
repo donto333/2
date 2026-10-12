@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createExpressMiddleware } from '@trpc/server/adapters/express'
 import { registerOAuthRoutes, createContext, webdevRouter, router, publicPlatformConfig, ENV, OAUTH_STATE_COOKIE, ONE_YEAR_MS, sdk } from './webdev-adapter.mjs'
 import { registerDesktopAuthRoutes } from './desktop-auth.mjs'
+import { balanceAccess, isLaunched } from './launch.mjs'
 
 export function createGameApp(gameRouter, { leaderboard } = {}) {
   const app = express()
@@ -23,6 +24,16 @@ export function createGameApp(gameRouter, { leaderboard } = {}) {
     } catch {
       return res.status(400).json({ error: 'stripe_payload_invalid' })
     }
+  })
+  // 밸런스 테스트 페이지 열람 권한: 출시 전에는 모두, 출시 후에는 운영자(관리자 권한)만.
+  app.get('/api/balance/access', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    const launched = isLaunched()
+    let user = null
+    if (launched) {
+      try { user = await sdk.authenticateRequest(req) } catch { user = null }
+    }
+    res.json(balanceAccess(launched, user, ENV.adminEmail))
   })
   app.get('/api/auth/config', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store')
