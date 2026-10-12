@@ -113,6 +113,18 @@ export function effectDefinition(id: BattleEffectId): BattleEffectDefinition {
   return BATTLE_EFFECTS[id]
 }
 
+export type GeneralEffectLoadout = { buff: BuffId; debuff: DebuffId; cleanse?: boolean }
+const ROLE_LOADOUT: Record<'기병' | '궁병' | '책사' | '보병', GeneralEffectLoadout> = {
+  기병: { buff: 'cavalry-surge', debuff: 'fear' },
+  궁병: { buff: 'hawk-eye', debuff: 'mark' },
+  책사: { buff: 'battle-focus', debuff: 'confusion', cleanse: true },
+  보병: { buff: 'iron-wall', debuff: 'armor-break' },
+}
+export const GENERAL_EFFECT_LOADOUTS: Record<string, GeneralEffectLoadout> = {}
+export function effectLoadout(generalId: string, role: keyof typeof ROLE_LOADOUT): GeneralEffectLoadout {
+  return GENERAL_EFFECT_LOADOUTS[generalId] ?? ROLE_LOADOUT[role]
+}
+
 export function effectNames(effects: ActiveBattleEffect[]): string {
   return effects.filter(effect => effect.remaining > 0).map(effect => `${effect.icon} ${effect.name}`).join(' · ')
 }

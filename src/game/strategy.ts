@@ -1,4 +1,5 @@
 import cityRoutes from '../../server/city-routes.json'
+import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
@@ -697,7 +698,7 @@ const withSkillText = (general: General): General => {
   const def = GENERAL_SKILLS[general.id]
   return def ? { ...general, skillName: def.active.name, skillDescription: def.active.desc } : general
 }
-const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText)
+const LIBRARY: General[] = Array.from(new Map([...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText).map(general => [general.id, general] as const)).values())
 
 /** 도감(Lv1) 원형. 성장 전 능력치가 필요한 스킬 공식에서 쓴다. */
 export function templateGeneral(id: string): General | undefined {

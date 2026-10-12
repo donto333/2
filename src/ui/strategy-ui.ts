@@ -47,23 +47,6 @@ const MAP_REGION_LABELS: ReadonlyArray<{ id: string; name: string; hanja: string
   { id: 'jiaozhou', name: '교주', hanja: '交州', x: 48.1, y: 81.0 },
 ]
 
-// 후한 말 13주(州) 이름표 위치 (같은 방식으로 계산)
-const MAP_REGION_LABELS: ReadonlyArray<{ id: string; name: string; hanja: string; x: number; y: number }> = [
-  { id: 'liangzhou', name: '양주', hanja: '涼州', x: 22.2, y: 17.8 },
-  { id: 'yongzhou', name: '옹주', hanja: '雍州', x: 38.2, y: 28.4 },
-  { id: 'bingzhou', name: '병주', hanja: '幷州', x: 52.2, y: 14.5 },
-  { id: 'jizhou', name: '기주', hanja: '冀州', x: 63.4, y: 17.7 },
-  { id: 'qingzhou', name: '청주', hanja: '青州', x: 72.0, y: 21.2 },
-  { id: 'sili', name: '사례', hanja: '司隷', x: 50.4, y: 30.3 },
-  { id: 'yanzhou', name: '연주', hanja: '兗州', x: 65.8, y: 26.1 },
-  { id: 'yuzhou', name: '예주', hanja: '豫州', x: 61.6, y: 35.6 },
-  { id: 'xuzhou', name: '서주', hanja: '徐州', x: 73.6, y: 34.0 },
-  { id: 'yangzhou', name: '양주', hanja: '揚州', x: 72.1, y: 49.9 },
-  { id: 'jingzhou', name: '형주', hanja: '荊州', x: 52.1, y: 56.5 },
-  { id: 'yizhou', name: '익주', hanja: '益州', x: 32.6, y: 52.4 },
-  { id: 'jiaozhou', name: '교주', hanja: '交州', x: 48.1, y: 81.0 },
-]
-
 export interface AuthView {
   status: 'authenticated' | 'logged_out' | 'offline'
   name: string | null
@@ -162,11 +145,7 @@ export interface StrategyUiCallbacks {
   onBattleStart: () => void
   onScenarioStart: (id: string) => void
   onBattleMove: (index: number) => void
-  onBattleSkill: (index?: number) => void
-  onBattleSpeed: (speed: number) => void
-  onBattleAuto: (on: boolean) => void
-  onBattlePause: (on: boolean) => void
-  onBattleStop: () => void
+  onBattleSkill: () => void
   onBattleTactic: (tactic: 'guard' | 'feint' | 'charge') => void
   onDuelRefresh: () => void
   onDuelStart: (opponentId: string) => void
@@ -416,139 +395,80 @@ export class StrategyUI {
     requestAnimationFrame(() => overlay.classList.add('is-visible'))
   }
 
-  setBattleAutoAvailable(available: boolean): void {
-    this.battleAutoAvailable = available
-  }
-
-  /** 무장 버튼을 길게 누르면 스킬(0.42초). 짧게 누르면 기동(클릭). */
-  private handleUnitPress = (event: PointerEvent): void => {
-    const unit = (event.target as HTMLElement).closest<HTMLElement>('[data-bt-unit]')
-    if (!unit || (event.target as HTMLElement).closest('[data-action="battle-skill"]')) return
-    window.clearTimeout(this.longPressTimer)
-    const index = Number(unit.dataset.btUnit ?? 0)
-    this.longPressTimer = window.setTimeout(() => {
-      this.suppressMoveUntil = Date.now() + 700
-      unit.classList.add('is-long-pressed')
-      window.setTimeout(() => unit.classList.remove('is-long-pressed'), 260)
-      this.callbacks.onBattleSkill(index)
-    }, 420)
-  }
-
-  private cancelUnitPress = (): void => {
-    window.clearTimeout(this.longPressTimer)
-  }
-
   updateBattle(snapshot: BattleSnapshot): void {
     this.latestBattle = snapshot
     if (snapshot.active) this.battleViewActive = true
     else if (this.renderedState?.section === 'battle') this.battleViewActive = false
-    const q = <T extends HTMLElement = HTMLElement>(selector: string) => this.root.querySelector<T>(selector)
-    // 전투 전체화면(Manus 개선안): 전투 중에는 좌측 메뉴·상단 재화를 숨기고, 끝나면 되돌린다.
-    this.root.querySelector('.app-shell')?.classList.toggle('app-shell--battle', this.battleViewActive && this.renderedState?.section === 'battle')
-    const section = q('.page-section--battle')
-    if (!section) return
-    const set = (selector: string, text: string) => { const node = q(selector); if (node && node.textContent !== text) node.textContent = text }
-    const width = (selector: string, value: number) => { const node = q(selector); if (node) node.style.width = `${Math.max(0, Math.min(100, value))}%` }
-    set('[data-bt-status]', snapshot.status)
-    set('[data-bt-time]', snapshot.active || snapshot.result ? `남은 ${Math.ceil(snapshot.timeLeft)}초` : '제한 90초')
-    set('[data-bt-phase]', `${snapshot.phaseName}`)
-    set('[data-bt-morale-text]', `적 사기 ${snapshot.moraleValue} / ${snapshot.moraleMax}`)
-    width('[data-bt-morale]', snapshot.morale)
-    width('[data-bt-threat]', snapshot.threat)
-    set('[data-bt-threat-text]', `${snapshot.threat}`)
-    set('[data-bt-collapse]', `붕괴 ${snapshot.collapses}/2`)
-    q('[data-bt-collapse]')?.classList.toggle('is-danger', snapshot.collapses > 0)
-    set('[data-bt-combo]', `연계 ${snapshot.combo}`)
-    set('[data-bt-pressure]', `적 압박 ×${snapshot.difficultyMultiplier.toFixed(2)}`)
-    set('[data-bt-bond]', snapshot.bond ? `인연 · ${snapshot.bond}` : '인연 없음')
-    const pattern = snapshot.pattern
-    const callout = q('[data-bt-callout]')
-    callout?.classList.toggle('is-open', Boolean(pattern))
-    callout?.classList.toggle('is-guard', pattern?.kind === 'guard')
-    set('[data-bt-pattern]', pattern ? pattern.label : snapshot.active ? '다음 예고 대기' : '전투 시작 전')
-    set('[data-bt-warning]', pattern ? pattern.warning : snapshot.active ? '적이 움직임을 준비합니다.' : '적 전술 예고가 뜨면 같은 레인의 무장 버튼을 누르십시오.')
-    width('[data-bt-window]', pattern ? pattern.timeLeft / pattern.window * 100 : 0)
-    this.root.querySelectorAll<HTMLElement>('[data-bt-lane]').forEach(node => node.classList.toggle('is-target', Boolean(pattern && pattern.kind !== 'guard' && pattern.lanes.includes(Number(node.dataset.btLane)))))
-    const warn = q('[data-bt-enemy-warn]')
-    if (warn) {
-      warn.hidden = !snapshot.enemyWarning
-      if (snapshot.enemyWarning) warn.textContent = `적장 스킬 예고 · ${snapshot.enemyWarning.general}의 「${snapshot.enemyWarning.name}」 · 철벽 태세로 막으십시오`
+    const elapsed = this.root.querySelector<HTMLElement>('[data-battle-time]')
+    const morale = this.root.querySelector<HTMLElement>('[data-battle-morale]')
+    const moraleBar = this.root.querySelector<HTMLElement>('[data-morale-bar]')
+    const phase = this.root.querySelector<HTMLElement>('[data-battle-phase]')
+    const pattern = this.root.querySelector<HTMLElement>('[data-battle-pattern]')
+    const combo = this.root.querySelector<HTMLElement>('[data-battle-combo]')
+    const threat = this.root.querySelector<HTMLElement>('[data-battle-threat]')
+    const threatBar = this.root.querySelector<HTMLElement>('[data-threat-bar]')
+    const tacticGauge = this.root.querySelector<HTMLElement>('[data-battle-gauge]')
+    const tacticGaugeBar = this.root.querySelector<HTMLElement>('[data-gauge-bar]')
+    const guardState = this.root.querySelector<HTMLElement>('[data-guard-state]')
+    const selected = this.root.querySelector<HTMLElement>('[data-battle-selected]')
+    const status = this.root.querySelector<HTMLElement>('[data-battle-status]')
+    const role = this.root.querySelector<HTMLElement>('[data-battle-role]')
+    const skillName = this.root.querySelector<HTMLElement>('[data-battle-skill-name]')
+    const skillDescription = this.root.querySelector<HTMLElement>('[data-battle-skill-description]')
+    const skillState = this.root.querySelector<HTMLElement>('[data-battle-skill-state]')
+    const skillButton = this.root.querySelector<HTMLButtonElement>('[data-battle-skill-button]')
+    const effects = this.root.querySelector<HTMLElement>('[data-battle-effects]')
+    const opponentDeck = this.root.querySelector<HTMLElement>('[data-opponent-deck]')
+    const difficulty = this.root.querySelector<HTMLElement>('[data-battle-difficulty]')
+    const enemyPower = this.root.querySelector<HTMLElement>('[data-enemy-power]')
+    const troopStatus = this.root.querySelector<HTMLElement>('[data-battle-troop-status]')
+    if (elapsed) elapsed.textContent = `${Math.floor(snapshot.elapsed / 60).toString().padStart(2, '0')}:${Math.floor(snapshot.elapsed % 60).toString().padStart(2, '0')}`
+    if (morale) morale.textContent = `${snapshot.morale}%`
+    if (moraleBar) moraleBar.style.width = `${snapshot.morale}%`
+    if (phase) phase.textContent = `${snapshot.phase + 1}/3 · ${snapshot.phaseName}`
+    if (pattern) pattern.textContent = `적 패턴 · ${snapshot.enemyPattern}`
+    if (combo) combo.textContent = `연계 ${snapshot.combo}`
+    if (threat) threat.textContent = `${snapshot.threat}%`
+    if (threatBar) threatBar.style.width = `${snapshot.threat}%`
+    if (tacticGauge) tacticGauge.textContent = `${snapshot.tacticGauge}%`
+    if (tacticGaugeBar) tacticGaugeBar.style.width = `${snapshot.tacticGauge}%`
+    if (guardState) guardState.textContent = snapshot.guardActive ? '철벽 태세' : '전술 대기'
+    if (selected) selected.textContent = snapshot.selectedName
+    if (status) status.textContent = snapshot.status
+    if (role) role.textContent = `${snapshot.selectedRole} · Lv.${snapshot.selectedLevel}`
+    if (skillName) skillName.textContent = snapshot.skillName
+    if (skillDescription) skillDescription.textContent = snapshot.skillDescription
+    if (skillState) skillState.textContent = !snapshot.skillUnlocked ? 'Lv.10 해금' : !snapshot.active ? '전투 시작 후 사용' : snapshot.skillReady ? '스킬 준비' : `${snapshot.skillCooldown.toFixed(1)}초 후`
+    if (skillButton) skillButton.disabled = !(snapshot.active && snapshot.skillUnlocked && snapshot.skillReady)
+    if (effects) effects.innerHTML = this.battleEffectsMarkup(snapshot.activeEffects)
+    if (opponentDeck) opponentDeck.innerHTML = this.opponentDeckMarkup(snapshot.opponentDeck)
+    if (difficulty) difficulty.textContent = `${snapshot.difficulty} · x${snapshot.difficultyMultiplier.toFixed(2)}`
+    if (enemyPower) enemyPower.textContent = String(snapshot.enemyPower)
+    if (troopStatus) troopStatus.innerHTML = this.troopStatusMarkup(snapshot.troopStatus)
+    if (snapshot.selectedStats) {
+      Object.entries(snapshot.selectedStats).forEach(([key, value]) => {
+        const bar = this.root.querySelector<HTMLElement>(`[data-battle-stat="${key}"]`)
+        const label = this.root.querySelector<HTMLElement>(`[data-battle-stat-value="${key}"]`)
+        if (bar) bar.style.width = `${value}%`
+        if (label) label.textContent = String(value)
+      })
     }
-    section.classList.toggle('is-enemy-warning', Boolean(snapshot.enemyWarning))
-    snapshot.units.forEach(unit => {
-      const node = q(`[data-bt-unit="${unit.lane}"]`)
-      if (!node) return
-      const pct = unit.maxTroops ? unit.troops / unit.maxTroops * 100 : 0
-      const bar = node.querySelector<HTMLElement>('[data-bt-unit-troops]')
-      if (bar) bar.style.width = `${pct}%`
-      const cd = node.querySelector<HTMLElement>('[data-bt-unit-cd]')
-      const ratio = unit.cooldownMax ? Math.min(1, unit.cooldown / unit.cooldownMax) : 0
-      node.style.setProperty('--cd', `${Math.round(ratio * 360)}deg`)
-      if (cd) cd.textContent = !unit.skillUnlocked ? '스킬 잠김' : !snapshot.active ? unit.skillName : unit.ready ? '스킬 준비' : `${unit.cooldown.toFixed(1)}초`
-      node.classList.toggle('is-ready', unit.ready)
-      node.classList.toggle('is-down', !unit.alive)
-      node.classList.toggle('is-target', Boolean(pattern && pattern.kind !== 'guard' && pattern.lanes.includes(unit.lane)))
-      node.classList.toggle('is-selected', unit.lane === snapshot.selectedUnit)
-      const skill = node.querySelector<HTMLButtonElement>('[data-action="battle-skill"]')
-      if (skill) skill.disabled = !unit.ready
-    })
-    width('[data-bt-gauge]', snapshot.tacticGauge)
-    set('[data-bt-gauge-text]', `전술 게이지 ${snapshot.tacticGauge}`)
-    this.root.querySelectorAll<HTMLButtonElement>('[data-action="battle-tactic"]').forEach(button => {
-      const tactic = (button.dataset.tactic ?? 'guard') as keyof BattleSnapshot['tacticCosts']
-      const cost = snapshot.tacticCosts[tactic]
-      button.disabled = !snapshot.active || snapshot.tacticGauge < cost
-      const label = button.querySelector('em')
-      if (label) label.textContent = String(cost)
-      button.classList.toggle('is-called', tactic === 'guard' && (pattern?.kind === 'guard' || Boolean(snapshot.enemyWarning)))
-    })
-    q('[data-bt-guard]')?.classList.toggle('is-on', snapshot.guardActive)
-    const effects = q('[data-battle-effects]')
-    if (effects) effects.innerHTML = this.battleEffectsMarkup([...snapshot.activeEffects, ...snapshot.playerDebuffs])
-    snapshot.troopStatus.filter(unit => unit.side === 'enemy').forEach(unit => {
-      const card = q(`[data-bt-enemy="${unit.index}"]`)
-      if (!card) return
-      card.classList.toggle('is-down', !unit.alive)
-      const bar = card.querySelector<HTMLElement>('i')
-      if (bar) bar.style.width = `${unit.maxTroops ? unit.troops / unit.maxTroops * 100 : 0}%`
-    })
-    const enemies = q('[data-bt-enemies]')
-    if (enemies && snapshot.opponentDeck.length && !enemies.dataset.filled) { enemies.innerHTML = this.enemyHudMarkup(snapshot.opponentDeck); enemies.dataset.filled = '1' }
-    const log = q('[data-bt-log]')
-    if (log) {
-      const lines = this.battleLogOpen ? snapshot.log.slice(-8) : snapshot.log.slice(-2)
-      const html = lines.map(line => `<li>${escapeHtml(line)}</li>`).join('') || '<li>전투 기록이 여기에 표시됩니다.</li>'
-      if (log.dataset.html !== html) { log.innerHTML = html; log.dataset.html = html }
-    }
-    q('[data-bt-speed]')?.classList.toggle('is-on', snapshot.speed >= 2)
-    set('[data-bt-pause]', snapshot.paused ? '▶ 계속' : '❚❚ 멈춤')
-    q('[data-bt-pause]')?.classList.toggle('is-on', snapshot.paused)
-    const paused = q('[data-bt-paused]')
-    if (paused) paused.hidden = !snapshot.paused
-    section.classList.toggle('is-paused', snapshot.paused)
-    const stop = q('[data-bt-stop]')
-    if (stop) stop.textContent = Date.now() < this.stopConfirmUntil ? '한 번 더 누르면 중지' : '■ 전투 중지'
-    q('[data-bt-auto]')?.classList.toggle('is-on', snapshot.autoPlay)
-    const startButton = q('[data-action="battle-start"]')
+    const startButton = this.root.querySelector<HTMLElement>('[data-action="battle-start"]')
     if (startButton) startButton.style.display = snapshot.active ? 'none' : 'inline-flex'
+    this.root.querySelectorAll<HTMLButtonElement>('[data-action="battle-tactic"]').forEach(button => {
+      const cost = Number(button.dataset.tacticCost ?? 100)
+      button.disabled = !snapshot.active || snapshot.tacticGauge < cost
+    })
+    this.root.querySelectorAll<HTMLElement>('[data-battle-unit]').forEach(node => node.classList.toggle('is-selected', Number(node.dataset.battleUnit) === snapshot.selectedUnit))
+    this.root.querySelectorAll<HTMLElement>('[data-tactic-lane]').forEach(node => node.classList.toggle('is-counter', snapshot.active && Number(node.dataset.tacticLane) === snapshot.enemyPatternLane))
   }
 
-  showBattleResult(result: BattleResult, notice = ''): void {
-    const stars = [1, 2, 3].map(index => `<i class="${index <= result.stars ? 'is-on' : ''}">★</i>`).join('')
-    const reason = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '남은 병력 비율로 판정했습니다' }[result.reason]
-    const rows = [
-      ['예고 파훼', `${result.breaks} / ${result.patterns}`],
-      ['최대 연계', String(result.maxCombo)],
-      ['남은 병력', `${Math.round(result.troopRatio * 100)}%`],
-      ['전열 붕괴', `${result.collapses}회`],
-      ['전투 시간', `${Math.round(result.durationMs / 1000)}초`],
-    ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join('')
-    const checks = result.won ? `<ul class="result-checks"><li class="is-on">승리</li><li class="${result.troopRatio >= 0.5 ? 'is-on' : ''}">병력 50% 이상</li><li class="${result.collapses === 0 ? 'is-on' : ''}">전열 붕괴 없음</li></ul>` : ''
-    const modal = document.createElement('div')
-    modal.className = 'result-modal'
-    modal.innerHTML = `<div class="result-card"><span class="eyebrow">작전 결과</span><div class="result-mark">${result.won ? '승리' : '패배'}</div>${result.won ? `<div class="result-stars">${stars}</div>` : ''}<h2>${escapeHtml(reason)}</h2>${checks}<div class="result-grid">${rows}</div>${notice ? `<p>${escapeHtml(notice)}</p>` : ''}<div class="result-score"><span>작전 점수</span><strong>${formatNumber(result.score)}</strong></div><button class="action-button action-button--primary" data-action="close-result">확인</button></div>`
-    this.root.appendChild(modal)
-    requestAnimationFrame(() => modal.classList.add('is-visible'))
+  showBattleResult(won: boolean, score: number): void {
+    const result = document.createElement('div')
+    result.className = 'result-modal'
+    result.innerHTML = `<div class="result-card"><span class="eyebrow">작전 결과</span><div class="result-mark">${won ? '승리' : '패배'}</div><h2>${won ? '전장을 지배했다' : '진형이 무너졌다'}</h2><p>${won ? '부대의 호흡과 무장의 성장이 승리를 만들었습니다.' : '무장의 배치와 성장 상태를 다시 점검하십시오.'}</p><div class="result-score"><span>작전 점수</span><strong>${formatNumber(score)}</strong></div><button class="action-button action-button--primary" data-action="close-result">확인</button></div>`
+    this.root.appendChild(result)
+    requestAnimationFrame(() => result.classList.add('is-visible'))
   }
 
   private accessGate(): string {
@@ -570,20 +490,19 @@ export class StrategyUI {
       <div class="app-shell${state.section === 'battle' && this.battleViewActive ? ' app-shell--battle' : ''}">
         <header class="topbar">
           <div class="brand-lockup"><div class="brand-seal"><span>✦</span></div><div><div class="brand-title">천하</div><div class="brand-subtitle">패왕의 시대 · 전술 사령부</div></div></div>
-          <div class="topbar-center"><span class="season-dot"></span><span>제1장 · 황혼의 관문</span><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold">${icon('gold')}<small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver">${icon('silver')}<small>은전</small><strong>${formatNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor">${icon('honor')}<small>명망</small><strong>${formatNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence">${icon('influence')}<small>영향력</small><strong>${formatNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain">${icon('grain')}<small>식량</small><strong>${formatNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood">${icon('wood')}<small>목재</small><strong>${formatNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron">${icon('iron')}<small>철</small><strong>${formatNumber(state.resources.iron)}</strong></span></div></div>
-          ${state.section === 'battle' && this.battleViewActive ? this.battleTopControls() : ''}
+          <div class="topbar-center"><span class="season-dot"></span><span>제1장 · 황혼의 관문</span><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold"><i>◈</i><small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver"><i>◎</i><small>은전</small><strong>${formatNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor"><i>✦</i><small>명망</small><strong>${formatNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence"><i>⌁</i><small>영향력</small><strong>${formatNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain"><i>◉</i><small>식량</small><strong>${formatNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood"><i>♣</i><small>목재</small><strong>${formatNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron"><i>◆</i><small>철</small><strong>${formatNumber(state.resources.iron)}</strong></span></div></div>
           <div class="topbar-actions"><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}">${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : this.auth.status === 'offline' ? '오프라인 모드' : 'Manus 로그인'}</button></div>
         </header>
         <aside class="sidebar">
           <div class="sidebar-label">본진</div>
-          ${this.navButton('overview', icon('overview'), '본영', state.section)}
-          ${this.navButton('recruit', icon('recruit'), '모집 · 장비', state.section, state.lastRecruit ? 'NEW' : '')}
-          ${this.navButton('roster', icon('roster'), '보유 무장', state.section, `${state.generals.length}`)}
-          ${this.navButton('codex', icon('codex'), '무장 도감', state.section, `${allGenerals().length}`)}
-          ${this.navButton('formation', icon('formation'), '출전 편성', state.section, `${state.formation.length}/3`)}
-          ${this.navButton('equipment', icon('equipment'), '장비 관리', state.section, `${equipmentInventoryCount(state)}`)}
-          ${this.navButton('territory', icon('territory'), '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === state.faction).length}`)}
-          ${this.navButton('research', icon('research'), '기술 연구', state.section)}
+          ${this.navButton('overview', '◈', '본영', state.section)}
+          ${this.navButton('recruit', '✦', '모집 · 장비', state.section, state.lastRecruit ? 'NEW' : '')}
+          ${this.navButton('roster', '◇', '보유 무장', state.section, `${state.generals.length}`)}
+          ${this.navButton('codex', '▤', '무장 도감', state.section, `${allGenerals().length}`)}
+          ${this.navButton('formation', '⌘', '출전 편성', state.section, `${state.formation.length}/3`)}
+          ${this.navButton('equipment', '⚒', '장비 관리', state.section, `${equipmentInventoryCount(state)}`)}
+          ${this.navButton('territory', '⌂', '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === state.faction).length}`)}
+          ${this.navButton('research', '✧', '기술 연구', state.section)}
           <div class="sidebar-rule"></div><div class="sidebar-label">작전</div>
           ${this.navButton('battle', '⚔', '시나리오', state.section)}
           ${this.navButton('duel', '⚔', '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
@@ -593,7 +512,7 @@ export class StrategyUI {
           ${this.navButton('updates', '✎', '업데이트 기록', state.section, 'NEW')}
           ${this.navButton('account', '◎', '계정 관리', state.section)}
           ${this.isAdmin() ? '<div class="sidebar-rule"></div><div class="sidebar-label">운영</div>' : ''}
-          ${this.isAdmin() ? this.navButton('admin', icon('admin'), '관리자 센터', state.section, 'LIVE') : ''}
+          ${this.isAdmin() ? this.navButton('admin', '▣', '관리자 센터', state.section, 'LIVE') : ''}
           <div class="sidebar-spacer"></div>
           <div class="sidebar-profile"><div class="profile-orb">${state.faction.slice(0, 1)}</div><div><strong>${state.faction} 진영</strong><small>옥패 07 · Lv.12</small></div></div>
         </aside>
@@ -642,7 +561,7 @@ export class StrategyUI {
 
   private recruitSection(state: StrategyState): string {
     const result = state.lastRecruit
-    return `<section class="page-section page-section--recruit"><div class="section-heading section-heading--compact"><div><span class="eyebrow">SUMMONING HALL · 02</span><h1>무장 모집</h1><p class="heading-copy">한 장의 인장이 진형 전체를 바꿉니다.</p></div><div class="section-counter"><span>보유 무장</span><strong>${state.generals.length}<small> / ${allGenerals().length}</small></strong></div></div><div class="recruit-layout"><div class="recruit-pedestal glass-card"><div class="pedestal-glow"></div><div class="summon-seal"><span>✦</span><i>옥패의 응답</i></div><div class="recruit-copy"><span class="pill pill--gold">무료 게임 내 재화</span><h2>옥패의 부름</h2><p>역사 속 무장들이 인장 너머에서 응답합니다.<br>중복 무장은 즉시 성급으로 전환됩니다.</p></div><div class="recruit-actions"><button class="action-button action-button--primary" data-action="recruit" data-count="1"><span>1회 모집</span><b>✦ 100</b></button><button class="action-button action-button--outline" data-action="recruit" data-count="10"><span>10회 연속 모집</span><b>✦ 900</b></button></div><div class="fair-play-note"><span>◎</span><span>현금 결제 없음 · 모집 확률 상시 공개</span></div></div><div class="recruit-side"><div class="glass-card rate-card"><div class="card-header"><div><span class="eyebrow">DROP TABLE</span><h3>모집 확률</h3></div><span class="rate-note">1회 기준</span></div>${([5, 4, 3, 2, 1] as const).map(grade => `<div class="rate-row"><span class="grade-dot" style="--grade:${GRADE_META[grade].color}"></span><span>${grade}등급 <small>${GRADE_META[grade].label}</small></span><strong>${GRADE_META[grade].rate}</strong><div class="rate-track"><i style="width:${GRADE_META[grade].rate}"></i></div></div>`).join('')}<div class="rate-footnote">* 중복 획득 시 해당 무장의 성급이 +1 상승합니다. 최대 5성.</div></div>${result ? `<div class="glass-card recruit-result"><span class="eyebrow">LATEST ACQUISITION</span><div class="result-card-row">${this.portrait(result, 'general-portrait--large')}<div><h3>${result.name}<span class="star-row">${'★'.repeat(result.stars)}${'☆'.repeat(5 - result.stars)}</span></h3><p>${result.epithet}</p><small>${result.grade}등급 · ${result.role} · Lv.${result.level}</small></div></div><p class="result-note">${state.lastNotice}</p></div>` : '<div class="glass-card empty-result"><span class="empty-rune">✦</span><p>모집 결과가 이곳에 기록됩니다.</p></div>'}</div></div></section>`
+    return `<section class="page-section page-section--recruit"><div class="section-heading section-heading--compact"><div><span class="eyebrow">SUMMONING HALL · 02</span><h1>무장 모집</h1><p class="heading-copy">한 장의 인장이 진형 전체를 바꿉니다.</p></div><div class="section-counter"><span>보유 무장</span><strong>${state.generals.length}<small> / 65</small></strong></div></div><div class="recruit-layout"><div class="recruit-pedestal glass-card"><div class="pedestal-glow"></div><div class="summon-seal"><span>✦</span><i>옥패의 응답</i></div><div class="recruit-copy"><span class="pill pill--gold">무료 게임 내 재화</span><h2>옥패의 부름</h2><p>역사 속 무장들이 인장 너머에서 응답합니다.<br>중복 무장은 즉시 성급으로 전환됩니다.</p></div><div class="recruit-actions"><button class="action-button action-button--primary" data-action="recruit" data-count="1"><span>1회 모집</span><b>✦ 100</b></button><button class="action-button action-button--outline" data-action="recruit" data-count="10"><span>10회 연속 모집</span><b>✦ 900</b></button></div><div class="fair-play-note"><span>◎</span><span>현금 결제 없음 · 모집 확률 상시 공개</span></div></div><div class="recruit-side"><div class="glass-card rate-card"><div class="card-header"><div><span class="eyebrow">DROP TABLE</span><h3>모집 확률</h3></div><span class="rate-note">1회 기준</span></div>${([5, 4, 3, 2, 1] as const).map(grade => `<div class="rate-row"><span class="grade-dot" style="--grade:${GRADE_META[grade].color}"></span><span>${grade}등급 <small>${GRADE_META[grade].label}</small></span><strong>${GRADE_META[grade].rate}</strong><div class="rate-track"><i style="width:${GRADE_META[grade].rate}"></i></div></div>`).join('')}<div class="rate-footnote">* 중복 획득 시 해당 무장의 성급이 +1 상승합니다. 최대 5성.</div></div>${result ? `<div class="glass-card recruit-result"><span class="eyebrow">LATEST ACQUISITION</span><div class="result-card-row">${this.portrait(result, 'general-portrait--large')}<div><h3>${result.name}<span class="star-row">${'★'.repeat(result.stars)}${'☆'.repeat(5 - result.stars)}</span></h3><p>${result.epithet}</p><small>${result.grade}등급 · ${result.role} · Lv.${result.level}</small></div></div><p class="result-note">${state.lastNotice}</p></div>` : '<div class="glass-card empty-result"><span class="empty-rune">✦</span><p>모집 결과가 이곳에 기록됩니다.</p></div>'}</div></div></section>`
   }
 
   private rosterSection(state: StrategyState): string {
@@ -655,13 +574,13 @@ export class StrategyUI {
     const catalog = allGenerals()
     const ownedIds = new Set(state.generals.map(general => general.id))
     const ownedCount = catalog.filter(general => ownedIds.has(general.id)).length
-    return `<section class="page-section page-section--codex"><div class="section-heading section-heading--compact"><div><span class="eyebrow">GENERAL CODEX · 04</span><h1>무장 도감</h1><p class="heading-copy">천하에 이름을 남긴 ${catalog.length}명의 무장과 해금 현황을 확인하십시오.</p></div><div class="section-counter"><span>수집 현황</span><strong>${ownedCount}<small> / ${catalog.length}</small></strong></div></div><div class="codex-summary glass-card"><div><span class="eyebrow">COLLECTION PROGRESS</span><h3>옥패 기록원</h3><p>모집으로 영입한 무장은 상세 정보와 성장 상태가 도감에 기록됩니다.</p></div><div class="codex-progress"><strong>${Math.round((ownedCount / catalog.length) * 100)}%</strong><i><b style="width:${(ownedCount / catalog.length) * 100}%"></b></i><small>${ownedCount}명 영입 · ${catalog.length - ownedCount}명 미영입</small></div></div><div class="codex-grid">${catalog.map(general => this.codexCard(general, ownedIds.has(general.id))).join('')}</div></section>`
+    return `<section class="page-section page-section--codex"><div class="section-heading section-heading--compact"><div><span class="eyebrow">GENERAL CODEX · 04</span><h1>무장 도감</h1><p class="heading-copy">천하에 이름을 남긴 65명의 무장과 해금 현황을 확인하십시오.</p></div><div class="section-counter"><span>수집 현황</span><strong>${ownedCount}<small> / ${catalog.length}</small></strong></div></div><div class="codex-summary glass-card"><div><span class="eyebrow">COLLECTION PROGRESS</span><h3>옥패 기록원</h3><p>모집으로 영입한 무장은 상세 정보와 성장 상태가 도감에 기록됩니다.</p></div><div class="codex-progress"><strong>${Math.round((ownedCount / catalog.length) * 100)}%</strong><i><b style="width:${(ownedCount / catalog.length) * 100}%"></b></i><small>${ownedCount}명 영입 · ${catalog.length - ownedCount}명 미영입</small></div></div><div class="codex-grid">${catalog.map(general => this.codexCard(general, ownedIds.has(general.id))).join('')}</div></section>`
   }
 
   private formationSection(state: StrategyState): string {
     const bench = this.sortedFormationBench(state)
     const sortOptions: Array<[FormationSort, string]> = [['power', '전투력'], ['grade', '등급']]
-    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">FORMATION COMMAND · 05</span><h1>출전 편성</h1><p class="heading-copy">세 개의 전열 슬롯에 장수를 배치해 황혼의 관문을 돌파할 진형을 완성하십시오.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">ACTIVE DEPLOYMENT</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>아래 장수를 눌러 편성에 넣거나 해제할 수 있습니다. 세 번째 슬롯은 상황에 맞춰 교체하십시오.</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '슬롯을 채우는 중'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">AVAILABLE RESERVE</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">FORMATION COMMAND · 05</span><h1>출전 편성</h1><p class="heading-copy">세 개의 전열 슬롯에 장수를 배치해 황혼의 관문을 돌파할 진형을 완성하십시오.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착</button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">ACTIVE DEPLOYMENT</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>아래 장수를 눌러 편성에 넣거나 해제할 수 있습니다. 세 번째 슬롯은 상황에 맞춰 교체하십시오.</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '슬롯을 채우는 중'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">AVAILABLE RESERVE</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
   }
 
   private equipmentSection(state: StrategyState): string {
@@ -794,7 +713,7 @@ export class StrategyUI {
 
   private resourceTokens(state: StrategyState): string {
     const values = { ...state.resources, silver: state.silver }
-    return (['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<div class="resource-token" style="--resource-color:${RESOURCE_META[key].color}"><span>${icon(key)}</span><div><small>${RESOURCE_META[key].label}</small><strong>${formatNumber(values[key])}</strong></div></div>`).join('')
+    return (['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<div class="resource-token" style="--resource-color:${RESOURCE_META[key].color}"><span>${RESOURCE_META[key].icon}</span><div><small>${RESOURCE_META[key].label}</small><strong>${formatNumber(values[key])}</strong></div></div>`).join('')
   }
 
   private territorySection(state: StrategyState): string {
@@ -954,7 +873,7 @@ export class StrategyUI {
   private conquestCard(city: City, state: StrategyState, siege: number, eligibility: ReturnType<typeof conquestEligibility>): string {
     const cost = conquestCost(city)
     const power = conquestPower(state)
-    const costText = `${icon('grain', 'gi--inline')} ${formatNumber(cost.grain ?? 0)} · ${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
+    const costText = `▦ ${formatNumber(cost.grain ?? 0)} · ◈ ${formatNumber(cost.silver ?? 0)} · ◆ ${formatNumber(cost.iron ?? 0)}`
     const garrisonCount = city.garrisons?.length ?? 3
     const defeated = Math.min(garrisonCount, city.defendersDefeated ?? 0)
     const remaining = Math.max(0, garrisonCount - defeated)
@@ -973,9 +892,9 @@ export class StrategyUI {
   }
   private buildingRow(city: City, building: CityBuilding, canManage: boolean): string {
     const cost = buildingCost(building)
-    const costText = `${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('wood', 'gi--inline')} ${formatNumber(cost.wood ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
+    const costText = `◈ ${formatNumber(cost.silver ?? 0)} · ⌁ ${formatNumber(cost.wood ?? 0)} · ◆ ${formatNumber(cost.iron ?? 0)}`
     const maxed = building.level >= building.maxLevel
-    return `<div class="building-row"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed ? 'disabled' : ''}>${maxed ? '최고 단계' : `강화 · ${costText}`}</button></div>`
+    return `<div class="building-row"><div class="building-glyph">${building.kind === 'agriculture' ? '▦' : building.kind === 'commerce' ? '◇' : building.kind === 'barracks' ? '⚔' : building.kind === 'workshop' ? '◆' : '✧'}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed ? 'disabled' : ''}>${maxed ? '최고 단계' : `강화 · ${costText}`}</button></div>`
   }
 
   private researchSection(state: StrategyState): string {
@@ -1041,19 +960,13 @@ export class StrategyUI {
 
   private skillDetailPanel(general: General): string {
     const detail = skillDetail(general)
-    const extra = [
-      detail.passive ? `<div class="skill-detail-wide"><small>패시브 (3성)</small><strong>${escapeHtml(detail.passive)}</strong></div>` : '',
-      detail.awaken ? `<div class="skill-detail-wide"><small>각성 (5성)</small><strong>${escapeHtml(detail.awaken)}</strong></div>` : '',
-      detail.weakness ? `<div class="skill-detail-wide skill-detail-weak"><small>약점</small><strong>${escapeHtml(detail.weakness)}</strong></div>` : '',
-    ].join('')
-    return `<div class="skill-detail-panel skill-detail-panel--${detail.category === '정화·치료' ? 'cleanse' : detail.category === '버프' ? 'buff' : detail.category === '디버프' ? 'debuff' : 'combat'}"><div class="skill-detail-title"><span>◈ 스킬 상세 <b class="skill-category">${detail.type}</b></span><b>${skillRank(general)}성 · 사기 −${skillPower(general)}</b></div><div class="skill-detail-grid"><div><small>발동</small><strong>${escapeHtml(detail.trigger)}</strong></div><div><small>대상</small><strong>${escapeHtml(detail.target)}</strong></div><div class="skill-detail-wide"><small>효과</small><strong>${escapeHtml(detail.effect)}</strong></div><div><small>유형</small><strong>${escapeHtml(detail.duration)}</strong></div><div><small>쿨다운</small><strong>${escapeHtml(detail.cooldown)}</strong></div>${extra}</div></div>`
+    return `<div class="skill-detail-panel skill-detail-panel--${detail.category === '정화·치료' ? 'cleanse' : detail.category === '버프' ? 'buff' : detail.category === '디버프' ? 'debuff' : 'combat'}"><div class="skill-detail-title"><span>◈ 스킬 상세 <b class="skill-category">${detail.category}</b></span><b>${skillRank(general)}단계 · 위력 ${skillPower(general)}</b></div><div class="skill-detail-grid"><div><small>발동 조건</small><strong>${escapeHtml(detail.trigger)}</strong></div><div><small>대상</small><strong>${escapeHtml(detail.target)}</strong></div><div><small>효과 수치</small><strong>${escapeHtml(detail.effect)}</strong></div><div><small>지속 시간</small><strong>${escapeHtml(detail.duration)}</strong></div><div><small>재사용 조건</small><strong>${escapeHtml(detail.cooldown)} 후 재사용</strong></div></div></div>`
   }
-
 
   private generalCard(general: General, inFormation: boolean): string {
     const meta = GRADE_META[general.grade]
     const portraitPath = this.portraitAsset(general)
-    return `<article class="general-card ${inFormation ? 'is-deployed' : ''}" style="--accent:${general.accent};--grade:${meta.color}"><div class="card-art"><div class="art-grid"></div><div class="art-spark has-portrait" style="--portrait:url('${portraitPath}')">${general.portrait}</div><div class="grade-tag"><span>${general.grade}</span><small>${meta.label}</small></div><div class="deploy-tag">${inFormation ? '출전 중' : '대기'}</div></div><div class="general-card-body"><div class="general-line"><div><h3>${general.name}<span class="star-row">${'★'.repeat(general.stars)}${'☆'.repeat(5 - general.stars)}</span></h3><p>${general.epithet}</p></div><span class="role-tag">${general.role}</span></div><div class="level-line"><span>Lv.${general.level}</span><span>전투력 <b>${formatNumber(combatPower(general))}</b></span></div><div class="stat-bars stat-bars--attributes">${this.attributeRows(general)}</div><div class="skill-preview"><span>◈ ${general.skillName} · ${skillDetail(general).type} · 사기 −${skillPower(general)}</span><small>${general.skillDescription}</small></div>${this.skillDetailPanel(general)}<div class="general-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : '출전 편성'}</button><button class="mini-action" data-action="upgrade" data-id="${general.id}">강화 <span>＋</span></button>${general.skillUnlocked ? `<span class="skill-ready">스킬 ${skillRank(general)}성</span>` : `<button class="mini-action mini-action--skill" data-action="skill" data-id="${general.id}">${general.level >= skillUnlockLevel(general) ? '스킬 해금' : `Lv.${skillUnlockLevel(general)} 해금`} <span>◈</span></button>`}</div></div></article>`
+    return `<article class="general-card ${inFormation ? 'is-deployed' : ''}" style="--accent:${general.accent};--grade:${meta.color}"><div class="card-art"><div class="art-grid"></div><div class="art-spark has-portrait" style="--portrait:url('${portraitPath}')">${general.portrait}</div><div class="grade-tag"><span>${general.grade}</span><small>${meta.label}</small></div><div class="deploy-tag">${inFormation ? '출전 중' : '대기'}</div></div><div class="general-card-body"><div class="general-line"><div><h3>${general.name}<span class="star-row">${'★'.repeat(general.stars)}${'☆'.repeat(5 - general.stars)}</span></h3><p>${general.epithet}</p></div><span class="role-tag">${general.role}</span></div><div class="level-line"><span>Lv.${general.level}</span><span>전투력 <b>${formatNumber(combatPower(general))}</b></span></div><div class="stat-bars stat-bars--attributes">${this.attributeRows(general)}</div><div class="skill-preview"><span>◈ ${general.skillName} · ${skillRank(general)}단계 · 위력 ${skillPower(general)}</span><small>${general.skillDescription}</small></div>${this.skillDetailPanel(general)}<div class="general-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : '출전 편성'}</button><button class="mini-action" data-action="upgrade" data-id="${general.id}">강화 <span>＋</span></button>${general.skillUnlocked ? `<span class="skill-ready">스킬 ${skillRank(general)}단계</span>` : `<button class="mini-action mini-action--skill" data-action="skill" data-id="${general.id}">${general.level >= skillUnlockLevel(general) ? '스킬 해금' : `Lv.${skillUnlockLevel(general)} 해금`} <span>◈</span></button>`}</div></div></article>`
   }
 
   private codexCard(general: General, owned: boolean): string {
@@ -1109,20 +1022,6 @@ export class StrategyUI {
     return `<section class="page-section page-section--battle"><div class="battle-topline"><div><span class="eyebrow">TACTICAL FRONT · 04</span><h1>황혼의 관문</h1><p class="heading-copy">적의 예고를 읽고 상성 기동으로 연계를 이어 세 번의 전황을 돌파하십시오.</p></div><div class="battle-status"><span class="status-dot"></span><span data-battle-status>${battle?.status ?? '대기 중'}</span><span class="battle-time" data-battle-time>${battle ? '00:00' : '—'}</span></div></div><div class="battle-hud"><div class="hud-side"><span class="hud-label">촉한 진영</span><strong>아군 진형</strong><div class="hud-units">${state.formation.map((id, index) => { const general = state.generals.find(item => item.id === id); return general ? `<button class="hud-unit ${battle?.selectedUnit === index ? 'is-selected' : ''}" data-action="battle-unit" data-index="${index}" data-battle-unit="${index}">${this.portrait(general, 'hud-portrait')}<small>${general.name}</small><b>Lv.${general.level}</b></button>` : '' }).join('')}</div><div class="hud-enemy-label">상대 무장</div><div class="hud-units hud-units--enemy">${this.enemyHudMarkup(battle?.opponentDeck)}</div></div><div class="hud-center"><span data-battle-phase>${phaseText}</span><strong data-battle-morale>${battle ? `${battle.morale}%` : '100%'}</strong><div class="morale-track"><i data-morale-bar style="width:${battle?.morale ?? 100}%"></i></div><div class="battle-pattern" data-battle-pattern>${patternText}</div><div class="battle-meters"><b data-battle-combo>${comboText}</b><span>위협 <i data-battle-threat>${threatText}</i></span><span>전술 <i data-battle-gauge>0%</i></span></div><div class="tactic-track"><i data-gauge-bar style="width:0%"></i></div><small class="guard-state" data-guard-state>전술 대기</small><div class="threat-track"><i data-threat-bar style="width:${battle?.threat ?? 0}%"></i></div></div><div class="hud-side hud-side--enemy"><span class="hud-label">적대 세력 · ${battle?.duelMode ? '실제 유저 덱' : '훈련용 덱'}</span><strong>무장 덱 3 : 3</strong><div class="enemy-crest">☵</div><div class="enemy-meta"><span>난이도 <b data-battle-difficulty>${difficultyText}</b></span><span>전투력 <b data-enemy-power>${enemyPowerText}</b></span></div></div></div><div class="opponent-deck glass-card"><div class="card-header"><div><span class="eyebrow">OPPONENT DECK · 03</span><h3>이번 전투의 적 무장</h3></div><span class="sync-label">라운드별 강화</span></div><div class="opponent-deck-grid" data-opponent-deck>${this.opponentDeckMarkup(battle?.opponentDeck)}</div></div><div class="troop-status glass-card"><div class="card-header"><div><span class="eyebrow">TROOP STRENGTH · 06</span><h3>양측 병력 상태</h3></div><span class="sync-label">자동 교전</span></div><div class="troop-status-grid" data-battle-troop-status>${this.troopStatusMarkup(battle?.troopStatus)}</div></div><div class="battle-command glass-card"><div class="command-selected"><span class="eyebrow">SELECTED COMMANDER</span><div class="commander-heading"><h3 data-battle-selected>${selected}</h3><span data-battle-role>${battle?.selectedRole ?? selectedGeneral?.role ?? '—'} · ${battle?.selectedArchetype ?? '무장형'} · Lv.${battle?.selectedLevel ?? selectedGeneral?.level ?? 0}</span></div><div class="command-stat-grid">${statMarkup}</div><div class="command-skill"><span>◈ <b data-battle-skill-name>${skillName}</b></span><small data-battle-skill-description>${skillDescription}</small></div><div class="battle-effects" data-battle-effects>${this.battleEffectsMarkup(battle?.activeEffects)}</div></div><div class="command-actions"><button class="tactic-button" data-action="move" data-index="0" data-tactic-lane="0"><span>↙</span><small>좌측 기동</small></button><button class="tactic-button tactic-button--primary" data-action="move" data-index="1" data-tactic-lane="1"><span>↑</span><small>중앙 돌파</small></button><button class="tactic-button" data-action="move" data-index="2" data-tactic-lane="2"><span>↘</span><small>우측 기동</small></button><button class="skill-button" data-action="battle-skill" data-battle-skill-button ${skillReady ? '' : 'disabled'}><span>◈</span><small data-battle-skill-state>${skillState}</small></button><button class="tactic-button tactic-button--guard" data-action="battle-tactic" data-tactic="guard" data-tactic-cost="35"><span>▣</span><small>철벽</small></button><button class="tactic-button tactic-button--feint" data-action="battle-tactic" data-tactic="feint" data-tactic-cost="50"><span>⌁</span><small>유인책</small></button><button class="tactic-button tactic-button--charge" data-action="battle-tactic" data-tactic="charge" data-tactic-cost="65"><span>⚔</span><small>전군 돌격</small></button>${battle?.active ? '' : '<button class="action-button action-button--primary battle-start" data-action="battle-start">전투 시작 <span>→</span></button>'}</div></div><div class="battle-tip"><span>TIP</span> 적 패턴과 같은 방향을 누르면 연계와 전술 게이지가 쌓입니다. 철벽은 위협을 억제하고, 유인책은 연계를 만들며, 전군 돌격은 연계를 피해로 태웁니다.</div></section>`
   }
 
-  /** 전투 중 상단 바: 멈춤 · ×2 배속 · 자동(별 3개 시나리오) · 전투 중지 */
-  private battleTopControls(): string {
-    const battle = this.latestBattle
-    return `<div class="topbar-battle"><button class="tb-btn" data-action="battle-pause" data-bt-pause aria-label="일시 정지">${battle?.paused ? '▶ 계속' : '❚❚ 멈춤'}</button><button class="tb-btn ${(battle?.speed ?? 1) >= 2 ? 'is-on' : ''}" data-action="battle-speed" data-bt-speed aria-label="2배속">×2 배속</button>${this.battleAutoAvailable ? `<button class="tb-btn ${battle?.autoPlay ? 'is-on' : ''}" data-action="battle-auto" data-bt-auto>자동</button>` : ''}<button class="tb-btn tb-btn--stop" data-action="battle-stop" data-bt-stop>■ 전투 중지</button></div>`
-  }
-
-  /** 상단 HUD의 적 무장 카드(초상·레벨·병력 막대) — Manus 전투 HUD 개선안 */
-  private enemyHudMarkup(opponents: BattleOpponent[] = []): string {
-    return opponents.length
-      ? opponents.map((opponent, index) => `<div class="bt-enemy" data-bt-enemy="${index}"><div class="general-portrait bt-enemy-portrait has-portrait" style="--portrait:url('/assets/generals-realistic-webp/${opponent.id}.webp')"><span>${escapeHtml(opponent.name.slice(0, 1))}</span></div><div><strong>${escapeHtml(opponent.name)}</strong><small>${opponent.role} · Lv.${opponent.level}</small><span class="bt-enemy-troops"><i style="width:100%"></i></span></div></div>`).join('')
-      : '<span class="bt-enemies-empty">전투 시작 시 적 무장이 배치됩니다.</span>'
-  }
-
-
   private accountSection(): string {
     if (this.auth.status !== 'authenticated') {
       return `<section class="page-section page-section--account"><div class="section-heading section-heading--compact"><div><span class="eyebrow">ACCOUNT COMMAND · 06</span><h1>계정 관리</h1><p class="heading-copy">계정 정보를 확인하고 전적 동기화에 사용할 표시 이름을 관리합니다.</p></div></div><div class="glass-card account-gate"><div class="account-gate-mark">◎</div><h2>Manus 계정으로 연결하십시오</h2><p>로그인하면 계정 정보, 천하 랭킹, 전적 동기화를 한 곳에서 관리할 수 있습니다.</p><button class="action-button action-button--primary" data-action="login">Manus 로그인 <span>→</span></button></div></section>`
@@ -1143,7 +1042,7 @@ export class StrategyUI {
     const filters = [['all', '전체'], ['legendary', '천명'], ['officer', '책사'], ['deployed', '출전 중']] as const
     const activity: Array<[string, string, string, string]> = [
       ['08:04', '장수 도감', '삼국지 장수 50명 콘텐츠 팩 등록', 'jade'],
-      ['07:24', '게임 밸런스', '모집 풀 70명 및 등급 확률 검증 완료', 'gold'],
+      ['07:24', '게임 밸런스', '모집 풀 65명 및 등급 확률 검증 완료', 'gold'],
       ['07:07', '전투 연출', '화살 궤적·검기·충격파 VFX 배포', 'jade'],
       ['06:52', '시즌 운영', '제1장 황혼의 관문 활성화', 'muted'],
     ]
@@ -1163,7 +1062,7 @@ export class StrategyUI {
       const stateRows = this.adminGameAccounts.map(account => `<div class="game-data-row" data-game-user="${account.id}"><div class="admin-account-identity"><span class="admin-account-avatar">${escapeHtml((account.name || '장').slice(0, 1))}</span><span><b>${escapeHtml(account.name || '이름 없음')}</b><small>${escapeHtml(account.email || account.openId)}</small></span></div>${[['honor', '명망'], ['silver', '은전'], ['gold', '금화'], ['manuals', '병서'], ['wins', '승리'], ['battleScore', '최고 점수'], ['grain', '식량'], ['wood', '목재'], ['iron', '철'], ['influence', '영향력']].map(([field, label]) => `<label><span>${label}</span><input type="number" min="0" data-game-field="${field}" value="${account.game[field as keyof typeof account.game]}"></label>`).join('')}<button class="action-button action-button--primary game-data-save" data-action="admin-game-save" data-account-id="${account.id}">저장</button></div>`).join('')
       body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">ACCOUNT GAME STATE</span><h3>게임 계정 데이터 편집</h3><p>계정별 재화·전적·내정 자원을 수정합니다. 모든 값은 관리자 권한으로 서버에 저장됩니다.</p></div><button class="ghost-button" data-action="admin-game-refresh">데이터 새로고침 ↻</button></div>${this.adminGameDataError ? `<div class="admin-account-gate"><div class="account-gate-mark">◎</div><h3>관리자 권한이 필요합니다</h3><p>${escapeHtml(this.adminGameDataError)}</p></div>` : `<div class="game-data-legend"><span>편집 가능 항목</span><b>재화 5종 · 전적 2종 · 내정 자원 4종</b><small>장수 도감·진형 원본은 무결성 보호를 위해 별도 승인 없이 수정하지 않습니다.</small></div><div class="game-data-list">${stateRows || '<div class="admin-empty-row">게임 계정 데이터가 없습니다.</div>'}</div>`}</div>`
     } else if (this.adminTab === 'season') {
-      body = `<div class="admin-grid"><div class="glass-card admin-panel season-control"><div class="card-header"><div><span class="eyebrow">SEASON CONTROL</span><h3>시즌 01 · 황혼의 관문</h3></div><span class="admin-state-chip ${this.adminPublished ? 'is-on' : 'is-off'}">${this.adminPublished ? '게시 중' : '비공개'}</span></div><div class="season-banner"><span>SEASON 01</span><strong>황혼의 관문</strong><small>실시간 전술 전략 캠페인</small></div><div class="season-meta"><span>시작일 <b>2026.10.01</b></span><span>콘텐츠 <b>정상</b></span><span>모집 풀 <b>${allGenerals().length}명</b></span></div><button class="action-button action-button--primary admin-action" data-action="admin-toggle-publish">${this.adminPublished ? '시즌 비공개 전환' : '시즌 게시 재개'} <span>→</span></button></div><div class="glass-card admin-panel"><div class="card-header"><div><span class="eyebrow">ANNOUNCEMENT</span><h3>운영 공지</h3></div><span class="rate-note">시즌 배너</span></div><label class="admin-field"><span>현재 공지 문구</span><input value="황혼의 관문 · 삼국지 장수 50명 업데이트" readonly></label><button class="action-button action-button--outline admin-action" data-action="admin-announce">공지 미리보기 표시</button><p class="admin-note">이 화면의 시즌 변경은 로컬 관리자 미리보기 상태이며 서버 게시 권한을 대신하지 않습니다.</p></div></div>`
+      body = `<div class="admin-grid"><div class="glass-card admin-panel season-control"><div class="card-header"><div><span class="eyebrow">SEASON CONTROL</span><h3>시즌 01 · 황혼의 관문</h3></div><span class="admin-state-chip ${this.adminPublished ? 'is-on' : 'is-off'}">${this.adminPublished ? '게시 중' : '비공개'}</span></div><div class="season-banner"><span>SEASON 01</span><strong>황혼의 관문</strong><small>실시간 전술 전략 캠페인</small></div><div class="season-meta"><span>시작일 <b>2026.10.01</b></span><span>콘텐츠 <b>정상</b></span><span>모집 풀 <b>65명</b></span></div><button class="action-button action-button--primary admin-action" data-action="admin-toggle-publish">${this.adminPublished ? '시즌 비공개 전환' : '시즌 게시 재개'} <span>→</span></button></div><div class="glass-card admin-panel"><div class="card-header"><div><span class="eyebrow">ANNOUNCEMENT</span><h3>운영 공지</h3></div><span class="rate-note">시즌 배너</span></div><label class="admin-field"><span>현재 공지 문구</span><input value="황혼의 관문 · 삼국지 장수 50명 업데이트" readonly></label><button class="action-button action-button--outline admin-action" data-action="admin-announce">공지 미리보기 표시</button><p class="admin-note">이 화면의 시즌 변경은 로컬 관리자 미리보기 상태이며 서버 게시 권한을 대신하지 않습니다.</p></div></div>`
     } else {
       body = `<div class="glass-card admin-panel admin-audit"><div class="card-header"><div><span class="eyebrow">AUDIT TRAIL</span><h3>변경 기록</h3></div><span class="sync-label">CHECKPOINT 8ED4135</span></div>${activity.concat([['06:31', '품질 검증', '타입 검사·38개 테스트·프로덕션 빌드 통과', 'jade'] as const]).map(([time, category, message, tone]) => `<div class="audit-row"><time>${time}</time><span class="activity-mark activity-mark--${tone}"></span><div><b>${category}</b><p>${message}</p></div><small>검증됨</small></div>`).join('')}</div>`
     }
@@ -1172,15 +1071,15 @@ export class StrategyUI {
 
   private shopSection(state: StrategyState): string {
     const statLabels: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
-    const goldCards = GOLD_PACKAGES.map(goldPackage => `<article class="shop-item shop-item--gold glass-card"><div class="shop-item-icon shop-item-icon--gold">${icon('gold')}</div><div class="shop-item-copy"><span class="pill pill--mythic">금화 충전</span><h2>${escapeHtml(goldPackage.name)}</h2><p>${escapeHtml(goldPackage.description)}</p><small>금화 +${goldPackage.gold}개 · 1개당 1,500원</small></div><button class="action-button action-button--primary" data-action="gold-purchase" data-package-id="${goldPackage.id}" ${GOLD_PURCHASE_ENABLED ? '' : 'disabled'}>${GOLD_PURCHASE_ENABLED ? `₩ ${goldPackage.priceKRW.toLocaleString('ko-KR')} · 충전` : '정식 출시 전 구매 잠금'}</button></article>`).join('')
-    const resourceCards = RESOURCE_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--resource glass-card"><div class="shop-item-icon shop-item-icon--resource">${icon(product.resource)}</div><div class="shop-item-copy"><span class="pill pill--resource">자원 패키지</span><h2>${escapeHtml(RESOURCE_META[product.resource].label)} ${product.goldCost}금화</h2><p>${escapeHtml(product.description)}</p><small>${RESOURCE_META[product.resource].label} +${formatNumber(product.amount)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="cash-shop-purchase" data-product-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
-    const honorCards = HONOR_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--honor glass-card"><div class="shop-item-icon shop-item-icon--gold">${icon('honor')}</div><div class="shop-item-copy"><span class="pill pill--resource">명망 패키지</span><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.description)}</p><small>명망 +${formatNumber(product.honor)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="honor-shop-purchase" data-package-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
+    const goldCards = GOLD_PACKAGES.map(goldPackage => `<article class="shop-item shop-item--gold glass-card"><div class="shop-item-icon shop-item-icon--gold">◈</div><div class="shop-item-copy"><span class="pill pill--mythic">금화 충전</span><h2>${escapeHtml(goldPackage.name)}</h2><p>${escapeHtml(goldPackage.description)}</p><small>금화 +${goldPackage.gold}개 · 1개당 1,500원</small></div><button class="action-button action-button--primary" data-action="gold-purchase" data-package-id="${goldPackage.id}" ${GOLD_PURCHASE_ENABLED ? '' : 'disabled'}>${GOLD_PURCHASE_ENABLED ? `₩ ${goldPackage.priceKRW.toLocaleString('ko-KR')} · 충전` : '정식 출시 전 구매 잠금'}</button></article>`).join('')
+    const resourceCards = RESOURCE_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--resource glass-card"><div class="shop-item-icon shop-item-icon--resource">${RESOURCE_META[product.resource].icon}</div><div class="shop-item-copy"><span class="pill pill--resource">자원 패키지</span><h2>${escapeHtml(RESOURCE_META[product.resource].label)} ${product.goldCost}금화</h2><p>${escapeHtml(product.description)}</p><small>${RESOURCE_META[product.resource].label} +${formatNumber(product.amount)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="cash-shop-purchase" data-product-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
+    const honorCards = HONOR_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--honor glass-card"><div class="shop-item-icon shop-item-icon--gold">★</div><div class="shop-item-copy"><span class="pill pill--resource">명망 패키지</span><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.description)}</p><small>명망 +${formatNumber(product.honor)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="honor-shop-purchase" data-package-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
     const mythicCards = MYTHIC_SHOP_EQUIPMENT.map(item => { const specialty = equipmentSpecialty(item); return `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon"><img class="equipment-image--mythic" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /></div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small>${specialty ? `<strong class="shop-specialty">특기 · ${escapeHtml(specialty.label)} · ${escapeHtml(specialty.description)}</strong>` : ''}</div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>` }).join('')
     const cards = this.shopTab === 'gold' ? goldCards : this.shopTab === 'resources' ? resourceCards + honorCards : mythicCards
     const description = this.shopTab === 'gold' ? '금화 1개를 1,500원 기준으로 충전해 자원 패키지를 교환하십시오.' : this.shopTab === 'resources' ? '금화로 영토·강화·연구에 필요한 자원 패키지를 교환합니다.' : '유저 대련 승리로 얻은 신화장비 조각으로 장비를 교환합니다.'
     const notice = this.shopTab === 'gold' ? '정식 출시 전 혜택' : this.shopTab === 'resources' ? '자원 패키지 안내' : '대련 승리 보상'
     const noticeText = this.shopTab === 'gold' ? '정식 출시 전에는 매일 금화 100개를 지급합니다. 금화 테스트 충전은 정식 출시 지시 전까지 잠겨 있습니다.' : this.shopTab === 'resources' ? '기존 현금 자원 패키지는 삭제하고, 자원 25종과 명망 3·5·10·20·50·100금화 패키지를 제공합니다. 금화 1개는 명망 100개로 교환됩니다.' : '유저 대련에서 승리할 때마다 신화장비 조각 1개를 획득합니다. 신화 장비 뽑기는 제공하지 않습니다.'
-    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">CELESTIAL MARKET · SHOP</span><h1>상점</h1><p class="heading-copy">${description}</p></div><div class="shop-balances glass-card"><div><span>보유 금화</span><strong>${icon('gold', 'gi--inline')} ${formatNumber(state.gold)}</strong></div><div><span>보유 명망</span><strong>${icon('honor', 'gi--inline')} ${formatNumber(state.honor)}</strong></div><div><span>신화 조각</span><strong>${icon('mythic', 'gi--inline')} ${state.mythicFragments}</strong></div></div></div><div class="shop-tabs" role="tablist"><button class="shop-tab ${this.shopTab === 'gold' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="gold">금화 충전 <small>5종</small></button><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">자원·명망 <small>31종</small></button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비 <small>12종</small></button></div><div class="shop-notice glass-card"><strong>${notice}</strong><span>${noticeText}</span></div><div class="shop-grid">${cards}</div></section>`
+    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">CELESTIAL MARKET · SHOP</span><h1>상점</h1><p class="heading-copy">${description}</p></div><div class="shop-balances glass-card"><div><span>보유 금화</span><strong>◈ ${formatNumber(state.gold)}</strong></div><div><span>보유 명망</span><strong>★ ${formatNumber(state.honor)}</strong></div><div><span>신화 조각</span><strong>✦ ${state.mythicFragments}</strong></div></div></div><div class="shop-tabs" role="tablist"><button class="shop-tab ${this.shopTab === 'gold' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="gold">금화 충전 <small>5종</small></button><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">자원·명망 <small>31종</small></button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비 <small>12종</small></button></div><div class="shop-notice glass-card"><strong>${notice}</strong><span>${noticeText}</span></div><div class="shop-grid">${cards}</div></section>`
   }
 
   private updatesSection(): string {
@@ -1331,17 +1230,9 @@ export class StrategyUI {
     else if (action === 'scenario-select') { this.scenarioSelectedId = button.dataset.scenarioId ?? this.scenarioSelectedId; if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'scenario-start') this.callbacks.onScenarioStart(button.dataset.scenarioId ?? '')
     else if (action === 'battle-start') this.callbacks.onBattleStart()
-    else if (action === 'battle-unit' || action === 'move') { if (Date.now() >= this.suppressMoveUntil) this.callbacks.onBattleMove(Number(button.dataset.index ?? 0)) }
-    else if (action === 'battle-skill') this.callbacks.onBattleSkill(button.dataset.index === undefined ? undefined : Number(button.dataset.index))
-    else if (action === 'battle-speed') this.callbacks.onBattleSpeed((this.latestBattle?.speed ?? 1) >= 2 ? 1 : 2)
-    else if (action === 'battle-pause') this.callbacks.onBattlePause(!this.latestBattle?.paused)
-    else if (action === 'battle-stop') {
-      // 실수로 누르는 것을 막기 위해 3초 안에 한 번 더 눌러야 중지한다.
-      if (Date.now() < this.stopConfirmUntil) { this.stopConfirmUntil = 0; this.callbacks.onBattleStop() }
-      else { this.stopConfirmUntil = Date.now() + 3000; button.textContent = '한 번 더 누르면 중지'; button.classList.add('is-confirm'); window.setTimeout(() => { button.classList.remove('is-confirm'); if (Date.now() >= this.stopConfirmUntil) button.textContent = '■ 전투 중지' }, 3050) }
-    }
-    else if (action === 'battle-auto') this.callbacks.onBattleAuto(!this.latestBattle?.autoPlay)
-    else if (action === 'battle-log') { this.battleLogOpen = !this.battleLogOpen; button.textContent = this.battleLogOpen ? '접기' : '전체 기록'; const log = this.root.querySelector<HTMLElement>('[data-bt-log]'); if (log) log.dataset.html = ''; if (this.latestBattle) this.updateBattle(this.latestBattle) }
+    else if (action === 'battle-unit') this.callbacks.onBattleMove(Number(button.dataset.index ?? 0))
+    else if (action === 'move') this.callbacks.onBattleMove(Number(button.dataset.index ?? 0))
+    else if (action === 'battle-skill') this.callbacks.onBattleSkill()
     else if (action === 'battle-tactic') this.callbacks.onBattleTactic((button.dataset.tactic ?? 'guard') as 'guard' | 'feint' | 'charge')
     else if (action === 'duel-refresh') this.callbacks.onDuelRefresh()
     else if (action === 'duel-start') this.callbacks.onDuelStart(button.dataset.opponentId ?? '')

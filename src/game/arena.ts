@@ -1,59 +1,20 @@
 import * as THREE from 'three'
-import { allGenerals, scaleGeneral, type General } from './strategy'
-import { BattleCore, BATTLE_RULES, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
-import type { ActiveBattleEffect } from './battle-effects'
-import type { SkillType } from './skills'
-
-export interface BattleUnitStatus {
-  lane: number
-  id: string
-  name: string
-  role: General['role']
-  level: number
-  stars: number
-  troops: number
-  maxTroops: number
-  alive: boolean
-  skillName: string
-  skillType: SkillType
-  skillUnlocked: boolean
-  cooldown: number
-  cooldownMax: number
-  ready: boolean
-}
-
-export interface BattlePatternStatus {
-  label: string
-  lanes: number[]
-  kind: 'lane' | 'pincer' | 'guard'
-  warning: string
-  timeLeft: number
-  window: number
-  judged: boolean
-}
+import { allGenerals, skillPower, skillRank, type General } from './strategy'
+import { BATTLE_PATTERNS, phaseName, resolveBattleTactic, resolveTactic, type BattleTactic } from './battle-rules'
+import { effectDefinition, effectLoadout, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId } from './battle-effects'
 
 export interface BattleSnapshot {
   active: boolean
-  mode: BattleMode
   elapsed: number
-  timeLeft: number
-  /** 이번 막 적 사기 % (0~100) */
   morale: number
-  moraleValue: number
-  moraleMax: number
   phase: number
   phaseName: string
-  pattern: BattlePatternStatus | null
   enemyPattern: string
   enemyPatternLane: number
   combo: number
   threat: number
-  collapses: number
   tacticGauge: number
-  tacticCosts: Record<BattleTactic, number>
   guardActive: boolean
-  units: BattleUnitStatus[]
-  enemyWarning: { name: string; general: string } | null
   selectedUnit: number
   selectedName: string
   selectedRole: General['role'] | '—'
@@ -66,8 +27,6 @@ export interface BattleSnapshot {
   skillReady: boolean
   skillCooldown: number
   activeEffects: ActiveBattleEffect[]
-  playerDebuffs: ActiveBattleEffect[]
-  bond: string
   opponentDeck: BattleOpponent[]
   troopStatus: BattleTroopStatus[]
   difficulty: string
@@ -75,11 +34,6 @@ export interface BattleSnapshot {
   duelMode: boolean
   enemyPower: number
   status: string
-  speed: number
-  paused: boolean
-  autoPlay: boolean
-  log: string[]
-  result: BattleResult | null
 }
 
 export interface BattleOpponent {
@@ -103,7 +57,7 @@ export interface BattleTroopStatus {
 
 export interface ArenaCallbacks {
   onEvent: (message: string) => void
-  onBattleEnd: (result: BattleResult & { mode: BattleMode }) => void
+  onBattleEnd: (result: { won: boolean; score: number; durationMs: number }) => void
 }
 
 interface BattleUnit {
@@ -150,20 +104,23 @@ export class Arena {
   private selectionRing: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial> | null = null
   private commandMarker: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial> | null = null
   private battleActive = false
-  private core: BattleCore | null = null
-  private mode: BattleMode = 'normal'
-  private moraleBonus = 0
-  private speed = 1
-  private paused = false
-  private winStreak = 0
-  private startedAt = 0
+  private battleElapsed = 0
+  private enemyMorale = 100
+  private battlePhase = 0
+  private combo = 0
+  private comboTimer = 0
+  private threat = 0
+  private tacticGauge = 0
+  private guardTimer = 0
+  private nextCommandAt = 0
+  private patternIndex = 0
+  private nextPatternAt = 0
   private selectedUnit = 0
   private skillCooldown = 0
   private enemySkillCooldown = 3.5
   private enemySkillIndex = 0
   private lastPulse = 0
   private lastVolley = -1
-  private lastCombatLog = 0
   private disposed = false
   private generals: General[] = []
   private enemyDeck: General[] = []
@@ -329,7 +286,7 @@ export class Arena {
   }
 
   private troopCapacity(general: General): number {
-    return coreTroopCapacity(general)
+    return Math.round(620 + general.leadership * 6 + general.defense * 3 + general.level * 24 + general.grade * 70)
   }
 
   private troopType(general: General): TroopType {
@@ -362,50 +319,27 @@ export class Arena {
     this.selectUnit(0)
   }
 
-  /** 미리 정한 적 덱과 전투 종류. null이면 일반 전투(적은 아군 레벨에 맞춰 뽑는다). */
-  setOpponentDeck(generals: General[] | null, mode: BattleMode = generals?.length ? 'duel' : 'normal'): void {
+  setOpponentDeck(generals: General[] | null): void {
     this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
-    this.mode = this.configuredEnemyDeck?.length ? mode : 'normal'
-    this.moraleBonus = 0
+    this.duelMode = Boolean(this.configuredEnemyDeck?.length)
   }
-  setSiegeDeck(generals: General[] | null, moraleBonus = 0): void {
+  setSiegeDeck(generals: General[] | null): void {
     this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
-    this.mode = 'siege'
-    this.moraleBonus = moraleBonus
+    this.duelMode = false
   }
   setScenarioDifficulty(multiplier: number): void {
     this.scenarioDifficultyMultiplier = Math.max(0.86, Math.min(1.8, multiplier))
   }
   isDuelBattle(): boolean {
-    return this.mode === 'duel'
-  }
-  battleMode(): BattleMode {
-    return this.mode
-  }
-
-  setSpeed(speed: number): void {
-    this.speed = speed >= 2 ? 2 : 1
-  }
-
-  /** 일시 정지: 전투 시간·적 행동·스킬 쿨다운이 모두 멈춘다. 정지 중에는 명령을 받지 않는다. */
-  setPaused(on: boolean): void {
-    this.paused = Boolean(on) && this.battleActive
-  }
-
-  setAutoPlay(on: boolean): void {
-    if (this.core) this.core.autoPilot = on ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null
+    return this.duelMode
   }
 
   stopBattle(): void {
     this.battleActive = false
-    this.paused = false
-    this.core = null
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
     this.enemyDeck = []
     this.configuredEnemyDeck = null
-    this.mode = 'normal'
-    this.moraleBonus = 0
-    this.enemyWarning = null
+    this.duelMode = false
   }
 
   private createUnit(general: General, teamColor: number, position: THREE.Vector3): THREE.Group {
@@ -844,7 +778,7 @@ export class Arena {
     })
   }
 
-  private spawnSlashWave(general: General, damage: number, skillName = general.skillName): void {
+  private spawnSlashWave(general: General, damage: number): void {
     const color = this.skillColor(general)
     const group = new THREE.Group()
     const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
@@ -880,7 +814,7 @@ export class Arena {
         })
       },
     })
-    const signature = this.makeTextSprite(skillName, `#${color.toString(16).padStart(6, '0')}`, 1.55)
+    const signature = this.makeTextSprite(general.skillName, `#${color.toString(16).padStart(6, '0')}`, 1.55)
     signature.position.set(0, 4.6, -3)
     this.addEffect({
       object: signature,
@@ -924,28 +858,7 @@ export class Arena {
     this.selectionRing.position.z = unit.group.position.z
   }
 
-  /** 일반 전투 적 덱: 아군 평균 레벨(+연승 보정)에 맞추고 아군 최고 등급을 넘지 않는다. */
-  private normalEnemyDeck(): General[] {
-    const playerIds = new Set(this.generals.map(general => general.id))
-    const count = Math.max(1, this.generals.length)
-    const level = Math.max(1, Math.round(this.generals.reduce((sum, general) => sum + general.level, 0) / count) + Math.min(5, this.winStreak))
-    const stars = Math.max(1, Math.round(this.generals.reduce((sum, general) => sum + general.stars, 0) / count))
-    const topGrade = Math.max(1, ...this.generals.map(general => general.grade))
-    const pool = allGenerals().filter(general => !playerIds.has(general.id) && general.grade <= topGrade).sort(() => Math.random() - 0.5)
-    const chosen: General[] = []
-    for (const general of pool) {
-      if (chosen.length === 3) break
-      if (chosen.filter(item => item.role === general.role).length >= 2) continue
-      chosen.push(general)
-    }
-    return chosen.map(general => scaleGeneral({ ...general, level: 1, stars: 1 }, level, stars))
-  }
-
-  startBattle(options: { autoPlay?: boolean } = {}): void {
-    const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
-    this.enemyDeck = deck
-    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
-    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, autoPilot: options.autoPlay ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null })
+  startBattle(): void {
     this.battleActive = true
     this.battleElapsed = 0
     this.enemyMorale = 100
@@ -963,9 +876,7 @@ export class Arena {
     this.enemySkillIndex = 0
     this.lastPulse = 0
     this.lastVolley = -1
-    this.lastCombatLog = 0
-    this.enemyWarning = null
-    this.logLines.splice(0)
+    this.lastCombatPulse = 0
     this.cameraIntro = 1.35
     this.cameraVictory = 0
     this.cameraShake = 0.12
@@ -994,57 +905,124 @@ export class Arena {
       const group = this.createUnit(general, ember, position)
       group.rotation.y = Math.PI
       const model = group.userData.model as THREE.Group
-      const maxTroops = this.core!.enemies[index]?.maxTroops ?? this.troopCapacity(general)
+      const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(ember)
       group.add(status.group)
       const squad = group.getObjectByName(`realistic-squad-${general.role}`) as THREE.Group
-      this.enemyUnits.push({ group, squad, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0 })
+      this.enemyUnits.push({ group, squad, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0.8 + index * 0.15, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0 })
       this.scene.add(group)
     })
     this.playerUnits.forEach((unit, index) => {
-      const coreUnit = this.core!.players[index]
-      unit.maxTroops = coreUnit?.maxTroops ?? unit.maxTroops
-      unit.troops = coreUnit?.troops ?? unit.troops
-      unit.group.visible = true
-      unit.statusFill.scale.x = 1
       unit.target.set(-4.4 + index * 4.4, 0, -2.6 - index * 0.15)
     })
-    this.enemyUnits.forEach((unit, index) => unit.target.set(-4.4 + index * 4.4, 0, -5.1 - index * 0.15))
+    this.enemyUnits.forEach((unit, index) => {
+      unit.target.set(-4.4 + index * 4.4, 0, -5.1 - index * 0.15)
+    })
     this.playerUnits.forEach((unit, index) => this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, 0.7)), index % 2 ? 0xa4a08a : 0xb68f70))
     this.enemyUnits.forEach((unit, index) => this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, -0.7)), index % 2 ? 0xa4a08a : 0xb68f70))
-    this.drainCore()
+    this.callbacks.onEvent(`작전 개시 · 무장 덱 ${this.enemyDeck.map(general => general.name).join(' · ')} · ${BATTLE_PATTERNS[0].warning}`)
   }
 
-  /** 무장 버튼(탭): 그 무장의 레인으로 기동해 적 예고에 대응한다. */
   commandMove(index: number): void {
-    if (!this.battleActive || !this.core || this.paused) return
-    this.selectUnit(index)
+    if (!this.battleActive) return
+    if (this.battleElapsed < this.nextCommandAt) return
     const unit = this.playerUnits[index]
-    if (unit && unit.troops > 0) {
-      const target = new THREE.Vector3(-5 + index * 5, 0, -1 - index * 1.2)
-      unit.target.copy(target)
-      if (!this.commandMarker) {
-        this.commandMarker = this.createMarker(0xf6c56d)
-        this.scene.add(this.commandMarker)
-      }
-      this.commandMarker.position.set(target.x, 0.05, target.z)
+    if (!unit || unit.troops <= 0) return
+    const target = new THREE.Vector3(-5 + index * 5, 0, -1 - index * 1.2)
+    unit.target.copy(target)
+    this.selectUnit(index)
+    if (!this.commandMarker) {
+      this.commandMarker = this.createMarker(0xf6c56d)
+      this.scene.add(this.commandMarker)
     }
-    this.core.command(index)
-    this.drainCore()
+    this.commandMarker.position.set(target.x, 0.05, target.z)
+    const pattern = BATTLE_PATTERNS[this.patternIndex]
+    if (!pattern) return
+    const result = resolveTactic(index, pattern.lane, this.combo, this.threat)
+    this.nextCommandAt = this.battleElapsed + 0.42
+    this.combo = result.combo
+    const rawThreatDelta = result.threat - this.threat
+    const threatMultiplier = rawThreatDelta > 0
+      ? (hasBattleEffect(this.activeBuffs, 'jade-command') ? 0.65 : 1)
+        * (hasBattleEffect(this.activeBuffs, 'phoenix-guard') ? 0.75 : 1)
+        * (hasBattleEffect(this.activeDebuffs, 'confusion') ? 0.65 : 1)
+        * (hasBattleEffect(this.activeDebuffs, 'blind') ? 0.8 : 1)
+      : 1
+    this.threat = Math.max(0, Math.min(100, this.threat + rawThreatDelta * threatMultiplier))
+    if (result.success) {
+      const gaugeGain = 24 * (hasBattleEffect(this.activeBuffs, 'war-chant') ? 1.25 : 1)
+      this.tacticGauge = Math.min(100, this.tacticGauge + gaugeGain)
+    }
+    this.comboTimer = result.success ? 4.2 + (hasBattleEffect(this.activeBuffs, 'chain-fury') ? 1.5 : 0) : 0
+    if (result.success) {
+      this.enemyMorale = Math.max(0, this.enemyMorale - result.moraleDamage)
+      this.dealTroopDamageToEnemy(result.moraleDamage * 2, `${unit.general.name}의 ${pattern.label}`, jade)
+      this.spawnImpact(new THREE.Vector3(target.x, 0, target.z - 2), result.moraleDamage, jade)
+      this.callbacks.onEvent(`${unit.general.name} · ${pattern.label} 파훼 성공 · 연계 ${this.combo} · 적 사기 -${result.moraleDamage}`)
+    } else {
+      this.callbacks.onEvent(`${unit.general.name} · ${pattern.label}에 노출 · 위협도 ${Math.round(this.threat)}%`)
+    }
   }
 
   useTactic(tactic: BattleTactic): void {
-    if (!this.battleActive || !this.core || this.paused) return
-    this.core.useTactic(tactic)
-    this.drainCore()
+    if (!this.battleActive) return
+    const result = resolveBattleTactic(tactic, this.tacticGauge, this.combo, this.threat)
+    if (!result.ok) {
+      this.callbacks.onEvent('전술 게이지가 부족합니다. 적 패턴을 파훼해 게이지를 충전하십시오.')
+      return
+    }
+    this.tacticGauge = result.gauge
+    this.combo = result.combo
+    this.threat = result.threat
+    this.guardTimer = result.guardDuration
+    if (tactic === 'guard') {
+      this.callbacks.onEvent('철벽 태세 · 4.5초 동안 위협도 상승을 억제합니다.')
+      return
+    }
+    this.enemyMorale = Math.max(0, this.enemyMorale - result.moraleDamage)
+    if (result.moraleDamage > 0) this.dealTroopDamageToEnemy(result.moraleDamage * 2, tactic === 'feint' ? '유인책' : '전군 돌격', tactic === 'feint' ? jade : ember)
+    this.spawnImpact(new THREE.Vector3(0, 0, -6), result.moraleDamage, tactic === 'feint' ? jade : ember)
+    this.callbacks.onEvent(tactic === 'feint'
+      ? `유인책 성공 · 적 전열을 끌어냈습니다 · 연계 ${this.combo} · 적 사기 -${result.moraleDamage}`
+      : `전군 돌격 · 연계를 불태워 적을 압박합니다 · 적 사기 -${result.moraleDamage}`)
   }
 
-  /** 무장 버튼(길게)·스킬 버튼: 그 무장의 스킬. index가 없으면 선택한 무장. */
-  castSkill(index = this.selectedUnit): void {
-    if (!this.battleActive || !this.core || this.paused) return
-    this.selectUnit(index)
-    this.core.castSkill(index)
-    this.drainCore()
+  castSkill(): void {
+    if (!this.battleActive) return
+    const unit = this.playerUnits[this.selectedUnit]
+    if (!unit || unit.troops <= 0 || !unit.general.skillUnlocked) {
+      this.callbacks.onEvent('아직 해금되지 않은 장수 스킬입니다.')
+      return
+    }
+    if (this.skillCooldown > 0) {
+      this.callbacks.onEvent(`${unit.general.name}의 스킬 재사용 대기 · ${this.skillCooldown.toFixed(1)}초`)
+      return
+    }
+    const impact = this.skillImpact(unit.general)
+    const loadout = effectLoadout(unit.general.id, unit.general.role)
+    const cleansed = loadout.cleanse ? this.activeDebuffs.splice(0).length : 0
+    this.applyEffect('buff', loadout.buff)
+    this.applyEffect('debuff', loadout.debuff)
+    const comboBonus = 1 + Math.min(this.combo, 8) * (hasBattleEffect(this.activeBuffs, 'chain-fury') ? 0.088 : 0.08)
+    const damageMultiplier = (hasBattleEffect(this.activeBuffs, 'dragon-might') ? 1.18 : 1)
+      * (hasBattleEffect(this.activeBuffs, 'chain-fury') ? 1.1 : 1)
+      * (hasBattleEffect(this.activeDebuffs, 'armor-break') ? 1.22 : 1)
+      * (hasBattleEffect(this.activeDebuffs, 'mark') ? 1.12 : 1)
+    const flatDamage = hasBattleEffect(this.activeBuffs, 'hawk-eye') ? 8 : 0
+    const amplifiedDamage = Math.round((impact.moraleDamage + flatDamage) * comboBonus * damageMultiplier)
+    unit.model.userData.skillPulse = 1
+    const consumedCombo = this.combo
+    this.enemyMorale = Math.max(0, this.enemyMorale - amplifiedDamage)
+    this.dealTroopDamageToEnemy(amplifiedDamage * 3, unit.general.skillName, jade)
+    this.skillCooldown = Math.max(2, impact.cooldown
+      * (hasBattleEffect(this.activeBuffs, 'swift-step') ? 0.8 : 1)
+      - (hasBattleEffect(this.activeBuffs, 'battle-focus') ? 1.5 : 0))
+    this.combo = 0
+    this.comboTimer = 0
+    this.spawnSlashWave(unit.general, amplifiedDamage * 10)
+    this.spawnSkillBurst(new THREE.Vector3(0, 1.1, -5.5), this.skillColor(unit.general))
+    this.cameraShake = Math.min(0.55, this.cameraShake + 0.22)
+    this.callbacks.onEvent(`${unit.general.name} · ${unit.general.skillName} 발동 · ${impact.message} · ${effectDefinition(loadout.buff).name} + ${effectDefinition(loadout.debuff).name}${cleansed ? ` · 상태이상 ${cleansed}개 치료` : ''} · ${consumedCombo ? `${consumedCombo}연계 증폭 · ` : ''}적 사기 -${amplifiedDamage}`)
   }
 
   private castEnemySkill(): void {
@@ -1086,106 +1064,86 @@ export class Arena {
     collection.push({ ...definition, remaining: definition.duration, stacks: 1 })
   }
 
-  private pushLog(text: string): void {
-    this.logLines.push(text)
-    if (this.logLines.length > 12) this.logLines.shift()
-  }
-
-  private drainCore(): void {
-    const core = this.core
-    if (!core) return
-    for (const event of core.drainEvents()) this.handleCoreEvent(event, core)
-    this.syncTroops()
-  }
-
-  private handleCoreEvent(event: CoreEvent, core: BattleCore): void {
-    switch (event.kind) {
-      case 'log':
-        this.pushLog(event.text)
-        this.callbacks.onEvent(event.text)
+  private skillImpact(general: General): { moraleDamage: number; cooldown: number; message: string } {
+    const martial = general.martial
+    const leadership = general.leadership
+    const stratagem = general.stratagem
+    const speed = general.speed
+    let moraleDamage = 12
+    let message = `적 사기 -${moraleDamage}`
+    switch (general.id) {
+      case 'guan-yu':
+        moraleDamage = 18 + Math.round(martial * 0.1)
+        message = `무력 관통 · 적 사기 -${moraleDamage}`
         break
-      case 'hit': {
-        const unit = this.unitAt(event.side, event.lane)
-        if (!unit) break
-        unit.hitFlash = 0.18
-        unit.hitReact = Math.min(1, unit.hitReact + Math.min(0.72, 0.22 + event.amount / 300))
-        unit.knockback.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.11 : -0.11, 0, event.side === 'enemy' ? -0.3 : 0.3))
-        this.cameraShake = Math.min(0.62, this.cameraShake + (event.amount >= 160 ? 0.18 : 0.06))
-        if (event.amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(event.amount), event.side === 'enemy' ? jade : ember)
-        if (core.t - this.lastCombatLog > 1.6) {
-          this.lastCombatLog = core.t
-          this.callbacks.onEvent(`${event.source} · ${unit.general.name} 병력 −${Math.round(event.amount)}`)
-        }
+      case 'zhao-yun':
+        moraleDamage = 13 + Math.round(speed * 0.08)
+        message = `속도 돌파 · 적 사기 -${moraleDamage}`
         break
-      }
-      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) unit.attackMotion = 1; break }
-      case 'heal': { const unit = this.unitAt(event.side, event.lane); if (unit && event.amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(event.amount), 0x7be3a2); break }
-      case 'skill': {
-        const unit = this.unitAt(event.side, event.lane)
-        if (!unit) break
-        unit.model.userData.skillPulse = 1
-        if (event.side === 'player') {
-          this.spawnSlashWave(unit.general, Math.max(20, event.morale * 10), event.name)
-          this.spawnSkillBurst(new THREE.Vector3(0, 1.1, -5.5), this.skillColor(unit.general))
-          this.cameraShake = Math.min(0.55, this.cameraShake + 0.22)
-        } else {
-          this.spawnSkillBurst(unit.group.position.clone().add(new THREE.Vector3(0, 1.2, 0)), ember)
-          this.cameraShake = Math.min(0.55, this.cameraShake + 0.16)
-          this.enemyWarning = null
-        }
+      case 'zhuge-liang':
+        moraleDamage = 20 + Math.round(stratagem * 0.12)
+        message = `모략 진형 · 적 사기 -${moraleDamage}`
         break
-      }
-      case 'enemySkillWarn': {
-        const unit = this.unitAt('enemy', event.lane)
-        this.enemyWarning = { name: event.name, general: unit?.general.name ?? '적장', until: core.t + BATTLE_RULES.enemySkillWarning + 0.2 }
+      case 'lu-bu':
+        moraleDamage = 25 + Math.round(martial * 0.14)
+        message = `무쌍 충격 · 적 사기 -${moraleDamage}`
         break
-      }
-      case 'answer':
-        if (event.success) {
-          const enemy = this.unitAt('enemy', Math.max(0, event.lane))
-          this.spawnImpact((enemy?.group.position ?? new THREE.Vector3(0, 0, -6)).clone(), 12, jade)
-        }
+      case 'zhou-yu':
+        moraleDamage = 22 + Math.round(stratagem * 0.11)
+        message = `화공 확산 · 적 사기 -${moraleDamage}`
         break
-      case 'phase': {
-        const closing = event.phase === 1 ? 0.8 : 1.35
-        this.playerUnits.forEach((unit, index) => { unit.target.z -= closing + index * 0.08 })
-        this.enemyUnits.forEach((unit, index) => { unit.target.z += closing + index * 0.08 })
-        this.spawnDustCloud(new THREE.Vector3(0, 0, -3.9), 0xb9a17c)
-        this.cameraShake = Math.min(0.48, this.cameraShake + 0.1)
-        break
-      }
-      case 'collapse':
-        this.cameraShake = Math.min(0.7, this.cameraShake + 0.35)
-        break
-      case 'unitDown': { const unit = this.unitAt(event.side, event.lane); if (unit) unit.group.visible = false; break }
-      case 'end': {
-        this.battleActive = false
-        this.enemyWarning = null
-        this.cameraVictory = event.result.won ? 1.5 : 0
-        this.cameraShake = event.result.won ? 0.22 : 0.1
-        if (this.mode === 'normal') this.winStreak = event.result.won ? this.winStreak + 1 : Math.max(-2, Math.min(0, this.winStreak) - 2)
-        // 랭킹 서버는 실제 경과 시간보다 긴 기록을 거절한다: 배속과 무관하게 실제 시간을 보낸다.
-        this.callbacks.onBattleEnd({ ...event.result, durationMs: Math.round(performance.now() - this.startedAt), mode: this.mode })
-        break
-      }
       default:
-        break
+        if (general.role === '책사') {
+          moraleDamage = 14 + Math.round(stratagem * 0.09)
+          message = `책략 교란 · 적 사기 -${moraleDamage}`
+        } else if (general.role === '기병') {
+          moraleDamage = 13 + Math.round(speed * 0.08)
+          message = `기동 충격 · 적 사기 -${moraleDamage}`
+        } else if (general.role === '궁병') {
+          moraleDamage = 13 + Math.round(martial * 0.08)
+          message = `정밀 사격 · 적 사기 -${moraleDamage}`
+        } else {
+          moraleDamage = 12 + Math.round(leadership * 0.08)
+          message = `전열 압박 · 적 사기 -${moraleDamage}`
+        }
+    }
+    const rankMultiplier = 1 + (skillRank(general) - 1) * 0.1
+    const powerMultiplier = skillPower(general) / 100
+    moraleDamage = Math.round(moraleDamage * rankMultiplier * powerMultiplier)
+    const cooldown = Math.max(4, 12 - speed * 0.05 - (skillRank(general) - 1) * 0.45)
+    return { moraleDamage, cooldown, message: `${message} · ${skillRank(general)}단계 위력` }
+  }
+
+  private announcePattern(): void {
+    this.patternIndex = (this.patternIndex + 1) % BATTLE_PATTERNS.length
+    this.nextPatternAt = this.battleElapsed + 3.6
+    const pattern = BATTLE_PATTERNS[this.patternIndex]
+    this.callbacks.onEvent(`적 전술 예고 · ${pattern.warning}`)
+  }
+
+  private dealTroopDamage(target: BattleUnit, amount: number, source: string, color: number): void {
+    if (target.troops <= 0) return
+    const damage = Math.max(1, Math.round(amount))
+    target.troops = Math.max(0, target.troops - damage)
+    target.hitFlash = 0.18
+    target.hitReact = Math.min(1, target.hitReact + Math.min(0.72, 0.22 + damage / 150))
+    target.knockback.add(new THREE.Vector3(target.group.position.x > 0 ? 0.11 : -0.11, 0, target.group.position.z > 0 ? 0.3 : -0.3))
+    this.cameraShake = Math.min(0.62, this.cameraShake + (damage >= 80 ? 0.22 : 0.1))
+    target.statusFill.scale.x = Math.max(0.001, target.troops / target.maxTroops)
+    if (target.troops === 0) {
+      target.group.visible = false
+      this.callbacks.onEvent(`${target.general.name}의 병력이 전멸했습니다.`)
+    }
+    this.spawnImpact(target.group.position.clone(), damage, color)
+    if (this.battleElapsed - this.lastCombatPulse > 1.1) {
+      this.lastCombatPulse = this.battleElapsed
+      this.callbacks.onEvent(`${source} · ${target.general.name} 병력 -${damage} · 잔여 ${target.troops}/${target.maxTroops}`)
     }
   }
 
-  private syncTroops(): void {
-    const core = this.core
-    if (!core) return
-    const sync = (units: BattleUnit[], coreUnits: BattleCore['players']) => units.forEach((unit, index) => {
-      const coreUnit = coreUnits[index]
-      if (!coreUnit) return
-      unit.troops = coreUnit.troops
-      unit.maxTroops = coreUnit.maxTroops
-      unit.statusFill.scale.x = Math.max(0.001, unit.troops / Math.max(1, unit.maxTroops))
-      if (unit.troops > 0 && !unit.group.visible) unit.group.visible = true
-    })
-    sync(this.playerUnits, core.players)
-    sync(this.enemyUnits, core.enemies)
+  private dealTroopDamageToEnemy(amount: number, source: string, color: number): void {
+    const target = this.enemyUnits.find(unit => unit.troops > 0)
+    if (target) this.dealTroopDamage(target, amount, source, color)
   }
 
   private updateUnitMotion(unit: BattleUnit, delta: number, elapsed: number, color: number): void {
@@ -1249,86 +1207,51 @@ export class Arena {
 
   private troopStatus(): BattleTroopStatus[] {
     return [
-      ...this.playerUnits.map((unit, index) => ({ side: 'player' as const, index, id: unit.general.id, name: unit.general.name, troops: Math.round(unit.troops), maxTroops: unit.maxTroops, alive: unit.troops > 0 })),
-      ...this.enemyUnits.map((unit, index) => ({ side: 'enemy' as const, index, id: unit.general.id, name: unit.general.name, troops: Math.round(unit.troops), maxTroops: unit.maxTroops, alive: unit.troops > 0 })),
+      ...this.playerUnits.map((unit, index) => ({ side: 'player' as const, index, id: unit.general.id, name: unit.general.name, troops: unit.troops, maxTroops: unit.maxTroops, alive: unit.troops > 0 })),
+      ...this.enemyUnits.map((unit, index) => ({ side: 'enemy' as const, index, id: unit.general.id, name: unit.general.name, troops: unit.troops, maxTroops: unit.maxTroops, alive: unit.troops > 0 })),
     ]
   }
 
   private difficultyLabel(): string {
-    return { normal: '일반 전투', scenario: '시나리오', siege: '공성전', duel: '유저 대련' }[this.mode]
+    if (this.duelMode) return '유저 대련'
+    return ['초급', '중급', '고급'][this.battlePhase] ?? '고급'
   }
 
   getSnapshot(): BattleSnapshot {
-    const core = this.core
     const unit = this.playerUnits[this.selectedUnit]
     const general = unit?.general
-    const coreSelected = core?.players[this.selectedUnit]
-    const open = core?.pattern && !core.pattern.judged ? core.pattern : null
-    const elapsed = core?.t ?? 0
-    const units = this.generals.map((member, lane): BattleUnitStatus => {
-      const coreUnit = core?.players[lane]
-      const fallback = coreTroopCapacity(member)
-      return {
-        lane, id: member.id, name: member.name, role: member.role, level: member.level, stars: member.stars,
-        troops: Math.round(coreUnit?.troops ?? fallback), maxTroops: coreUnit?.maxTroops ?? fallback, alive: (coreUnit?.troops ?? 1) > 0,
-        skillName: coreUnit ? core!.skillName(coreUnit) : member.skillName,
-        skillType: coreUnit?.def.type ?? '돌격',
-        skillUnlocked: Boolean(member.skillUnlocked),
-        cooldown: Math.max(0, coreUnit?.cd ?? 0), cooldownMax: coreUnit?.cdMax ?? 0,
-        ready: Boolean(core?.active && member.skillUnlocked && coreUnit && coreUnit.troops > 0 && coreUnit.cd <= 0),
-      }
-    })
-    const pattern = open ? { label: open.def.label, lanes: open.def.lanes, kind: open.def.kind, warning: open.def.warning, timeLeft: Math.max(0, open.deadline - elapsed), window: Math.max(0.1, open.deadline - open.at), judged: open.judged } : null
-    const enemyPower = this.enemyDeck.reduce((sum, enemy) => sum + enemy.leadership + enemy.martial + enemy.stratagem + enemy.speed + enemy.level * 4, 0)
-    const moraleMax = core?.moraleMax ?? BATTLE_RULES.moraleByPhase[0]
-    const moraleValue = Math.max(0, core?.morale ?? moraleMax)
+    const pattern = BATTLE_PATTERNS[this.patternIndex] ?? BATTLE_PATTERNS[0]
     return {
       active: this.battleActive,
-      mode: this.mode,
-      elapsed,
-      timeLeft: Math.max(0, BATTLE_RULES.timeLimit - elapsed),
-      morale: Math.round(moraleValue / Math.max(1, moraleMax) * 100),
-      moraleValue: Math.round(moraleValue),
-      moraleMax,
-      phase: core?.phase ?? 0,
-      phaseName: phaseName(core?.phase ?? 0),
-      pattern,
-      enemyPattern: pattern?.label ?? '대기',
-      enemyPatternLane: pattern && pattern.kind !== 'guard' ? pattern.lanes[0] ?? -1 : -1,
-      combo: core?.combo ?? 0,
-      threat: Math.round(core?.threat ?? 0),
-      collapses: core?.collapses ?? 0,
-      tacticGauge: Math.floor(core?.gauge ?? 0),
-      tacticCosts: { guard: core?.tacticCost('guard') ?? 35, feint: core?.tacticCost('feint') ?? 50, charge: core?.tacticCost('charge') ?? 65 },
-      guardActive: (core?.guardTimer ?? 0) > 0,
-      units,
-      enemyWarning: this.enemyWarning && this.enemyWarning.until > elapsed ? { name: this.enemyWarning.name, general: this.enemyWarning.general } : null,
+      elapsed: this.battleElapsed,
+      morale: Math.round(this.enemyMorale),
+      phase: this.battlePhase,
+      phaseName: phaseName(this.battlePhase),
+      enemyPattern: pattern.label,
+      enemyPatternLane: pattern.lane,
+      combo: this.combo,
+      threat: Math.round(this.threat),
+      tacticGauge: Math.round(this.tacticGauge),
+      guardActive: this.guardTimer > 0,
       selectedUnit: this.selectedUnit,
       selectedName: general?.name ?? '—',
       selectedRole: general?.role ?? '—',
       selectedArchetype: general ? this.commanderArchetype(general) : '—',
       selectedLevel: general?.level ?? 0,
       selectedStats: general ? { leadership: general.leadership, martial: general.martial, stratagem: general.stratagem, speed: general.speed } : null,
-      skillName: coreSelected ? core!.skillName(coreSelected) : general?.skillName ?? '장수 스킬',
-      skillDescription: coreSelected ? coreSelected.def.active.desc : general?.skillDescription ?? '무장을 선택하면 고유 스킬이 표시됩니다.',
+      skillName: general?.skillName ?? '장수 스킬',
+      skillDescription: general?.skillDescription ?? '무장을 선택하면 고유 스킬이 표시됩니다.',
       skillUnlocked: general?.skillUnlocked ?? false,
-      skillReady: Boolean(units[this.selectedUnit]?.ready),
-      skillCooldown: units[this.selectedUnit]?.cooldown ?? 0,
-      activeEffects: [...(core?.buffs ?? []), ...(core?.debuffs ?? []), ...(core?.enemyBuffs ?? [])].map(effect => ({ ...effect })),
-      playerDebuffs: (core?.playerDebuffs ?? []).map(effect => ({ ...effect })),
-      bond: core?.bond ? `${core.bond.name} · ${core.bond.desc}` : '',
-      opponentDeck: this.enemyDeck.map(enemy => ({ id: enemy.id, name: enemy.name, role: enemy.role, level: enemy.level, grade: enemy.grade, portraitPath: enemy.portraitPath })),
+      skillReady: Boolean(general?.skillUnlocked && this.skillCooldown <= 0),
+      skillCooldown: Math.max(0, this.skillCooldown),
+      activeEffects: [...this.activeBuffs, ...this.activeDebuffs].map(effect => ({ ...effect })),
+      opponentDeck: this.enemyDeck.map(general => ({ id: general.id, name: general.name, role: general.role, level: general.level, grade: general.grade, portraitPath: general.portraitPath })),
       troopStatus: this.troopStatus(),
       difficulty: this.difficultyLabel(),
-      difficultyMultiplier: core ? Math.round((BATTLE_RULES.pressureStart + (BATTLE_RULES.pressureEnd - BATTLE_RULES.pressureStart) * Math.min(1, elapsed / BATTLE_RULES.pressureRamp)) * 100) / 100 : 1,
-      duelMode: this.mode === 'duel',
-      enemyPower,
-      status: this.battleActive ? (this.paused ? '일시 정지' : core?.autoPilot ? '자동 전투 중' : '전투 중') : core?.result ? (core.result.won ? '승리' : '패배') : '대기 중',
-      speed: this.speed,
-      paused: this.paused,
-      autoPlay: Boolean(core?.autoPilot),
-      log: this.logLines.slice(-12),
-      result: core?.result ?? null,
+      difficultyMultiplier: this.difficultyMultiplier,
+      duelMode: this.duelMode,
+      enemyPower: this.enemyDeck.reduce((sum, enemy) => sum + enemy.leadership + enemy.martial + enemy.stratagem + enemy.speed + enemy.level * 4, 0),
+      status: this.battleActive ? '전투 중' : '대기 중',
     }
   }
 
@@ -1375,10 +1298,40 @@ export class Arena {
       this.threat = Math.max(0, this.threat - 22)
       this.callbacks.onEvent(`${phaseName(this.battlePhase)} · ${this.difficultyLabel()} · 적 덱의 압박이 강화됩니다.`)
     }
-    this.drainCore()
-    if (this.core.t - this.lastVolley > 1.85) {
-      this.lastVolley = this.core.t
+    if (this.battleElapsed - this.lastVolley > 1.85) {
+      this.lastVolley = this.battleElapsed
       this.spawnArrowVolley()
+    }
+    const leadership = this.playerUnits.length ? this.playerUnits.reduce((sum, unit) => sum + unit.general.leadership, 0) / this.playerUnits.length : 0
+    const speed = this.playerUnits.length ? this.playerUnits.reduce((sum, unit) => sum + unit.general.speed, 0) / this.playerUnits.length : 0
+    const moraleDrainMultiplier = hasBattleEffect(this.activeBuffs, 'rally-banner') ? 1.35 : 1
+    const naturalMoraleDrain = delta * (0.42 + leadership * 0.002 + speed * 0.0015) * moraleDrainMultiplier
+    const effectMoraleDrain = delta * (
+      (hasBattleEffect(this.activeDebuffs, 'burning') ? 2.2 : 0)
+      + (hasBattleEffect(this.activeDebuffs, 'fear') ? 1.5 : 0)
+      + (hasBattleEffect(this.activeDebuffs, 'bleed') ? 1.3 : 0)
+    )
+    this.enemyMorale = Math.max(0, this.enemyMorale - naturalMoraleDrain - effectMoraleDrain)
+    const threatDecay = this.guardTimer > 0 ? 5.4 : 1.8
+    this.threat = Math.max(0, this.threat - delta * (threatDecay + (hasBattleEffect(this.activeBuffs, 'iron-wall') ? 4 : 0)))
+    const enemyPressure = delta * (0.72 * this.difficultyMultiplier)
+    this.threat = Math.min(100, this.threat + (this.guardTimer > 0 ? enemyPressure * 0.28 : enemyPressure))
+    if (hasBattleEffect(this.activeDebuffs, 'slow')) this.nextPatternAt += delta * 0.12
+    this.tickBattleEffects(delta)
+    if (this.battleElapsed - this.lastPulse > 5) {
+      this.lastPulse = this.battleElapsed
+      this.callbacks.onEvent(`전황 갱신 · 적 사기 ${Math.round(this.enemyMorale)}%`)
+    }
+    const playerTroops = this.playerUnits.reduce((sum, unit) => sum + unit.troops, 0)
+    const enemyTroops = this.enemyUnits.reduce((sum, unit) => sum + unit.troops, 0)
+    if (this.battleElapsed > 21 || playerTroops <= 0 || enemyTroops <= 0 || this.threat >= 100) {
+      this.battleActive = false
+      const won = enemyTroops <= 0 || (playerTroops > enemyTroops && this.threat < 100 && this.battleElapsed > 21)
+      this.cameraVictory = won ? 1.5 : 0
+      this.cameraShake = won ? 0.22 : 0.1
+      const score = Math.max(0, Math.round(4200 + this.combo * 240 + (100 - this.threat) * 18 + playerTroops * 1.4 + this.generals.reduce((sum, general) => sum + general.level * 41 + general.leadership + general.martial + general.stratagem + general.speed, 0)))
+      this.callbacks.onBattleEnd({ won, score, durationMs: Math.round(this.battleElapsed * 1000) })
+      this.callbacks.onEvent(won ? '전투 승리 · 세 번의 파도를 모두 넘었습니다.' : '전투 패배 · 위협도가 한계에 도달했습니다.')
     }
   }
 
