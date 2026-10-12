@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { allGenerals, scaleGeneral, type General } from './strategy'
-import { BattleCore, BATTLE_RULES, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
+import { BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import type { SkillType } from './skills'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -8,7 +8,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
-import { AnimatedHero, heroModelFor, strikeModelFor, troopModelFor } from './battle-models'
+import { AnimatedHero, heroModelFor, heroStrikeModel, strikeModelFor, troopModelFor } from './battle-models'
 import { STRIKE_FRAMES } from './battle-rig'
 import { effectsSetting } from './settings'
 import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
@@ -40,6 +40,8 @@ export interface BattleUnitStatus {
   cooldown: number
   cooldownMax: number
   ready: boolean
+  /** 같은 레인 적장과의 병종 상성(기병>궁병>창병>기병) */
+  edge: 'adv' | 'dis' | null
 }
 
 export interface BattlePatternStatus {
@@ -391,7 +393,7 @@ export class Arena {
   private attachRealModels(unit: BattleUnit): void {
     const name = heroModelFor(unit.general)
     unit.mounted = name === 'lubu' || name === 'caocao' || name === 'zhugeliang' || name === 'cavalry'
-    void strikeModelFor(name).then(model => {
+    void heroStrikeModel(unit.general).then(model => {
       if (unit.hero || !unit.group.parent && !this.playerUnits.includes(unit)) return
       const hero = new AnimatedHero(model)
       hero.root.rotation.y = Math.PI // 모델은 +Z를 본다 → 부대 앞(-Z)으로
@@ -646,6 +648,11 @@ export class Arena {
       unit.maxTroops = coreUnit?.maxTroops ?? unit.maxTroops
       unit.troops = coreUnit?.troops ?? unit.troops
       unit.group.visible = true
+      unit.dying = 0
+      unit.motion = null
+      unit.glow = 0
+      unit.squad.position.y = 0
+      unit.hero?.setFade(0)
       unit.statusFill.scale.x = 1
       unit.target.set(-4.4 + index * 4.4, 0, -2.6 - index * 0.15)
     })
@@ -716,8 +723,8 @@ export class Arena {
         const strike = this.pendingStrike
         if (strike && strike.source === event.source && strike.side !== event.side) {
           this.pendingStrike = null
-          this.addEffect(delayed(strike.delay, () => this.showHit(unit, event.side, event.amount)))  
-        } else this.showHit(unit, event.side, event.amount)
+          this.addEffect(delayed(strike.delay, () => this.showHit(unit, event.side, event.amount, event.edge)))  
+        } else this.showHit(unit, event.side, event.amount, event.edge)
         if (core.t - this.lastCombatLog > 1.6) {
           this.lastCombatLog = core.t
           this.callbacks.onEvent(`${event.source} · ${unit.general.name} 병력 −${Math.round(event.amount)}`)
@@ -766,6 +773,7 @@ export class Arena {
         this.enemyWarning = null
         this.cameraVictory = event.result.won ? 1.5 : 0
         this.cameraShake = event.result.won ? 0.22 : 0.1
+        this.playOutcome(event.result.won)
         if (this.mode === 'normal') this.winStreak = event.result.won ? this.winStreak + 1 : Math.max(-2, Math.min(0, this.winStreak) - 2)
         // 랭킹 서버는 실제 경과 시간보다 긴 기록을 거절한다: 배속과 무관하게 실제 시간을 보낸다.
         this.callbacks.onBattleEnd({ ...event.result, durationMs: Math.round(performance.now() - this.startedAt), mode: this.mode })
@@ -778,6 +786,23 @@ export class Arena {
 
   private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge'> {
     return { actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0, strikeAge: -1 }
+  }
+
+  private readonly edgeShownAt = new WeakMap<BattleUnit, number>()
+
+  /** 머리 위로 떠오르다 사라지는 글자 */
+  private floatText(position: THREE.Vector3, text: string, color: string, scale = 1): void {
+    const sprite = this.makeTextSprite(text, color, scale)
+    sprite.position.copy(position)
+    this.addEffect({
+      object: sprite, age: 0, life: 1.2,
+      tick: effect => {
+        const k = effect.age / effect.life
+        sprite.position.y = position.y + k * 0.8
+        sprite.material.opacity = k < 0.15 ? k / 0.15 : 1 - Math.max(0, k - 0.6) / 0.4
+      },
+      dispose: () => { sprite.material.map?.dispose(); sprite.material.dispose() },
+    })
   }
 
   private fx(effect: Fx): void {
@@ -811,8 +836,14 @@ export class Arena {
   }
 
   /** 피격 표시: 번쩍임 · 밀려남 · 숫자 · 흔들림 */
-  private showHit(unit: BattleUnit, side: 'player' | 'enemy', amount: number): void {
+  private showHit(unit: BattleUnit, side: 'player' | 'enemy', amount: number, edge?: 'adv' | 'dis'): void {
     if (unit.dying > 0 && unit.troops <= 0) return
+    // 병종 상성: 유리하면 "상성 우위"가 뜨고 더 세게 흔들린다(같은 무장 위에는 3.5초에 한 번)
+    if (edge && this.clock.getElapsed() - (this.edgeShownAt.get(unit) ?? -99) > 3.5) {
+      this.edgeShownAt.set(unit, this.clock.getElapsed())
+      this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 3.1, 0)), edge === 'adv' ? '상성 우위!' : '상성 열세', edge === 'adv' ? '#ffd27a' : '#b9c2c9', edge === 'adv' ? 1.05 : 0.8)
+      if (edge === 'adv') { this.cameraShake = Math.min(0.62, this.cameraShake + 0.08); unit.hitReact = Math.min(1, unit.hitReact + 0.25) }
+    }
     unit.hitFlash = 0.18
     unit.hitReact = Math.min(1, unit.hitReact + Math.min(0.72, 0.22 + amount / 300))
     unit.knockback.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.11 : -0.11, 0, side === 'enemy' ? -0.3 : 0.3))
@@ -855,6 +886,39 @@ export class Arena {
       const from = this.frontOf(unit, 0.8, ranged === 'arrow' ? 1.7 : 1.9)
       const to = target.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 1, 0))
       this.fx(projectile(from, to, ranged, ranged === 'orb' ? (side === 'player' ? 0x72c9ff : 0xc56bff) : color, flight, () => {}))
+    }))
+  }
+
+  /**
+   * 승리·패배 연출: 이긴 쪽은 무기를 연달아 치켜들며 금빛 기둥이 솟고,
+   * 진 쪽은 뒤로 물러나며 흐려진다.
+   */
+  private playOutcome(won: boolean): void {
+    const winners = (won ? this.playerUnits : this.enemyUnits).filter(unit => unit.troops > 0)
+    const losers = (won ? this.enemyUnits : this.playerUnits).filter(unit => unit.troops > 0)
+    const gold = 0xffd27a
+    winners.forEach((unit, index) => {
+      unit.motion = null
+      unit.glow = 0.8
+      unit.glowColor.set(won ? gold : ember)
+      for (let round = 0; round < 3; round += 1) {
+        this.addEffect(delayed(0.25 + round * 0.85 + index * 0.12, () => {
+          unit.strikeAge = 0
+          unit.hero?.playOnce('Attack')
+          unit.attackMotion = 1
+        }))
+      }
+      this.addEffect(delayed(0.3 + index * 0.15, () => this.fx(lightPillar(unit.group.position, won ? gold : ember, 1.1, 7, 1.6))))
+    })
+    losers.forEach((unit, index) => {
+      // 뒤로 물러난다(아군은 카메라 쪽, 적은 성채 쪽)
+      unit.target.z += unit.group.rotation.y === 0 ? 6 : -6
+      this.addEffect(delayed(1.5 + index * 0.2, () => { if (unit.dying <= 0) unit.dying = 1 }))
+    })
+    const center = new THREE.Vector3(0, 0, -4)
+    this.addEffect(delayed(0.2, () => {
+      this.fx(shockwave(center, won ? gold : 0x8a8f96, 9, 1.2))
+      this.floatText(center.clone().setY(4.6), won ? '승리!' : '패배', won ? '#ffd27a' : '#c3c8cd', won ? 1.9 : 1.5)
     }))
   }
 
@@ -1072,6 +1136,7 @@ export class Arena {
         skillUnlocked: Boolean(member.skillUnlocked),
         cooldown: Math.max(0, coreUnit?.cd ?? 0), cooldownMax: coreUnit?.cdMax ?? 0,
         ready: Boolean(core?.active && member.skillUnlocked && coreUnit && coreUnit.troops > 0 && coreUnit.cd <= 0),
+        edge: (() => { const foe = this.enemyDeck[lane]; if (!foe) return null; const value = matchup(member.role, foe.role); return value > 1 ? 'adv' as const : value < 1 ? 'dis' as const : null })(),
       }
     })
     const pattern = open ? { label: open.def.label, lanes: open.def.lanes, kind: open.def.kind, warning: open.def.warning, timeLeft: Math.max(0, open.deadline - elapsed), window: Math.max(0.1, open.deadline - open.at), judged: open.judged } : null

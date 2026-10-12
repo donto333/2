@@ -514,6 +514,13 @@ export class StrategyUI {
       const pct = unit.maxTroops ? unit.troops / unit.maxTroops * 100 : 0
       const bar = node.querySelector<HTMLElement>('[data-bt-unit-troops]')
       if (bar) bar.style.width = `${pct}%`
+      const edge = node.querySelector<HTMLElement>('[data-bt-unit-edge]')
+      if (edge) {
+        edge.hidden = !unit.edge
+        edge.className = `bt-unit-edge ${unit.edge === 'adv' ? 'is-adv' : unit.edge === 'dis' ? 'is-dis' : ''}`
+        const text = unit.edge === 'adv' ? '상성 유리' : unit.edge === 'dis' ? '상성 불리' : ''
+        if (edge.textContent !== text) edge.textContent = text
+      }
       const cd = node.querySelector<HTMLElement>('[data-bt-unit-cd]')
       const ratio = unit.cooldownMax ? Math.min(1, unit.cooldown / unit.cooldownMax) : 0
       node.style.setProperty('--cd', `${Math.round(ratio * 360)}deg`)
@@ -1169,7 +1176,7 @@ export class StrategyUI {
       const live = battle?.units[index]
       const pct = live && live.maxTroops ? live.troops / live.maxTroops * 100 : 100
       const detail = skillDetail(general)
-      return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${general.accent}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
+      return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${general.accent}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span><span class="bt-unit-edge" data-bt-unit-edge hidden></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
     }).join('')
     const modeLabel = battle?.mode === 'scenario' ? '시나리오 전투' : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : '일반 전투'
     const tactic = (id: 'guard' | 'feint' | 'charge', icon: string, label: string, note: string) => `<button class="bt-tactic bt-tactic--${id}" data-action="battle-tactic" data-tactic="${id}" ${id === 'guard' ? 'data-bt-guard' : ''} disabled><span>${icon}</span><strong>${label}</strong><small>${note}</small><em>${battle?.tacticCosts[id] ?? { guard: 35, feint: 50, charge: 65 }[id]}</em></button>`
@@ -1272,6 +1279,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.13', '전투 연출 강화', '맞으면 병사들이 조금씩 다르게 뒤로 밀리며 젖혀지고(기병은 크게), 병력이 줄어든 만큼 병사가 뒤로 쓰러지며 사라집니다. 승리하면 무장들이 무기를 연달아 치켜들고 금빛 기둥이 솟으며, 진 쪽은 뒤로 물러나 흐려집니다. 병종 상성(기병>궁병>창병>기병)이 유리하면 "상성 우위!"가 뜨고, 무장 버튼에 같은 레인 적장과의 상성이 표시됩니다. 관우(청룡언월도)·장비(장팔사모)·조운·마초(창)·전위·장료(극)·허저·서황(대도) 등 이름난 무장은 고유 무기를 듭니다.', '완료', 'jade'],
       ['2026.10.13', '안정성 · 성능 개선', '금화·신화장비 조각·낙양 강화석은 이제 서버가 기준입니다(일일 금화, 시나리오 최초 클리어, 세력전 승리, 유저 대련 보상은 서버가 확인한 뒤 지급). 낙양전 시간은 기기 시간대와 무관하게 한국 시간 일요일 20:00~24:00로 맞췄습니다. 계정 관리에 그래픽 품질·전투 효과 설정을 추가했고, 전투 중 화면이 버벅이면 효과를 자동으로 줄입니다. 첫 전투 진입 때 멈칫하지 않도록 모델을 미리 준비합니다.', '완료', 'jade'],
       ['2026.10.13', '신화장비 강화 · 낙양 강화석', '신화장비는 이제 은전·철로 강화할 수 없고, 낙양 강화석으로만 강화합니다. 강화석 1개로 1회(+1단계) 강화하며, 주간 낙양전에서 낙양을 점령한 진영의 유저가 점령 1회(주 1회)마다 1개를 받습니다. 보유 개수는 장비 관리 화면에서 확인할 수 있습니다.', '완료', 'gold'],
       ['2026.10.12', '병종별 공격 동작', '일반 공격 때 병종마다 다른 동작을 합니다. 창병은 세워 든 창을 앞으로 눕혀 힘껏 찌르고, 기병은 상체를 비틀며 칼을 머리 위로 들었다가 앞아래로 내리치며(여포는 방천화극을 크게 휘두름), 궁병은 활을 앞으로 겨누고 시위를 턱까지 당겼다 놓습니다. 무장뿐 아니라 부대 병사들도 조금씩 시차를 두고 같은 동작을 하며, 궁병 부대는 시위를 놓는 순간 화살이 날아갑니다.', '완료', 'jade'],

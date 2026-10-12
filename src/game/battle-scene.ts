@@ -214,9 +214,19 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
   // 병종별 공격 자세(모프): 병사마다 조금씩 늦게 시작해 한 몸처럼 보이지 않게 한다
   let strikeDuration = 0
   let morphHolder: { morphTargetInfluences: number[] } | null = null
+  // 병력이 줄면 그만큼의 병사가 뒤로 쓰러지며 사라진다(쓰러지기 시작한 시각, 없으면 -1)
+  let prevVisible = -1
+  let fallAt: number[] = []
+  const FALL_TIME = 0.9
   const update = (t: number, moving: boolean, attack: number, hit: number, alive: number, strike = -1) => {
     const visible = Math.max(0, Math.min(count, Math.ceil(count * alive)))
-    mesh.count = visible
+    if (fallAt.length !== count) { fallAt = new Array(count).fill(-1); prevVisible = visible }
+    if (visible < prevVisible) for (let i = visible; i < prevVisible; i += 1) fallAt[i] = t
+    if (visible > prevVisible) for (let i = prevVisible; i < visible; i += 1) fallAt[i] = -1
+    prevVisible = visible
+    let drawn = visible
+    for (let i = visible; i < count; i += 1) if (fallAt[i] >= 0 && t - fallAt[i] < FALL_TIME) drawn = i + 1
+    mesh.count = drawn
     if (morphHolder && strikeDuration > 0) {
       const influences = morphHolder.morphTargetInfluences
       const frames = influences.length + 1
@@ -233,11 +243,22 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
       if (mesh.morphTexture) mesh.morphTexture.needsUpdate = true
     }
     const lunge = Math.sin(Math.min(1, attack) * Math.PI)
-    for (let i = 0; i < visible; i += 1) {
+    for (let i = 0; i < drawn; i += 1) {
       const b = base[i]
+      // 맞으면 병사마다 조금씩 다르게 뒤로 밀리며 몸이 젖혀진다(기병은 말이 앞발을 드는 듯 크게)
+      const stagger = hit * (0.6 + b.jitter * 0.8)
       const bob = (moving ? Math.abs(Math.sin(t * (kind === 'cavalry' ? 9 : 7) + b.phase)) * 0.07 : Math.sin(t * 1.4 + b.phase) * 0.012) * bobScale
-      p.set(b.x + Math.sin(t * 0.7 + b.phase) * 0.02, bob, b.z - lunge * (kind === 'archer' ? 0.05 : 0.35) * (0.6 + b.jitter * 0.4) * bobScale + hit * 0.12)
-      e.set(moving ? -0.06 : 0, yaw + Math.sin(t * 0.5 + b.phase) * 0.06, Math.sin(t * (moving ? 7 : 1.4) + b.phase) * (moving ? 0.04 : 0.012))
+      p.set(b.x + Math.sin(t * 0.7 + b.phase) * 0.02, bob, b.z - lunge * (kind === 'archer' ? 0.05 : 0.35) * (0.6 + b.jitter * 0.4) * bobScale + stagger * 0.2)
+      e.set((moving ? -0.06 : 0) + stagger * (kind === 'cavalry' ? 0.3 : 0.22), yaw + Math.sin(t * 0.5 + b.phase) * 0.06 + stagger * (b.jitter - 0.5) * 0.4, Math.sin(t * (moving ? 7 : 1.4) + b.phase) * (moving ? 0.04 : 0.012))
+      if (i >= visible) {
+        // 쓰러지는 병사: 뒤로 넘어가며 땅으로 가라앉는다
+        const f = Math.min(1, (t - fallAt[i]) / FALL_TIME)
+        const ease = f * f * (3 - 2 * f)
+        e.x = ease * (kind === 'cavalry' ? 0.9 : 1.45)
+        e.z += (b.jitter - 0.5) * ease * 0.8
+        p.y = -ease * 0.35 * bobScale
+        p.z += ease * 0.3
+      }
       q.setFromEuler(e)
       m.compose(p, q, s)
       mesh.setMatrixAt(i, m)

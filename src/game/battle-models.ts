@@ -3,7 +3,7 @@
 import * as THREE from 'three'
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { General } from './strategy'
-import { STRIKE_FRAMES, strikeInfluences, strikeModel, type StrikeKind, type StrikeModel } from './battle-rig'
+import { SIGNATURE_WEAPONS, STRIKE_FRAMES, strikeInfluences, strikeModel, type SignatureWeapon, type StrikeKind, type StrikeModel } from './battle-rig'
 
 export type ModelName = 'lubu' | 'caocao' | 'zhugeliang' | 'cavalry' | 'lancer' | 'archer' | 'battlefield'
 const BASE = '/assets/models/'
@@ -69,8 +69,13 @@ export function preloadStrikeModels(names: ModelName[] = ['lancer', 'cavalry', '
 }
 
 /** 모델 하나의 병종별 공격 자세 묶음(불러온 뒤 한 번만 굽는다) */
-export function strikeModelFor(name: ModelName): Promise<StrikeModel> {
-  return loadModel(name).then(gltf => strikeModel(name, gltf))
+export function strikeModelFor(name: ModelName, weapon?: SignatureWeapon): Promise<StrikeModel> {
+  return loadModel(name).then(gltf => strikeModel(name, gltf, weapon))
+}
+
+/** 무장 모델 + 고유 무기(관우 청룡언월도, 장비 장팔사모 등) */
+export function heroStrikeModel(general: General): Promise<StrikeModel> {
+  return strikeModelFor(heroModelFor(general), SIGNATURE_WEAPONS[general.id])
 }
 
 /**

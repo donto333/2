@@ -38,6 +38,10 @@ interface RigSpec {
   keys: RigKey[]
   /** 손에 쥔 무기: 마지막 뼈(무기 뼈)에 붙는다 */
   prop?: () => Prop
+  /** 무기를 쥐는 위치(없으면 무기 뼈의 중심) */
+  propAt?: V3
+  /** 모델이 원래 쥔 무기 꼭짓점: 고유 무기로 바꿀 때 손 위치로 접어 숨긴다 */
+  hideNative?: (p: THREE.Vector3) => boolean
 }
 
 const sm = (a: number, b: number, x: number) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k) }
@@ -58,6 +62,58 @@ function swordProp(): Prop {
   grip.translate(0, -0.03, 0)
   return { geometry: mergeGeometries([blade, tip, guard, grip].map(g => g.toNonIndexed()))!, material: metal(0xd8dde4) }
 }
+/** 긴 자루 무기: 손잡이(원점) 위로 1.7, 아래로 0.9 */
+function polearm(head: THREE.BufferGeometry[], shaftColor: number, headColor: number, rough = 0.35): Prop {
+  const shaft = new THREE.CylinderGeometry(0.021, 0.021, 2.6, 6)
+  shaft.translate(0, 0.4, 0)
+  const parts = [shaft, ...head].map(g => g.index ? g.toNonIndexed() : g)
+  // 자루와 날을 한 재질로 칠하되, 날 꼭짓점만 밝은 금속빛이 되도록 꼭짓점 색을 쓴다
+  const colors: number[] = []
+  const shaftRgb = new THREE.Color(shaftColor), headRgb = new THREE.Color(headColor)
+  parts.forEach((g, i) => { const c = i === 0 ? shaftRgb : headRgb; for (let v = 0; v < g.getAttribute('position').count; v += 1) colors.push(c.r, c.g, c.b) })
+  const geometry = mergeGeometries(parts)!
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+  return { geometry, material: new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.75, roughness: rough }) }
+}
+/** 청룡언월도(관우): 넓게 휜 큰 칼날 */
+function glaiveProp(): Prop {
+  const blade = new THREE.CylinderGeometry(0.2, 0.2, 0.03, 16, 1, false, 0, Math.PI * 0.62)
+  blade.rotateZ(Math.PI / 2); blade.rotateY(Math.PI / 2); blade.scale(1, 2.4, 1); blade.translate(0.07, 1.62, 0)
+  const back = new THREE.BoxGeometry(0.05, 0.12, 0.03); back.translate(-0.06, 1.38, 0)
+  return polearm([blade, back], 0x2d4a2c, 0xd9d2b8)
+}
+/** 장팔사모(장비): 뱀처럼 굽이친 창날 */
+function snakeProp(): Prop {
+  const segments: THREE.BufferGeometry[] = []
+  for (let i = 0; i < 5; i += 1) {
+    const seg = new THREE.BoxGeometry(0.05 - i * 0.006, 0.13, 0.016)
+    seg.rotateZ((i % 2 ? 1 : -1) * 0.35)
+    seg.translate((i % 2 ? 1 : -1) * 0.022, 1.66 + i * 0.11, 0)
+    segments.push(seg)
+  }
+  const tip = new THREE.ConeGeometry(0.03, 0.14, 4); tip.translate(0, 2.27, 0)
+  return polearm([...segments, tip], 0x2b2522, 0xcfd6dc)
+}
+/** 창(조운·마초·손책): 은빛 창날 + 붉은 술 */
+function spearProp(): Prop {
+  const tip = new THREE.ConeGeometry(0.045, 0.42, 4); tip.translate(0, 1.92, 0)
+  const tassel = new THREE.ConeGeometry(0.07, 0.18, 8); tassel.rotateX(Math.PI); tassel.translate(0, 1.66, 0)
+  return polearm([tip, tassel], 0x3a2a20, 0xe2e6ea, 0.3)
+}
+/** 극(전위·장료): 창날 + 한쪽 초승달 날 */
+function halberdProp(): Prop {
+  const spike = new THREE.ConeGeometry(0.04, 0.38, 4); spike.translate(0, 1.95, 0)
+  const crescent = new THREE.TorusGeometry(0.17, 0.028, 4, 12, Math.PI)
+  crescent.rotateZ(-Math.PI / 2); crescent.scale(0.85, 1, 0.4); crescent.translate(0.04, 1.62, 0)
+  return polearm([spike, crescent], 0x3b2c22, 0xc8c2b0)
+}
+/** 대도(허저·서황): 넓고 두꺼운 칼날 */
+function bladeProp(): Prop {
+  const blade = new THREE.BoxGeometry(0.16, 0.7, 0.03); blade.translate(0.05, 1.7, 0)
+  const tip = new THREE.ConeGeometry(0.09, 0.2, 4); tip.rotateY(Math.PI / 4); tip.scale(1, 1, 0.3); tip.translate(0.05, 2.15, 0)
+  return polearm([blade, tip], 0x2a2420, 0xbfc4c8)
+}
+
 /** 깃부채 */
 function fanProp(): Prop {
   const handle = new THREE.CylinderGeometry(0.016, 0.016, 0.24, 6)
@@ -118,6 +174,26 @@ function riderSpec(prop: () => Prop, grip: V3, weapon: 'sword' | 'fan'): RigSpec
         ],
     prop,
   }
+}
+
+/** 이름난 무장의 고유 무기 */
+export type SignatureWeapon = 'glaive' | 'snake' | 'spear' | 'halberd' | 'blade'
+export const SIGNATURE_WEAPONS: Record<string, SignatureWeapon> = {
+  'guan-yu': 'glaive', 'guan-ping': 'glaive', 'guan-xing': 'glaive',
+  'zhao-yun': 'spear', 'ma-chao': 'spear', 'sun-ce': 'spear', 'ma-dai': 'spear', 'gongsun-zan': 'spear',
+  'zhang-liao': 'halberd', 'zhang-fei': 'snake', 'zhang-bao': 'snake',
+  'dian-wei': 'halberd', 'xu-chu': 'blade', 'xu-huang': 'blade',
+}
+const WEAPON_PROPS: Record<SignatureWeapon, () => Prop> = { glaive: glaiveProp, snake: snakeProp, spear: spearProp, halberd: halberdProp, blade: bladeProp }
+
+function withWeapon(name: ModelName, weapon: SignatureWeapon): RigSpec | undefined {
+  const base = SPECS[name]
+  if (!base) return undefined
+  // 말 위 무장: 칼 대신 긴 자루 무기(손잡이 위치는 칼과 같다)
+  if (name === 'cavalry' || name === 'caocao') return { ...base, prop: WEAPON_PROPS[weapon] }
+  // 보병 무장: 원래 쥔 창을 숨기고 같은 손에 고유 무기를 쥐어 준다(창을 쥔 팔에 붙는다)
+  if (name === 'lancer') return { ...base, prop: WEAPON_PROPS[weapon], propAt: [-0.62, 1.42, 0.2], hideNative: p => p.x < -0.52 }
+  return undefined
 }
 
 const SPECS: Partial<Record<ModelName, RigSpec>> = {
@@ -233,6 +309,14 @@ function buildFromRig(gltf: GLTF, spec: RigSpec): StrikeModel {
   const base = posedBase(gltf)
   const src = base.source.geometry
   const bodyCount = base.position.length / 3
+  // 고유 무기로 바꿀 때 원래 무기 꼭짓점은 손 위치로 접어 보이지 않게 한다
+  if (spec.hideNative && spec.propAt) {
+    const q = new THREE.Vector3()
+    for (let i = 0; i < bodyCount; i += 1) {
+      q.fromArray(base.position, i * 3)
+      if (spec.hideNative(q)) base.position.set(spec.propAt, i * 3)
+    }
+  }
   // 몸 꼭짓점 가중치
   const boneCount = spec.bones.length
   const weights = new Float32Array(bodyCount * boneCount)
@@ -245,13 +329,14 @@ function buildFromRig(gltf: GLTF, spec: RigSpec): StrikeModel {
   // 무기: 손잡이 위치로 옮겨 무기 뼈에 100% 붙인다
   const prop = spec.prop?.()
   const propBone = boneCount - 1
-  let propPos: Float32Array | null = null, propNor: Float32Array | null = null
+  let propPos: Float32Array | null = null, propNor: Float32Array | null = null, propColor: Float32Array | null = null
   if (prop) {
     const g = prop.geometry.index ? prop.geometry.toNonIndexed() : prop.geometry
     g.computeVertexNormals()
-    g.translate(...spec.bones[propBone].pivot)
+    g.translate(...(spec.propAt ?? spec.bones[propBone].pivot))
     propPos = g.getAttribute('position').array as Float32Array
     propNor = g.getAttribute('normal').array as Float32Array
+    propColor = (g.getAttribute('color')?.array as Float32Array | undefined) ?? null
   }
   const propCount = propPos ? propPos.length / 3 : 0
   const total = bodyCount + propCount
@@ -281,7 +366,7 @@ function buildFromRig(gltf: GLTF, spec: RigSpec): StrikeModel {
     }
     return { position, normal }
   }
-  return assemble(spec.kind, src, bodyCount, propCount, deform, base.source.material as THREE.Material, prop?.material)
+  return assemble(spec.kind, src, bodyCount, propCount, deform, base.source.material as THREE.Material, prop?.material, propColor)
 }
 
 function buildArcher(gltf: GLTF): StrikeModel {
@@ -298,7 +383,7 @@ function buildArcher(gltf: GLTF): StrikeModel {
   return assemble('shoot', first.source.geometry, first.position.length / 3, 0, t => frameAt(t), first.source.material as THREE.Material)
 }
 
-function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number, propCount: number, deform: (t: number) => { position: Float32Array; normal: Float32Array }, bodyMaterial: THREE.Material, propMaterial?: THREE.Material): StrikeModel {
+function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number, propCount: number, deform: (t: number) => { position: Float32Array; normal: Float32Array }, bodyMaterial: THREE.Material, propMaterial?: THREE.Material, propColor?: Float32Array | null): StrikeModel {
   const total = bodyCount + propCount
   const geometry = new THREE.BufferGeometry()
   const rest = deform(0)
@@ -309,6 +394,12 @@ function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number
     const uv = new Float32Array(total * 2)
     for (let i = 0; i < bodyCount; i += 1) { uv[i * 2] = uvSrc.getX(i); uv[i * 2 + 1] = uvSrc.getY(i) }
     geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+  }
+  if (propColor) {
+    // 무기 꼭짓점 색(자루·날). 몸 재질은 꼭짓점 색을 쓰지 않으므로 몸 쪽은 흰색으로 채운다
+    const color = new Float32Array(total * 3).fill(1)
+    color.set(propColor, bodyCount * 3)
+    geometry.setAttribute('color', new THREE.BufferAttribute(color, 3))
   }
   const index: number[] = []
   if (src.index) for (let i = 0; i < src.index.count; i += 1) index.push(src.index.getX(i))
@@ -332,14 +423,16 @@ function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number
   return { kind, geometry, materials, ...STRIKE_TIMING[kind] }
 }
 
-const cache = new Map<ModelName, StrikeModel>()
-/** 모델 하나의 공격 자세 묶음(한 번만 굽는다) */
-export function strikeModel(name: ModelName, gltf: GLTF): StrikeModel {
-  const cached = cache.get(name)
+const cache = new Map<string, StrikeModel>()
+/** 모델 하나의 공격 자세 묶음(무기별로 한 번만 굽는다) */
+export function strikeModel(name: ModelName, gltf: GLTF, weapon?: SignatureWeapon): StrikeModel {
+  const variant = weapon ? withWeapon(name, weapon) : undefined
+  const key = variant ? `${name}|${weapon}` : name
+  const cached = cache.get(key)
   if (cached) return cached
-  const spec = SPECS[name]
+  const spec = variant ?? SPECS[name]
   const model = name === 'archer' ? buildArcher(gltf) : spec ? buildFromRig(gltf, spec) : buildFromRig(gltf, { kind: 'slash', bones: [{ name: 'torso', parent: -1, pivot: [0, 1, 0] }], weights: () => [0], keys: [{ t: 0, b: {} }] })
-  cache.set(name, model)
+  cache.set(key, model)
   return model
 }
 

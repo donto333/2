@@ -682,3 +682,9 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .setting-seg__btn+.setting-seg__btn{border-left:1px solid rgba(232,209,162,.18)}
 .setting-seg__btn.is-active{background:rgba(224,177,82,.22);color:#f6d58e;font-weight:600}
 @media (max-width:640px){.setting-row{flex-direction:column;align-items:flex-start}}
+
+/* 전투: 같은 레인 적장과의 병종 상성 */
+.bt-unit-edge{position:absolute;top:4px;right:4px;padding:1px 6px;font-size:10.5px;font-weight:700;border-radius:3px;pointer-events:none}
+.bt-unit-edge.is-adv{background:rgba(214,164,60,.9);color:#2a1a08}
+.bt-unit-edge.is-dis{background:rgba(70,78,86,.85);color:#d8dde2}
+.bt-unit-main{position:relative}

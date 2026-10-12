@@ -80,7 +80,7 @@ export interface CoreUnit {
 
 export type CoreEvent =
   | { kind: 'log'; text: string; tone?: 'jade' | 'ember' }
-  | { kind: 'hit'; side: Side; lane: number; amount: number; source: string }
+  | { kind: 'hit'; side: Side; lane: number; amount: number; source: string; edge?: 'adv' | 'dis' }
   | { kind: 'heal'; side: Side; lane: number; amount: number }
   | { kind: 'attack'; side: Side; lane: number; target: number }
   | { kind: 'skill'; side: Side; lane: number; name: string; morale: number; type: SkillType; target: number }
@@ -383,7 +383,8 @@ export class BattleCore {
     const { dr, taken } = this.damageReduction(victim, attacker)
     const amount = Math.max(1, Math.round(raw * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken)))
     victim.troops = Math.max(0, victim.troops - amount)
-    this.events.push({ kind: 'hit', side: victim.side, lane: victim.lane, amount, source })
+    const edgeValue = attacker ? matchup(attacker.general.role, victim.general.role) : 1
+    this.events.push({ kind: 'hit', side: victim.side, lane: victim.lane, amount, source, ...(edgeValue > 1 ? { edge: 'adv' as const } : edgeValue < 1 ? { edge: 'dis' as const } : {}) })
     if (victim.side === 'enemy') this.drainMorale(amount / this.enemyMaxTotal * 100 * BATTLE_RULES.moraleDrainPerTroopPct)
     if (victim.side === 'player') {
       if (this.passive(victim) === 'cdOnHit') victim.cd = Math.max(0, victim.cd - (victim.def.passive?.value ?? 0))
