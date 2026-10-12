@@ -1,4 +1,5 @@
 import cityRoutes from '../../server/city-routes.json'
+import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
@@ -679,7 +680,59 @@ function makeExpansionGeneral([id, name, epithet, role, grade, skillName, skillD
 }
 
 const EXPANSION_GENERALS = EXPANSION_SPECS.map(makeExpansionGeneral)
-const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS]
+// 스킬 이름·설명은 skills.ts(스킬 재구성안)가 단일 원본이다.
+const withSkillText = (general: General): General => {
+  const def = GENERAL_SKILLS[general.id]
+  return def ? { ...general, skillName: def.active.name, skillDescription: def.active.desc } : general
+}
+const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText)
+
+// 시나리오 적 전용 무장(모집되지 않음).
+const ENEMY_ONLY: General[] = ([
+  ['zhang-jiao', '장각', '천공장군의 태평도', '책사', 4, '각'],
+  ['zhang-bao-hj', '장보', '지공장군의 요술', '책사', 3, '보'],
+  ['zhang-liang-hj', '장량', '인공장군의 황건 돌격', '보병', 3, '량'],
+] as Array<[string, string, string, Role, Grade, string]>).map(([id, name, epithet, role, grade, portrait]) => withSkillText(makeExpansionGeneral([id, name, epithet, role, grade, '', '', portrait])))
+
+/** 도감(Lv1) 원형. 성장 전 능력치가 필요한 스킬 공식에서 쓴다. */
+export function templateGeneral(id: string): General | undefined {
+  const found = LIBRARY.find(general => general.id === id) ?? ENEMY_ONLY.find(general => general.id === id)
+  return found ? { ...found } : undefined
+}
+
+export function enemyOnlyGenerals(): General[] {
+  return ENEMY_ONLY.map(general => ({ ...general }))
+}
+
+/** 적 무장 성장: 아군 강화·성급 상승과 같은 공식으로 능력치를 올린다. */
+export function scaleGeneral(general: General, level: number, stars: number): General {
+  const scaled = { ...general }
+  const targetStars = Math.max(1, Math.min(5, Math.trunc(stars)))
+  const targetLevel = Math.max(1, Math.trunc(level))
+  for (let star = scaled.stars + 1; star <= targetStars; star += 1) {
+    scaled.attack += 4 + star; scaled.defense += 3 + Math.floor(star / 2); scaled.command += 3 + Math.floor(star / 2)
+    scaled.leadership += 3 + star; scaled.martial += 4 + star; scaled.stratagem += 2 + Math.floor(star / 2); scaled.speed += 2 + Math.floor(star / 2)
+  }
+  scaled.stars = Math.max(scaled.stars, targetStars)
+  scaled.skillRank = scaled.stars
+  for (let next = scaled.level + 1; next <= targetLevel; next += 1) {
+    scaled.attack += 6 + scaled.stars; scaled.defense += 4 + Math.floor(scaled.stars / 2); scaled.command += 3; scaled.leadership += 3
+    scaled.martial += 6 + scaled.stars; scaled.stratagem += 2; scaled.speed += 2
+  }
+  scaled.level = Math.max(scaled.level, targetLevel)
+  scaled.skillUnlocked = scaled.level >= skillUnlockLevel(scaled)
+  return scaled
+}
+
+/** 저장된 무장의 스킬 이름·설명을 현재 정의에 맞춘다(각성 이름 포함). */
+export function syncGeneralSkills(state: StrategyState): void {
+  state.generals.forEach(general => {
+    const def = GENERAL_SKILLS[general.id]
+    if (!def) return
+    general.skillName = activeSkillName(general)
+    general.skillDescription = isAwakened(general) && def.awaken ? `${def.active.desc} · 각성: ${def.awaken.desc}` : def.active.desc
+  })
+}
 
 function copyGeneral(general: General): General {
   return { ...general }
@@ -891,84 +944,45 @@ export function skillRank(general: General): number {
   return general.skillRank ?? Math.max(1, general.stars)
 }
 
+/** 스킬 1회 사기 피해(버프·인연 제외, 상한 40 적용). 스킬 재구성안의 공식. */
 export function skillPower(general: General): number {
-  const basePower = general.skillPower ?? 100
-  const progression = (skillRank(general) - 1) * 18 + Math.max(0, general.level - 10) * 3
-  return Math.round((basePower + progression) * GRADE_POWER_MULTIPLIER[general.grade])
+  const template = templateGeneral(general.id)
+  return Math.round(Math.min(SKILL_MORALE_CAP, baseMoraleDamage(general, template ?? general)) * 10) / 10
 }
 
 export interface GeneralSkillDetail {
   category: '공격' | '버프' | '디버프' | '정화·치료' | '방어·제어'
+  type: SkillType
   trigger: string
   target: string
   effect: string
   duration: string
   cooldown: string
+  passive: string
+  awaken: string
+  weakness: string
 }
 
+const TYPE_CATEGORY: Record<SkillType, GeneralSkillDetail['category']> = { 돌격: '공격', 사격: '공격', 계략: '디버프', 통솔: '버프', 수호: '방어·제어', 치유: '정화·치료' }
+const TYPE_TARGET: Record<SkillType, string> = { 돌격: '같은 레인의 적(없으면 앞의 적)', 사격: '병력 비율이 가장 낮은 적', 계략: '적 전체', 통솔: '아군 전체', 수호: '아군', 치유: '아군' }
+
 export function skillDetail(general: General): GeneralSkillDetail {
+  const def = skillDefFor(general.id, general.role, general.skillName, general.skillDescription)
+  const template = templateGeneral(general.id) ?? general
   const power = skillPower(general)
-  const rank = skillRank(general)
-  const cooldown = `${Math.max(8, 20 - rank * 2)}초`
-  const cleanseIds = new Set(['zhuge-liang', 'liu-bei', 'da-qiao', 'lu-su', 'xu-shu'])
-  const debuffIds = new Set(['guan-yu', 'lu-bu', 'zhou-yu', 'huang-zhong', 'jia-xu', 'pang-tong', 'gan-ning', 'taishi-ci'])
-  const buffIds = new Set(['zhao-yun', 'zhuge-liang', 'liu-bei', 'da-qiao', 'lu-su', 'xu-shu', 'wen-ping'])
-  const category: GeneralSkillDetail['category'] = cleanseIds.has(general.id) ? '정화·치료' : debuffIds.has(general.id) ? '디버프' : buffIds.has(general.id) ? '버프' : general.role === '보병' ? '방어·제어' : '공격'
-  if (category === '정화·치료') return {
-    category,
-    trigger: '아군에게 상태이상 발생 또는 체력 70% 이하',
-    target: '아군 전체와 자신',
-    effect: `${general.skillName} · 상태이상 2개 치료 · 회복력 ${Math.round(power / 3)} · 사기 +${Math.round(power / 10)}`,
-    duration: `${5 + rank}초 동안 제어 저항 +${10 + rank * 3}%`,
-    cooldown,
-  }
-  if (category === '버프') return {
-    category,
-    trigger: general.role === '책사' ? '전술 게이지 50% 이상 또는 전술 명령 직후' : '전투 시작 후 2초 또는 아군 위기 시',
-    target: general.role === '책사' ? '아군 전체' : '자신과 전방 아군',
-    effect: `${general.skillName} · 공격·전술 능력 +${Math.round(power / 7)}% · 상태이상 저항 +${10 + rank * 2}%`,
-    duration: `${5 + rank}초`,
-    cooldown,
-  }
-  if (category === '디버프') return {
-    category,
-    trigger: general.role === '궁병' ? '후열 조준 완료 또는 체력이 낮은 적 포착' : '돌격 명령 또는 연계 2회 달성',
-    target: general.role === '궁병' ? '체력이 가장 낮은 적' : '전방 적과 인접 적',
-    effect: `${general.skillName} · 적 방어·행동력 -${Math.round(power / 8)}% · 받는 피해 +${Math.min(30, 10 + rank * 3)}%`,
-    duration: `${4 + rank}초`,
-    cooldown,
-  }
-  if (general.role === '기병') return {
-    category,
-    trigger: '전투 시작 후 2초 또는 돌격 명령',
-    target: '전방 적 1명과 인접 적',
-    effect: `${general.skillName} · 주 대상 피해 ${power}% · 주변 적 사기 -${Math.round(power / 8)}`,
-    duration: '즉시 피해 · 사기 약화 5초',
-    cooldown,
-  }
-  if (general.role === '궁병') return {
-    category,
-    trigger: '후열 배치 후 3초마다 자동 조준',
-    target: '현재 체력이 가장 낮은 적',
-    effect: `${general.skillName} · 원거리 피해 ${power}% · 치명타 확률 +${Math.min(35, 12 + rank * 3)}%`,
-    duration: '피해 즉시 · 치명타 보정 4초',
-    cooldown,
-  }
-  if (general.role === '책사') return {
-    category,
-    trigger: '전술 게이지 50% 이상 또는 전술 명령 직후',
-    target: '아군 전체와 적 전열',
-    effect: `${general.skillName} · 아군 전술 위력 +${Math.round(power / 7)}% · 적 행동력 -${Math.round(power / 10)}`,
-    duration: `${5 + rank}초`,
-    cooldown,
-  }
+  const awakened = isAwakened(general)
+  const unlock = general.grade >= 3 ? 3 : 0
   return {
-    category,
-    trigger: '아군 병력 70% 이하 또는 중앙 돌파 명령',
-    target: '자신과 전방 아군',
-    effect: `${general.skillName} · 피해 감소 ${Math.min(45, 18 + rank * 4)}% · 적 위협 +${Math.round(power / 9)}`,
-    duration: `${4 + rank}초`,
-    cooldown,
+    category: TYPE_CATEGORY[def.type],
+    type: def.type,
+    trigger: '무장 버튼을 길게 눌러 발동 (무장별 쿨다운)',
+    target: TYPE_TARGET[def.type],
+    effect: `${activeSkillName(general)} · ${def.active.desc}${SKILL_TYPE_META[def.type].base > 0 ? ` · 적 사기 −${power}` : ''}${awakened && def.awaken ? ` · 각성: ${def.awaken.desc}` : ''}`,
+    duration: `${def.type} 유형 · ${SKILL_TYPE_META[def.type].label}${general.stars >= 4 ? ' · 효과 지속 +1초' : ''}`,
+    cooldown: `${skillCooldownFor(general, template)}초`,
+    passive: def.passive ? `${def.passive.name} — ${def.passive.desc}${unlock && general.stars < unlock ? ' (3성에서 열림)' : ''}` : '',
+    awaken: def.awaken ? `${def.awaken.name} — ${def.awaken.desc}${awakened ? '' : ' (5성 각성)'}` : '',
+    weakness: def.weakness?.desc ?? '',
   }
 }
 
@@ -977,6 +991,7 @@ export function totalPower(state: StrategyState): number {
 }
 
 export function ensureEquipmentState(state: StrategyState): void {
+  syncGeneralSkills(state)
   if (!Array.isArray(state.equipmentInventory)) state.equipmentInventory = starterEquipment()
   state.equipmentInventory.forEach(item => {
     item.quantity = Math.max(1, Math.trunc(item.quantity ?? 1))

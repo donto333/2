@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GRADE_POWER_MULTIPLIER, GOLD_PACKAGES, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseHonorPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentInventoryCount, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
-import { effectLoadout } from '../src/game/battle-effects'
+import { GENERAL_SKILLS } from '../src/game/skills'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -94,13 +94,18 @@ describe('commander attributes', () => {
     }
   })
 
-  it('aligns support concepts with cleanse-capable battle loadouts', () => {
+  it('gives every general a skill type that matches the approved skill plan', () => {
     const catalog = allGenerals()
-    expect(skillDetail(catalog.find(general => general.id === 'zhuge-liang')!).category).toBe('정화·치료')
-    expect(skillDetail(catalog.find(general => general.id === 'lu-bu')!).category).toBe('디버프')
-    expect(skillDetail(catalog.find(general => general.id === 'zhao-yun')!).category).toBe('버프')
-    expect(effectLoadout('zhuge-liang', '책사').cleanse).toBe(true)
-    expect(effectLoadout('liu-bei', '보병').cleanse).toBe(true)
+    const typeOf = (id: string) => skillDetail(catalog.find(general => general.id === id)!).type
+    expect(typeOf('zhuge-liang')).toBe('계략')
+    expect(typeOf('lu-bu')).toBe('돌격')
+    expect(typeOf('liu-bei')).toBe('치유')
+    expect(typeOf('cao-ren')).toBe('수호')
+    expect(typeOf('huang-zhong')).toBe('사격')
+    expect(typeOf('cao-cao')).toBe('통솔')
+    expect(catalog.every(general => GENERAL_SKILLS[general.id])).toBe(true)
+    expect(catalog.find(general => general.id === 'gao-shun')!.skillName).toBe('함진영')
+    expect(catalog.find(general => general.id === 'huang-zhong')!.skillName).toBe('정군산 일격')
   })
 
   it('returns ten visible rewards for a ten-pull and charges the ten-pull cost', () => {
