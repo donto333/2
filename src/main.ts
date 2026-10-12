@@ -627,6 +627,28 @@ const ui = new StrategyUI(root, {
     arena.setSpeed(speed)
     ui.updateBattle(arena.getSnapshot())
   },
+  onBattlePause: on => {
+    arena.setPaused(on)
+    ui.updateBattle(arena.getSnapshot())
+  },
+  onBattleStop: () => {
+    // 전투 중지: 결과·보상 없이 끝내고 시나리오 목록(전투 메뉴 첫 화면)으로 돌아간다.
+    const siege = pendingSiege
+    arena.stopBattle()
+    scenarioActive = false
+    activeScenario = null
+    duelActive = false
+    pendingTicket = null
+    if (siege) {
+      pendingSiege = null
+      queueAccountSave(true)
+      void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })
+    }
+    state.section = 'battle'
+    ui.updateBattle(arena.getSnapshot())
+    ui.render(state)
+    ui.notify('전투를 중지했습니다. 시나리오 목록으로 돌아갑니다. (보상 없음)')
+  },
   onBattleAuto: on => {
     arena.setAutoPlay(on)
     ui.updateBattle(arena.getSnapshot())

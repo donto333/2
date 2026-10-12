@@ -76,6 +76,7 @@ export interface BattleSnapshot {
   enemyPower: number
   status: string
   speed: number
+  paused: boolean
   autoPlay: boolean
   log: string[]
   result: BattleResult | null
@@ -153,6 +154,7 @@ export class Arena {
   private mode: BattleMode = 'normal'
   private moraleBonus = 0
   private speed = 1
+  private paused = false
   private winStreak = 0
   private startedAt = 0
   private selectedUnit = 0
@@ -372,12 +374,18 @@ export class Arena {
     this.speed = speed >= 2 ? 2 : 1
   }
 
+  /** 일시 정지: 전투 시간·적 행동·스킬 쿨다운이 모두 멈춘다. 정지 중에는 명령을 받지 않는다. */
+  setPaused(on: boolean): void {
+    this.paused = Boolean(on) && this.battleActive
+  }
+
   setAutoPlay(on: boolean): void {
     if (this.core) this.core.autoPilot = on ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null
   }
 
   stopBattle(): void {
     this.battleActive = false
+    this.paused = false
     this.core = null
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
     this.enemyDeck = []
@@ -926,6 +934,7 @@ export class Arena {
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
     this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, autoPilot: options.autoPlay ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null })
     this.battleActive = true
+    this.paused = false
     this.startedAt = performance.now()
     this.lastVolley = -1
     this.lastCombatLog = 0
@@ -962,7 +971,7 @@ export class Arena {
 
   /** 무장 버튼(탭): 그 무장의 레인으로 기동해 적 예고에 대응한다. */
   commandMove(index: number): void {
-    if (!this.battleActive || !this.core) return
+    if (!this.battleActive || !this.core || this.paused) return
     this.selectUnit(index)
     const unit = this.playerUnits[index]
     if (unit && unit.troops > 0) {
@@ -979,14 +988,14 @@ export class Arena {
   }
 
   useTactic(tactic: BattleTactic): void {
-    if (!this.battleActive || !this.core) return
+    if (!this.battleActive || !this.core || this.paused) return
     this.core.useTactic(tactic)
     this.drainCore()
   }
 
   /** 무장 버튼(길게)·스킬 버튼: 그 무장의 스킬. index가 없으면 선택한 무장. */
   castSkill(index = this.selectedUnit): void {
-    if (!this.battleActive || !this.core) return
+    if (!this.battleActive || !this.core || this.paused) return
     this.selectUnit(index)
     this.core.castSkill(index)
     this.drainCore()
@@ -1214,8 +1223,9 @@ export class Arena {
       difficultyMultiplier: core ? Math.round((BATTLE_RULES.pressureStart + (BATTLE_RULES.pressureEnd - BATTLE_RULES.pressureStart) * Math.min(1, elapsed / BATTLE_RULES.pressureRamp)) * 100) / 100 : 1,
       duelMode: this.mode === 'duel',
       enemyPower,
-      status: this.battleActive ? (core?.autoPilot ? '자동 전투 중' : '전투 중') : core?.result ? (core.result.won ? '승리' : '패배') : '대기 중',
+      status: this.battleActive ? (this.paused ? '일시 정지' : core?.autoPilot ? '자동 전투 중' : '전투 중') : core?.result ? (core.result.won ? '승리' : '패배') : '대기 중',
       speed: this.speed,
+      paused: this.paused,
       autoPlay: Boolean(core?.autoPilot),
       log: this.logLines.slice(-12),
       result: core?.result ?? null,
@@ -1238,7 +1248,7 @@ export class Arena {
       this.updateUnitMotion(unit, delta, this.clock.getElapsed() + index * 0.4, ember)
     })
     this.updateCamera(delta)
-    if (!this.battleActive || !this.core) return
+    if (!this.battleActive || !this.core || this.paused) return
     let remaining = delta * this.speed
     while (remaining > 0 && this.core.active) {
       const step = Math.min(0.05, remaining)

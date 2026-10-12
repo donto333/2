@@ -452,3 +452,21 @@ body .app-shell--battle .bt-tactic-row { margin-top: 8px; }
   body .app-shell--battle .bt-tactic { padding: 6px 2px; }
   body .app-shell--battle .bt-tactic small { display: none; }
 }
+
+/* ── 전투 상단 바: 멈춤 · ×2 배속 · 자동 · 전투 중지 ── */
+body .topbar-battle { display: none; }
+body .app-shell--battle .topbar-battle { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+body .tb-btn { min-height: 36px; padding: 6px 14px; border-radius: 10px; border: 1px solid var(--gold-line); background: rgba(40, 18, 8, .78); color: var(--gold-hi); font-weight: 800; font-size: 14px; white-space: nowrap; }
+body .tb-btn.is-on { background: var(--gold); color: #3a1d08; border-color: var(--gold); }
+body .tb-btn--stop { border-color: rgba(255, 128, 102, .6); color: #ffb39a; }
+body .tb-btn--stop.is-confirm { background: var(--lacquer); color: #fff; border-color: var(--lacquer-hi); }
+body .bt-paused { position: relative; z-index: 2; display: grid; justify-items: center; gap: 6px; width: min(420px, 100%); padding: 16px; border-radius: 14px; background: rgba(20, 8, 4, .82); border: 1px solid var(--gold-line); text-align: center; }
+body .bt-paused[hidden] { display: none; }
+body .bt-paused strong { font-size: 22px; color: var(--gold-hi); }
+body .bt-paused small { color: var(--cream-soft); }
+body .page-section--battle.is-paused .bt-callout, body .page-section--battle.is-paused .bt-controls { opacity: .45; pointer-events: none; }
+@media (max-width: 760px) {
+  body .app-shell--battle .topbar-battle { gap: 5px; }
+  body .app-shell--battle .brand-title { display: none; }
+  body .tb-btn { min-height: 32px; padding: 5px 9px; font-size: 12.5px; }
+}

@@ -116,6 +116,8 @@ export interface StrategyUiCallbacks {
   onBattleSkill: (index?: number) => void
   onBattleSpeed: (speed: number) => void
   onBattleAuto: (on: boolean) => void
+  onBattlePause: (on: boolean) => void
+  onBattleStop: () => void
   onBattleTactic: (tactic: 'guard' | 'feint' | 'charge') => void
   onDuelRefresh: () => void
   onDuelStart: (opponentId: string) => void
@@ -185,6 +187,7 @@ export class StrategyUI {
   private battleLogOpen = false
   private longPressTimer = 0
   private suppressMoveUntil = 0
+  private stopConfirmUntil = 0
   private cityFilter: CityFilter = 'all'
   private cityQuery = ''
 
@@ -451,7 +454,14 @@ export class StrategyUI {
       const html = lines.map(line => `<li>${escapeHtml(line)}</li>`).join('') || '<li>전투 기록이 여기에 표시됩니다.</li>'
       if (log.dataset.html !== html) { log.innerHTML = html; log.dataset.html = html }
     }
-    set('[data-bt-speed]', `×${snapshot.speed}`)
+    q('[data-bt-speed]')?.classList.toggle('is-on', snapshot.speed >= 2)
+    set('[data-bt-pause]', snapshot.paused ? '▶ 계속' : '❚❚ 멈춤')
+    q('[data-bt-pause]')?.classList.toggle('is-on', snapshot.paused)
+    const paused = q('[data-bt-paused]')
+    if (paused) paused.hidden = !snapshot.paused
+    section.classList.toggle('is-paused', snapshot.paused)
+    const stop = q('[data-bt-stop]')
+    if (stop) stop.textContent = Date.now() < this.stopConfirmUntil ? '한 번 더 누르면 중지' : '■ 전투 중지'
     q('[data-bt-auto]')?.classList.toggle('is-on', snapshot.autoPlay)
     const startButton = q('[data-action="battle-start"]')
     if (startButton) startButton.style.display = snapshot.active ? 'none' : 'inline-flex'
@@ -495,6 +505,7 @@ export class StrategyUI {
         <header class="topbar">
           <div class="brand-lockup"><div class="brand-seal"><span>✦</span></div><div><div class="brand-title">천하</div><div class="brand-subtitle">패왕의 시대 · 전술 사령부</div></div></div>
           <div class="topbar-center"><span class="season-dot"></span><span>제1장 · 황혼의 관문</span><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold">${icon('gold')}<small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver">${icon('silver')}<small>은전</small><strong>${formatNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor">${icon('honor')}<small>명망</small><strong>${formatNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence">${icon('influence')}<small>영향력</small><strong>${formatNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain">${icon('grain')}<small>식량</small><strong>${formatNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood">${icon('wood')}<small>목재</small><strong>${formatNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron">${icon('iron')}<small>철</small><strong>${formatNumber(state.resources.iron)}</strong></span></div></div>
+          ${state.section === 'battle' && this.battleViewActive ? this.battleTopControls() : ''}
           <div class="topbar-actions"><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}">${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : this.auth.status === 'offline' ? '오프라인 모드' : 'Manus 로그인'}</button></div>
         </header>
         <aside class="sidebar">
@@ -987,17 +998,22 @@ export class StrategyUI {
       const detail = skillDetail(general)
       return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${general.accent}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
     }).join('')
-    const speedOpen = state.wins >= 10
     const modeLabel = battle?.mode === 'scenario' ? '시나리오 전투' : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : '일반 전투'
     const tactic = (id: 'guard' | 'feint' | 'charge', icon: string, label: string, note: string) => `<button class="bt-tactic bt-tactic--${id}" data-action="battle-tactic" data-tactic="${id}" ${id === 'guard' ? 'data-bt-guard' : ''} disabled><span>${icon}</span><strong>${label}</strong><small>${note}</small><em>${battle?.tacticCosts[id] ?? { guard: 35, feint: 50, charge: 65 }[id]}</em></button>`
     return `<section class="page-section page-section--battle">
 <div class="bt-top">
-<div class="bt-hud glass-card"><div class="bt-hud-row"><span class="bt-phase" data-bt-phase>${battle?.phaseName ?? '1막 · 서전'}</span><b data-bt-morale-text>적 사기 ${battle?.moraleValue ?? 80} / ${battle?.moraleMax ?? 80}</b></div><div class="bt-bar bt-bar--morale"><i data-bt-morale style="width:${battle?.morale ?? 100}%"></i></div><div class="bt-hud-row bt-hud-row--threat"><span>위협도 <b data-bt-threat-text>${battle?.threat ?? 0}</b></span><div class="bt-bar bt-bar--threat"><i data-bt-threat style="width:${battle?.threat ?? 0}%"></i></div><b class="bt-collapse" data-bt-collapse>붕괴 ${battle?.collapses ?? 0}/2</b></div><div class="bt-hud-meta"><span class="bt-mode">${modeLabel}</span><span data-bt-status>${battle?.status ?? '대기 중'}</span><span class="bt-time" data-bt-time>제한 90초</span><span data-bt-combo>연계 ${battle?.combo ?? 0}</span><span data-bt-pressure>적 압박 ×1.00</span><span data-bt-bond>${escapeHtml(battle?.bond ? `인연 · ${battle.bond}` : '인연 없음')}</span></div><div class="bt-hud-chips">${speedOpen ? `<button class="bt-chip" data-action="battle-speed" data-bt-speed>×${battle?.speed ?? 1}</button>` : ''}${this.battleAutoAvailable ? `<button class="bt-chip ${battle?.autoPlay ? 'is-on' : ''}" data-action="battle-auto" data-bt-auto>자동</button>` : ''}${active ? '<button class="bt-chip bt-chip--retreat" data-action="section" data-section="overview">퇴각</button>' : ''}</div></div>
+<div class="bt-hud glass-card"><div class="bt-hud-row"><span class="bt-phase" data-bt-phase>${battle?.phaseName ?? '1막 · 서전'}</span><b data-bt-morale-text>적 사기 ${battle?.moraleValue ?? 80} / ${battle?.moraleMax ?? 80}</b></div><div class="bt-bar bt-bar--morale"><i data-bt-morale style="width:${battle?.morale ?? 100}%"></i></div><div class="bt-hud-row bt-hud-row--threat"><span>위협도 <b data-bt-threat-text>${battle?.threat ?? 0}</b></span><div class="bt-bar bt-bar--threat"><i data-bt-threat style="width:${battle?.threat ?? 0}%"></i></div><b class="bt-collapse" data-bt-collapse>붕괴 ${battle?.collapses ?? 0}/2</b></div><div class="bt-hud-meta"><span class="bt-mode">${modeLabel}</span><span data-bt-status>${battle?.status ?? '대기 중'}</span><span class="bt-time" data-bt-time>제한 90초</span><span data-bt-combo>연계 ${battle?.combo ?? 0}</span><span data-bt-pressure>적 압박 ×1.00</span><span data-bt-bond>${escapeHtml(battle?.bond ? `인연 · ${battle.bond}` : '인연 없음')}</span></div></div>
 <div class="bt-enemies glass-card"><span class="bt-enemies-label">상대 무장</span><div class="bt-enemy-row" data-bt-enemies>${this.enemyHudMarkup(battle?.opponentDeck)}</div></div>
 </div>
-<div class="bt-stage"><div class="bt-callout" data-bt-callout><span class="eyebrow">적 전술 예고</span><strong data-bt-pattern>${active ? '다음 예고 대기' : '전투 시작 전'}</strong><p data-bt-warning>적 전술 예고가 뜨면 같은 레인의 무장 버튼을 누르십시오.</p><div class="bt-lanes"><span data-bt-lane="0">↙ 좌</span><span data-bt-lane="1">↑ 중</span><span data-bt-lane="2">↘ 우</span></div><div class="bt-bar bt-bar--window"><i data-bt-window style="width:0%"></i></div></div><div class="bt-enemy-warn" data-bt-enemy-warn hidden></div><div class="bt-feed"><ul class="bt-log" data-bt-log><li>전투 기록이 여기에 표시됩니다.</li></ul><button class="bt-log-toggle" data-action="battle-log">${this.battleLogOpen ? '접기' : '더 보기'}</button><div class="battle-effects" data-battle-effects>${this.battleEffectsMarkup(battle?.activeEffects)}</div></div></div>
+<div class="bt-stage"><div class="bt-paused" data-bt-paused hidden><strong>일시 정지</strong><small>전투 시간과 적의 행동이 멈췄습니다.</small><button class="action-button action-button--primary" data-action="battle-pause">▶ 계속하기</button></div><div class="bt-callout" data-bt-callout><span class="eyebrow">적 전술 예고</span><strong data-bt-pattern>${active ? '다음 예고 대기' : '전투 시작 전'}</strong><p data-bt-warning>적 전술 예고가 뜨면 같은 레인의 무장 버튼을 누르십시오.</p><div class="bt-lanes"><span data-bt-lane="0">↙ 좌</span><span data-bt-lane="1">↑ 중</span><span data-bt-lane="2">↘ 우</span></div><div class="bt-bar bt-bar--window"><i data-bt-window style="width:0%"></i></div></div><div class="bt-enemy-warn" data-bt-enemy-warn hidden></div><div class="bt-feed"><ul class="bt-log" data-bt-log><li>전투 기록이 여기에 표시됩니다.</li></ul><button class="bt-log-toggle" data-action="battle-log">${this.battleLogOpen ? '접기' : '더 보기'}</button><div class="battle-effects" data-battle-effects>${this.battleEffectsMarkup(battle?.activeEffects)}</div></div></div>
 <div class="bt-controls glass-card"><div class="bt-units">${units}</div><div class="bt-tactic-row"><div class="bt-gauge"><span data-bt-gauge-text>전술 게이지 ${battle?.tacticGauge ?? 0}</span><div class="bt-bar bt-bar--gauge"><i data-bt-gauge style="width:${battle?.tacticGauge ?? 0}%"></i></div></div>${tactic('guard', '▣', '철벽 태세', '위협·적장 스킬 억제')}${tactic('feint', '⌁', '유인책', '연계 +2')}${tactic('charge', '⚔', '전군 돌격', '연계를 사기 피해로')}</div>${active ? '' : '<button class="action-button action-button--primary battle-start" data-action="battle-start">전투 시작 <span>→</span></button>'}</div>
 </section>`
+  }
+
+  /** 전투 중 상단 바: 멈춤 · ×2 배속 · 자동(별 3개 시나리오) · 전투 중지 */
+  private battleTopControls(): string {
+    const battle = this.latestBattle
+    return `<div class="topbar-battle"><button class="tb-btn" data-action="battle-pause" data-bt-pause aria-label="일시 정지">${battle?.paused ? '▶ 계속' : '❚❚ 멈춤'}</button><button class="tb-btn ${(battle?.speed ?? 1) >= 2 ? 'is-on' : ''}" data-action="battle-speed" data-bt-speed aria-label="2배속">×2 배속</button>${this.battleAutoAvailable ? `<button class="tb-btn ${battle?.autoPlay ? 'is-on' : ''}" data-action="battle-auto" data-bt-auto>자동</button>` : ''}<button class="tb-btn tb-btn--stop" data-action="battle-stop" data-bt-stop>■ 전투 중지</button></div>`
   }
 
   /** 상단 HUD의 적 무장 카드(초상·레벨·병력 막대) — Manus 전투 HUD 개선안 */
@@ -1067,6 +1083,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.12', '전투 상단 바', '전투 중 화면 맨 위에 멈춤·×2 배속·전투 중지 버튼을 넣었습니다. 멈추면 전투 시간과 적의 행동이 모두 멈추고, 전투 중지는 한 번 더 눌러 확인하면 보상 없이 시나리오 목록으로 돌아갑니다. ×2 배속은 처음부터 쓸 수 있습니다.', '완료', 'gold'],
       ['2026.10.12', '황건적 무장 5명 합류', '장각(5등급 책사)·장보(4등급 책사)·장량(4등급 보병)·관해(3등급 보병)·주창(3등급 기병)을 모집할 수 있습니다. 새 스킬 체계에 맞춘 고유 스킬·패시브와 장각의 각성, 인연 「황천당립」(3명 이상 편성 시 공격 +5%, 계략 쿨다운 −1초)을 넣었고, 184~190년 시나리오의 적으로도 등장합니다.', '완료', 'gold'],
       ['2026.10.12', '무장 스킬 재구성', '70명 모두 고사에 맞는 고유 스킬로 바꾸고 3성 패시브·5성 각성·인연 7종을 더했습니다. 스킬 한 번의 사기 피해는 최대 40, 쿨다운은 무장마다 따로 돕니다. 이름이 바뀐 스킬 12개: 정군산 일격(황충), 가정 고지(왕평), 장팔사모(장포), 견벽청야(사마의), 여츤결사(방덕), 번성 해위(서황), 발시담목(하후돈), 호가십팔박(채문희), 북해 구원(태사자), 서량 철기 대열(마등), 오두미도(장로), 적토 헌상(송헌).', '완료', 'gold'],
       ['2026.10.12', '전투 개편', '적 사기를 0으로 만들면 다음 막, 3막을 넘기면 승리합니다(제한 90초). 예고 하나에 첫 입력만 판정하고 순서는 무작위입니다. 2막 양익 협공·3막 적장 돌격, 적장 스킬 예고, 전열 붕괴(2회 패배), 방어·병종 상성 피해, 별 3개 평가와 별에 따른 반복 보상, 시나리오별 실제 상대 덱을 넣었습니다. 무장 버튼을 길게 누르면 스킬입니다.', '완료', 'gold'],
@@ -1197,6 +1214,12 @@ export class StrategyUI {
     else if (action === 'battle-unit' || action === 'move') { if (Date.now() >= this.suppressMoveUntil) this.callbacks.onBattleMove(Number(button.dataset.index ?? 0)) }
     else if (action === 'battle-skill') this.callbacks.onBattleSkill(button.dataset.index === undefined ? undefined : Number(button.dataset.index))
     else if (action === 'battle-speed') this.callbacks.onBattleSpeed((this.latestBattle?.speed ?? 1) >= 2 ? 1 : 2)
+    else if (action === 'battle-pause') this.callbacks.onBattlePause(!this.latestBattle?.paused)
+    else if (action === 'battle-stop') {
+      // 실수로 누르는 것을 막기 위해 3초 안에 한 번 더 눌러야 중지한다.
+      if (Date.now() < this.stopConfirmUntil) { this.stopConfirmUntil = 0; this.callbacks.onBattleStop() }
+      else { this.stopConfirmUntil = Date.now() + 3000; button.textContent = '한 번 더 누르면 중지'; button.classList.add('is-confirm'); window.setTimeout(() => { button.classList.remove('is-confirm'); if (Date.now() >= this.stopConfirmUntil) button.textContent = '■ 전투 중지' }, 3050) }
+    }
     else if (action === 'battle-auto') this.callbacks.onBattleAuto(!this.latestBattle?.autoPlay)
     else if (action === 'battle-log') { this.battleLogOpen = !this.battleLogOpen; button.textContent = this.battleLogOpen ? '접기' : '전체 기록'; const log = this.root.querySelector<HTMLElement>('[data-bt-log]'); if (log) log.dataset.html = ''; if (this.latestBattle) this.updateBattle(this.latestBattle) }
     else if (action === 'battle-tactic') this.callbacks.onBattleTactic((button.dataset.tactic ?? 'guard') as 'guard' | 'feint' | 'charge')
