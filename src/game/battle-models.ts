@@ -106,8 +106,26 @@ export class AnimatedHero {
     this.mixer.update(delta)
   }
 
-  setFlash(amount: number): void {
-    for (const material of this.materials) material.emissive.setRGB(amount * 0.22, amount * 0.12, amount * 0.05)
+  /** 피격 번쩍임(따뜻한 흰빛) + 스킬 기운(무장 색) */
+  setFlash(amount: number, glow = 0, glowColor?: THREE.Color): void {
+    const r = amount * 0.22 + (glowColor ? glowColor.r * glow * 0.16 : 0)
+    const g = amount * 0.12 + (glowColor ? glowColor.g * glow * 0.16 : 0)
+    const b = amount * 0.05 + (glowColor ? glowColor.b * glow * 0.16 : 0)
+    for (const material of this.materials) material.emissive.setRGB(r, g, b)
+  }
+
+  /** 쓰러짐: 투명하게 사라진다(0 = 보임, 1 = 사라짐) */
+  setFade(amount: number): void {
+    for (const material of this.materials) {
+      const fading = amount > 0
+      if (material.transparent !== fading) { material.transparent = fading; material.needsUpdate = true }
+      material.opacity = 1 - amount
+    }
+  }
+
+  /** 동작 재생 속도(슬로모션·배속) */
+  setTimeScale(scale: number): void {
+    this.mixer.timeScale = scale
   }
 }
 

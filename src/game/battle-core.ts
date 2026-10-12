@@ -3,7 +3,7 @@
 import type { General } from './strategy'
 import { templateGeneral } from './strategy'
 import { BATTLE_EFFECTS, effectValue, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId, type BuffId, type DebuffId, type PlayerDebuffId } from './battle-effects'
-import { SKILL_MORALE_CAP, SKILL_TYPE_META, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type BondDef, type GeneralSkillDef, type SkillFx } from './skills'
+import { SKILL_MORALE_CAP, SKILL_TYPE_META, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type BondDef, type GeneralSkillDef, type SkillFx, type SkillType } from './skills'
 
 export type BattleMode = 'normal' | 'scenario' | 'siege' | 'duel'
 export type BattleTactic = 'guard' | 'feint' | 'charge'
@@ -82,8 +82,8 @@ export type CoreEvent =
   | { kind: 'log'; text: string; tone?: 'jade' | 'ember' }
   | { kind: 'hit'; side: Side; lane: number; amount: number; source: string }
   | { kind: 'heal'; side: Side; lane: number; amount: number }
-  | { kind: 'attack'; side: Side; lane: number }
-  | { kind: 'skill'; side: Side; lane: number; name: string; morale: number }
+  | { kind: 'attack'; side: Side; lane: number; target: number }
+  | { kind: 'skill'; side: Side; lane: number; name: string; morale: number; type: SkillType; target: number }
   | { kind: 'pattern'; pattern: PatternDef }
   | { kind: 'answer'; lane: number; success: boolean }
   | { kind: 'phase'; phase: number }
@@ -360,6 +360,13 @@ export class BattleCore {
     return BATTLE_RULES.pressureStart + (BATTLE_RULES.pressureEnd - BATTLE_RULES.pressureStart) * Math.min(1, this.t / BATTLE_RULES.pressureRamp)
   }
 
+  /** 화면 연출용: 스킬이 겨누는 상대 레인(사격은 병력이 가장 적은 상대) */
+  private skillFocus(defenders: CoreUnit[], unit: CoreUnit): number {
+    const alive = this.alive(defenders)
+    if (unit.def.type === '사격') return [...alive].sort((left, right) => left.troops - right.troops)[0]?.lane ?? unit.lane
+    return this.targetFor(defenders, unit.lane)?.lane ?? unit.lane
+  }
+
   private targetFor(units: CoreUnit[], lane: number): CoreUnit | undefined {
     const same = units[lane]
     return same && same.troops > 0 ? same : units.find(unit => unit.troops > 0)
@@ -429,7 +436,7 @@ export class BattleCore {
       }
       const raw = (20 + g.attack * 0.34 + g.martial * 0.24 + g.leadership * 0.1) * 120 / (120 + target.general.defense) * matchup(g.role, target.general.role) * Math.max(0.1, multiplier)
       attacker.firstAttackDone = true
-      this.events.push({ kind: 'attack', side: attacker.side, lane: attacker.lane })
+      this.events.push({ kind: 'attack', side: attacker.side, lane: attacker.lane, target: target.lane })
       this.dealDamage(target, raw, g.name, attacker)
     }
     this.players.forEach(unit => swing(unit, this.enemies))
@@ -708,7 +715,7 @@ export class BattleCore {
     this.firstSkillUsed = true
     this.lastSkillId = unit.general.id
     if (stripped) notes.unshift(`적 강화 ${stripped}개 제거`)
-    this.events.push({ kind: 'skill', side: 'player', lane, name, morale })
+    this.events.push({ kind: 'skill', side: 'player', lane, name, morale, type: unit.def.type, target: this.skillFocus(this.enemies, unit) })
     this.log(`${unit.general.name} · 「${name}」${morale > 0 ? ` · 적 사기 −${morale}` : ''}${notes.length ? ` · ${notes.join(' · ')}` : ''}`, 'jade')
     return true
   }
@@ -806,7 +813,7 @@ export class BattleCore {
     const name = unit.def.active.name
     const power = Math.min(SKILL_MORALE_CAP, baseMoraleDamage(this.growth(unit), unit.base))
     const shortDebuff = this.players.some(other => this.passive(other) === 'shortDebuff') ? 1 : 0
-    this.events.push({ kind: 'skill', side: 'enemy', lane: unit.lane, name, morale: 0 })
+    this.events.push({ kind: 'skill', side: 'enemy', lane: unit.lane, name, morale: 0, type: unit.def.type, target: this.skillFocus(this.players, unit) })
     const type = unit.def.type
     if (type === '돌격' || type === '사격') {
       const target = type === '사격' ? [...this.alive(this.players)].sort((left, right) => left.troops - right.troops)[0] : this.targetFor(this.players, unit.lane)

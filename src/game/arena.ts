@@ -9,6 +9,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { AnimatedHero, bakedTroop, heroModelFor, loadModel, troopModelFor } from './battle-models'
+import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
 import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
 
 /** 마지막 색보정: 가장자리 어둡게(비네트) · 따뜻한 대비 */
@@ -157,6 +158,15 @@ interface BattleUnit {
   /** 실사 3D 모델(불러오면 도형 모델 대신 보인다) */
   hero: AnimatedHero | null
   mounted: boolean
+  /** 무장 몸 전체를 움직이는 축(돌진·젖힘·떠오름). 무장 모델은 이 안에 있다 */
+  actor: THREE.Group
+  motion: Motion | null
+  pose: Pose
+  /** 스킬 기운(0~1)과 그 색 */
+  glow: number
+  glowColor: THREE.Color
+  /** 쓰러지는 중(1 → 0) */
+  dying: number
 }
 
 interface ArenaEffect {
@@ -167,6 +177,7 @@ interface ArenaEffect {
   dispose: () => void
 }
 
+const ease = (k: number) => k * k * (3 - 2 * k)
 const jade = 0x52e0c4
 const ember = 0xff8066
 type TroopType = 'cavalry' | 'spearmen' | 'archer'
@@ -209,6 +220,13 @@ export class Arena {
   private readonly environment: Environment
   private composer: EffectComposer | null = null
   private research: BattleResearch | null = null
+  /** 연출용 시간 흐름: 스킬 기 모으기 슬로모션 · 강타 순간 멈춤(실제 초) */
+  private slowMo = 0
+  private hitStop = 0
+  /** 스킬 쓰는 무장에게 카메라를 당긴다 */
+  private cameraFocus: { target: THREE.Vector3; age: number; life: number; strength: number; side: 'player' | 'enemy' } | null = null
+  /** 공격 동작 직후의 피해: 칼이 닿거나 화살이 꽂히는 순간에 맞춰 보여 준다 */
+  private pendingStrike: { side: 'player' | 'enemy'; source: string; delay: number } | null = null
 
   constructor(canvas: HTMLCanvasElement, callbacks: ArenaCallbacks) {
     this.callbacks = callbacks
@@ -261,7 +279,7 @@ export class Arena {
       const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(jade)
       group.add(status.group)
-      const unit: BattleUnit = { group, squad: built.squad.group, model: built.rig.root, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false }
+      const unit: BattleUnit = { group, squad: built.squad.group, model: built.rig.root, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false, ...this.motionFields(built.actor) }
       this.attachRealModels(unit)
       this.playerUnits.push(unit)
       this.scene.add(group)
@@ -317,7 +335,7 @@ export class Arena {
     this.enemyWarning = null
   }
 
-  private createUnit(general: General, teamColor: number, position: THREE.Vector3): { group: THREE.Group; rig: GeneralRig; squad: Squad } {
+  private createUnit(general: General, teamColor: number, position: THREE.Vector3): { group: THREE.Group; rig: GeneralRig; squad: Squad; actor: THREE.Group } {
     const team = teamColor === ember ? 'enemy' : 'player'
     const group = new THREE.Group()
     group.position.copy(position)
@@ -325,13 +343,15 @@ export class Arena {
     const rig = createGeneralModel(general, team)
     const squad = createSquad(general.role, team, this.quality)
     group.userData.model = rig.root
-    group.add(squad.group, rig.root)
+    const actor = new THREE.Group()
+    actor.add(rig.root)
+    group.add(squad.group, actor)
     // 발밑 진영 고리(아군 청록 · 적 붉은색)
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 0.98, 40), new THREE.MeshBasicMaterial({ color: team === 'enemy' ? 0xff5a3c : 0x5ae0c0, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }))
     ring.rotation.x = -Math.PI / 2
     ring.position.y = 0.03
     group.add(ring)
-    return { group, rig, squad }
+    return { group, rig, squad, actor }
   }
 
   /** 실사 모델을 불러와 도형 모델·병사와 바꾼다(불러오기 전에는 도형 모델로 바로 싸울 수 있다) */
@@ -343,7 +363,7 @@ export class Arena {
       const hero = new AnimatedHero(gltf)
       hero.root.rotation.y = Math.PI // 모델은 +Z를 본다 → 부대 앞(-Z)으로
       hero.root.scale.setScalar(1.18) // 무장은 병사보다 한눈에 띄게 조금 크게
-      unit.group.add(hero.root)
+      unit.actor.add(hero.root)
       unit.rig.root.visible = false
       unit.hero = hero
     }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
@@ -558,107 +578,6 @@ export class Arena {
     return 0x4cdfff
   }
 
-  private spawnSkillBurst(position: THREE.Vector3, color: number): void {
-    const group = new THREE.Group()
-    const particles: THREE.Mesh[] = []
-    const core = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.98, blending: THREE.AdditiveBlending, depthWrite: false }))
-    const aura = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 12), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }))
-    const rune = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.045, 8, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
-    rune.rotation.x = Math.PI / 2
-    group.add(core, aura, rune)
-    for (let index = 0; index < 18; index += 1) {
-      const particle = new THREE.Mesh(new THREE.IcosahedronGeometry(0.055 + (index % 3) * 0.025, 0), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }))
-      particle.userData.velocity = new THREE.Vector3(Math.cos(index * 0.52) * (0.7 + (index % 4) * 0.12), 0.35 + (index % 3) * 0.18, Math.sin(index * 0.52) * (0.7 + (index % 4) * 0.12))
-      group.add(particle)
-      particles.push(particle)
-    }
-    group.position.copy(position)
-    this.addEffect({
-      object: group,
-      age: 0,
-      life: 0.9,
-      tick: effect => {
-        const progress = effect.age / effect.life
-        const burst = Math.sin(Math.min(progress * 1.35, 1) * Math.PI)
-        core.scale.setScalar(0.8 + burst * 2.2)
-        core.material.opacity = 0.98 * (1 - progress)
-        aura.scale.setScalar(0.8 + burst * 2.8)
-        aura.material.opacity = 0.25 * (1 - progress)
-        rune.scale.setScalar(0.7 + burst * 2.1)
-        rune.rotation.z += 0.12
-        rune.material.opacity = 0.88 * (1 - progress)
-        particles.forEach(particle => {
-          const velocity = particle.userData.velocity as THREE.Vector3
-          particle.position.copy(velocity).multiplyScalar(progress * 2.7)
-          particle.rotation.x += 0.18
-          particle.rotation.y += 0.22
-          ;(particle.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - progress)
-        })
-      },
-      dispose: () => group.traverse(node => {
-        const mesh = node as THREE.Mesh
-        mesh.geometry?.dispose()
-        const material = mesh.material
-        if (material && !Array.isArray(material)) material.dispose()
-      }),
-    })
-  }
-
-  private spawnSlashWave(general: General, damage: number, skillName = general.skillName): void {
-    const color = this.skillColor(general)
-    const group = new THREE.Group()
-    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.88, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
-    for (let index = 0; index < 3; index += 1) {
-      const slash = new THREE.Mesh(new THREE.TorusGeometry(1.35 + index * 0.22, 0.12, 8, 32, Math.PI * 0.86), material.clone())
-      slash.rotation.set(Math.PI / 2, index * 0.08, index * 0.2 - 0.42)
-      slash.position.x = (index - 1) * 1.15
-      slash.position.y = 1.45 + index * 0.18
-      slash.scale.set(1.05, 1, 0.66)
-      group.add(slash)
-    }
-    const start = new THREE.Vector3(general.role === '궁병' ? 1.5 : 0, 1.1, 5.6)
-    const end = new THREE.Vector3(0, 1.2, -8.2)
-    group.position.copy(start)
-    this.addEffect({
-      object: group,
-      age: 0,
-      life: 1.12,
-      tick: effect => {
-        const progress = Math.min(effect.age / effect.life, 1)
-        group.position.lerpVectors(start, end, progress)
-        group.rotation.z += 0.055
-        group.scale.setScalar(0.65 + Math.sin(Math.min(progress, 0.5) * Math.PI) * 0.62)
-        group.children.forEach(child => ((child as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - Math.max(0, progress - 0.55) / 0.45))
-        if (progress > 0.72 && effect.age - 0.016 <= effect.life * 0.72) this.spawnImpact(end, damage, color)
-      },
-      dispose: () => {
-        group.traverse(node => {
-          const mesh = node as THREE.Mesh
-          mesh.geometry?.dispose()
-          const meshMaterial = mesh.material
-          if (meshMaterial && !Array.isArray(meshMaterial)) meshMaterial.dispose()
-        })
-      },
-    })
-    const signature = this.makeTextSprite(skillName, `#${color.toString(16).padStart(6, '0')}`, 1.55)
-    signature.position.set(0, 4.6, -3)
-    this.addEffect({
-      object: signature,
-      age: 0,
-      life: 1.55,
-      tick: effect => {
-        const progress = effect.age / effect.life
-        signature.position.y = 4.6 + Math.sin(progress * Math.PI) * 0.55
-        signature.scale.setScalar(1.2 + Math.sin(Math.min(progress * 1.5, 1) * Math.PI) * 0.45)
-        signature.material.opacity = progress < 0.2 ? progress / 0.2 : 1 - Math.max(0, progress - 0.72) / 0.28
-      },
-      dispose: () => {
-        signature.material.map?.dispose()
-        signature.material.dispose()
-      },
-    })
-  }
-
   private updateEffects(delta: number): void {
     for (let index = this.effects.length - 1; index >= 0; index -= 1) {
       const effect = this.effects[index]
@@ -724,7 +643,7 @@ export class Arena {
       const maxTroops = this.core!.enemies[index]?.maxTroops ?? this.troopCapacity(general)
       const status = this.createTroopStatus(ember)
       group.add(status.group)
-      this.enemyUnits.push({ group, squad: built.squad.group, model: built.rig.root, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false })
+      this.enemyUnits.push({ group, squad: built.squad.group, model: built.rig.root, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false, ...this.motionFields(built.actor) })
       this.attachRealModels(this.enemyUnits[this.enemyUnits.length - 1])
       this.scene.add(group)
     })
@@ -787,6 +706,7 @@ export class Arena {
     const core = this.core
     if (!core) return
     for (const event of core.drainEvents()) this.handleCoreEvent(event, core)
+    this.pendingStrike = null
     this.syncTroops()
   }
 
@@ -799,34 +719,25 @@ export class Arena {
       case 'hit': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
-        unit.hitFlash = 0.18
-        unit.hitReact = Math.min(1, unit.hitReact + Math.min(0.72, 0.22 + event.amount / 300))
-        unit.knockback.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.11 : -0.11, 0, event.side === 'enemy' ? -0.3 : 0.3))
-        this.cameraShake = Math.min(0.62, this.cameraShake + (event.amount >= 160 ? 0.18 : 0.06))
-        if (event.amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(event.amount), event.side === 'enemy' ? jade : ember)
+        const strike = this.pendingStrike
+        if (strike && strike.source === event.source && strike.side !== event.side) {
+          this.pendingStrike = null
+          this.addEffect(delayed(strike.delay, () => this.showHit(unit, event.side, event.amount)))  
+        } else this.showHit(unit, event.side, event.amount)
         if (core.t - this.lastCombatLog > 1.6) {
           this.lastCombatLog = core.t
           this.callbacks.onEvent(`${event.source} · ${unit.general.name} 병력 −${Math.round(event.amount)}`)
         }
         break
       }
-      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) { unit.attackMotion = 1; unit.hero?.playOnce('Attack') } break }
+      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) this.playAttack(unit, event.side, event.target); break }
       case 'heal': { const unit = this.unitAt(event.side, event.lane); if (unit && event.amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(event.amount), 0x7be3a2); break }
       case 'skill': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
-        unit.skillPulse = 1
-        unit.hero?.playOnce('Skill')
         this.callbacks.onSkillCast?.({ side: event.side, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
-        if (event.side === 'player') {
-          this.spawnSlashWave(unit.general, Math.max(20, event.morale * 10), event.name)
-          this.spawnSkillBurst(new THREE.Vector3(0, 1.1, -5.5), this.skillColor(unit.general))
-          this.cameraShake = Math.min(0.55, this.cameraShake + 0.22)
-        } else {
-          this.spawnSkillBurst(unit.group.position.clone().add(new THREE.Vector3(0, 1.2, 0)), ember)
-          this.cameraShake = Math.min(0.55, this.cameraShake + 0.16)
-          this.enemyWarning = null
-        }
+        this.playSkill(unit, event.side, event.type, event.name, event.morale, event.target)
+        if (event.side === 'enemy') this.enemyWarning = null
         break
       }
       case 'enemySkillWarn': {
@@ -851,7 +762,11 @@ export class Arena {
       case 'collapse':
         this.cameraShake = Math.min(0.7, this.cameraShake + 0.35)
         break
-      case 'unitDown': { const unit = this.unitAt(event.side, event.lane); if (unit) unit.group.visible = false; break }
+      case 'unitDown': {
+        const unit = this.unitAt(event.side, event.lane)
+        if (unit) { unit.dying = 1; unit.motion = null; this.addEffect(shockwave(unit.group.position.clone(), 0xb9a17c, 2.2, 0.7)) }
+        break
+      }
       case 'end': {
         this.battleActive = false
         this.enemyWarning = null
@@ -867,6 +782,190 @@ export class Arena {
     }
   }
 
+  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying'> {
+    return { actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0 }
+  }
+
+  private fx(effect: Fx): void {
+    this.addEffect(effect)
+  }
+
+  /** 동작 시간(배속 반영) → 효과 시간 */
+  private scaled(seconds: number): number {
+    return seconds / Math.max(0.25, this.speed)
+  }
+
+  /** 동작 시간표에 맞춰 나중에 실행(배속 반영) */
+  private later(seconds: number, run: () => void): Fx {
+    return delayed(this.scaled(seconds), run)
+  }
+
+  /** 무장이 바라보는 앞쪽 지점(월드) */
+  private frontOf(unit: BattleUnit, distance: number, height = 1.2): THREE.Vector3 {
+    const forward = unit.group.rotation.y === 0 ? -1 : 1
+    return unit.group.position.clone().add(new THREE.Vector3(0, height, forward * distance))
+  }
+
+  private facing(unit: BattleUnit): number {
+    return unit.group.rotation.y === 0 ? Math.PI : 0
+  }
+
+  private isRanged(general: General): 'arrow' | 'orb' | null {
+    if (general.role === '궁병') return 'arrow'
+    if (general.role === '책사') return 'orb'
+    return null
+  }
+
+  /** 피격 표시: 번쩍임 · 밀려남 · 숫자 · 흔들림 */
+  private showHit(unit: BattleUnit, side: 'player' | 'enemy', amount: number): void {
+    if (unit.dying > 0 && unit.troops <= 0) return
+    unit.hitFlash = 0.18
+    unit.hitReact = Math.min(1, unit.hitReact + Math.min(0.72, 0.22 + amount / 300))
+    unit.knockback.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.11 : -0.11, 0, side === 'enemy' ? -0.3 : 0.3))
+    this.cameraShake = Math.min(0.62, this.cameraShake + (amount >= 160 ? 0.18 : 0.06))
+    if (amount >= 160) this.hitStop = Math.max(this.hitStop, 0.06)
+    this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, amount >= 120 ? 1.3 : 0.9))
+    if (amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember)
+  }
+
+  /** 일반 공격: 근접은 튀어나가 베고, 궁병은 화살·책사는 기탄을 날린다 */
+  private playAttack(unit: BattleUnit, side: 'player' | 'enemy', targetLane: number): void {
+    unit.attackMotion = 1
+    if (unit.motion?.kind === 'skill') return // 스킬 동작 중에는 끊지 않는다
+    const target = this.unitAt(side === 'player' ? 'enemy' : 'player', targetLane)
+    const color = side === 'player' ? 0x9ff5e2 : 0xffa27a
+    const ranged = this.isRanged(unit.general)
+    unit.hero?.playOnce('Attack')
+    if (!ranged || !target) {
+      unit.motion = { kind: 'melee', t: 0, dur: MELEE_DURATION }
+      this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(MELEE_STRIKE) }
+      const flip = Math.random() < 0.5
+      this.fx(this.later(MELEE_STRIKE, () => {
+        this.fx(slashArc(this.frontOf(unit, 1.7, 1.2), this.facing(unit), color, unit.mounted ? 1.8 : 1.5, flip))
+      }))
+      return
+    }
+    unit.motion = { kind: 'shoot', t: 0, dur: SHOOT_DURATION }
+    const flight = ranged === 'arrow' ? 0.34 : 0.42
+    this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(SHOOT_RELEASE) + flight }
+    this.fx(this.later(SHOOT_RELEASE, () => {
+      const from = this.frontOf(unit, 0.8, ranged === 'arrow' ? 1.7 : 1.9)
+      const to = target.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 1, 0))
+      this.fx(projectile(from, to, ranged, ranged === 'orb' ? (side === 'player' ? 0x72c9ff : 0xc56bff) : color, flight, () => {}))
+    }))
+  }
+
+  /** 스킬: 기 모으기(슬로모션·카메라 당김) → 종류별 발동 */
+  private playSkill(unit: BattleUnit, side: 'player' | 'enemy', type: SkillType, name: string, morale: number, targetLane: number): void {
+    const foes = side === 'player' ? this.enemyUnits : this.playerUnits
+    const allies = side === 'player' ? this.playerUnits : this.enemyUnits
+    const aliveFoes = foes.filter(other => other.troops > 0 && other.dying <= 0)
+    const target = foes[targetLane]?.troops > 0 ? foes[targetLane] : aliveFoes[0]
+    const color = side === 'player' ? this.skillColor(unit.general) : ember
+    const tint = new THREE.Color(color)
+    const origin = unit.group.position.clone()
+    let dash = 0
+    if (type === '돌격' && target) dash = THREE.MathUtils.clamp(Math.abs(target.group.position.z - origin.z) - 1.1, 1.4, 4.2)
+    unit.motion = { kind: 'skill', t: 0, dur: skillDuration(type), skillType: type, dash }
+    unit.skillPulse = 1
+    unit.glow = 1
+    unit.glowColor.copy(tint)
+    unit.hero?.playOnce('Skill')
+    // 기 모으기
+    this.slowMo = Math.max(this.slowMo, side === 'player' ? 0.38 : 0.22)
+    this.cameraFocus = { target: origin.clone(), age: 0, life: side === 'player' ? 1.35 : 1.05, strength: side === 'player' ? 0.7 : 0.5, side }
+    this.fx(groundCircle(origin, color, 2.4, SKILL_RELEASE + 0.9))
+    this.fx(lightPillar(origin, color, 0.9, 5.5, SKILL_RELEASE + 0.35))
+    this.fx(chargeMotes(origin, color))
+    const label = this.makeTextSprite(name, `#${color.toString(16).padStart(6, '0')}`, 1.25)
+    label.position.copy(origin).add(new THREE.Vector3(0, 4.3, 0))
+    this.addEffect({
+      object: label, age: 0, life: 1.6,
+      tick: effect => {
+        const k = effect.age / effect.life
+        label.position.y = origin.y + 4.3 + Math.sin(k * Math.PI) * 0.4
+        label.scale.set(3.4 * (1 + Math.sin(Math.min(k * 2, 1) * Math.PI) * 0.25), 1.25 * (1 + Math.sin(Math.min(k * 2, 1) * Math.PI) * 0.25), 1)
+        label.material.opacity = k < 0.12 ? k / 0.12 : 1 - Math.max(0, k - 0.7) / 0.3
+      },
+      dispose: () => { label.material.map?.dispose(); label.material.dispose() },
+    })
+    const damage = Math.max(20, morale * 10)
+    const big = (at: THREE.Vector3, size = 1) => {
+      this.fx(shockwave(at, color, 3.2 * size, 0.65))
+      this.fx(hitSpark(at.clone().setY(1.1), color, 1.6 * size))
+      this.hitStop = Math.max(this.hitStop, 0.09)
+      this.cameraShake = Math.min(0.7, this.cameraShake + 0.26)
+    }
+    // 발동
+    this.fx(this.later(SKILL_RELEASE, () => {
+      switch (type) {
+        case '돌격': {
+          const start = origin.clone().setY(0)
+          const end = this.frontOf(unit, dash, 0)
+          this.fx(dashTrail(start, end, color))
+          this.fx(this.later(CHARGE_STRIKE - SKILL_RELEASE, () => {
+            const hitAt = target ? target.group.position.clone() : end.clone()
+            this.fx(slashArc(hitAt.clone().setY(1.2), this.facing(unit), color, 2.4, false, 0.55))
+            this.fx(this.later(0.08, () => this.fx(slashArc(hitAt.clone().setY(1.4), this.facing(unit), 0xffffff, 2.1, true, 0.35))))
+            big(hitAt, 1.1)
+            if (target) this.spawnImpact(target.group.position.clone(), damage, color)
+          }))
+          break
+        }
+        case '사격': {
+          const shots = aliveFoes.length ? aliveFoes : target ? [target] : []
+          for (let i = 0; i < 9; i += 1) {
+            const victim = i < 5 && target ? target : shots[i % Math.max(1, shots.length)]
+            if (!victim) break
+            const from = this.frontOf(unit, 0.6, 1.8).add(new THREE.Vector3((Math.random() - 0.5) * 1.2, Math.random() * 0.4, 0))
+            const to = victim.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, 0.6, (Math.random() - 0.5) * 1.2))
+            this.fx(this.later(i * 0.04, () => this.fx(projectile(from, to, 'arrow', color, 0.36, at => this.fx(hitSpark(at, color, 0.7)), 1.6))))
+          }
+          if (target) this.fx(this.later(0.4 + 8 * 0.04, () => { big(target.group.position.clone(), 0.8); this.spawnImpact(target.group.position.clone(), damage, color) }))
+          break
+        }
+        case '계략': {
+          const fire = /화|불|연환|동남풍|적벽/.test(name) || unit.general.id === 'zhou-yu' || unit.general.id === 'lu-xun'
+          const victims = aliveFoes.length ? aliveFoes : []
+          victims.forEach((victim, i) => {
+            const at = victim.group.position.clone()
+            this.fx(groundCircle(at, fire ? 0xff7a2a : color, 3, 1.1, -1.4))
+            this.fx(this.later(0.22 + i * 0.12, () => {
+              if (fire) this.fx(fireBurst(at)); else this.fx(lightning(at, color))
+              big(at, 0.8)
+              if (victim === target) this.spawnImpact(at, damage, color)
+            }))
+          })
+          break
+        }
+        case '통솔': {
+          this.fx(shockwave(origin, color, 9, 1))
+          allies.filter(ally => ally.troops > 0).forEach(ally => {
+            ally.glow = Math.max(ally.glow, 0.8)
+            ally.glowColor.copy(tint)
+            this.fx(lightPillar(ally.group.position, color, 1.1, 4, 0.9))
+          })
+          if (target) this.fx(this.later(0.25, () => { big(target.group.position.clone(), 0.7); this.spawnImpact(target.group.position.clone(), damage, color) }))
+          break
+        }
+        case '수호': {
+          allies.filter(ally => ally.troops > 0).forEach(ally => this.fx(shieldDome(ally.group.position, side === 'player' ? 0x8fd8ff : 0xff9a7a)))
+          this.cameraShake = Math.min(0.5, this.cameraShake + 0.12)
+          break
+        }
+        case '치유': {
+          allies.filter(ally => ally.troops > 0).forEach(ally => {
+            this.fx(healMotes(ally.group.position))
+            this.fx(lightPillar(ally.group.position, 0x7be3a2, 1.2, 3.5, 1))
+            ally.glow = Math.max(ally.glow, 0.7)
+            ally.glowColor.set(0x7be3a2)
+          })
+          break
+        }
+      }
+    }))
+  }
+
   private syncTroops(): void {
     const core = this.core
     if (!core) return
@@ -876,7 +975,7 @@ export class Arena {
       unit.troops = coreUnit.troops
       unit.maxTroops = coreUnit.maxTroops
       unit.statusFill.scale.x = Math.max(0.001, unit.troops / Math.max(1, unit.maxTroops))
-      if (unit.troops > 0 && !unit.group.visible) unit.group.visible = true
+      if (unit.troops > 0 && (!unit.group.visible || unit.dying > 0)) { unit.group.visible = true; unit.dying = 0; unit.hero?.setFade(0) }
     })
     sync(this.playerUnits, core.players)
     sync(this.enemyUnits, core.enemies)
@@ -894,9 +993,29 @@ export class Arena {
     unit.hitFlash = Math.max(0, unit.hitFlash - delta)
     unit.group.position.y = 0
     unit.squadCtl.update(elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.hitReact, unit.troops / Math.max(1, unit.maxTroops))
+    // 몸 전체 동작: 공격 돌진 · 스킬 기 모으기/돌격 · 피격 젖힘
+    const actionDelta = this.paused ? 0 : delta * this.speed
+    if (unit.motion) {
+      unit.motion.t += actionDelta
+      if (unit.motion.t >= unit.motion.dur) unit.motion = null
+    }
+    const pose = actorPose(unit.motion, unit.hitReact, unit.pose)
+    unit.actor.position.set(0, pose.y, pose.z)
+    unit.actor.rotation.set(pose.tilt, pose.twist, 0)
+    unit.actor.scale.setScalar(pose.scale)
+    unit.glow = Math.max(0, unit.glow - (unit.motion?.kind === 'skill' ? 0 : delta * 2.2))
+    if (unit.dying > 0) {
+      unit.dying = Math.max(0, unit.dying - delta * 1.1)
+      const fall = 1 - unit.dying
+      unit.actor.rotation.x = -Math.min(1.35, fall * 2.2) // 앞으로 고꾸라진다
+      unit.actor.position.y = -fall * 0.5
+      unit.squad.position.y = -fall * 0.7
+      unit.hero?.setFade(Math.max(0, fall * 1.4 - 0.4))
+      if (unit.dying <= 0) { unit.group.visible = false; unit.squad.position.y = 0 }
+    }
     if (unit.hero) {
-      unit.hero.update(delta * (this.paused ? 0 : this.speed), moving, unit.mounted)
-      unit.hero.setFlash(unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0)
+      unit.hero.update(actionDelta, moving, unit.mounted)
+      unit.hero.setFlash(unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0, unit.glow, unit.glowColor)
     } else animateGeneral(unit.rig, elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.skillPulse, unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0)
     unit.motionPulse -= delta
     if (moving && unit.motionPulse <= 0) {
@@ -990,7 +1109,12 @@ export class Arena {
     }
   }
 
-  private update(delta: number): void {
+  private update(realDelta: number): void {
+    // 강타 순간 멈춤(아주 짧게) · 스킬 기 모으기 슬로모션
+    const scale = this.hitStop > 0 ? 0.05 : this.slowMo > 0 ? 0.32 : 1
+    this.hitStop = Math.max(0, this.hitStop - realDelta)
+    this.slowMo = Math.max(0, this.slowMo - realDelta)
+    const delta = realDelta * scale
     this.updateEffects(delta)
     this.playerUnits.forEach(unit => {
       this.updateUnitMotion(unit, delta, this.clock.getElapsed(), jade)
@@ -1005,7 +1129,7 @@ export class Arena {
     this.enemyUnits.forEach((unit, index) => {
       this.updateUnitMotion(unit, delta, this.clock.getElapsed() + index * 0.4, ember)
     })
-    this.updateCamera(delta)
+    this.updateCamera(realDelta)
     if (!this.battleActive || !this.core || this.paused) return
     let remaining = delta * this.speed
     while (remaining > 0 && this.core.active) {
@@ -1041,6 +1165,20 @@ export class Arena {
       this.cameraLookAt.z + (this.cameraBase.z - this.cameraLookAt.z) * pull + introOffset + victoryOffset + (this.battleActive ? frontZ * 0.06 : 0),
     )
     this.camera.lookAt(this.cameraLookAt.x + focusX, this.cameraLookAt.y + (this.cameraVictory > 0 ? 1.2 : 0), focusZ)
+    // 스킬: 쓰는 무장 쪽으로 카메라를 바짝 당겼다가 돌아온다
+    const focus = this.cameraFocus
+    if (focus) {
+      focus.age += delta
+      const k = focus.age / focus.life
+      if (k >= 1) { this.cameraFocus = null; return }
+      const weight = focus.strength * (k < 0.22 ? ease(k / 0.22) : k < 0.62 ? 1 : 1 - ease((k - 0.62) / 0.38))
+      const back = focus.side === 'player' ? 6.2 : 8.4
+      const closePos = new THREE.Vector3(focus.target.x * 0.75 + (focus.target.x >= 0 ? -1.6 : 1.6), 2.9 + (aspect < 0.8 ? 1.6 : 0), focus.target.z + back + (aspect < 0.8 ? 3.4 : 0))
+      const closeLook = new THREE.Vector3(focus.target.x * 0.85, 1.5, focus.target.z - (focus.side === 'player' ? 2.6 : 0))
+      const look = new THREE.Vector3(this.cameraLookAt.x + focusX, this.cameraLookAt.y, focusZ).lerp(closeLook, weight)
+      this.camera.position.lerp(closePos.add(new THREE.Vector3((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake * 0.55, 0)), weight)
+      this.camera.lookAt(look)
+    }
   }
 
   private animate = (): void => {
