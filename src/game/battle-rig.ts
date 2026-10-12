@@ -1,0 +1,356 @@
+// 병종별 공격 동작을 "미리 구운 자세(모프)"로 만든다.
+//  - 창병: 창을 쥔 팔이 창째로 앞으로 눕혀져 찌른다
+//  - 기병(조조 포함): 상체를 비틀며 칼을 머리 위에서 내리친다 · 여포는 쥐고 있는 방천화극을 크게 휘두른다
+//  - 궁병: 활을 든 팔을 들고 시위를 당겼다 놓는다(궁병 모델은 뼈대가 온전해 뼈를 직접 돌린다)
+//  - 책사: 깃부채를 앞으로 크게 휘두른다
+// 받은 모델 대부분은 뼈대와 메시가 맞지 않아(몸 전체가 한 뼈에 붙어 있다) 뼈 동작이 먹지 않는다.
+// 그래서 꼭짓점 위치로 상체·팔·무기 영역을 나눠 간단한 가상 뼈를 만들고, 동작을 몇 장의 자세로 구워
+// 모프 타깃으로 담는다. 병사(InstancedMesh)는 병사마다 다른 시각의 자세를, 무장은 한 메시로 같은 자세를 쓴다.
+import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { applyLayer, findBones, sampleKeys, type PoseKey } from './battle-poses'
+import type { ModelName } from './battle-models'
+
+export type StrikeKind = 'thrust' | 'slash' | 'shoot' | 'cast'
+
+/** 동작 길이(초)와 무기가 닿거나 화살이 떠나는 순간(0~1) */
+export const STRIKE_TIMING: Record<StrikeKind, { duration: number; hit: number }> = {
+  thrust: { duration: 0.72, hit: 0.42 },
+  slash: { duration: 0.78, hit: 0.45 },
+  shoot: { duration: 1.0, hit: 0.6 },
+  cast: { duration: 0.8, hit: 0.5 },
+}
+
+/** 구워 두는 자세 수(0번 = 기본 자세, 나머지가 모프 타깃) */
+export const STRIKE_FRAMES = 10
+
+type V3 = [number, number, number]
+interface RigBone { name: string; parent: number; pivot: V3 }
+interface RigKey { t: number; b: Record<string, { r?: V3; m?: V3 }> }
+interface Prop { geometry: THREE.BufferGeometry; material: THREE.Material }
+interface RigSpec {
+  kind: StrikeKind
+  bones: RigBone[]
+  /** 꼭짓점 → 뼈별 가중치(합이 1보다 작으면 나머지는 제자리) */
+  weights: (p: THREE.Vector3) => number[]
+  keys: RigKey[]
+  /** 손에 쥔 무기: 마지막 뼈(무기 뼈)에 붙는다 */
+  prop?: () => Prop
+}
+
+const sm = (a: number, b: number, x: number) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k) }
+
+// ── 무기 도형 ────────────────────────────────────────────────
+function metal(color: number, rough = 0.32): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color, metalness: 0.85, roughness: rough })
+}
+/** 무기는 손잡이가 원점, 날이 +Y로 뻗게 만든다 */
+function swordProp(): Prop {
+  const blade = new THREE.BoxGeometry(0.055, 1.05, 0.014)
+  blade.translate(0, 0.62, 0)
+  const tip = new THREE.ConeGeometry(0.039, 0.16, 4)
+  tip.rotateY(Math.PI / 4); tip.scale(1, 1, 0.26); tip.translate(0, 1.22, 0)
+  const guard = new THREE.BoxGeometry(0.2, 0.035, 0.05)
+  guard.translate(0, 0.08, 0)
+  const grip = new THREE.CylinderGeometry(0.018, 0.018, 0.2, 6)
+  grip.translate(0, -0.03, 0)
+  return { geometry: mergeGeometries([blade, tip, guard, grip].map(g => g.toNonIndexed()))!, material: metal(0xd8dde4) }
+}
+/** 깃부채 */
+function fanProp(): Prop {
+  const handle = new THREE.CylinderGeometry(0.016, 0.016, 0.24, 6)
+  const fan = new THREE.CircleGeometry(0.26, 12, Math.PI * 0.18, Math.PI * 0.64)
+  fan.translate(0, 0.02, 0)
+  return { geometry: mergeGeometries([handle.toNonIndexed(), fan.toNonIndexed()])!, material: new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.8, side: THREE.DoubleSide }) }
+}
+
+// ── 모델별 동작 설계 ─────────────────────────────────────────
+// 몸 기준 축: +Z가 앞, +Y가 위, -X가 몸의 오른쪽(무기 쥔 쪽).
+const LANCER: RigSpec = {
+  kind: 'thrust',
+  bones: [
+    { name: 'torso', parent: -1, pivot: [0, 1.0, 0] },
+    { name: 'arm', parent: 0, pivot: [-0.3, 1.45, 0.05] },
+  ],
+  weights: p => {
+    // 창(가장 바깥 세로 막대)과 창을 쥔 팔
+    const spear = p.x < -0.52 ? 1 : 0
+    const arm = Math.max(spear, sm(-0.3, -0.37, p.x) * sm(1.2, 1.28, p.y) * (1 - sm(1.62, 1.7, p.y)))
+    const torso = sm(0.92, 1.1, p.y)
+    return [torso * (1 - arm), arm]
+  },
+  keys: [
+    { t: 0, b: {} },
+    { t: 0.2, b: { torso: { r: [-6, -18, 0] }, arm: { r: [86, 0, 6], m: [0.08, 0, -0.42] } } },
+    { t: 0.42, b: { torso: { r: [12, 14, 0], m: [0, 0, 0.12] }, arm: { r: [90, 0, 4], m: [0.14, 0, 0.62] } } },
+    { t: 0.6, b: { torso: { r: [9, 10, 0], m: [0, 0, 0.08] }, arm: { r: [88, 0, 4], m: [0.12, 0, 0.45] } } },
+    { t: 1, b: {} },
+  ],
+}
+
+function riderSpec(prop: () => Prop, grip: V3, weapon: 'sword' | 'fan'): RigSpec {
+  return {
+    kind: weapon === 'fan' ? 'cast' : 'slash',
+    bones: [
+      { name: 'torso', parent: -1, pivot: [0, 1.66, 0] },
+      { name: 'weapon', parent: 0, pivot: grip },
+    ],
+    // 안장 위 상체(말 목은 빼고)
+    weights: p => [sm(1.6, 1.74, p.y) * (1 - sm(0.3, 0.42, p.z)), 0],
+    keys: weapon === 'fan'
+      ? [
+          { t: 0, b: { weapon: { r: [20, 0, 0] } } },
+          { t: 0.3, b: { torso: { r: [-4, -22, 0] }, weapon: { r: [-30, 0, -40], m: [-0.05, 0.25, -0.1] } } },
+          { t: 0.5, b: { torso: { r: [8, 20, 0] }, weapon: { r: [70, 0, 50], m: [0.22, 0.05, 0.3] } } },
+          { t: 0.7, b: { torso: { r: [5, 14, 0] }, weapon: { r: [60, 0, 40], m: [0.15, 0, 0.2] } } },
+          { t: 1, b: { weapon: { r: [20, 0, 0] } } },
+        ]
+      : [
+          { t: 0, b: { weapon: { r: [25, 0, 0] } } },
+          // 들어올리기: 상체를 오른쪽으로 비틀고 칼끝을 머리 위 뒤로
+          { t: 0.28, b: { torso: { r: [-8, -34, 4] }, weapon: { r: [-62, 0, -28], m: [0.02, 0.42, -0.12] } } },
+          // 내려치기: 상체가 앞으로 쏠리며 칼이 앞아래 대각선으로
+          { t: 0.45, b: { torso: { r: [14, 30, -4] }, weapon: { r: [112, 0, 38], m: [0.2, -0.05, 0.42] } } },
+          { t: 0.62, b: { torso: { r: [10, 34, -3] }, weapon: { r: [128, 0, 52], m: [0.24, -0.12, 0.36] } } },
+          { t: 1, b: { weapon: { r: [25, 0, 0] } } },
+        ],
+    prop,
+  }
+}
+
+const SPECS: Partial<Record<ModelName, RigSpec>> = {
+  lancer: LANCER,
+  cavalry: riderSpec(swordProp, [-0.3, 1.86, 0.3], 'sword'),
+  caocao: riderSpec(swordProp, [-0.3, 1.86, 0.28], 'sword'),
+  lubu: {
+    // 여포 모델은 방천화극을 이미 쥐고 있다(오른쪽 앞으로 비스듬히): 그 화극을 무기 뼈에 붙인다
+    kind: 'slash',
+    bones: [
+      { name: 'torso', parent: -1, pivot: [0, 1.66, 0] },
+      { name: 'weapon', parent: 0, pivot: [-0.42, 1.47, 0.36] },
+    ],
+    weights: p => {
+      const halberd = p.x < -0.33 && p.z > 0.42 && p.y > 1.0 && p.y < 1.66 ? 1 : 0
+      return [halberd ? 0 : sm(1.6, 1.74, p.y) * (1 - sm(0.3, 0.42, p.z)), halberd]
+    },
+    keys: [
+      { t: 0, b: {} },
+      // 화극을 머리 위 뒤로 크게 들어 올렸다가
+      { t: 0.3, b: { torso: { r: [-8, -30, 4] }, weapon: { r: [-118, -10, -10], m: [0.06, 0.45, -0.3] } } },
+      // 앞으로 크게 휘둘러 내려친다
+      { t: 0.45, b: { torso: { r: [14, 28, -4] }, weapon: { r: [12, 26, 8], m: [0.16, 0.05, 0.25] } } },
+      { t: 0.62, b: { torso: { r: [10, 32, -3] }, weapon: { r: [22, 40, 10], m: [0.2, -0.02, 0.2] } } },
+      { t: 1, b: {} },
+    ],
+  },
+  zhugeliang: riderSpec(fanProp, [-0.28, 1.9, 0.3], 'fan'),
+}
+
+/** 궁병: 활 겨눈 자세 위에서 시위 손을 턱까지 당겼다가 놓는다(이 모델은 L/R 이름이 반대로 붙어 있어 시위 손이 _R) */
+const ARCHER_KEYS: PoseKey[] = [
+  { t: 0.3, r: {} },
+  // 시위를 턱 앞까지 당긴다
+  { t: 0.55, r: { UpperArm_R: [-60, -30, 0], Forearm_R: [-90, 0, 0] } },
+  // 놓는 순간 손이 뒤로 튕긴다
+  { t: 0.63, r: { UpperArm_R: [-48, -48, 0], Forearm_R: [-55, 0, 0] } },
+  { t: 0.85, r: {} },
+]
+
+// ── 굽기 ─────────────────────────────────────────────────────
+function sampleRig(keys: RigKey[], t: number, bone: string): { r: V3; m: V3 } {
+  let a = keys[0], b = keys[keys.length - 1]
+  if (t <= a.t) b = a
+  else for (let i = 0; i < keys.length - 1; i += 1) if (t >= keys[i].t && t <= keys[i + 1].t) { a = keys[i]; b = keys[i + 1]; break }
+  const k = b.t > a.t ? sm(a.t, b.t, t) : 1
+  const ra = a.b[bone]?.r ?? [0, 0, 0], rb = b.b[bone]?.r ?? [0, 0, 0]
+  const ma = a.b[bone]?.m ?? [0, 0, 0], mb = b.b[bone]?.m ?? [0, 0, 0]
+  const mix = (x: V3, y: V3): V3 => [x[0] + (y[0] - x[0]) * k, x[1] + (y[1] - x[1]) * k, x[2] + (y[2] - x[2]) * k]
+  return { r: mix(ra, rb), m: mix(ma, mb) }
+}
+
+function boneMatrices(spec: RigSpec, t: number): THREE.Matrix4[] {
+  const out: THREE.Matrix4[] = []
+  const euler = new THREE.Euler(), q = new THREE.Quaternion()
+  spec.bones.forEach((bone, index) => {
+    const { r, m } = sampleRig(spec.keys, t, bone.name)
+    const pivot = new THREE.Vector3(...bone.pivot)
+    euler.set(THREE.MathUtils.degToRad(r[0]), THREE.MathUtils.degToRad(r[1]), THREE.MathUtils.degToRad(r[2]), 'YXZ')
+    q.setFromEuler(euler)
+    const local = new THREE.Matrix4().makeTranslation(m[0], m[1], m[2])
+      .multiply(new THREE.Matrix4().makeTranslation(pivot.x, pivot.y, pivot.z))
+      .multiply(new THREE.Matrix4().makeRotationFromQuaternion(q))
+      .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z))
+    out[index] = bone.parent >= 0 ? out[bone.parent].clone().multiply(local) : local
+  })
+  return out
+}
+
+/** 모델의 기본 자세(Idle) 꼭짓점을 장면 좌표로 굳힌다 */
+function posedBase(gltf: GLTF, layer?: (root: THREE.Object3D) => void, clipName = 'Idle', clipFraction = -1): { position: Float32Array; normal: Float32Array; source: THREE.SkinnedMesh } {
+  const scene = cloneSkinned(gltf.scene)
+  const mixer = new THREE.AnimationMixer(scene)
+  const clip = gltf.animations.find(item => item.name === clipName) ?? gltf.animations[0]
+  if (clip) { mixer.clipAction(clip).play(); mixer.setTime(clipFraction >= 0 ? clip.duration * clipFraction : 0.4) }
+  scene.updateMatrixWorld(true)
+  layer?.(scene)
+  scene.updateMatrixWorld(true)
+  let skinned: THREE.SkinnedMesh | null = null
+  scene.traverse(node => { if ((node as THREE.SkinnedMesh).isSkinnedMesh && !skinned) skinned = node as THREE.SkinnedMesh })
+  if (!skinned) throw new Error('no skinned mesh')
+  const mesh = skinned as THREE.SkinnedMesh
+  mesh.skeleton.update()
+  const pos = mesh.geometry.getAttribute('position'), nor = mesh.geometry.getAttribute('normal')
+  const position = new Float32Array(pos.count * 3), normal = new Float32Array(pos.count * 3)
+  const v = new THREE.Vector3(), w = new THREE.Vector3(), n = new THREE.Vector3()
+  for (let i = 0; i < pos.count; i += 1) {
+    v.fromBufferAttribute(pos, i)
+    mesh.applyBoneTransform(i, v)
+    v.applyMatrix4(mesh.matrixWorld)
+    position.set([v.x, v.y, v.z], i * 3)
+    if (nor) {
+      n.fromBufferAttribute(nor, i)
+      w.fromBufferAttribute(pos, i).addScaledVector(n, 0.01)
+      mesh.applyBoneTransform(i, w)
+      w.applyMatrix4(mesh.matrixWorld).sub(v).normalize()
+      normal.set([w.x, w.y, w.z], i * 3)
+    }
+  }
+  return { position, normal, source: mesh }
+}
+
+export interface StrikeModel {
+  kind: StrikeKind
+  geometry: THREE.BufferGeometry
+  /** 몸(원래 재질) + 무기(있으면) */
+  materials: THREE.Material[]
+  duration: number
+  hit: number
+}
+
+function buildFromRig(gltf: GLTF, spec: RigSpec): StrikeModel {
+  const base = posedBase(gltf)
+  const src = base.source.geometry
+  const bodyCount = base.position.length / 3
+  // 몸 꼭짓점 가중치
+  const boneCount = spec.bones.length
+  const weights = new Float32Array(bodyCount * boneCount)
+  const p = new THREE.Vector3()
+  for (let i = 0; i < bodyCount; i += 1) {
+    p.fromArray(base.position, i * 3)
+    const w = spec.weights(p)
+    for (let b = 0; b < boneCount; b += 1) weights[i * boneCount + b] = w[b] ?? 0
+  }
+  // 무기: 손잡이 위치로 옮겨 무기 뼈에 100% 붙인다
+  const prop = spec.prop?.()
+  const propBone = boneCount - 1
+  let propPos: Float32Array | null = null, propNor: Float32Array | null = null
+  if (prop) {
+    const g = prop.geometry.index ? prop.geometry.toNonIndexed() : prop.geometry
+    g.computeVertexNormals()
+    g.translate(...spec.bones[propBone].pivot)
+    propPos = g.getAttribute('position').array as Float32Array
+    propNor = g.getAttribute('normal').array as Float32Array
+  }
+  const propCount = propPos ? propPos.length / 3 : 0
+  const total = bodyCount + propCount
+  const deform = (t: number): { position: Float32Array; normal: Float32Array } => {
+    const mats = boneMatrices(spec, t)
+    const normalMats = mats.map(m => new THREE.Matrix3().setFromMatrix4(m))
+    const position = new Float32Array(total * 3), normal = new Float32Array(total * 3)
+    const v = new THREE.Vector3(), acc = new THREE.Vector3(), tmp = new THREE.Vector3(), n = new THREE.Vector3(), nAcc = new THREE.Vector3()
+    for (let i = 0; i < bodyCount; i += 1) {
+      v.fromArray(base.position, i * 3); n.fromArray(base.normal, i * 3)
+      let rest = 1
+      acc.set(0, 0, 0); nAcc.set(0, 0, 0)
+      for (let b = 0; b < boneCount; b += 1) {
+        const w = weights[i * boneCount + b]
+        if (w <= 0) continue
+        rest -= w
+        acc.addScaledVector(tmp.copy(v).applyMatrix4(mats[b]), w)
+        nAcc.addScaledVector(tmp.copy(n).applyMatrix3(normalMats[b]), w)
+      }
+      acc.addScaledVector(v, rest); nAcc.addScaledVector(n, rest).normalize()
+      position.set([acc.x, acc.y, acc.z], i * 3); normal.set([nAcc.x, nAcc.y, nAcc.z], i * 3)
+    }
+    for (let i = 0; i < propCount; i += 1) {
+      v.fromArray(propPos!, i * 3).applyMatrix4(mats[propBone])
+      n.fromArray(propNor!, i * 3).applyMatrix3(normalMats[propBone]).normalize()
+      position.set([v.x, v.y, v.z], (bodyCount + i) * 3); normal.set([n.x, n.y, n.z], (bodyCount + i) * 3)
+    }
+    return { position, normal }
+  }
+  return assemble(spec.kind, src, bodyCount, propCount, deform, base.source.material as THREE.Material, prop?.material)
+}
+
+function buildArcher(gltf: GLTF): StrikeModel {
+  // 궁병 모델의 원래 공격 동작 중 "활을 앞으로 겨눈" 구간을 쓰고, 그 위에 시위 당기기·놓기를 얹는다.
+  // (팔 뼈를 크게 돌리면 몸통 갑옷까지 끌려가므로 당기는 손은 작게만 움직인다)
+  const frameAt = (p: number) => {
+    if (p <= 0.12 || p >= 0.93) return posedBase(gltf)
+    const raise = Math.min(1, (p - 0.12) / 0.2)
+    const lower = p > 0.8 ? (p - 0.8) / 0.13 : 0
+    const fraction = 0.6 + raise * 0.18 - lower * 0.18
+    return posedBase(gltf, root => applyLayer(root, findBones(root), sampleKeys(ARCHER_KEYS, p)), 'Attack', fraction)
+  }
+  const first = frameAt(0)
+  return assemble('shoot', first.source.geometry, first.position.length / 3, 0, t => frameAt(t), first.source.material as THREE.Material)
+}
+
+function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number, propCount: number, deform: (t: number) => { position: Float32Array; normal: Float32Array }, bodyMaterial: THREE.Material, propMaterial?: THREE.Material): StrikeModel {
+  const total = bodyCount + propCount
+  const geometry = new THREE.BufferGeometry()
+  const rest = deform(0)
+  geometry.setAttribute('position', new THREE.BufferAttribute(rest.position, 3))
+  geometry.setAttribute('normal', new THREE.BufferAttribute(rest.normal, 3))
+  const uvSrc = src.getAttribute('uv')
+  if (uvSrc) {
+    const uv = new Float32Array(total * 2)
+    for (let i = 0; i < bodyCount; i += 1) { uv[i * 2] = uvSrc.getX(i); uv[i * 2 + 1] = uvSrc.getY(i) }
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+  }
+  const index: number[] = []
+  if (src.index) for (let i = 0; i < src.index.count; i += 1) index.push(src.index.getX(i))
+  else for (let i = 0; i < bodyCount; i += 1) index.push(i)
+  const bodyIndexCount = index.length
+  for (let i = 0; i < propCount; i += 1) index.push(bodyCount + i)
+  geometry.setIndex(index)
+  geometry.addGroup(0, bodyIndexCount, 0)
+  if (propCount) geometry.addGroup(bodyIndexCount, propCount, 1)
+  const morphPos: THREE.BufferAttribute[] = [], morphNor: THREE.BufferAttribute[] = []
+  for (let f = 1; f < STRIKE_FRAMES; f += 1) {
+    const frame = deform(f / (STRIKE_FRAMES - 1) * 0.999)
+    morphPos.push(new THREE.BufferAttribute(frame.position, 3))
+    morphNor.push(new THREE.BufferAttribute(frame.normal, 3))
+  }
+  geometry.morphAttributes.position = morphPos
+  geometry.morphAttributes.normal = morphNor
+  geometry.computeBoundingSphere()
+  const body = (bodyMaterial as THREE.MeshStandardMaterial).clone()
+  const materials: THREE.Material[] = propMaterial ? [body, propMaterial] : [body]
+  return { kind, geometry, materials, ...STRIKE_TIMING[kind] }
+}
+
+const cache = new Map<ModelName, StrikeModel>()
+/** 모델 하나의 공격 자세 묶음(한 번만 굽는다) */
+export function strikeModel(name: ModelName, gltf: GLTF): StrikeModel {
+  const cached = cache.get(name)
+  if (cached) return cached
+  const spec = SPECS[name]
+  const model = name === 'archer' ? buildArcher(gltf) : spec ? buildFromRig(gltf, spec) : buildFromRig(gltf, { kind: 'slash', bones: [{ name: 'torso', parent: -1, pivot: [0, 1, 0] }], weights: () => [0], keys: [{ t: 0, b: {} }] })
+  cache.set(name, model)
+  return model
+}
+
+/** 공격 진행도(0~1, 범위 밖이면 기본 자세) → 모프 가중치 */
+export function strikeInfluences(progress: number, out: number[]): number[] {
+  out.fill(0)
+  if (!(progress > 0 && progress < 1)) return out
+  const f = progress * (STRIKE_FRAMES - 1)
+  const i = Math.floor(f), a = f - i
+  // 0번 자세는 기본 메시이므로 모프 번호는 하나씩 밀린다
+  if (i >= 1) out[i - 1] = 1 - a
+  if (i + 1 <= STRIKE_FRAMES - 1) out[i] = (out[i] ?? 0) + a
+  return out
+}

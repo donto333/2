@@ -21,6 +21,8 @@ export interface Motion {
   skillType?: SkillType
   /** 돌격 스킬: 앞으로 달려 나가는 거리 */
   dash?: number
+  /** 일반 공격: 무기가 닿거나 화살이 떠나는 순간(초) */
+  hit?: number
 }
 
 /** 공격 동작 시간과 실제로 맞는 순간(초) */
@@ -57,14 +59,17 @@ export function actorPose(motion: Motion | null, hitReact: number, out: Pose): P
     const t = motion.t
     if (motion.kind === 'melee') {
       // 뒤로 당겼다가 → 튀어나가 베고 → 잠시 멈춘 뒤 → 제자리
-      const back = seg(t, 0, 0.14), dash = seg(t, 0.14, MELEE_STRIKE), ret = seg(t, 0.4, MELEE_DURATION)
-      out.z = (0.28 * back) * (1 - dash) + (-1.15 * dash) * (1 - ret)
-      out.tilt = (0.14 * back) * (1 - dash) + (-0.24 * dash) * (1 - ret)
-      out.twist = (-0.35 * back) * (1 - dash) + (0.45 * dash) * (1 - ret)
+      // (팔·무기 동작은 병종별 자세 모프가 맡고, 여기서는 몸 전체의 쏠림만)
+      const hit = motion.hit ?? MELEE_STRIKE
+      const back = seg(t, 0, hit * 0.55), dash = seg(t, hit * 0.55, hit), ret = seg(t, hit + 0.15, motion.dur)
+      out.z = (0.22 * back) * (1 - dash) + (-0.95 * dash) * (1 - ret)
+      out.tilt = (0.08 * back) * (1 - dash) + (-0.12 * dash) * (1 - ret)
+      out.twist = (-0.12 * back) * (1 - dash) + (0.16 * dash) * (1 - ret)
     } else if (motion.kind === 'shoot') {
-      const draw = seg(t, 0, SHOOT_RELEASE), recoil = seg(t, SHOOT_RELEASE, 0.2), ret = seg(t, 0.2, SHOOT_DURATION)
-      out.z = 0.12 * draw * (1 - recoil) + 0.32 * recoil * (1 - ret)
-      out.tilt = 0.06 * draw + 0.1 * recoil * (1 - ret) - 0.06 * draw * recoil
+      const release = motion.hit ?? SHOOT_RELEASE
+      const draw = seg(t, 0, release), recoil = seg(t, release, release + 0.08), ret = seg(t, release + 0.08, motion.dur)
+      out.z = 0.08 * draw * (1 - recoil) + 0.22 * recoil * (1 - ret)
+      out.tilt = 0.04 * draw + 0.07 * recoil * (1 - ret) - 0.04 * draw * recoil
     } else {
       const type = motion.skillType ?? '돌격'
       const windup = seg(t, 0, SKILL_RELEASE)
@@ -301,8 +306,9 @@ export function projectile(from: THREE.Vector3, to: THREE.Vector3, kind: 'arrow'
     halo.scale.setScalar(0.3)
     head.add(coreMesh, halo)
   }
-  const tail = new THREE.Mesh(r.streak, glowMaterial(color, 0.75, r.pillarTex))
-  tail.position.z = 0.8
+  const tail = new THREE.Mesh(r.streak, glowMaterial(color, kind === 'arrow' ? 0.45 : 0.75, r.pillarTex))
+  // 화살은 가늘고 짧은 꼬리, 기탄은 굵은 꼬리
+  if (kind === 'arrow') { tail.scale.set(0.22, 1, 0.32); tail.position.z = 0.3 } else tail.position.z = 0.8
   head.add(tail)
   const motes: THREE.Mesh[] = []
   if (kind !== 'arrow') {

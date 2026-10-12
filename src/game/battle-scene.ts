@@ -166,9 +166,10 @@ export function soldierGeometry(kind: 'infantry' | 'archer' | 'cavalry' | 'pike'
 // ── 부대(무장 주변 병사 대열): 인스턴스 한 번에 그린다 ─────────────
 export interface Squad {
   group: THREE.Group
-  update: (t: number, moving: boolean, attack: number, hit: number, alive: number) => void
-  /** 실사 모델(자세를 굳힌 도형)로 교체: 병사가 커지므로 간격을 넓히고 수를 줄인다 */
-  upgrade: (geometry: THREE.BufferGeometry, material: THREE.Material) => void
+  /** strike: 부대 공격이 시작된 뒤 흐른 시간(초, 공격 중이 아니면 음수) */
+  update: (t: number, moving: boolean, attack: number, hit: number, alive: number, strike?: number) => void
+  /** 실사 모델(병종별 공격 자세를 구운 도형)로 교체: 병사가 커지므로 간격을 넓히고 수를 줄인다 */
+  upgrade: (geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], strikeDuration?: number, frames?: number) => void
 }
 export function createSquad(role: General['role'], team: Team, quality: SceneQuality): Squad {
   const kind = role === '기병' ? 'cavalry' : role === '궁병' ? 'archer' : role === '보병' ? 'pike' : 'infantry'
@@ -190,7 +191,7 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
   let count = base.length
   let yaw = 0
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.18 })
-  let mesh: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material> = new THREE.InstancedMesh(soldierGeometry(kind, team), material, count)
+  let mesh: THREE.InstancedMesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]> = new THREE.InstancedMesh(soldierGeometry(kind, team), material, count)
   mesh.castShadow = quality === 'high'
   mesh.frustumCulled = false
   const tintAll = (target: THREE.InstancedMesh, realistic: boolean) => {
@@ -210,9 +211,27 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
   group.add(mesh)
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), e = new THREE.Euler()
   let bobScale = 1
-  const update = (t: number, moving: boolean, attack: number, hit: number, alive: number) => {
+  // 병종별 공격 자세(모프): 병사마다 조금씩 늦게 시작해 한 몸처럼 보이지 않게 한다
+  let strikeDuration = 0
+  let morphHolder: { morphTargetInfluences: number[] } | null = null
+  const update = (t: number, moving: boolean, attack: number, hit: number, alive: number, strike = -1) => {
     const visible = Math.max(0, Math.min(count, Math.ceil(count * alive)))
     mesh.count = visible
+    if (morphHolder && strikeDuration > 0) {
+      const influences = morphHolder.morphTargetInfluences
+      const frames = influences.length + 1
+      for (let i = 0; i < count; i += 1) {
+        influences.fill(0)
+        const p = strike < 0 ? -1 : (strike - base[i].jitter * 0.22) / strikeDuration
+        if (p > 0 && p < 1) {
+          const f = p * (frames - 1), k = Math.floor(f), a = f - k
+          if (k >= 1) influences[k - 1] = 1 - a
+          if (k <= frames - 2) influences[k] += a
+        }
+        mesh.setMorphAt(i, morphHolder as unknown as THREE.Mesh)
+      }
+      if (mesh.morphTexture) mesh.morphTexture.needsUpdate = true
+    }
     const lunge = Math.sin(Math.min(1, attack) * Math.PI)
     for (let i = 0; i < visible; i += 1) {
       const b = base[i]
@@ -225,7 +244,7 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
     }
     mesh.instanceMatrix.needsUpdate = true
   }
-  const upgrade = (geometry: THREE.BufferGeometry, realMaterial: THREE.Material) => {
+  const upgrade = (geometry: THREE.BufferGeometry, realMaterial: THREE.Material | THREE.Material[], duration = 0, frames = 0) => {
     const cav = kind === 'cavalry'
     const [c2, r2] = quality === 'low' ? (cav ? [2, 1] : [3, 2]) : (cav ? [2, 2] : [4, 3])
     base = cav ? layout(c2, r2, 1.25, 3.0, 0.9, 1.4) : layout(c2, r2, 0.82, 0.86, 0.75, 0.75)
@@ -233,6 +252,8 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
     yaw = Math.PI // 실사 모델은 +Z를 보도록 맞춰 두었다 → 부대 앞(-Z)으로 돌린다
     bobScale = 1.6
     const next = new THREE.InstancedMesh(geometry, realMaterial, count)
+    strikeDuration = duration
+    morphHolder = frames > 1 && geometry.morphAttributes.position?.length ? { morphTargetInfluences: new Array(frames - 1).fill(0) } : null
     next.castShadow = quality === 'high'
     next.frustumCulled = false
     tintAll(next, true)

@@ -8,7 +8,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
-import { AnimatedHero, bakedTroop, heroModelFor, loadModel, troopModelFor } from './battle-models'
+import { AnimatedHero, heroModelFor, strikeModelFor, troopModelFor } from './battle-models'
+import { STRIKE_FRAMES } from './battle-rig'
 import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
 import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
 
@@ -167,6 +168,8 @@ interface BattleUnit {
   glowColor: THREE.Color
   /** 쓰러지는 중(1 → 0) */
   dying: number
+  /** 병사들의 병종별 공격 자세: 시작 뒤 흐른 시간(초, 공격 중이 아니면 음수) */
+  strikeAge: number
 }
 
 interface ArenaEffect {
@@ -201,7 +204,6 @@ export class Arena {
   private winStreak = 0
   private startedAt = 0
   private selectedUnit = 0
-  private lastVolley = -1
   private lastCombatLog = 0
   private disposed = false
   private generals: General[] = []
@@ -358,16 +360,16 @@ export class Arena {
   private attachRealModels(unit: BattleUnit): void {
     const name = heroModelFor(unit.general)
     unit.mounted = name === 'lubu' || name === 'caocao' || name === 'zhugeliang' || name === 'cavalry'
-    void loadModel(name).then(gltf => {
+    void strikeModelFor(name).then(model => {
       if (unit.hero || !unit.group.parent && !this.playerUnits.includes(unit)) return
-      const hero = new AnimatedHero(gltf)
+      const hero = new AnimatedHero(model)
       hero.root.rotation.y = Math.PI // 모델은 +Z를 본다 → 부대 앞(-Z)으로
       hero.root.scale.setScalar(1.18) // 무장은 병사보다 한눈에 띄게 조금 크게
       unit.actor.add(hero.root)
       unit.rig.root.visible = false
       unit.hero = hero
     }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
-    void bakedTroop(troopModelFor(unit.general.role)).then(baked => unit.squadCtl.upgrade(baked.geometry, baked.material)).catch(() => {})
+    void strikeModelFor(troopModelFor(unit.general.role)).then(model => unit.squadCtl.upgrade(model.geometry, model.materials, model.duration, STRIKE_FRAMES)).catch(() => {})
   }
 
   private clearUnits(): void {
@@ -532,44 +534,6 @@ export class Arena {
     })
   }
 
-  /** 화살 일제 사격: 짧은 화살들이 포물선을 그리며 적진에 떨어진다 */
-  private spawnArrowVolley(): void {
-    const archers = this.playerUnits.filter(unit => unit.troops > 0)
-    if (!archers.length || !this.enemyUnits.length) return
-    const arrowGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.7, 4)
-    arrowGeo.rotateX(Math.PI / 2)
-    const material = new THREE.MeshBasicMaterial({ color: 0xffe2a8, transparent: true, opacity: 0.95 })
-    const group = new THREE.Group()
-    const arrows: Array<{ mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; delay: number }> = []
-    for (let i = 0; i < 14; i += 1) {
-      const shooter = archers[i % archers.length]
-      const target = this.enemyUnits[i % this.enemyUnits.length]
-      const from = shooter.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2.4, 1.4, 1.2 + Math.random()))
-      const to = target.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2.6, 0.2, -0.6 - Math.random() * 1.8))
-      const mesh = new THREE.Mesh(arrowGeo, material)
-      mesh.visible = false
-      group.add(mesh)
-      arrows.push({ mesh, from, to, delay: Math.random() * 0.25 })
-    }
-    const prev = new THREE.Vector3(), cur = new THREE.Vector3()
-    const at = (a: typeof arrows[number], k: number, out: THREE.Vector3) => out.lerpVectors(a.from, a.to, k).setY(THREE.MathUtils.lerp(a.from.y, a.to.y, k) + Math.sin(k * Math.PI) * 4.2)
-    this.addEffect({
-      object: group, age: 0, life: 1.35,
-      tick: effect => {
-        for (const a of arrows) {
-          const k = (effect.age - a.delay) / 1.0
-          if (k <= 0 || k >= 1) { a.mesh.visible = false; continue }
-          a.mesh.visible = true
-          at(a, k, cur); at(a, Math.max(0, k - 0.03), prev)
-          a.mesh.position.copy(cur)
-          a.mesh.lookAt(cur.clone().add(cur.clone().sub(prev)))
-        }
-        if (effect.age > 1.05 && effect.age - 0.02 <= 1.05) this.spawnImpact(this.enemyUnits[0].group.position.clone(), 18, 0xf6c56d)
-      },
-      dispose: () => { arrowGeo.dispose(); material.dispose() },
-    })
-  }
-
   private skillColor(general: General): number {
     if (general.id === 'zhou-yu' || general.role === '궁병') return 0xff8a4c
     if (general.id === 'zhuge-liang' || general.role === '책사') return 0x72c9ff
@@ -628,7 +592,6 @@ export class Arena {
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()
-    this.lastVolley = -1
     this.lastCombatLog = 0
     this.enemyWarning = null
     this.logLines.splice(0)
@@ -782,8 +745,8 @@ export class Arena {
     }
   }
 
-  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying'> {
-    return { actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0 }
+  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge'> {
+    return { actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0, strikeAge: -1 }
   }
 
   private fx(effect: Fx): void {
@@ -831,28 +794,52 @@ export class Arena {
   /** 일반 공격: 근접은 튀어나가 베고, 궁병은 화살·책사는 기탄을 날린다 */
   private playAttack(unit: BattleUnit, side: 'player' | 'enemy', targetLane: number): void {
     unit.attackMotion = 1
-    if (unit.motion?.kind === 'skill') return // 스킬 동작 중에는 끊지 않는다
     const target = this.unitAt(side === 'player' ? 'enemy' : 'player', targetLane)
+    // 병사들: 병종별 공격 자세(창 찌르기 · 말 위 검격 · 활쏘기). 한창 휘두르는 중이면 끊지 않는다
+    if (unit.strikeAge < 0 || unit.strikeAge > 0.7) {
+      unit.strikeAge = 0
+      if (unit.general.role === '궁병' && target) this.troopVolley(unit, target, side)
+    }
+    if (unit.motion?.kind === 'skill') return // 스킬 동작 중에는 끊지 않는다
     const color = side === 'player' ? 0x9ff5e2 : 0xffa27a
     const ranged = this.isRanged(unit.general)
     unit.hero?.playOnce('Attack')
     if (!ranged || !target) {
-      unit.motion = { kind: 'melee', t: 0, dur: MELEE_DURATION }
-      this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(MELEE_STRIKE) }
-      const flip = Math.random() < 0.5
-      this.fx(this.later(MELEE_STRIKE, () => {
-        this.fx(slashArc(this.frontOf(unit, 1.7, 1.2), this.facing(unit), color, unit.mounted ? 1.8 : 1.5, flip))
+      const hit = unit.hero?.hitTime ?? MELEE_STRIKE
+      unit.motion = { kind: 'melee', t: 0, dur: Math.max(MELEE_DURATION, hit + 0.32), hit }
+      this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(hit) }
+      const flip = unit.hero?.kind === 'slash' ? false : Math.random() < 0.5
+      this.fx(this.later(hit - 0.03, () => {
+        // 찌르기는 짧고 곧은 궤적, 베기는 크게 휘는 궤적
+        const thrust = unit.hero?.kind === 'thrust'
+        this.fx(slashArc(this.frontOf(unit, thrust ? 2.0 : 1.7, thrust ? 1.45 : 1.3), this.facing(unit), color, thrust ? 1.1 : unit.mounted ? 1.8 : 1.5, flip, thrust ? 0.05 : 0.55))
       }))
       return
     }
-    unit.motion = { kind: 'shoot', t: 0, dur: SHOOT_DURATION }
+    const release = unit.hero?.hitTime ?? SHOOT_RELEASE
+    unit.motion = { kind: 'shoot', t: 0, dur: Math.max(SHOOT_DURATION, release + 0.3), hit: release }
     const flight = ranged === 'arrow' ? 0.34 : 0.42
-    this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(SHOOT_RELEASE) + flight }
-    this.fx(this.later(SHOOT_RELEASE, () => {
+    this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(release) + flight }
+    this.fx(this.later(release, () => {
       const from = this.frontOf(unit, 0.8, ranged === 'arrow' ? 1.7 : 1.9)
       const to = target.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 1, 0))
       this.fx(projectile(from, to, ranged, ranged === 'orb' ? (side === 'player' ? 0x72c9ff : 0xc56bff) : color, flight, () => {}))
     }))
+  }
+
+  /** 궁병 부대: 병사들이 시위를 놓는 순간에 맞춰 화살이 날아간다 */
+  private troopVolley(unit: BattleUnit, target: BattleUnit, side: 'player' | 'enemy'): void {
+    const color = side === 'player' ? 0xffe2a8 : 0xffb48a
+    const release = 0.6 // 궁병 자세에서 시위를 놓는 순간(초)
+    for (let i = 0; i < 5; i += 1) {
+      const delay = release + Math.random() * 0.2
+      this.fx(this.later(delay, () => {
+        if (unit.troops <= 0) return
+        const from = this.frontOf(unit, 0.6 + Math.random() * 1.2, 1.6).add(new THREE.Vector3((Math.random() - 0.5) * 2.6, 0, 0))
+        const to = target.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2.4, 0.3, (Math.random() - 0.5) * 1.6))
+        this.fx(projectile(from, to, 'arrow', color, 0.55 + Math.random() * 0.1, () => {}, 1.8))
+      }))
+    }
   }
 
   /** 스킬: 기 모으기(슬로모션·카메라 당김) → 종류별 발동 */
@@ -992,9 +979,10 @@ export class Arena {
     unit.skillPulse = Math.max(0, unit.skillPulse - delta * 1.1)
     unit.hitFlash = Math.max(0, unit.hitFlash - delta)
     unit.group.position.y = 0
-    unit.squadCtl.update(elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.hitReact, unit.troops / Math.max(1, unit.maxTroops))
-    // 몸 전체 동작: 공격 돌진 · 스킬 기 모으기/돌격 · 피격 젖힘
     const actionDelta = this.paused ? 0 : delta * this.speed
+    if (unit.strikeAge >= 0) { unit.strikeAge += actionDelta; if (unit.strikeAge > 2.2) unit.strikeAge = -1 }
+    unit.squadCtl.update(elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.hitReact, unit.troops / Math.max(1, unit.maxTroops), unit.strikeAge)
+    // 몸 전체 동작: 공격 돌진 · 스킬 기 모으기/돌격 · 피격 젖힘
     if (unit.motion) {
       unit.motion.t += actionDelta
       if (unit.motion.t >= unit.motion.dur) unit.motion = null
@@ -1138,10 +1126,6 @@ export class Arena {
       remaining -= step
     }
     this.drainCore()
-    if (this.core.t - this.lastVolley > 1.85) {
-      this.lastVolley = this.core.t
-      this.spawnArrowVolley()
-    }
   }
 
   private updateCamera(delta: number): void {
