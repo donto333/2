@@ -131,6 +131,7 @@ function persistLocalGame(): void {
       equipmentLoadouts: state.equipmentLoadouts,
       selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
       mythicFragments: state.mythicFragments,
+      mythicStones: state.mythicStones,
       duelAttemptsToday: state.duelAttemptsToday,
       duelDayKey: state.duelDayKey,
       prelaunchGoldDayKey: state.prelaunchGoldDayKey,
@@ -172,6 +173,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       equipmentLoadouts: saved.equipmentLoadouts,
       selectedEquipmentGeneralId: saved.selectedEquipmentGeneralId,
       mythicFragments: saved.mythicFragments,
+      mythicStones: saved.mythicStones,
       duelAttemptsToday: saved.duelAttemptsToday,
       duelDayKey: saved.duelDayKey,
       prelaunchGoldDayKey: saved.prelaunchGoldDayKey,
@@ -353,6 +355,7 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
     writePendingTerritoryBattles(remaining)
     const snapshots = await ManusAuth.query('territory.list') as FactionTerritorySnapshot[]
     const merged = mergeFactionTerritories(state, snapshots)
+    await claimLuoyangReward()
     persistLocalGame()
     ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
     ui.render(state)
@@ -360,6 +363,28 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
   } catch {
     ui.setTerritorySync('서버 원장 연결 대기')
     if (notify) ui.notify('서버 원장 연결이 지연되고 있습니다. 로컬 작전 결과는 보존되며 다시 시도합니다.', 'jade')
+  }
+}
+
+/**
+ * 주간 낙양전 보상: 서버가 승리 진영 유저에게 지급하고 보상 주차를 기록한다.
+ * 서버 주차가 이 기기에서 아는 주차와 다르면 새 보상이므로 금화·낙양 상자·낙양 강화석을 반영한다.
+ */
+async function claimLuoyangReward(): Promise<void> {
+  if (authView.status !== 'authenticated') return
+  try {
+    const reward = await ManusAuth.query('account.luoyangReward') as { weekKey: string | null; reward: number }
+    if (!reward.weekKey || reward.weekKey === state.luoyangRewardWeekKey) return
+    const gold = Math.max(0, Math.trunc(reward.reward ?? 0))
+    state.luoyangRewardWeekKey = reward.weekKey
+    state.lastLuoyangReward = gold
+    state.gold += gold
+    state.luoyangBoxes += 1
+    state.mythicStones += 1
+    queueAccountSave(true)
+    ui.notify(`낙양전 승리 보상 · 금화 ${gold}개 · 낙양 상자 1개 · 낙양 강화석 1개 (신화장비 강화 1회)`, 'jade')
+  } catch {
+    // 연결이 끊겨도 서버가 주차를 지키므로 다음 동기화 때 다시 받는다.
   }
 }
 
@@ -1067,7 +1092,7 @@ async function refreshAccount(): Promise<void> {
   const requestGeneration = authGeneration
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; mythicStones?: number; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null }
     // 계정이 바뀐 동안 도착한 이전 계정 응답은 현재 상태에 적용하지 않는다.
     if (requestGeneration !== authGeneration || authView.status !== 'authenticated') return
     {
@@ -1093,6 +1118,7 @@ async function refreshAccount(): Promise<void> {
       if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
       if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
       state.mythicFragments = Math.max(0, Math.trunc(game.mythicFragments ?? 0))
+      state.mythicStones = Math.max(0, Math.trunc(game.mythicStones ?? 0))
       state.duelAttemptsToday = Math.max(0, Math.trunc(game.duelAttemptsToday ?? state.duelAttemptsToday))
       if (typeof game.duelDayKey === 'string') state.duelDayKey = game.duelDayKey
       if (typeof game.prelaunchGoldDayKey === 'string') state.prelaunchGoldDayKey = game.prelaunchGoldDayKey
@@ -1158,6 +1184,7 @@ function accountStatePayload() {
     equipmentLoadoutsData: JSON.stringify(state.equipmentLoadouts),
     selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
     mythicFragments: saveInt(state.mythicFragments),
+    mythicStones: saveInt(state.mythicStones),
     duelAttemptsToday: saveInt(state.duelAttemptsToday, 5),
     duelDayKey: state.duelDayKey,
     prelaunchGoldDayKey: state.prelaunchGoldDayKey,

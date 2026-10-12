@@ -665,3 +665,9 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 }
 @media (max-width:560px){.research-grid--five{grid-template-columns:1fr}}
 .page-section--research .section-counter span{white-space:nowrap}
+
+/* 낙양 강화석: 신화장비 강화 */
+.mini-action--mythic{color:#f6c56d;border-color:rgba(246,197,109,.55);background:linear-gradient(120deg,rgba(120,60,140,.35),rgba(60,30,20,.4))}
+.mini-action--mythic:disabled{opacity:.5}
+.mythic-stone-note{margin-top:6px;color:#e8c98a;font-size:12.5px}
+.mythic-stone-note b{color:#f6c56d;font-size:14px}

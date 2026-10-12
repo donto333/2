@@ -67,6 +67,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
   lastLuoyangReward: int("lastLuoyangReward"),
   luoyangRewardWeekKey: varchar("luoyangRewardWeekKey", { length: 16 }),
   mythicFragments: int("mythicFragments").default(0).notNull(),
+  mythicStones: int("mythicStones").default(0).notNull(),
   duelAttemptsToday: int("duelAttemptsToday").default(0).notNull(),
   duelDayKey: varchar("duelDayKey", { length: 16 }),
   prelaunchGoldDayKey: varchar("prelaunchGoldDayKey", { length: 16 }),
@@ -484,9 +485,18 @@ async function grantLuoyangBox(db, userId, now = Date.now()) {
     const account = rows[0];
     if (!account || account.faction !== settlement.winnerFaction || account.luoyangRewardWeekKey === settlement.weekKey) return false;
     const reward = 10 + Math.floor(Math.random() * 91);
-    await tx.update(gameAccountStates).set({ luoyangBoxes: sql`${gameAccountStates.luoyangBoxes} + 1`, lastLuoyangReward: reward, gold: sql`${gameAccountStates.gold} + ${reward}`, luoyangRewardWeekKey: settlement.weekKey }).where(eq(gameAccountStates.userId, userId));
+    await tx.update(gameAccountStates).set({ luoyangBoxes: sql`${gameAccountStates.luoyangBoxes} + 1`, mythicStones: sql`${gameAccountStates.mythicStones} + 1`, lastLuoyangReward: reward, gold: sql`${gameAccountStates.gold} + ${reward}`, luoyangRewardWeekKey: settlement.weekKey }).where(eq(gameAccountStates.userId, userId));
     return true;
   });
+}
+/** 낙양 주간 보상 확인: 지급 대상이면 지급하고, 현재 보상 주차와 금액을 돌려준다(클라이언트가 반영) */
+async function getLuoyangReward(userId) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await ensureFactionTerritories(db);
+  await grantLuoyangBox(db, userId);
+  const rows = await db.select({ weekKey: gameAccountStates.luoyangRewardWeekKey, reward: gameAccountStates.lastLuoyangReward }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
+  return { weekKey: rows[0]?.weekKey ?? null, reward: rows[0]?.reward ?? 0 };
 }
 async function getFactionTerritories(userId) {
   const db = await getDb();
@@ -637,9 +647,11 @@ async function listDuelOpponents(viewerId, limit = 12) {
     };
   }).filter(Boolean).sort((left, right) => right.score - left.score).slice(0, Math.max(1, Math.min(50, limit)));
 }
-async function updateGameState(userId, values) {
+async function updateGameState(userId, input) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  // 낙양 보상 주차는 서버만 정한다: 클라이언트가 옛 주차로 덮어써 보상이 두 번 나가지 않게 한다.
+  const { luoyangRewardWeekKey: _ignoredWeekKey, ...values } = input;
   await db.insert(gameAccountStates).values({ userId, ...values }).onDuplicateKeyUpdate({ set: values });
   // The client already owns the canonical state. Avoid a second full-row read
   // (including large JSON inventories) after every write.
@@ -1165,6 +1177,7 @@ export {
   getDb,
   getGameState,
   getFactionTerritories,
+  getLuoyangReward,
   listDuelOpponents,
   listGameStates,
   listUsers,

@@ -221,6 +221,8 @@ export interface StrategyState {
   selectedEquipmentGeneralId: string
   lastEquipmentDraw: Equipment[]
   mythicFragments: number
+  /** 낙양 강화석: 주간 낙양전 승리 진영 유저에게 주 1개. 신화장비 강화는 이것으로만(1개 = 1회) */
+  mythicStones: number
   duelAttemptsToday: number
   duelDayKey: string
   prelaunchGoldDayKey: string
@@ -829,7 +831,7 @@ export function createInitialState(): StrategyState {
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 7, battleScore: 18460,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, luoyangBoxes: 0, lastLuoyangReward: undefined, luoyangRewardWeekKey: undefined, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
-    equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '', scenarioCleared: [],
+    equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, mythicStones: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '', scenarioCleared: [],
   }
   ensurePrelaunchDailyGold(state)
   ensureCityGarrisons(state)
@@ -983,6 +985,7 @@ export function ensureEquipmentState(state: StrategyState): void {
   if (!state.selectedEquipmentGeneralId || !state.generals.some(general => general.id === state.selectedEquipmentGeneralId)) state.selectedEquipmentGeneralId = state.generals[0]?.id ?? ''
   if (!Array.isArray(state.lastEquipmentDraw)) state.lastEquipmentDraw = []
   if (typeof state.mythicFragments !== 'number') state.mythicFragments = 0
+  if (typeof state.mythicStones !== 'number' || !Number.isFinite(state.mythicStones)) state.mythicStones = 0
   ensureDuelDailyState(state)
 }
 
@@ -1098,6 +1101,9 @@ export function equipmentPower(state: StrategyState, generalId: string): number 
   return Math.round(bonus.leadership * 1.15 + bonus.martial * 1.25 + bonus.stratagem * 0.9 + bonus.speed * 0.65)
 }
 
+/** 신화장비 강화 1회에 드는 낙양 강화석 */
+export const MYTHIC_STONE_COST = 1
+
 export function equipmentCost(item: Equipment, state?: StrategyState): Partial<Record<ResourceKey, number>> {
   const cut = 1 - (state ? researchMods(state).enhanceCost : 0)
   return { silver: Math.round((420 + item.level * 260) * cut), iron: Math.round((100 + item.level * 75) * cut) }
@@ -1108,8 +1114,14 @@ export function enhanceEquipment(state: StrategyState, id: string): UpgradeResul
   const item = state.equipmentInventory.find(candidate => candidate.id === id)
   if (!item) return { ok: false, message: '장비를 찾을 수 없습니다.' }
   if (item.level >= 20) return { ok: false, message: '장비가 이미 최고 강화 레벨입니다.' }
-  const cost = equipmentCost(item, state)
-  if (!spendResources(state, cost)) return { ok: false, message: `강화 재화가 부족합니다. 은전 ${formatNumber(cost.silver ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요` }
+  if (item.grade === 'mythic') {
+    // 신화장비는 은전·철로 강화할 수 없고, 낙양 강화석 1개로 1회 강화한다.
+    if (state.mythicStones < MYTHIC_STONE_COST) return { ok: false, message: '낙양 강화석이 없습니다. 신화장비는 낙양 강화석으로만 강화할 수 있습니다(낙양 점령 1회당 1개).' }
+    state.mythicStones -= MYTHIC_STONE_COST
+  } else {
+    const cost = equipmentCost(item, state)
+    if (!spendResources(state, cost)) return { ok: false, message: `강화 재화가 부족합니다. 은전 ${formatNumber(cost.silver ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요` }
+  }
   const quantity = item.quantity ?? 1
   if (quantity > 1) {
     item.quantity = quantity - 1
@@ -1119,7 +1131,7 @@ export function enhanceEquipment(state: StrategyState, id: string): UpgradeResul
     return { ok: true, message: state.lastNotice }
   }
   item.level += 1
-  state.lastNotice = `${item.name} 강화 완료 · Lv.${item.level} · ${item.mainStat} +${equipmentValue(item)}`
+  state.lastNotice = `${item.name} 강화 완료 · Lv.${item.level} · ${item.mainStat} +${equipmentValue(item)}${item.grade === 'mythic' ? ` · 낙양 강화석 남은 ${state.mythicStones}개` : ''}`
   return { ok: true, message: state.lastNotice }
 }
 

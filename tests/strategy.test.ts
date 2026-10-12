@@ -368,3 +368,25 @@ describe('commander attributes', () => {
   })
 
 })
+
+describe('mythic enhancement with Luoyang stones', () => {
+  it('enhances mythic equipment only with Luoyang stones, one stone per level', () => {
+    const state = createInitialState()
+    const mythic = { ...MYTHIC_SHOP_EQUIPMENT[0], id: 'test-mythic-stone', level: 0, quantity: 1 }
+    state.equipmentInventory.push(mythic)
+    state.silver = 9_999_999
+    state.resources.silver = state.silver
+    state.resources.iron = 9_999_999
+    state.mythicStones = 0
+    const silverBefore = state.silver
+    expect(enhanceEquipment(state, mythic.id).ok).toBe(false)
+    expect(mythic.level).toBe(0)
+    expect(state.silver).toBe(silverBefore)
+    state.mythicStones = 1
+    expect(enhanceEquipment(state, mythic.id).ok).toBe(true)
+    expect(mythic.level).toBe(1)
+    expect(state.mythicStones).toBe(0)
+    expect(state.silver).toBe(silverBefore)
+    expect(enhanceEquipment(state, mythic.id).ok).toBe(false)
+  })
+})
