@@ -51,7 +51,7 @@ export const BATTLE_RULES = {
   timeWarnAt: 20,
 }
 
-export interface PatternDef { id: string; label: string; lanes: number[]; kind: 'lane' | 'pincer' | 'guard'; minPhase: number; warning: string }
+export interface PatternDef { id: string; label: string; lanes: number[]; kind: 'lane' | 'pincer' | 'guard' | 'hold'; minPhase: number; warning: string }
 
 export const PATTERNS: PatternDef[] = [
   { id: 'left-flank', label: '좌익 포위', lanes: [0], kind: 'lane', minPhase: 0, warning: '좌측 협공 예고 · 좌측 무장으로 끊어내십시오.' },
@@ -59,6 +59,8 @@ export const PATTERNS: PatternDef[] = [
   { id: 'right-feint', label: '우익 유인', lanes: [2], kind: 'lane', minPhase: 0, warning: '우측에 빈틈 · 우측 무장으로 연계를 만드십시오.' },
   { id: 'crossfire', label: '십자 포화', lanes: [1], kind: 'lane', minPhase: 0, warning: '전방 포화 · 중앙을 고정해 진형을 보존하십시오.' },
   { id: 'pincer', label: '양익 협공', lanes: [0, 2], kind: 'pincer', minPhase: 1, warning: '양 날개 동시 공격 · 좌측과 우측 무장 모두 대응하십시오.' },
+  { id: 'feigned-retreat', label: '거짓 후퇴', lanes: [], kind: 'hold', minPhase: 1, warning: '적이 물러나는 척합니다 · 아무 버튼도 누르지 말고 기다리십시오.' },
+  { id: 'full-assault', label: '전면 공세', lanes: [0, 1, 2], kind: 'pincer', minPhase: 2, warning: '세 방면 동시 공세 · 좌·중·우 무장을 모두 누르십시오.' },
   { id: 'general-charge', label: '적장 돌격', lanes: [1], kind: 'guard', minPhase: 2, warning: '적장이 직접 돌격합니다 · 철벽 태세로만 막을 수 있습니다.' },
 ]
 
@@ -98,6 +100,7 @@ export type CoreEvent =
   | { kind: 'enemySkillWarn'; lane: number; name: string }
   | { kind: 'collapse'; count: number }
   | { kind: 'timeWarn'; left: number }
+  | { kind: 'counter'; lane: number; name: string }
   | { kind: 'unitDown'; side: Side; lane: number }
   | { kind: 'end'; result: BattleResult }
 
@@ -576,6 +579,8 @@ export class BattleCore {
   private expirePattern(): void {
     const open = this.pattern
     if (!open || open.judged || this.t < open.deadline) return
+    // 거짓 후퇴는 끝까지 참으면 파훼
+    if (open.def.kind === 'hold') return this.resolvePattern(true, -1, '침착 대응')
     open.judged = true
     this.combo = 0
     this.lastCommandFailed = true
@@ -593,6 +598,8 @@ export class BattleCore {
     if (!open || open.judged) return
     if (open.def.kind === 'lane') return this.resolvePattern(open.def.lanes.includes(lane), lane)
     if (open.def.kind === 'guard') return this.resolvePattern(false, lane)
+    // 거짓 후퇴: 쫓아가면(버튼을 누르면) 걸려든다
+    if (open.def.kind === 'hold') return this.resolvePattern(false, lane)
     if (!open.def.lanes.includes(lane)) return this.resolvePattern(false, lane)
     open.inputs.add(lane)
     if (open.def.lanes.every(required => open.inputs.has(required))) this.resolvePattern(true, lane, '양익 대응')
@@ -739,6 +746,17 @@ export class BattleCore {
     this.firstSkillUsed = true
     this.lastSkillId = unit.general.id
     if (stripped) notes.unshift(`적 강화 ${stripped}개 제거`)
+    // 스킬 카운터: 같은 레인 적장이 스킬을 예고 중이면 공격형 스킬로 끊어 낸다
+    const foe = this.enemies[lane]
+    if (foe && foe.warned && foe.troops > 0 && (unit.def.type === '돌격' || unit.def.type === '사격' || unit.def.type === '계략')) {
+      foe.warned = false
+      foe.cd = foe.cdMax * 0.5
+      this.combo = Math.min(8, this.combo + 1)
+      this.maxCombo = Math.max(this.maxCombo, this.combo)
+      this.drainMorale(10)
+      notes.push(`「${foe.def.active.name}」 차단 · 적 사기 −10`)
+      this.events.push({ kind: 'counter', lane, name: foe.def.active.name })
+    }
     // 치유·수호형도 승리에 이바지하도록: 쓰면 연계 +1과 작은 사기 피해(군심 고양)
     if (unit.def.type === '치유' || unit.def.type === '수호') {
       this.combo = Math.min(8, this.combo + 1)
@@ -831,7 +849,7 @@ export class BattleCore {
       if (!unit.warned && unit.cd <= BATTLE_RULES.enemySkillWarning + (this.research.enemyWarn ?? 0)) {
         unit.warned = true
         this.events.push({ kind: 'enemySkillWarn', lane: unit.lane, name: unit.def.active.name })
-        this.log(`적장 스킬 예고 · ${unit.general.name}의 「${unit.def.active.name}」 · 철벽 태세로 막으십시오`, 'ember')
+        this.log(`적장 스킬 예고 · ${unit.general.name}의 「${unit.def.active.name}」 · 철벽 태세로 막거나, 같은 레인 무장의 스킬로 끊으십시오`, 'ember')
       }
       if (unit.cd > 0) continue
       unit.cd = unit.cdMax
@@ -952,7 +970,10 @@ export class BattleCore {
     const open = this.pattern
     if (open && !open.judged && this.t >= open.reactAt) {
       const correct = this.rng() < pilot.accuracy
-      if (open.def.kind === 'guard') {
+      if (open.def.kind === 'hold') {
+        if (!correct) this.command(1)
+        open.reactAt = Number.POSITIVE_INFINITY // 참기로 했으면 다시 판단하지 않는다
+      } else if (open.def.kind === 'guard') {
         if (correct && this.gauge >= this.tacticCost('guard')) this.useTactic('guard')
         else if (!correct) this.command(0)
       } else if (correct) open.def.lanes.forEach(lane => this.command(lane))

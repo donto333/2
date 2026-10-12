@@ -778,3 +778,4 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .tutorial-reward .mini-action{flex:0 0 auto;min-width:96px}
 [data-bt-time].is-urgent{color:#ff8a6a !important;font-weight:700;animation:bt-urgent 1s ease-in-out infinite}
 @keyframes bt-urgent{50%{opacity:.55}}
+[data-bt-callout].is-hold{border-color:rgba(160,200,255,.7) !important;box-shadow:0 0 18px rgba(140,190,255,.35)}

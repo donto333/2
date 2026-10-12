@@ -47,7 +47,7 @@ export interface BattleUnitStatus {
 export interface BattlePatternStatus {
   label: string
   lanes: number[]
-  kind: 'lane' | 'pincer' | 'guard'
+  kind: 'lane' | 'pincer' | 'guard' | 'hold'
   warning: string
   timeLeft: number
   window: number
@@ -184,6 +184,10 @@ interface ArenaEffect {
 }
 
 const ease = (k: number) => k * k * (3 - 2 * k)
+/** 맞붙는 선: 아군·적 무장 사이 최소 간격(말 길이와 돌진 거리를 감안) */
+const PLAYER_LINE_Z = -1.6
+const ENEMY_LINE_Z = -6.0
+const MIN_LINE_GAP = 3.6
 const jade = 0x52e0c4
 const ember = 0xff8066
 type TroopType = 'cavalry' | 'spearmen' | 'archer'
@@ -288,7 +292,7 @@ export class Arena {
       const built = this.createUnit(general, jade, positions[index] ?? positions[0])
       const group = built.group
       const maxTroops = this.troopCapacity(general)
-      const status = this.createTroopStatus(jade)
+      const status = this.createTroopStatus(jade, general)
       group.add(status.group)
       const unit: BattleUnit = { group, squad: built.squad.group, model: built.rig.root, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false, ...this.motionFields(built.actor) }
       this.attachRealModels(unit)
@@ -317,6 +321,38 @@ export class Arena {
   }
 
   /** 기술 연구(강병·지략) 보정: 다음 전투부터 적용 */
+  /**
+   * 측면 지원: 한쪽 부대가 무너지면 그 레인의 상대 부대가 가장 가까운 살아 있는 적 레인 쪽으로 옮겨 가 협공한다.
+   * (전투 계산은 이미 살아 있는 적을 노리므로 화면만 맞춘다)
+   */
+  private laneSupport(fallenSide: 'player' | 'enemy', lane: number): void {
+    const movers = fallenSide === 'enemy' ? this.playerUnits : this.enemyUnits
+    const foes = fallenSide === 'enemy' ? this.enemyUnits : this.playerUnits
+    const mover = movers[lane]
+    if (!mover || mover.troops <= 0) return
+    const alive = foes.map((unit, index) => ({ unit, index })).filter(entry => entry.index !== lane && entry.unit.troops > 0 && entry.unit.dying <= 0)
+    if (!alive.length) return
+    alive.sort((a, b) => Math.abs(a.index - lane) - Math.abs(b.index - lane))
+    const goal = alive[0].unit
+    mover.target.x = THREE.MathUtils.lerp(mover.target.x, goal.target.x, 0.55)
+    mover.target.z += fallenSide === 'enemy' ? -0.6 : 0.6
+    this.keepLineGap()
+    if (fallenSide === 'enemy') this.floatText(mover.group.position.clone().add(new THREE.Vector3(0, 3.4, 0)), '측면 지원!', '#ffd27a', 0.9)
+  }
+
+  /** 같은 레인의 아군·적 부대가 서로 파고들지 않도록 최소 간격을 지킨다 */
+  private keepLineGap(): void {
+    this.playerUnits.forEach((unit, lane) => {
+      const foe = this.enemyUnits[lane]
+      if (!foe) return
+      const gap = unit.target.z - foe.target.z
+      if (gap >= MIN_LINE_GAP) return
+      const push = (MIN_LINE_GAP - gap) / 2
+      unit.target.z += push
+      foe.target.z -= push
+    })
+  }
+
   /** 결과 화면용: 같은 레인 적장과의 병종 상성 유리·불리 레인 수 */
   matchupSummary(): { adv: number; dis: number } {
     let adv = 0, dis = 0
@@ -428,16 +464,26 @@ export class Arena {
     this.commandMarker = null
   }
 
-  private createTroopStatus(color: number): { group: THREE.Group; fill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> } {
+  private createTroopStatus(color: number, general?: General): { group: THREE.Group; fill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> } {
     const group = new THREE.Group()
     group.position.set(0, 3.9, 0)
     group.renderOrder = 8
-    const background = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.11), new THREE.MeshBasicMaterial({ color: 0x1c120c, transparent: true, opacity: 0.78, depthTest: false, depthWrite: false }))
-    const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.065), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.96, depthTest: false, depthWrite: false }))
+    // 병력 막대: 휴대폰에서도 보이게 두껍게, 진영 색을 또렷하게
+    const background = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.24), new THREE.MeshBasicMaterial({ color: 0x120a06, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false }))
+    const fillGeometry = new THREE.PlaneGeometry(1.9, 0.16)
+    fillGeometry.translate(0.95, 0, 0) // 왼쪽 끝을 기준으로 줄어들게
+    const fill = new THREE.Mesh(fillGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1, depthTest: false, depthWrite: false }))
     background.position.z = 0.02
-    fill.position.set(-0.79, 0, 0.03)
+    fill.position.set(-0.95, 0, 0.03)
     fill.scale.x = 1
     group.add(background, fill)
+    // 이름표: 무장 이름 · 병종(항상 카메라를 본다)
+    if (general) {
+      const tag = this.makeTextSprite(`${general.name} · ${general.role}`, color === ember ? '#ffb39c' : '#bff3e4', 0.62)
+      tag.position.set(0, 0.42, 0.04)
+      tag.renderOrder = 9
+      group.add(tag)
+    }
     return { group, fill }
   }
 
@@ -485,14 +531,14 @@ export class Arena {
     return sprite
   }
 
-  private spawnImpact(position: THREE.Vector3, damage: number, color = 0xf6c56d): void {
+  private spawnImpact(position: THREE.Vector3, damage: number, color = 0xf6c56d, showNumber = true): void {
     const group = new THREE.Group()
     const intensity = Math.min(1.65, 0.82 + damage / 180)
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.72, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
     const innerRing = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.3, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
     ring.rotation.x = -Math.PI / 2
     innerRing.rotation.x = -Math.PI / 2
-    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.98, blending: THREE.AdditiveBlending, depthWrite: false }))
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }))
     flash.position.y = 0.7
     const shards: THREE.Mesh[] = []
     for (let index = 0; index < 8; index += 1) {
@@ -505,9 +551,9 @@ export class Arena {
     }
     group.add(ring, innerRing, flash)
     group.position.copy(position)
-    const label = this.makeTextSprite(`-${damage}`, color === 0x4cdfff ? '#8deaff' : '#ffe5a4', 1.15)
-    label.position.set(0, 1.35, 0)
-    group.add(label)
+    // 숫자는 큰 타격·스킬에만(모든 타격에 띄우면 화면이 어지럽다)
+    const label = showNumber ? this.makeTextSprite(`-${damage}`, color === 0x4cdfff ? '#8deaff' : '#ffe5a4', 1.15) : null
+    if (label) { label.position.set(0, 1.35, 0); group.add(label) }
     this.addEffect({
       object: group,
       age: 0,
@@ -518,28 +564,26 @@ export class Arena {
         ring.material.opacity = 0.95 * (1 - progress)
         innerRing.scale.setScalar(1 + progress * 3.6 * intensity)
         innerRing.material.opacity = 0.9 * (1 - progress * 1.15)
-        flash.scale.setScalar(1 + progress * 2.5 * intensity)
-        flash.material.opacity = 0.98 * (1 - progress)
+        flash.scale.setScalar(1 + progress * 1.3 * intensity)
+        flash.material.opacity = 0.55 * (1 - progress)
         shards.forEach(shard => {
           shard.position.addScaledVector(shard.userData.velocity as THREE.Vector3, delta)
           shard.rotation.x += delta * 8
           shard.rotation.y += delta * 11
           ;(shard.material as THREE.MeshBasicMaterial).opacity = 0.92 * (1 - progress)
         })
-        label.position.y = 1.35 + progress * 1.2
-        label.material.opacity = 1 - progress
+        if (label) { label.position.y = 1.35 + progress * 1.2; label.material.opacity = 1 - progress }
         group.rotation.y += delta * 3
       },
       dispose: () => {
+        // 타격마다 만든 도형·재질을 모두 버린다(전투가 길어져도 메모리가 쌓이지 않게)
         group.traverse(node => {
-          const material = (node as THREE.Mesh).material
-          if (material && !Array.isArray(material)) {
-            material.dispose()
-          }
+          const mesh = node as THREE.Mesh
+          if (mesh.isMesh) mesh.geometry.dispose()
+          const material = mesh.material
+          if (material && !Array.isArray(material)) material.dispose()
         })
-        const spriteMaterial = label.material as THREE.SpriteMaterial
-        spriteMaterial.map?.dispose()
-        spriteMaterial.dispose()
+        if (label) { label.material.map?.dispose(); label.material.dispose() }
       },
     })
   }
@@ -650,7 +694,8 @@ export class Arena {
       const group = built.group
       group.rotation.y = Math.PI
       const maxTroops = this.core!.enemies[index]?.maxTroops ?? this.troopCapacity(general)
-      const status = this.createTroopStatus(ember)
+      const status = this.createTroopStatus(ember, general)
+      status.group.rotation.y = Math.PI // 적 부대는 반대로 돌아 있으므로 막대가 카메라를 보게 되돌린다
       group.add(status.group)
       this.enemyUnits.push({ group, squad: built.squad.group, model: built.rig.root, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false, ...this.motionFields(built.actor) })
       this.attachRealModels(this.enemyUnits[this.enemyUnits.length - 1])
@@ -667,9 +712,9 @@ export class Arena {
       unit.squad.position.y = 0
       unit.hero?.setFade(0)
       unit.statusFill.scale.x = 1
-      unit.target.set(-4.4 + index * 4.4, 0, -2.6 - index * 0.15)
+      unit.target.set(-4.4 + index * 4.4, 0, PLAYER_LINE_Z - index * 0.15)
     })
-    this.enemyUnits.forEach((unit, index) => unit.target.set(-4.4 + index * 4.4, 0, -5.1 - index * 0.15))
+    this.enemyUnits.forEach((unit, index) => unit.target.set(-4.4 + index * 4.4, 0, ENEMY_LINE_Z - index * 0.15))
     this.playerUnits.forEach((unit, index) => this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, 0.7)), index % 2 ? 0xa4a08a : 0xb68f70))
     this.enemyUnits.forEach((unit, index) => this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, -0.7)), index % 2 ? 0xa4a08a : 0xb68f70))
     this.drainCore()
@@ -682,6 +727,9 @@ export class Arena {
     const unit = this.playerUnits[index]
     if (unit && unit.troops > 0) {
       const target = new THREE.Vector3(-5 + index * 5, 0, -1 - index * 1.2)
+      // 기동해도 적 부대에 파고들지 않게 맞붙는 선 앞에서 멈춘다
+      const foe = this.enemyUnits[index]
+      if (foe) target.z = Math.max(target.z, foe.target.z + MIN_LINE_GAP)
       unit.target.copy(target)
       if (!this.commandMarker) {
         this.commandMarker = this.createMarker(0xf6c56d)
@@ -745,7 +793,7 @@ export class Arena {
         break
       }
       case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) this.playAttack(unit, event.side, event.target); break }
-      case 'heal': { const unit = this.unitAt(event.side, event.lane); if (unit && event.amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(event.amount), 0x7be3a2); break }
+      case 'heal': { const unit = this.unitAt(event.side, event.lane); if (unit && event.amount >= 60) this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 2.6, 0)), `+${Math.round(event.amount)}`, '#8fe3b0', 0.8); break }
       case 'skill': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
@@ -756,6 +804,8 @@ export class Arena {
       }
       case 'enemySkillWarn': {
         const unit = this.unitAt('enemy', event.lane)
+        // 예고된 적장 발밑에 붉은 경고 원(예고 시간 동안)
+        if (unit) this.fx(groundCircle(unit.group.position, 0xff3b2a, 3.2, BATTLE_RULES.enemySkillWarning + (core.research.enemyWarn ?? 0) + 0.3, -2.2))
         this.enemyWarning = { name: event.name, general: unit?.general.name ?? '적장', until: core.t + BATTLE_RULES.enemySkillWarning + (core.research.enemyWarn ?? 0) + 0.2 }
         break
       }
@@ -769,8 +819,20 @@ export class Arena {
         const closing = event.phase === 1 ? 0.8 : 1.35
         this.playerUnits.forEach((unit, index) => { unit.target.z -= closing + index * 0.08 })
         this.enemyUnits.forEach((unit, index) => { unit.target.z += closing + index * 0.08 })
+        this.keepLineGap()
         this.spawnDustCloud(new THREE.Vector3(0, 0, -3.9), 0xb9a17c)
         this.cameraShake = Math.min(0.48, this.cameraShake + 0.1)
+        break
+      }
+      case 'counter': {
+        const foe = this.unitAt('enemy', event.lane)
+        if (foe) {
+          const at = foe.group.position.clone()
+          this.floatText(at.clone().add(new THREE.Vector3(0, 3.4, 0)), '차단!', '#9ff5e2', 1.3)
+          this.fx(shockwave(at, 0x9ff5e2, 3, 0.6))
+          this.hitStop = Math.max(this.hitStop, 0.08)
+          foe.hitReact = 1
+        }
         break
       }
       case 'timeWarn':
@@ -783,6 +845,7 @@ export class Arena {
       case 'unitDown': {
         const unit = this.unitAt(event.side, event.lane)
         if (unit) { unit.dying = 1; unit.motion = null; this.addEffect(shockwave(unit.group.position.clone(), 0xb9a17c, 2.2, 0.7)) }
+        if (unit) this.laneSupport(event.side, event.lane)
         break
       }
       case 'end': {
@@ -856,7 +919,7 @@ export class Arena {
   private showHit(unit: BattleUnit, side: 'player' | 'enemy', amount: number, edge?: 'adv' | 'dis'): void {
     if (unit.dying > 0 && unit.troops <= 0) return
     // 병종 상성: 유리하면 "상성 우위"가 뜨고 더 세게 흔들린다(같은 무장 위에는 3.5초에 한 번)
-    if (edge && this.clock.getElapsed() - (this.edgeShownAt.get(unit) ?? -99) > 3.5) {
+    if (edge === 'adv' && this.clock.getElapsed() - (this.edgeShownAt.get(unit) ?? -99) > 3.5) {
       this.edgeShownAt.set(unit, this.clock.getElapsed())
       this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 3.1, 0)), edge === 'adv' ? '상성 우위!' : '상성 열세', edge === 'adv' ? '#ffd27a' : '#b9c2c9', edge === 'adv' ? 1.05 : 0.8)
       if (edge === 'adv') { this.cameraShake = Math.min(0.62, this.cameraShake + 0.08); unit.hitReact = Math.min(1, unit.hitReact + 0.25) }
@@ -867,7 +930,7 @@ export class Arena {
     this.cameraShake = Math.min(0.62, this.cameraShake + (amount >= 160 ? 0.18 : 0.06))
     if (amount >= 160) this.hitStop = Math.max(this.hitStop, 0.06)
     if (!this.reducedFx) this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, amount >= 120 ? 1.3 : 0.9))
-    if (amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember)
+    if (amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember, amount >= Math.max(120, unit.maxTroops * 0.05) || edge === 'adv')
   }
 
   /** 일반 공격: 근접은 튀어나가 베고, 궁병은 화살·책사는 기탄을 날린다 */

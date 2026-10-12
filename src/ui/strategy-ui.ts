@@ -548,6 +548,7 @@ export class StrategyUI {
     const callout = q('[data-bt-callout]')
     callout?.classList.toggle('is-open', Boolean(pattern))
     callout?.classList.toggle('is-guard', pattern?.kind === 'guard')
+    callout?.classList.toggle('is-hold', pattern?.kind === 'hold')
     set('[data-bt-pattern]', pattern ? pattern.label : snapshot.active ? '다음 예고 대기' : '전투 시작 전')
     set('[data-bt-warning]', pattern ? pattern.warning : snapshot.active ? '적이 움직임을 준비합니다.' : '적 전술 예고가 뜨면 같은 레인의 무장 버튼을 누르십시오.')
     width('[data-bt-window]', pattern ? pattern.timeLeft / pattern.window * 100 : 0)
@@ -555,7 +556,7 @@ export class StrategyUI {
     const warn = q('[data-bt-enemy-warn]')
     if (warn) {
       warn.hidden = !snapshot.enemyWarning
-      if (snapshot.enemyWarning) warn.textContent = `적장 스킬 예고 · ${snapshot.enemyWarning.general}의 「${snapshot.enemyWarning.name}」 · 철벽 태세로 막으십시오`
+      if (snapshot.enemyWarning) warn.textContent = `적장 스킬 예고 · ${snapshot.enemyWarning.general}의 「${snapshot.enemyWarning.name}」 · 철벽 태세로 막거나 같은 레인 무장의 스킬로 끊으십시오`
     }
     section.classList.toggle('is-enemy-warning', Boolean(snapshot.enemyWarning))
     snapshot.units.forEach(unit => {
