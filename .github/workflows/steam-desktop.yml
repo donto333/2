@@ -1,0 +1,67 @@
+name: Steam 데스크톱 빌드 (Windows)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: pnpm 준비
+        run: corepack enable
+
+      - name: 웹 게임 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: 타입 검사
+        run: pnpm typecheck
+
+      - name: 테스트
+        # 테스트가 실패해도 빌드 결과는 받아볼 수 있게 하되, 실행 기록에는 실패로 표시된다.
+        continue-on-error: true
+        run: pnpm test
+
+      - name: 웹 게임 빌드
+        run: pnpm run manus:build-source
+
+      - name: 데스크톱 의존성 설치
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+
+      - name: 웹 게임을 데스크톱 앱에 복사
+        working-directory: desktop
+        run: npm run copy-web
+
+      - name: Windows 실행 파일 패키징
+        working-directory: desktop
+        run: npm run dist:win
+
+      - name: 빌드 결과 확인
+        shell: pwsh
+        working-directory: desktop/release/win-unpacked
+        run: |
+          foreach ($f in 'Cheonha.exe', 'cheonharo.config.json', 'resources/app.asar') {
+            if (-not (Test-Path $f)) { throw "누락: $f" }
+          }
+          $dll = Get-ChildItem -Recurse -Filter steam_api64.dll -Path resources
+          if (-not $dll) { throw '누락: steam_api64.dll (steamworks.js)' }
+          Get-ChildItem | Format-Table Name, Length
+
+      - name: Steam 업로드용 폴더 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: cheonha-steam-windows-x64
+          path: desktop/release/win-unpacked
+          retention-days: 30

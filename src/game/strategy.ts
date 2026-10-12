@@ -672,6 +672,12 @@ const EXPANSION_SPECS: ExpansionSpec[] = [
   ['diao-chan', '초선', '폐월의 연환 미혹', '책사', 4, '연환 미혹', '적 지휘관을 혼란시켜 다음 행동을 지연한다.', '초'],
   ['cai-wenji', '채문희', '문희의 호가 귀환', '책사', 2, '호가 귀환', '전투 기록을 되살려 아군 사기를 회복한다.', '채'],
   ['da-qiao', '대교', '강동의 옥련', '궁병', 3, '옥련의 가호', '아군 장수의 스킬 재사용 대기시간을 줄인다.', '대'],
+  // 황건적 (donto333/1에서 가져옴: 이름·등급·병종·초상화가 같다)
+  ['zhang-jiao', '장각', '천공장군의 황천 개벽', '책사', 5, '태평요술', '', '각'],
+  ['zhang-bo', '장보', '지공장군의 부적 계략', '책사', 4, '부적 계략', '', '보'],
+  ['zhang-liang', '장량', '인공장군의 황건 선봉', '보병', 4, '황건 선봉', '', '량'],
+  ['guan-hai', '관해', '황건의 백파 맹장', '보병', 3, '백파 격돌', '', '관'],
+  ['zhou-cang', '주창', '황건을 거친 충직한 장수', '기병', 3, '황건 추격', '', '주'],
 ]
 
 function makeExpansionGeneral([id, name, epithet, role, grade, skillName, skillDescription, portrait]: ExpansionSpec): General {
@@ -686,7 +692,48 @@ function makeExpansionGeneral([id, name, epithet, role, grade, skillName, skillD
 }
 
 const EXPANSION_GENERALS = EXPANSION_SPECS.map(makeExpansionGeneral)
-const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS]
+// 스킬 이름·설명은 skills.ts(스킬 재구성안)가 단일 원본이다.
+const withSkillText = (general: General): General => {
+  const def = GENERAL_SKILLS[general.id]
+  return def ? { ...general, skillName: def.active.name, skillDescription: def.active.desc } : general
+}
+const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText)
+
+/** 도감(Lv1) 원형. 성장 전 능력치가 필요한 스킬 공식에서 쓴다. */
+export function templateGeneral(id: string): General | undefined {
+  const found = LIBRARY.find(general => general.id === id)
+  return found ? { ...found } : undefined
+}
+
+/** 적 무장 성장: 아군 강화·성급 상승과 같은 공식으로 능력치를 올린다. */
+export function scaleGeneral(general: General, level: number, stars: number): General {
+  const scaled = { ...general }
+  const targetStars = Math.max(1, Math.min(5, Math.trunc(stars)))
+  const targetLevel = Math.max(1, Math.trunc(level))
+  for (let star = scaled.stars + 1; star <= targetStars; star += 1) {
+    scaled.attack += 4 + star; scaled.defense += 3 + Math.floor(star / 2); scaled.command += 3 + Math.floor(star / 2)
+    scaled.leadership += 3 + star; scaled.martial += 4 + star; scaled.stratagem += 2 + Math.floor(star / 2); scaled.speed += 2 + Math.floor(star / 2)
+  }
+  scaled.stars = Math.max(scaled.stars, targetStars)
+  scaled.skillRank = scaled.stars
+  for (let next = scaled.level + 1; next <= targetLevel; next += 1) {
+    scaled.attack += 6 + scaled.stars; scaled.defense += 4 + Math.floor(scaled.stars / 2); scaled.command += 3; scaled.leadership += 3
+    scaled.martial += 6 + scaled.stars; scaled.stratagem += 2; scaled.speed += 2
+  }
+  scaled.level = Math.max(scaled.level, targetLevel)
+  scaled.skillUnlocked = scaled.level >= skillUnlockLevel(scaled)
+  return scaled
+}
+
+/** 저장된 무장의 스킬 이름·설명을 현재 정의에 맞춘다(각성 이름 포함). */
+export function syncGeneralSkills(state: StrategyState): void {
+  state.generals.forEach(general => {
+    const def = GENERAL_SKILLS[general.id]
+    if (!def) return
+    general.skillName = activeSkillName(general)
+    general.skillDescription = isAwakened(general) && def.awaken ? `${def.active.desc} · 각성: ${def.awaken.desc}` : def.active.desc
+  })
+}
 
 function copyGeneral(general: General): General {
   return { ...general }
@@ -905,84 +952,45 @@ export function skillRank(general: General): number {
   return general.skillRank ?? Math.max(1, general.stars)
 }
 
+/** 스킬 1회 사기 피해(버프·인연 제외, 상한 40 적용). 스킬 재구성안의 공식. */
 export function skillPower(general: General): number {
-  const basePower = general.skillPower ?? 100
-  const progression = (skillRank(general) - 1) * 18 + Math.max(0, general.level - 10) * 3
-  return Math.round((basePower + progression) * GRADE_POWER_MULTIPLIER[general.grade])
+  const template = templateGeneral(general.id)
+  return Math.round(Math.min(SKILL_MORALE_CAP, baseMoraleDamage(general, template ?? general)) * 10) / 10
 }
 
 export interface GeneralSkillDetail {
   category: '공격' | '버프' | '디버프' | '정화·치료' | '방어·제어'
+  type: SkillType
   trigger: string
   target: string
   effect: string
   duration: string
   cooldown: string
+  passive: string
+  awaken: string
+  weakness: string
 }
 
+const TYPE_CATEGORY: Record<SkillType, GeneralSkillDetail['category']> = { 돌격: '공격', 사격: '공격', 계략: '디버프', 통솔: '버프', 수호: '방어·제어', 치유: '정화·치료' }
+const TYPE_TARGET: Record<SkillType, string> = { 돌격: '같은 레인의 적(없으면 앞의 적)', 사격: '병력 비율이 가장 낮은 적', 계략: '적 전체', 통솔: '아군 전체', 수호: '아군', 치유: '아군' }
+
 export function skillDetail(general: General): GeneralSkillDetail {
+  const def = skillDefFor(general.id, general.role, general.skillName, general.skillDescription)
+  const template = templateGeneral(general.id) ?? general
   const power = skillPower(general)
-  const rank = skillRank(general)
-  const cooldown = `${Math.max(8, 20 - rank * 2)}초`
-  const cleanseIds = new Set(['zhuge-liang', 'liu-bei', 'da-qiao', 'lu-su', 'xu-shu'])
-  const debuffIds = new Set(['guan-yu', 'lu-bu', 'zhou-yu', 'huang-zhong', 'jia-xu', 'pang-tong', 'gan-ning', 'taishi-ci'])
-  const buffIds = new Set(['zhao-yun', 'zhuge-liang', 'liu-bei', 'da-qiao', 'lu-su', 'xu-shu', 'wen-ping'])
-  const category: GeneralSkillDetail['category'] = cleanseIds.has(general.id) ? '정화·치료' : debuffIds.has(general.id) ? '디버프' : buffIds.has(general.id) ? '버프' : general.role === '보병' ? '방어·제어' : '공격'
-  if (category === '정화·치료') return {
-    category,
-    trigger: '아군에게 상태이상 발생 또는 체력 70% 이하',
-    target: '아군 전체와 자신',
-    effect: `${general.skillName} · 상태이상 2개 치료 · 회복력 ${Math.round(power / 3)} · 사기 +${Math.round(power / 10)}`,
-    duration: `${5 + rank}초 동안 제어 저항 +${10 + rank * 3}%`,
-    cooldown,
-  }
-  if (category === '버프') return {
-    category,
-    trigger: general.role === '책사' ? '전술 게이지 50% 이상 또는 전술 명령 직후' : '전투 시작 후 2초 또는 아군 위기 시',
-    target: general.role === '책사' ? '아군 전체' : '자신과 전방 아군',
-    effect: `${general.skillName} · 공격·전술 능력 +${Math.round(power / 7)}% · 상태이상 저항 +${10 + rank * 2}%`,
-    duration: `${5 + rank}초`,
-    cooldown,
-  }
-  if (category === '디버프') return {
-    category,
-    trigger: general.role === '궁병' ? '후열 조준 완료 또는 체력이 낮은 적 포착' : '돌격 명령 또는 연계 2회 달성',
-    target: general.role === '궁병' ? '체력이 가장 낮은 적' : '전방 적과 인접 적',
-    effect: `${general.skillName} · 적 방어·행동력 -${Math.round(power / 8)}% · 받는 피해 +${Math.min(30, 10 + rank * 3)}%`,
-    duration: `${4 + rank}초`,
-    cooldown,
-  }
-  if (general.role === '기병') return {
-    category,
-    trigger: '전투 시작 후 2초 또는 돌격 명령',
-    target: '전방 적 1명과 인접 적',
-    effect: `${general.skillName} · 주 대상 피해 ${power}% · 주변 적 사기 -${Math.round(power / 8)}`,
-    duration: '즉시 피해 · 사기 약화 5초',
-    cooldown,
-  }
-  if (general.role === '궁병') return {
-    category,
-    trigger: '후열 배치 후 3초마다 자동 조준',
-    target: '현재 체력이 가장 낮은 적',
-    effect: `${general.skillName} · 원거리 피해 ${power}% · 치명타 확률 +${Math.min(35, 12 + rank * 3)}%`,
-    duration: '피해 즉시 · 치명타 보정 4초',
-    cooldown,
-  }
-  if (general.role === '책사') return {
-    category,
-    trigger: '전술 게이지 50% 이상 또는 전술 명령 직후',
-    target: '아군 전체와 적 전열',
-    effect: `${general.skillName} · 아군 전술 위력 +${Math.round(power / 7)}% · 적 행동력 -${Math.round(power / 10)}`,
-    duration: `${5 + rank}초`,
-    cooldown,
-  }
+  const awakened = isAwakened(general)
+  const unlock = general.grade >= 3 ? 3 : 0
   return {
-    category,
-    trigger: '아군 병력 70% 이하 또는 중앙 돌파 명령',
-    target: '자신과 전방 아군',
-    effect: `${general.skillName} · 피해 감소 ${Math.min(45, 18 + rank * 4)}% · 적 위협 +${Math.round(power / 9)}`,
-    duration: `${4 + rank}초`,
-    cooldown,
+    category: TYPE_CATEGORY[def.type],
+    type: def.type,
+    trigger: '무장 버튼을 길게 눌러 발동 (무장별 쿨다운)',
+    target: TYPE_TARGET[def.type],
+    effect: `${activeSkillName(general)} · ${def.active.desc}${SKILL_TYPE_META[def.type].base > 0 ? ` · 적 사기 −${power}` : ''}${awakened && def.awaken ? ` · 각성: ${def.awaken.desc}` : ''}`,
+    duration: `${def.type} 유형 · ${SKILL_TYPE_META[def.type].label}${general.stars >= 4 ? ' · 효과 지속 +1초' : ''}`,
+    cooldown: `${skillCooldownFor(general, template)}초`,
+    passive: def.passive ? `${def.passive.name} — ${def.passive.desc}${unlock && general.stars < unlock ? ' (3성에서 열림)' : ''}` : '',
+    awaken: def.awaken ? `${def.awaken.name} — ${def.awaken.desc}${awakened ? '' : ' (5성 각성)'}` : '',
+    weakness: def.weakness?.desc ?? '',
   }
 }
 
@@ -991,6 +999,7 @@ export function totalPower(state: StrategyState): number {
 }
 
 export function ensureEquipmentState(state: StrategyState): void {
+  syncGeneralSkills(state)
   if (!Array.isArray(state.equipmentInventory)) state.equipmentInventory = starterEquipment()
   state.equipmentInventory.forEach(item => {
     item.quantity = Math.max(1, Math.trunc(item.quantity ?? 1))
@@ -1701,4 +1710,115 @@ export function unlockResearch(state: StrategyState, id: string): { ok: boolean;
 
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat('ko-KR').format(value)
+}
+
+// ── 자동 편성 · 자동 장착 ──────────────────────────────────────────
+
+const EQUIPMENT_TYPES: EquipmentType[] = ['weapon', 'armor', 'accessory']
+
+/** 무장에게 맞는 능력치 가중치: 기본 전투력 공식에 스킬 주 능력치를 20% 더 얹는다. */
+function statWeights(general: General): Record<EquipmentStat, number> {
+  const weights: Record<EquipmentStat, number> = { leadership: 1.15, martial: 1.25, stratagem: 0.9, speed: 0.65 }
+  const stat = SKILL_TYPE_META[skillDefFor(general.id, general.role).type].stat
+  weights[stat] *= 1.2
+  return weights
+}
+
+/** 장비 묶음(최대 3개)의 가치: 주 능력치·특성·세트 효과를 equipmentBonus와 같은 규칙으로 계산 */
+function loadoutScore(items: Equipment[], weights: Record<EquipmentStat, number>): number {
+  const bonus: Record<EquipmentStat, number> = { leadership: 0, martial: 0, stratagem: 0, speed: 0 }
+  const sets: Partial<Record<EquipmentSet, number>> = {}
+  items.forEach(item => {
+    bonus[item.mainStat] += equipmentValue(item)
+    const specialty = equipmentSpecialty(item)
+    if (specialty) bonus[specialty.stat] += specialty.value
+    sets[item.set] = (sets[item.set] ?? 0) + 1
+  })
+  ;(Object.entries(sets) as Array<[EquipmentSet, number]>).forEach(([set, count]) => {
+    if (count >= 2) bonus[EQUIPMENT_SET_META[set].stat] += 10
+    if (count >= 3) bonus[EQUIPMENT_SET_META[set].stat] += 8
+  })
+  return (Object.keys(bonus) as EquipmentStat[]).reduce((sum, stat) => sum + bonus[stat] * weights[stat], 0)
+}
+
+export interface AutoResult extends UpgradeResult { changed: number }
+
+/**
+ * 자동 장착: 출전 무장(전투력 높은 순)부터 슬롯별 후보 상위 6개를 모두 조합해 가장 좋은 묶음을 고른다.
+ * 출전하지 않은 무장이 끼고 있던 장비도 가져올 수 있다. 한 장비는 한 무장만 낀다.
+ */
+export function autoEquip(state: StrategyState, generalIds: string[] = state.formation): AutoResult {
+  ensureEquipmentState(state)
+  const targets = generalIds.map(id => findGeneral(state, id)).filter((general): general is General => Boolean(general))
+    .sort((left, right) => combatPower(right) - combatPower(left))
+  if (!targets.length) return { ok: false, message: '장비를 장착할 출전 무장이 없습니다.', changed: 0 }
+  if (!state.equipmentInventory.length) return { ok: false, message: '보유한 장비가 없습니다. 모집·장비에서 장비를 얻으십시오.', changed: 0 }
+  const targetIds = new Set(targets.map(general => general.id))
+  // 다른 무장(비출전)이 낀 장비는 후보에 넣되, 출전 무장끼리는 이번 계산 결과로 다시 나눈다.
+  const used = new Set<string>()
+  let changed = 0
+  const before = JSON.stringify(targets.map(general => state.equipmentLoadouts[general.id] ?? {}))
+  targets.forEach(general => {
+    const weights = statWeights(general)
+    const pool = state.equipmentInventory.filter(item => !used.has(item.id))
+    const bySlot = EQUIPMENT_TYPES.map(type => [undefined, ...pool.filter(item => item.type === type)
+      .sort((left, right) => loadoutScore([right], weights) - loadoutScore([left], weights)).slice(0, 6)])
+    let best: Array<Equipment | undefined> = [undefined, undefined, undefined]
+    let bestScore = -1
+    for (const weapon of bySlot[0]) for (const armor of bySlot[1]) for (const accessory of bySlot[2]) {
+      const items = [weapon, armor, accessory].filter((item): item is Equipment => Boolean(item))
+      const score = loadoutScore(items, weights)
+      if (score > bestScore) { bestScore = score; best = [weapon, armor, accessory] }
+    }
+    const loadout: Partial<Record<EquipmentType, string>> = {}
+    best.forEach((item, index) => {
+      if (!item) return
+      used.add(item.id)
+      loadout[EQUIPMENT_TYPES[index]] = item.id
+    })
+    // 이 장비를 끼고 있던 비출전 무장에게서는 뺀다.
+    Object.entries(state.equipmentLoadouts).forEach(([ownerId, owned]) => {
+      if (targetIds.has(ownerId)) return
+      EQUIPMENT_TYPES.forEach(type => { if (owned[type] && used.has(owned[type]!)) delete owned[type] })
+    })
+    state.equipmentLoadouts[general.id] = loadout
+  })
+  const after = JSON.stringify(targets.map(general => state.equipmentLoadouts[general.id] ?? {}))
+  if (before !== after) changed = targets.length
+  const power = targets.reduce((sum, general) => sum + equipmentPower(state, general.id), 0)
+  state.lastNotice = changed
+    ? `자동 장착 완료 · 출전 무장 ${targets.length}명에게 가장 좋은 장비 조합을 장착했습니다 (장비 전투력 합계 ${formatNumber(power)})`
+    : '이미 가장 좋은 장비를 장착하고 있습니다.'
+  return { ok: true, message: state.lastNotice, changed }
+}
+
+/**
+ * 자동 편성: 전투력 상위 10명 안에서 3명 조합을 모두 따져
+ * 전투력 합 × (인연 +8%) × (병종이 다양할수록 +3%씩)이 가장 높은 조합을 고른다.
+ * 레인은 가운데에 방어·통솔이 높은 무장, 좌우에 나머지를 둔다(적은 같은 레인의 아군을 먼저 친다).
+ */
+export function autoFormation(state: StrategyState): AutoResult {
+  if (state.generals.length === 0) return { ok: false, message: '보유한 무장이 없습니다.', changed: 0 }
+  const power = (general: General) => combatPower(general) + equipmentPower(state, general.id)
+  const pool = [...state.generals].sort((left, right) => power(right) - power(left)).slice(0, 10)
+  const size = Math.min(3, pool.length)
+  let best: General[] = pool.slice(0, size)
+  let bestScore = -1
+  const consider = (combo: General[]) => {
+    const ids = combo.map(general => general.id)
+    const roles = new Set(combo.map(general => general.role)).size
+    const score = combo.reduce((sum, general) => sum + power(general), 0) * (bondFor(ids) ? 1.08 : 1) * (1 + 0.03 * Math.max(0, roles - 1))
+    if (score > bestScore) { bestScore = score; best = combo }
+  }
+  if (size < 3) consider(pool.slice(0, size))
+  else for (let a = 0; a < pool.length; a += 1) for (let b = a + 1; b < pool.length; b += 1) for (let c = b + 1; c < pool.length; c += 1) consider([pool[a], pool[b], pool[c]])
+  const tank = [...best].sort((left, right) => (right.defense + right.leadership) - (left.defense + left.leadership))[0]
+  const flanks = best.filter(general => general !== tank).sort((left, right) => power(right) - power(left))
+  const ordered = best.length === 3 ? [flanks[0], tank, flanks[1]] : best
+  const next = ordered.map(general => general.id)
+  const changed = next.join() !== state.formation.join() ? 1 : 0
+  state.formation = next
+  const bond = bondFor(next)
+  state.lastNotice = `자동 편성 완료 · ${ordered.map(general => general.name).join(' · ')}${bond ? ` · 인연 「${bond.name}」` : ''} · 편성 전투력 ${formatNumber(totalPower(state))}`
+  return { ok: true, message: state.lastNotice, changed }
 }

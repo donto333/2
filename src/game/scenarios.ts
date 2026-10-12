@@ -109,3 +109,55 @@ export function scenarioById(id: string): ScenarioDefinition | undefined {
 export function firstClearReward(scenario: ScenarioDefinition, clearedIds: readonly string[]): ScenarioReward | null {
   return clearedIds.includes(scenario.id) ? null : scenario.reward
 }
+
+// ── 시나리오 적 덱 (전투 개선안 · 촉 시점 기준, 위·오는 같은 사건의 반대편) ──
+type FactionKey = '촉한' | '위나라' | '오나라'
+interface EnemyPlan { levels: [number, number]; deck: Record<FactionKey, string[]>; byYear?: Record<number, Partial<Record<FactionKey, string[]>>> }
+const YELLOW_TURBANS = ['zhang-jiao', 'zhang-bo', 'zhang-liang']
+const YELLOW_VANGUARD = ['zhang-liang', 'guan-hai', 'zhou-cang']
+const DONG_ZHUO = ['dong-zhuo', 'lu-bu', 'gao-shun']
+const same = (deck: string[]): Record<FactionKey, string[]> => ({ 촉한: deck, 위나라: deck, 오나라: deck })
+
+const ENEMY_PLANS: EnemyPlan[] = [
+  { levels: [1, 8], deck: same(DONG_ZHUO), byYear: { 184: same(YELLOW_VANGUARD), 185: same(YELLOW_TURBANS), 186: same(YELLOW_TURBANS), 187: same(['zhang-bo', 'zhang-liang', 'guan-hai']), 188: same(YELLOW_TURBANS), 189: same(YELLOW_TURBANS) } },
+  { levels: [8, 14], deck: { 촉한: ['lu-bu', 'chen-gong', 'gao-shun'], 위나라: ['lu-bu', 'chen-gong', 'gao-shun'], 오나라: ['yuan-shu', 'wen-ping', 'song-xian'] }, byYear: { 197: same(['yuan-shu', 'wen-ping', 'song-xian']) } },
+  { levels: [14, 20], deck: same(['yuan-shao', 'yan-liang', 'wen-chou']) },
+  { levels: [20, 26], deck: { 촉한: ['cao-cao', 'cao-ren', 'zhang-liao'], 위나라: ['zhou-yu', 'huang-gai', 'zhuge-liang'], 오나라: ['cao-cao', 'cao-ren', 'zhang-liao'] }, byYear: { 211: same(['ma-chao', 'ma-teng', 'han-sui']) } },
+  { levels: [26, 32], deck: { 촉한: ['zhang-he', 'xu-huang', 'cao-hong'], 위나라: ['huang-zhong', 'fa-zheng', 'zhao-yun'], 오나라: ['zhang-liao', 'yue-jin', 'li-dian'] }, byYear: { 215: { 촉한: ['zhang-liao', 'yue-jin', 'li-dian'], 위나라: ['sun-quan', 'gan-ning', 'ling-tong'] } } },
+  { levels: [32, 38], deck: { 촉한: ['lu-xun', 'lu-meng', 'gan-ning'], 위나라: ['guan-yu', 'guan-ping', 'zhang-bao'], 오나라: ['liu-bei', 'guan-xing', 'zhang-bao'] }, byYear: { 225: same(['meng-huo', 'zhu-rong', 'guan-hai']) } },
+  { levels: [38, 44], deck: { 촉한: ['simayi', 'zhang-he', 'xu-huang'], 위나라: ['zhuge-liang', 'zhao-yun', 'wei-yan'], 오나라: ['simayi', 'zhang-he', 'xu-huang'] } },
+  { levels: [44, 50], deck: { 촉한: ['simayi', 'zhang-he', 'yu-jin'], 위나라: ['wei-yan', 'wang-ping', 'guan-xing'], 오나라: ['simayi', 'zhang-he', 'yu-jin'] } },
+]
+
+export function scenarioEnemyIds(scenario: ScenarioDefinition, faction: string): string[] {
+  const plan = ENEMY_PLANS[scenario.chapterIndex] ?? ENEMY_PLANS[0]
+  const key: FactionKey = faction === '위나라' || faction === '오나라' ? faction : '촉한'
+  return plan.byYear?.[scenario.year]?.[key] ?? plan.deck[key]
+}
+
+/** 장 안에서 뒤 사건일수록 높아지는 적 평균 레벨 */
+export function scenarioEnemyLevel(scenario: ScenarioDefinition): number {
+  const [low, high] = (ENEMY_PLANS[scenario.chapterIndex] ?? ENEMY_PLANS[0]).levels
+  const span = Math.max(1, scenario.entryCount - 1)
+  return Math.round(low + (high - low) * scenario.entryIndex / span)
+}
+
+// ── 별 기록: scenarioCleared 목록 안에 'stars:<별>:<id>'로 함께 저장한다(DB 변경 없음) ──
+const STAR_PREFIX = 'stars:'
+export function scenarioStars(cleared: readonly string[], id: string): number {
+  const entry = cleared.find(item => item.startsWith(STAR_PREFIX) && item.endsWith(`:${id}`))
+  return entry ? Number(entry.split(':')[1]) || 0 : 0
+}
+
+export function recordScenarioStars(cleared: string[], id: string, stars: number): boolean {
+  const best = scenarioStars(cleared, id)
+  if (stars <= best) return false
+  const index = cleared.findIndex(item => item.startsWith(STAR_PREFIX) && item.endsWith(`:${id}`))
+  if (index >= 0) cleared.splice(index, 1)
+  cleared.push(`${STAR_PREFIX}${Math.min(3, stars)}:${id}`)
+  return true
+}
+
+export function clearedScenarioCount(cleared: readonly string[]): number {
+  return cleared.filter(item => !item.startsWith(STAR_PREFIX)).length
+}

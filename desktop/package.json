@@ -1,0 +1,54 @@
+{
+  "name": "cheonharo-desktop",
+  "version": "0.1.0",
+  "description": "천하: 패왕의 시대 Steam 데스크톱 클라이언트",
+  "private": true,
+  "main": "main.cjs",
+  "author": "donto333",
+  "scripts": {
+    "copy-web": "node scripts/copy-web.mjs",
+    "start": "electron .",
+    "start:offline": "electron . --offline",
+    "dist:win": "electron-builder --win dir --x64 --publish never",
+    "dist:linux": "electron-builder --linux dir --x64 --publish never"
+  },
+  "dependencies": {
+    "steamworks.js": "^0.4.0"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.donto333.cheonharo",
+    "productName": "Cheonha",
+    "executableName": "Cheonha",
+    "copyright": "Copyright © 2026 donto333",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "steam.cjs",
+      "browser-login.cjs",
+      "cheonharo.config.json",
+      "steam-achievements.json",
+      "build/icon.png",
+      "app/**/*",
+      "package.json"
+    ],
+    "extraFiles": [
+      { "from": "cheonharo.config.json", "to": "cheonharo.config.json" }
+    ],
+    "asar": true,
+    "asarUnpack": ["node_modules/steamworks.js/**/*"],
+    "win": {
+      "target": [{ "target": "dir", "arch": ["x64"] }],
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": [{ "target": "dir", "arch": ["x64"] }],
+      "icon": "build/icon.png",
+      "category": "Game"
+    }
+  }
+}

@@ -1,26 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { BATTLE_EFFECTS, effectLoadout, hasBattleEffect, type ActiveBattleEffect } from '../src/game/battle-effects'
+import { BATTLE_EFFECTS, effectValue, hasBattleEffect, type ActiveBattleEffect } from '../src/game/battle-effects'
 
 describe('battle effect catalog', () => {
-  it('contains exactly ten buffs and ten debuffs', () => {
+  it('describes every effect with a positive duration', () => {
     const definitions = Object.values(BATTLE_EFFECTS)
-    expect(definitions.filter(effect => effect.kind === 'buff')).toHaveLength(10)
-    expect(definitions.filter(effect => effect.kind === 'debuff')).toHaveLength(10)
+    expect(definitions.length).toBeGreaterThanOrEqual(30)
     expect(definitions.every(effect => effect.duration > 0 && effect.description.length > 0)).toBe(true)
+    for (const id of ['chain', 'flood', 'rage', 'counter', 'atk-up', 'dr-up'] as const) expect(BATTLE_EFFECTS[id]).toBeDefined()
   })
 
-  it('assigns signature effects to core generals and role fallbacks to expansions', () => {
-    expect(effectLoadout('guan-yu', '기병')).toEqual({ buff: 'dragon-might', debuff: 'armor-break' })
-    expect(effectLoadout('zhuge-liang', '책사')).toEqual({ buff: 'jade-command', debuff: 'confusion', cleanse: true })
-    expect(effectLoadout('unknown-general', '궁병')).toEqual({ buff: 'hawk-eye', debuff: 'mark' })
-  })
-
-  it('only treats active effects as present', () => {
+  it('only treats active effects as present and keeps the strongest value', () => {
     const effects = [
       { ...BATTLE_EFFECTS['iron-wall'], remaining: 3, stacks: 1 },
       { ...BATTLE_EFFECTS.burning, remaining: 0, stacks: 1 },
+      { ...BATTLE_EFFECTS['atk-up'], remaining: 2, stacks: 1, value: 0.15 },
     ] satisfies ActiveBattleEffect[]
     expect(hasBattleEffect(effects, 'iron-wall')).toBe(true)
     expect(hasBattleEffect(effects, 'burning')).toBe(false)
+    expect(effectValue(effects, 'atk-up')).toBe(0.15)
   })
 })
