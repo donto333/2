@@ -5,13 +5,13 @@ import { BONDS, GENERAL_SKILLS, SKILL_MORALE_CAP, bondFor, isAwakened, skillCool
 describe('general skill plan', () => {
   const catalog = allGenerals()
 
-  it('defines a skill for all 65 generals, passives for grade 3+ and awakenings for the 12 grade-5 generals', () => {
+  it('defines a skill for all 70 generals, passives for grade 3+ and awakenings for the 13 grade-5 generals', () => {
     expect(catalog.every(general => GENERAL_SKILLS[general.id])).toBe(true)
     expect(catalog.filter(general => general.grade >= 3).every(general => GENERAL_SKILLS[general.id].passive)).toBe(true)
     expect(catalog.filter(general => general.grade <= 2).every(general => !GENERAL_SKILLS[general.id].passive)).toBe(true)
     const awakened = catalog.filter(general => GENERAL_SKILLS[general.id].awaken).map(general => general.id).sort()
     expect(awakened).toEqual(catalog.filter(general => general.grade === 5).map(general => general.id).sort())
-    expect(awakened).toHaveLength(12)
+    expect(awakened).toHaveLength(13)
   })
 
   it('never lets one skill exceed morale 40, even at Lv60 5 stars', () => {
@@ -54,7 +54,8 @@ describe('general skill plan', () => {
   })
 
   it('picks the first matching bond in priority order', () => {
-    expect(BONDS).toHaveLength(6)
+    expect(BONDS).toHaveLength(7)
+    expect(bondFor(['zhang-jiao', 'zhang-bo', 'guan-hai'])?.id).toBe('yellow-heaven')
     expect(bondFor(['liu-bei', 'guan-yu', 'zhang-fei'])?.id).toBe('peach-garden')
     expect(bondFor(['guan-yu', 'zhao-yun', 'ma-chao'])?.id).toBe('five-tigers')
     expect(bondFor(['zhou-yu', 'huang-gai', 'cao-cao'])?.id).toBe('red-cliffs')

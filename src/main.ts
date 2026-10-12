@@ -48,7 +48,7 @@ import {
 } from './game/strategy'
 import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
-import { cityDefenseForLevel, enemyOnlyGenerals, scaleGeneral, templateGeneral } from './game/strategy'
+import { cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -584,7 +584,7 @@ const ui = new StrategyUI(root, {
     // 적 덱: 그 시대에 실제로 맞섰던 상대(진영별), 장 안에서 뒤 사건일수록 강해진다.
     const enemyLevel = scenarioEnemyLevel(scenario)
     const deck = scenarioEnemyIds(scenario, state.faction).map((id, index) => {
-      const base = templateGeneral(id) ?? enemyOnlyGenerals()[index % 3]
+      const base = templateGeneral(id) ?? allGenerals()[index]
       return { ...scaleGeneral({ ...base, level: 1, stars: 1 }, enemyLevel + index - 1, Math.min(5, 1 + Math.floor(enemyLevel / 12))), skillUnlocked: enemyLevel >= 6 }
     })
     arena.setOpponentDeck(deck, 'scenario')

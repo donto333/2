@@ -76,15 +76,15 @@ describe('commander attributes', () => {
 
   it('includes the original roster plus 50 new Three Kingdoms generals', () => {
     const generals = allGenerals()
-    expect(generals).toHaveLength(65)
-    expect(new Set(generals.map(general => general.id)).size).toBe(65)
+    expect(generals).toHaveLength(70)
+    expect(new Set(generals.map(general => general.id)).size).toBe(70)
     expect(generals.some(general => general.id === 'liu-bei')).toBe(true)
     expect(generals.some(general => general.id === 'da-qiao')).toBe(true)
   })
 
   it('provides trigger, target, effect, duration, and cooldown details for every general skill', () => {
     const details = allGenerals().map(general => skillDetail(general))
-    expect(details).toHaveLength(65)
+    expect(details).toHaveLength(70)
     for (const detail of details) {
       expect(detail.trigger.length).toBeGreaterThan(0)
       expect(detail.target.length).toBeGreaterThan(0)

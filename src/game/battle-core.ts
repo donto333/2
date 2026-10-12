@@ -120,6 +120,7 @@ interface OpenPattern { def: PatternDef; at: number; deadline: number; judged: b
 const BEATS: Record<string, string> = { 기병: '궁병', 궁병: '보병', 보병: '기병' }
 const FIRE_IDS = new Set(['zhou-yu', 'lu-xun', 'huang-gai', 'zhu-rong'])
 const CHARGE_IDS = new Set(['lu-bu', 'zhang-fei', 'ma-chao'])
+const YELLOW_TURBAN_IDS = new Set(['zhang-jiao', 'zhang-bo', 'zhang-liang', 'guan-hai', 'zhou-cang'])
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 
 export function matchup(attacker: General['role'], defender: General['role']): number {
@@ -240,6 +241,7 @@ export class BattleCore {
       if (other !== unit && this.passive(other) === 'partnerCd' && other.def.passive?.partner === unit.general.id) cooldown -= other.def.passive?.value ?? 0
     })
     if (this.bond?.id === 'dragon-phoenix' && unit.def.type === '계략') cooldown -= 1.5
+    if (this.bond?.id === 'yellow-heaven' && unit.def.type === '계략') cooldown -= 1
     return Math.max(4, Math.round(cooldown * 10) / 10)
   }
 
@@ -305,6 +307,7 @@ export class BattleCore {
     if (id === 'partnerAtk' && this.hasPlayer(unit.def.passive?.partner ?? '')) bonus += value
     if (id === 'firstStrike' && !unit.firstAttackDone) bonus += value
     if (this.bond?.id === 'peach-garden') bonus += 0.08
+    if (this.bond?.id === 'yellow-heaven') bonus += 0.05
     if (hasBattleEffect(this.playerDebuffs, 'p-fear')) bonus -= 0.15
     return bonus
   }
@@ -598,6 +601,7 @@ export class BattleCore {
     const id = this.passive(unit)
     if (id === 'partnerPower' && this.hasPlayer(unit.def.passive?.partner ?? '')) mult += value
     if (id === 'factionPower') mult += value * this.players.filter(other => other.def.faction === unit.def.faction).length
+    if (id === 'yellowSky') mult += value * this.players.filter(other => YELLOW_TURBAN_IDS.has(other.general.id)).length
     if (id === 'alliance') mult += value * this.players.filter(other => other.def.faction !== unit.def.faction).length
     if (id === 'warlordHost' && this.players.length === 3 && this.players.every(other => other.def.faction === '군웅')) mult += value
     if (id === 'veteran' && unit.general.level >= 30) mult += value
@@ -785,7 +789,7 @@ export class BattleCore {
       const target = type === '사격' ? [...this.alive(this.players)].sort((left, right) => left.troops - right.troops)[0] : this.targetFor(this.players, unit.lane)
       if (target) this.dealDamage(target, Math.max(40, power * BATTLE_RULES.enemySkillTroopPerMorale) * (guarded ? 0.5 : 1), name, unit)
     } else if (type === '계략') {
-      const id: PlayerDebuffId = FIRE_IDS.has(unit.general.id) ? 'p-burn' : unit.general.id.includes('zhang-jiao') || unit.def.active.fx.some(effect => effect.k === 'debuff' && (effect.id === 'confusion' || effect.id === 'blind')) ? 'p-confuse' : 'p-fear'
+      const id: PlayerDebuffId = FIRE_IDS.has(unit.general.id) ? 'p-burn' : unit.general.id === 'zhang-jiao' || unit.general.id === 'zhang-bo' || unit.def.active.fx.some(effect => effect.k === 'debuff' && (effect.id === 'confusion' || effect.id === 'blind')) ? 'p-confuse' : 'p-fear'
       this.addEffect('pdebuff', id, (6 - shortDebuff) * (guarded ? 0.5 : 1))
     } else if (type === '치유') {
       this.alive(this.enemies).forEach(other => this.heal(other, other.maxTroops * 0.08))

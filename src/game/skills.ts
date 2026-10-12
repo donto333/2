@@ -142,10 +142,12 @@ export const GENERAL_SKILLS: Record<string, GeneralSkillDef> = {
   'gao-shun': { faction: '군웅', type: '돌격', mult: 1, active: a('함진영', '사기 피해, 적의 피해 감소 효과 무시', { k: 'ignoreDr' }) },
   'song-xian': { faction: '군웅', type: '통솔', mult: 1, active: a('적토 헌상', '아군 기병 1명 쿨다운 −2초', { k: 'allyCd', sec: 2, scope: 'cavalry' }) },
 
-  // ── 적 전용 (시나리오) ──
-  'zhang-jiao': { faction: '군웅', type: '계략', mult: 1, active: a('태평요술', '혼란 5초 + 공포 3초', { k: 'debuff', id: 'confusion', sec: 5 }, { k: 'debuff', id: 'fear', sec: 3 }) },
-  'zhang-bao-hj': { faction: '군웅', type: '계략', mult: 1, active: a('풍우 요술', '시야 차단 5초', { k: 'debuff', id: 'blind', sec: 5 }) },
-  'zhang-liang-hj': { faction: '군웅', type: '돌격', mult: 1, active: a('인공장군 돌격', '사기 피해 + 출혈 4초', { k: 'debuff', id: 'bleed', sec: 4 }) },
+  // ── 황건적 ──
+  'zhang-jiao': { faction: '군웅', type: '계략', mult: 1, active: a('태평요술', '혼란 5초 + 공포 4초 + 전술 게이지 +15', { k: 'debuff', id: 'confusion', sec: 5 }, { k: 'debuff', id: 'fear', sec: 4 }, { k: 'gauge', n: 15 }), passive: p('yellowSky', '창천이사', '편성한 황건 무장 1명당 위력 +8%', { value: 0.08 }), awaken: a('황천당립', '아군 공격 +15% 6초 + 위협도 −15', { k: 'buff', id: 'atk-up', sec: 6, value: 0.15 }, { k: 'threat', n: -15 }), weakness: { id: 'frail10', desc: '최대 병력 −10% (병사)' } },
+  'zhang-bo': { faction: '군웅', type: '계략', mult: 1, active: a('부적 계략', '혼란 5초 + 표적 낙인 6초', { k: 'debuff', id: 'confusion', sec: 5 }, { k: 'debuff', id: 'mark', sec: 6 }), passive: p('shortDebuff', '부적 수호', '아군 상태이상 지속 −1초', { value: 1 }) },
+  'zhang-liang': { faction: '군웅', type: '수호', mult: 1, active: a('황건 선봉', '아군 받는 피해 −20% 6초 + 위협도 −10', { k: 'buff', id: 'dr-up', sec: 6, value: 0.2 }, { k: 'threat', n: -10 }), passive: p('highTroopDr', '인공장군', '병력 70% 이상일 때 받는 피해 −10%', { value: 0.1 }) },
+  'guan-hai': { faction: '군웅', type: '돌격', mult: 1, active: a('백파 격돌', '사기 피해 + 갑주 균열 4초', { k: 'debuff', id: 'armor-break', sec: 4 }), passive: p('lowTroopAtk', '북해 포위', '병력 50% 이하면 공격 +15%', { value: 0.15 }) },
+  'zhou-cang': { faction: '군웅', type: '돌격', mult: 1, active: a('황건 추격', '사기 피해 + 출혈 5초', { k: 'debuff', id: 'bleed', sec: 5 }), passive: p('partnerAtk', '청룡도 수행', '관우와 편성 시 공격 +15%', { partner: 'guan-yu', value: 0.15 }) },
 }
 
 /** 인연: 하나만 적용되며 여러 개가 성립하면 위에 있는 것이 우선. */
@@ -157,6 +159,7 @@ export const BONDS: BondDef[] = [
   { id: 'five-generals', name: '오자양장', members: ['zhang-liao', 'yue-jin', 'yu-jin', 'zhang-he', 'xu-huang'], need: 3, desc: '받는 피해 −10%' },
   { id: 'dragon-phoenix', name: '와룡봉추', members: ['zhuge-liang', 'pang-tong'], need: 2, desc: '계략 스킬 쿨다운 −1.5초' },
   { id: 'red-cliffs', name: '적벽의 불', members: ['zhou-yu', 'huang-gai', 'pang-tong', 'zhuge-liang'], need: 2, desc: '화계 지속 +2초' },
+  { id: 'yellow-heaven', name: '황천당립', members: ['zhang-jiao', 'zhang-bo', 'zhang-liang', 'guan-hai', 'zhou-cang'], need: 3, desc: '아군 공격 +5%, 계략 스킬 쿨다운 −1초' },
 ]
 
 export function bondFor(ids: string[]): BondDef | null {

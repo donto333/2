@@ -666,6 +666,12 @@ const EXPANSION_SPECS: ExpansionSpec[] = [
   ['diao-chan', '초선', '폐월의 연환 미혹', '책사', 4, '연환 미혹', '적 지휘관을 혼란시켜 다음 행동을 지연한다.', '초'],
   ['cai-wenji', '채문희', '문희의 호가 귀환', '책사', 2, '호가 귀환', '전투 기록을 되살려 아군 사기를 회복한다.', '채'],
   ['da-qiao', '대교', '강동의 옥련', '궁병', 3, '옥련의 가호', '아군 장수의 스킬 재사용 대기시간을 줄인다.', '대'],
+  // 황건적 (donto333/1에서 가져옴: 이름·등급·병종·초상화가 같다)
+  ['zhang-jiao', '장각', '천공장군의 황천 개벽', '책사', 5, '태평요술', '', '각'],
+  ['zhang-bo', '장보', '지공장군의 부적 계략', '책사', 4, '부적 계략', '', '보'],
+  ['zhang-liang', '장량', '인공장군의 황건 선봉', '보병', 4, '황건 선봉', '', '량'],
+  ['guan-hai', '관해', '황건의 백파 맹장', '보병', 3, '백파 격돌', '', '관'],
+  ['zhou-cang', '주창', '황건을 거친 충직한 장수', '기병', 3, '황건 추격', '', '주'],
 ]
 
 function makeExpansionGeneral([id, name, epithet, role, grade, skillName, skillDescription, portrait]: ExpansionSpec): General {
@@ -687,21 +693,10 @@ const withSkillText = (general: General): General => {
 }
 const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText)
 
-// 시나리오 적 전용 무장(모집되지 않음).
-const ENEMY_ONLY: General[] = ([
-  ['zhang-jiao', '장각', '천공장군의 태평도', '책사', 4, '각'],
-  ['zhang-bao-hj', '장보', '지공장군의 요술', '책사', 3, '보'],
-  ['zhang-liang-hj', '장량', '인공장군의 황건 돌격', '보병', 3, '량'],
-] as Array<[string, string, string, Role, Grade, string]>).map(([id, name, epithet, role, grade, portrait]) => withSkillText(makeExpansionGeneral([id, name, epithet, role, grade, '', '', portrait])))
-
 /** 도감(Lv1) 원형. 성장 전 능력치가 필요한 스킬 공식에서 쓴다. */
 export function templateGeneral(id: string): General | undefined {
-  const found = LIBRARY.find(general => general.id === id) ?? ENEMY_ONLY.find(general => general.id === id)
+  const found = LIBRARY.find(general => general.id === id)
   return found ? { ...found } : undefined
-}
-
-export function enemyOnlyGenerals(): General[] {
-  return ENEMY_ONLY.map(general => ({ ...general }))
 }
 
 /** 적 무장 성장: 아군 강화·성급 상승과 같은 공식으로 능력치를 올린다. */

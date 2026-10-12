@@ -83,17 +83,18 @@ export function firstClearReward(scenario: ScenarioDefinition, clearedIds: reado
 // ── 시나리오 적 덱 (전투 개선안 · 촉 시점 기준, 위·오는 같은 사건의 반대편) ──
 type FactionKey = '촉한' | '위나라' | '오나라'
 interface EnemyPlan { levels: [number, number]; deck: Record<FactionKey, string[]>; byYear?: Record<number, Partial<Record<FactionKey, string[]>>> }
-const YELLOW_TURBANS = ['zhang-jiao', 'zhang-bao-hj', 'zhang-liang-hj']
+const YELLOW_TURBANS = ['zhang-jiao', 'zhang-bo', 'zhang-liang']
+const YELLOW_VANGUARD = ['zhang-liang', 'guan-hai', 'zhou-cang']
 const DONG_ZHUO = ['dong-zhuo', 'lu-bu', 'gao-shun']
 const same = (deck: string[]): Record<FactionKey, string[]> => ({ 촉한: deck, 위나라: deck, 오나라: deck })
 
 const ENEMY_PLANS: EnemyPlan[] = [
-  { levels: [1, 8], deck: same(DONG_ZHUO), byYear: { 184: same(YELLOW_TURBANS), 185: same(YELLOW_TURBANS), 186: same(YELLOW_TURBANS), 187: same(YELLOW_TURBANS), 188: same(YELLOW_TURBANS), 189: same(YELLOW_TURBANS) } },
+  { levels: [1, 8], deck: same(DONG_ZHUO), byYear: { 184: same(YELLOW_VANGUARD), 185: same(YELLOW_TURBANS), 186: same(YELLOW_TURBANS), 187: same(['zhang-bo', 'zhang-liang', 'guan-hai']), 188: same(YELLOW_TURBANS), 189: same(YELLOW_TURBANS) } },
   { levels: [8, 14], deck: { 촉한: ['lu-bu', 'chen-gong', 'gao-shun'], 위나라: ['lu-bu', 'chen-gong', 'gao-shun'], 오나라: ['yuan-shu', 'wen-ping', 'song-xian'] }, byYear: { 197: same(['yuan-shu', 'wen-ping', 'song-xian']) } },
   { levels: [14, 20], deck: same(['yuan-shao', 'yan-liang', 'wen-chou']) },
   { levels: [20, 26], deck: { 촉한: ['cao-cao', 'cao-ren', 'zhang-liao'], 위나라: ['zhou-yu', 'huang-gai', 'zhuge-liang'], 오나라: ['cao-cao', 'cao-ren', 'zhang-liao'] }, byYear: { 211: same(['ma-chao', 'ma-teng', 'han-sui']) } },
   { levels: [26, 32], deck: { 촉한: ['zhang-he', 'xu-huang', 'cao-hong'], 위나라: ['huang-zhong', 'fa-zheng', 'zhao-yun'], 오나라: ['zhang-liao', 'yue-jin', 'li-dian'] }, byYear: { 215: { 촉한: ['zhang-liao', 'yue-jin', 'li-dian'], 위나라: ['sun-quan', 'gan-ning', 'ling-tong'] } } },
-  { levels: [32, 38], deck: { 촉한: ['lu-xun', 'lu-meng', 'gan-ning'], 위나라: ['guan-yu', 'guan-ping', 'zhang-bao'], 오나라: ['liu-bei', 'guan-xing', 'zhang-bao'] }, byYear: { 225: same(['meng-huo', 'zhu-rong', 'zhang-liang-hj']) } },
+  { levels: [32, 38], deck: { 촉한: ['lu-xun', 'lu-meng', 'gan-ning'], 위나라: ['guan-yu', 'guan-ping', 'zhang-bao'], 오나라: ['liu-bei', 'guan-xing', 'zhang-bao'] }, byYear: { 225: same(['meng-huo', 'zhu-rong', 'guan-hai']) } },
   { levels: [38, 44], deck: { 촉한: ['simayi', 'zhang-he', 'xu-huang'], 위나라: ['zhuge-liang', 'zhao-yun', 'wei-yan'], 오나라: ['simayi', 'zhang-he', 'xu-huang'] } },
   { levels: [44, 50], deck: { 촉한: ['simayi', 'zhang-he', 'yu-jin'], 위나라: ['wei-yan', 'wang-ping', 'guan-xing'], 오나라: ['simayi', 'zhang-he', 'yu-jin'] } },
 ]
