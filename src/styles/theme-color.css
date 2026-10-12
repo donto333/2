@@ -847,3 +847,65 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .page-section--shop .shop-notice strong{font-size:13px}
 .page-section--shop .shop-notice span{font-size:12.5px}
 @media (max-width:900px){.shop-row__buys{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* ── PC 전투 화면: 위·아래 판을 줄이고 예고 창을 얇게 해 전장이 보이게 ── */
+@media (min-width: 761px) {
+  body .app-shell--battle .page-section--battle { gap: 8px; }
+  body .app-shell--battle .bt-top { gap: 8px; }
+  body .app-shell--battle .bt-hud { padding: 8px 14px; }
+  body .app-shell--battle .bt-hud-row { font-size: 13px; }
+  body .app-shell--battle .bt-bar--morale { height: 10px; margin: 5px 0 6px; }
+  body .app-shell--battle .bt-bar--threat { height: 7px; }
+  body .app-shell--battle .bt-hud-meta { margin-top: 5px; font-size: 12px; }
+  body .app-shell--battle .bt-enemies { padding: 7px 10px; }
+  body .app-shell--battle .bt-enemies-label { margin-bottom: 4px; font-size: 10.5px; }
+  body .app-shell--battle .bt-enemy { grid-template-columns: 32px minmax(0, 1fr); gap: 6px; padding: 3px 5px; }
+  body .app-shell--battle .bt-enemy-portrait { width: 32px; height: 36px; border-radius: 6px; }
+  body .app-shell--battle .bt-enemy strong { font-size: 12.5px; }
+  body .app-shell--battle .bt-enemy small { font-size: 10.5px; }
+
+  /* 전장 위 예고 창: 평소에는 작은 알약, 예고가 뜨면 얇은 띠 */
+  body .app-shell--battle .bt-stage { position: relative; }
+  body .app-shell--battle .bt-stage .bt-callout { width: min(440px, 100%); padding: 6px 12px 7px; border-radius: 10px; background: rgba(36, 16, 8, .62); }
+  body .app-shell--battle .bt-stage .bt-callout .eyebrow { font-size: 10px; }
+  body .app-shell--battle .bt-stage .bt-callout strong { font-size: 17px; margin: 0 0 2px; }
+  body .app-shell--battle .bt-stage .bt-callout p { font-size: 12px; margin: 0 0 5px; }
+  body .app-shell--battle .bt-stage .bt-callout .bt-lanes { gap: 6px; margin-bottom: 5px; }
+  body .app-shell--battle .bt-stage .bt-callout .bt-lanes span { padding: 2px 0; font-size: 12px; border-radius: 6px; }
+  body .app-shell--battle .bt-stage .bt-callout .bt-bar--window { height: 4px; }
+  body .app-shell--battle .bt-stage .bt-callout:not(.is-open) { width: auto; padding: 4px 14px; border-radius: 999px; opacity: .7; }
+  body .app-shell--battle .bt-stage .bt-callout:not(.is-open) > :not([data-bt-pattern]) { display: none; }
+  body .app-shell--battle .bt-stage .bt-callout:not(.is-open) strong { font-size: 12.5px; margin: 0; color: var(--cream-soft); }
+  body .app-shell--battle .bt-stage .bt-enemy-warn { width: min(440px, 100%); padding: 5px 10px; font-size: 12.5px; border-radius: 8px; }
+
+  /* 전투 기록은 왼쪽 아래 구석에 작게 */
+  body .app-shell--battle .bt-feed { position: absolute; left: 0; bottom: 0; width: min(380px, 40%); margin: 0; padding: 5px 10px; background: rgba(20, 8, 4, .5); }
+  body .app-shell--battle .bt-feed .bt-log { font-size: 11.5px; gap: 1px; padding-right: 54px; }
+  body .app-shell--battle .bt-feed .bt-log-toggle { top: 4px; right: 8px; font-size: 11px; }
+  body .app-shell--battle .bt-feed .battle-effect { padding: 3px 6px; font-size: 11.5px; }
+  body .app-shell--battle .battle-effects-empty { display: none; }
+  body .app-shell--battle .bt-feed .battle-effects { margin-top: 3px; padding-top: 3px; }
+
+  /* 아래 조작판: 무장 카드를 한 줄로, 전술 버튼은 아이콘+이름만 */
+  body .app-shell--battle .bt-controls { padding: 8px 10px; }
+  body .app-shell--battle .bt-units { gap: 8px; }
+  body .app-shell--battle .bt-unit { grid-template-columns: minmax(0, 1fr) minmax(110px, 38%); align-items: stretch; gap: 8px; padding: 6px; border-radius: 10px; }
+  body .app-shell--battle .bt-unit-main { grid-template-columns: 38px minmax(0, 1fr); column-gap: 8px; }
+  body .app-shell--battle .bt-unit-main .bt-portrait { width: 38px; height: 38px; border-radius: 8px; }
+  body .app-shell--battle .bt-unit-lane { font-size: 10.5px; line-height: 1.1; }
+  body .app-shell--battle .bt-unit-main strong { font-size: 13.5px; line-height: 1.2; }
+  body .app-shell--battle .bt-unit-main small { font-size: 10.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body .app-shell--battle .bt-unit-troops { height: 4px; margin-top: 4px; }
+  body .app-shell--battle .bt-unit-skill { align-content: center; padding: 4px 8px; }
+  body .app-shell--battle .bt-unit-skill b { font-size: 12px; }
+  body .app-shell--battle .bt-unit-skill small { font-size: 10.5px; }
+  body .app-shell--battle .bt-unit-edge { top: -2px; right: 0; font-size: 10px; padding: 0 5px; }
+  body .app-shell--battle .bt-tactic-row { margin-top: 6px; gap: 6px; }
+  body .app-shell--battle .bt-gauge { gap: 4px; font-size: 12px; }
+  body .app-shell--battle .bt-tactic { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 34px 5px 8px; }
+  body .app-shell--battle .bt-tactic span { font-size: 14px; }
+  body .app-shell--battle .bt-tactic strong { font-size: 12.5px; }
+  body .app-shell--battle .bt-tactic small { display: none; }
+  body .app-shell--battle .bt-tactic em { top: 50%; transform: translateY(-50%); right: 10px; }
+  body .app-shell--battle .bt-controls .battle-start { margin-top: 8px; }
+}

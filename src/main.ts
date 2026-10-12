@@ -1048,7 +1048,8 @@ const ui = new StrategyUI(root, {
 })
 
 arena = new Arena(canvas, {
-  onEvent: message => ui.notify(message),
+  // PC에서는 전투 기록이 화면 구석에 이미 보이므로 같은 내용의 알림 창은 휴대폰에서만 띄운다
+  onEvent: message => { if (window.innerWidth <= 760) ui.notify(message) },
   onSkillCast: info => ui.showSkillCutIn(info),
   onBattleEnd: result => {
     state.battleScore = Math.max(state.battleScore, result.score)
