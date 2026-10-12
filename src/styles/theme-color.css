@@ -513,3 +513,5 @@ body .summon-banner__jade { position: absolute; right: -22px; bottom: -26px; wid
 @keyframes summon-drift { 0% { transform: scale(1.02); } 50% { transform: scale(1.08) translateY(-1.5%); } 100% { transform: scale(1.02); } }
 @media (prefers-reduced-motion: reduce) { body .summon-banner__slide, body .summon-banner__slide img, body .summon-banner__jade { animation: none; } body .summon-banner__slide--two { opacity: 0; } }
 @media (max-width: 600px) { body .summon-banner { width: min(250px, 72%); } body .summon-banner__slide figcaption b { font-size: 18px; } body .summon-banner__jade { width: 50px; height: 62px; right: -16px; bottom: -20px; } }
+/* 대표 그림 한 장만: 교차 전환 없이 은은한 확대만 */
+body .summon-banner__slide--solo { animation: none; opacity: 1; }
