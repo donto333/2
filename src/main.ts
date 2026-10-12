@@ -48,7 +48,7 @@ import {
 } from './game/strategy'
 import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
-import { cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
+import { autoEquip, autoFormation, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -480,6 +480,21 @@ const ui = new StrategyUI(root, {
     if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+  },
+  onAutoFormation: withEquipment => {
+    const formed = autoFormation(state)
+    const equipped = withEquipment && formed.ok ? autoEquip(state) : null
+    arena.setGenerals(battleGenerals())
+    ui.render(state)
+    ui.notify(equipped?.ok ? `${formed.message} · ${equipped.message}` : formed.message, formed.ok ? 'jade' : 'ember')
+    if (formed.ok) queueAccountSave()
+  },
+  onAutoEquip: () => {
+    const result = autoEquip(state)
+    arena.setGenerals(battleGenerals())
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok && result.changed) queueAccountSave()
   },
   onEquipmentEquip: (generalId, itemId) => {
     const result = equipEquipment(state, generalId, itemId)

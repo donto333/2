@@ -1,5 +1,5 @@
 import cityRoutes from '../../server/city-routes.json'
-import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
+import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
@@ -1697,4 +1697,115 @@ export function unlockResearch(state: StrategyState, id: string): { ok: boolean;
 
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat('ko-KR').format(value)
+}
+
+// ── 자동 편성 · 자동 장착 ──────────────────────────────────────────
+
+const EQUIPMENT_TYPES: EquipmentType[] = ['weapon', 'armor', 'accessory']
+
+/** 무장에게 맞는 능력치 가중치: 기본 전투력 공식에 스킬 주 능력치를 20% 더 얹는다. */
+function statWeights(general: General): Record<EquipmentStat, number> {
+  const weights: Record<EquipmentStat, number> = { leadership: 1.15, martial: 1.25, stratagem: 0.9, speed: 0.65 }
+  const stat = SKILL_TYPE_META[skillDefFor(general.id, general.role).type].stat
+  weights[stat] *= 1.2
+  return weights
+}
+
+/** 장비 묶음(최대 3개)의 가치: 주 능력치·특성·세트 효과를 equipmentBonus와 같은 규칙으로 계산 */
+function loadoutScore(items: Equipment[], weights: Record<EquipmentStat, number>): number {
+  const bonus: Record<EquipmentStat, number> = { leadership: 0, martial: 0, stratagem: 0, speed: 0 }
+  const sets: Partial<Record<EquipmentSet, number>> = {}
+  items.forEach(item => {
+    bonus[item.mainStat] += equipmentValue(item)
+    const specialty = equipmentSpecialty(item)
+    if (specialty) bonus[specialty.stat] += specialty.value
+    sets[item.set] = (sets[item.set] ?? 0) + 1
+  })
+  ;(Object.entries(sets) as Array<[EquipmentSet, number]>).forEach(([set, count]) => {
+    if (count >= 2) bonus[EQUIPMENT_SET_META[set].stat] += 10
+    if (count >= 3) bonus[EQUIPMENT_SET_META[set].stat] += 8
+  })
+  return (Object.keys(bonus) as EquipmentStat[]).reduce((sum, stat) => sum + bonus[stat] * weights[stat], 0)
+}
+
+export interface AutoResult extends UpgradeResult { changed: number }
+
+/**
+ * 자동 장착: 출전 무장(전투력 높은 순)부터 슬롯별 후보 상위 6개를 모두 조합해 가장 좋은 묶음을 고른다.
+ * 출전하지 않은 무장이 끼고 있던 장비도 가져올 수 있다. 한 장비는 한 무장만 낀다.
+ */
+export function autoEquip(state: StrategyState, generalIds: string[] = state.formation): AutoResult {
+  ensureEquipmentState(state)
+  const targets = generalIds.map(id => findGeneral(state, id)).filter((general): general is General => Boolean(general))
+    .sort((left, right) => combatPower(right) - combatPower(left))
+  if (!targets.length) return { ok: false, message: '장비를 장착할 출전 무장이 없습니다.', changed: 0 }
+  if (!state.equipmentInventory.length) return { ok: false, message: '보유한 장비가 없습니다. 모집·장비에서 장비를 얻으십시오.', changed: 0 }
+  const targetIds = new Set(targets.map(general => general.id))
+  // 다른 무장(비출전)이 낀 장비는 후보에 넣되, 출전 무장끼리는 이번 계산 결과로 다시 나눈다.
+  const used = new Set<string>()
+  let changed = 0
+  const before = JSON.stringify(targets.map(general => state.equipmentLoadouts[general.id] ?? {}))
+  targets.forEach(general => {
+    const weights = statWeights(general)
+    const pool = state.equipmentInventory.filter(item => !used.has(item.id))
+    const bySlot = EQUIPMENT_TYPES.map(type => [undefined, ...pool.filter(item => item.type === type)
+      .sort((left, right) => loadoutScore([right], weights) - loadoutScore([left], weights)).slice(0, 6)])
+    let best: Array<Equipment | undefined> = [undefined, undefined, undefined]
+    let bestScore = -1
+    for (const weapon of bySlot[0]) for (const armor of bySlot[1]) for (const accessory of bySlot[2]) {
+      const items = [weapon, armor, accessory].filter((item): item is Equipment => Boolean(item))
+      const score = loadoutScore(items, weights)
+      if (score > bestScore) { bestScore = score; best = [weapon, armor, accessory] }
+    }
+    const loadout: Partial<Record<EquipmentType, string>> = {}
+    best.forEach((item, index) => {
+      if (!item) return
+      used.add(item.id)
+      loadout[EQUIPMENT_TYPES[index]] = item.id
+    })
+    // 이 장비를 끼고 있던 비출전 무장에게서는 뺀다.
+    Object.entries(state.equipmentLoadouts).forEach(([ownerId, owned]) => {
+      if (targetIds.has(ownerId)) return
+      EQUIPMENT_TYPES.forEach(type => { if (owned[type] && used.has(owned[type]!)) delete owned[type] })
+    })
+    state.equipmentLoadouts[general.id] = loadout
+  })
+  const after = JSON.stringify(targets.map(general => state.equipmentLoadouts[general.id] ?? {}))
+  if (before !== after) changed = targets.length
+  const power = targets.reduce((sum, general) => sum + equipmentPower(state, general.id), 0)
+  state.lastNotice = changed
+    ? `자동 장착 완료 · 출전 무장 ${targets.length}명에게 가장 좋은 장비 조합을 장착했습니다 (장비 전투력 합계 ${formatNumber(power)})`
+    : '이미 가장 좋은 장비를 장착하고 있습니다.'
+  return { ok: true, message: state.lastNotice, changed }
+}
+
+/**
+ * 자동 편성: 전투력 상위 10명 안에서 3명 조합을 모두 따져
+ * 전투력 합 × (인연 +8%) × (병종이 다양할수록 +3%씩)이 가장 높은 조합을 고른다.
+ * 레인은 가운데에 방어·통솔이 높은 무장, 좌우에 나머지를 둔다(적은 같은 레인의 아군을 먼저 친다).
+ */
+export function autoFormation(state: StrategyState): AutoResult {
+  if (state.generals.length === 0) return { ok: false, message: '보유한 무장이 없습니다.', changed: 0 }
+  const power = (general: General) => combatPower(general) + equipmentPower(state, general.id)
+  const pool = [...state.generals].sort((left, right) => power(right) - power(left)).slice(0, 10)
+  const size = Math.min(3, pool.length)
+  let best: General[] = pool.slice(0, size)
+  let bestScore = -1
+  const consider = (combo: General[]) => {
+    const ids = combo.map(general => general.id)
+    const roles = new Set(combo.map(general => general.role)).size
+    const score = combo.reduce((sum, general) => sum + power(general), 0) * (bondFor(ids) ? 1.08 : 1) * (1 + 0.03 * Math.max(0, roles - 1))
+    if (score > bestScore) { bestScore = score; best = combo }
+  }
+  if (size < 3) consider(pool.slice(0, size))
+  else for (let a = 0; a < pool.length; a += 1) for (let b = a + 1; b < pool.length; b += 1) for (let c = b + 1; c < pool.length; c += 1) consider([pool[a], pool[b], pool[c]])
+  const tank = [...best].sort((left, right) => (right.defense + right.leadership) - (left.defense + left.leadership))[0]
+  const flanks = best.filter(general => general !== tank).sort((left, right) => power(right) - power(left))
+  const ordered = best.length === 3 ? [flanks[0], tank, flanks[1]] : best
+  const next = ordered.map(general => general.id)
+  const changed = next.join() !== state.formation.join() ? 1 : 0
+  state.formation = next
+  const bond = bondFor(next)
+  state.lastNotice = `자동 편성 완료 · ${ordered.map(general => general.name).join(' · ')}${bond ? ` · 인연 「${bond.name}」` : ''} · 편성 전투력 ${formatNumber(totalPower(state))}`
+  return { ok: true, message: state.lastNotice, changed }
 }

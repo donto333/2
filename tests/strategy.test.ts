@@ -13,7 +13,7 @@ describe('commander attributes', () => {
   })
 
   it('makes grade 5 the strongest grade for both combat power and skill performance', () => {
-    const template = { ...createInitialState().generals[0], level: 1, stars: 1, skillRank: 1, skillPower: 100 }
+    const template = { ...allGenerals().find(general => general.id === 'wei-yan')!, level: 1, stars: 1, skillRank: 1, skillPower: 100 }
     const generals = ([1, 2, 3, 4, 5] as const).map(grade => ({ ...template, grade }))
     const combat = generals.map(general => combatPower(general))
     const skills = generals.map(general => skillPower(general))

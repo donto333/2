@@ -470,3 +470,12 @@ body .page-section--battle.is-paused .bt-callout, body .page-section--battle.is-
   body .app-shell--battle .brand-title { display: none; }
   body .tb-btn { min-height: 32px; padding: 5px 9px; font-size: 12.5px; }
 }
+
+/* ── 자동 편성 · 자동 장착 버튼 ── */
+body .auto-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+body .auto-actions .action-button { min-height: 40px; }
+body .equipment-toolbar .equipment-auto { white-space: nowrap; }
+@media (max-width: 760px) {
+  body .auto-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  body .auto-actions .action-button--primary { grid-column: 1 / -1; }
+}
