@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { allGenerals, scaleGeneral, type General } from './strategy'
-import { BattleCore, BATTLE_RULES, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
+import { BattleCore, BATTLE_RULES, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import type { SkillType } from './skills'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -208,6 +208,7 @@ export class Arena {
   private readonly quality: SceneQuality
   private readonly environment: Environment
   private composer: EffectComposer | null = null
+  private research: BattleResearch | null = null
 
   constructor(canvas: HTMLCanvasElement, callbacks: ArenaCallbacks) {
     this.callbacks = callbacks
@@ -284,6 +285,11 @@ export class Arena {
   }
   battleMode(): BattleMode {
     return this.mode
+  }
+
+  /** 기술 연구(강병·지략) 보정: 다음 전투부터 적용 */
+  setResearch(research: BattleResearch | null): void {
+    this.research = research
   }
 
   setSpeed(speed: number): void {
@@ -699,7 +705,7 @@ export class Arena {
     const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
     this.enemyDeck = deck
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
-    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, autoPilot: options.autoPlay ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null })
+    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, autoPilot: options.autoPlay ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null })
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()
@@ -825,7 +831,7 @@ export class Arena {
       }
       case 'enemySkillWarn': {
         const unit = this.unitAt('enemy', event.lane)
-        this.enemyWarning = { name: event.name, general: unit?.general.name ?? '적장', until: core.t + BATTLE_RULES.enemySkillWarning + 0.2 }
+        this.enemyWarning = { name: event.name, general: unit?.general.name ?? '적장', until: core.t + BATTLE_RULES.enemySkillWarning + (core.research.enemyWarn ?? 0) + 0.2 }
         break
       }
       case 'answer':

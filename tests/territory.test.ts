@@ -11,7 +11,7 @@ describe('territory and governance', () => {
     ])
     expect(state.cities).toHaveLength(45)
     expect(state.resources.grain).toBeGreaterThan(0)
-    expect(state.research).toHaveLength(58)
+    expect(state.research).toHaveLength(40)
   })
 
   it('starts cities at maximum defense and allows siege damage to reach zero', () => {
@@ -124,12 +124,11 @@ describe('territory and governance', () => {
     expect(upgradeBuilding(state, 'xuchang', 'farm').ok).toBe(false)
   })
 
-  it('requires a tier-one research before unlocking its tier-two branch', () => {
+  it('requires a tier-one research before starting its tier-two research', () => {
     const state = createInitialState()
-    expect(unlockResearch(state, 'granary').ok).toBe(false)
-    expect(unlockResearch(state, 'irrigation').ok).toBe(true)
-    expect(unlockResearch(state, 'granary').ok).toBe(true)
-    expect(state.research.find(node => node.id === 'granary')?.unlocked).toBe(true)
+    expect(unlockResearch(state, 'army-2', 0).ok).toBe(false)
+    expect(unlockResearch(state, 'army-1', 0).ok).toBe(true)
+    expect(state.research.find(node => node.id === 'army-1')?.endsAt).toBe(5 * 60_000)
   })
 
   it('weakens the wall and leaves capture to the final faction battle', () => {

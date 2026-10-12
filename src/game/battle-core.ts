@@ -113,6 +113,8 @@ export interface CoreConfig {
   moraleBonus?: number
   rng?: () => number
   autoPilot?: AutoPilot | null
+  /** 기술 연구(강병·지략)의 아군 보정 */
+  research?: BattleResearch | null
 }
 
 interface OpenPattern { def: PatternDef; at: number; deadline: number; judged: boolean; inputs: Set<number>; reactAt: number }
@@ -122,6 +124,13 @@ const FIRE_IDS = new Set(['zhou-yu', 'lu-xun', 'huang-gai', 'zhu-rong'])
 const CHARGE_IDS = new Set(['lu-bu', 'zhang-fei', 'ma-chao'])
 const YELLOW_TURBAN_IDS = new Set(['zhang-jiao', 'zhang-bo', 'zhang-liang', 'guan-hai', 'zhou-cang'])
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+
+/** 기술 연구 보정(research.ts의 BattleResearch와 같은 모양) */
+export interface BattleResearch {
+  troops?: number; archerAtk?: number; chargeSkill?: number; damageTaken?: number; startGauge?: number; collapseLoss?: number
+  finalActMorale?: number; ignoreFirstCollapse?: boolean; breakThreat?: number; window?: number; strategistCd?: number
+  fire?: number; enemyWarn?: number; tacticCost?: number; capBonus?: number; combo?: number
+}
 
 export function matchup(attacker: General['role'], defender: General['role']): number {
   if (BEATS[attacker] === defender) return 1.15
@@ -173,6 +182,8 @@ export class BattleCore {
   private readonly moraleScale: number
   private readonly moraleBonus: number
   private readonly rng: () => number
+  readonly research: BattleResearch
+  private collapseSaved = false
   /** 자동 전투(3성 시나리오). 전투 중에 켜고 끌 수 있다. */
   autoPilot: AutoPilot | null
 
@@ -181,16 +192,20 @@ export class BattleCore {
     this.rng = config.rng ?? Math.random
     this.autoPilot = config.autoPilot ?? null
     this.moraleBonus = clamp(Math.round(config.moraleBonus ?? 0), 0, 50)
+    this.research = config.research ?? {}
     this.players = players.slice(0, 3).map((general, lane) => this.makeUnit(general, 'player', lane))
+    // 오부 훈련: 아군 최대 병력 증가
+    if (this.research.troops) this.players.forEach(unit => { unit.maxTroops = Math.round(unit.maxTroops * (1 + this.research.troops!)); unit.troops = unit.maxTroops })
     this.enemies = enemies.slice(0, 3).map((general, lane) => this.makeUnit(general, 'enemy', lane))
     this.bond = bondFor(this.players.map(unit => unit.general.id))
-    this.players.forEach(unit => { unit.cdMax = this.cooldownFor(unit); unit.cd = Math.max(0, unit.cdMax * 0.4 - (this.passive(unit) === 'fastOpener' ? (unit.def.passive?.value ?? 0) : 0)) })
+    this.players.forEach(unit => { unit.cdMax = this.cooldownFor(unit) * (this.research.strategistCd && (unit.def.type === '계략' || unit.def.type === '통솔') ? 1 - this.research.strategistCd : 1); unit.cd = Math.max(0, unit.cdMax * 0.4 - (this.passive(unit) === 'fastOpener' ? (unit.def.passive?.value ?? 0) : 0)) })
     this.enemies.forEach(unit => { unit.cdMax = skillCooldownFor(this.growth(unit), unit.base) * (this.mode === 'duel' ? 1 : BATTLE_RULES.enemySkillCooldownMult); unit.cd = unit.cdMax * 0.6 })
     this.enemyMaxTotal = Math.max(1, this.enemies.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const enemyLevel = this.enemies.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.enemies.length)
     this.moraleScale = Math.min(2, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1))
     this.moraleMax = Math.round(BATTLE_RULES.moraleByPhase[0] * this.moraleScale) + this.moraleBonus
     this.morale = this.moraleMax
+    this.gauge = Math.min(100, this.research.startGauge ?? 0)
     if (this.players.some(unit => this.passive(unit) === 'startFear')) this.addEffect('debuff', 'fear', 3)
     this.log(`작전 개시 · 적 ${this.enemies.map(unit => unit.general.name).join(' · ')}${this.bond ? ` · 인연 「${this.bond.name}」 ${this.bond.desc}` : ''}`)
   }
@@ -294,7 +309,7 @@ export class BattleCore {
     let bonus = effectValue(this.buffs, 'atk-up')
     if (this.buffs.some(effect => effect.id === 'hangover' && effect.remaining <= 3)) bonus -= effectValue(this.buffs, 'hangover')
     if (unit.selfAtk.until > this.t) bonus += unit.selfAtk.value
-    if (unit.general.role === '궁병') bonus += effectValue(this.buffs, 'archer-focus')
+    if (unit.general.role === '궁병') bonus += effectValue(this.buffs, 'archer-focus') + (this.research.archerAtk ?? 0)
     if (unit.general.role === '기병') bonus += effectValue(this.buffs, 'cavalry-surge')
     const id = this.passive(unit)
     const value = unit.def.passive?.value ?? 0
@@ -321,7 +336,7 @@ export class BattleCore {
       if (attacker && this.passive(attacker) === 'vsCavalry' && unit.general.role === '기병') taken += attacker.def.passive?.value ?? 0
       return { dr: Math.min(BATTLE_RULES.drCap, dr), taken: Math.min(BATTLE_RULES.takenCap, taken) }
     }
-    let dr = effectValue(this.buffs, 'dr-up')
+    let dr = effectValue(this.buffs, 'dr-up') + (this.research.damageTaken ?? 0)
     if (unit.selfDr.until > this.t) dr += unit.selfDr.value
     const teamTroops = this.players.reduce((sum, other) => sum + other.troops, 0) / Math.max(1, this.players.reduce((sum, other) => sum + other.maxTroops, 0))
     this.players.forEach(other => {
@@ -447,12 +462,19 @@ export class BattleCore {
   }
 
   private collapse(): void {
+    // 불패 진형: 전투마다 첫 붕괴 1회를 막는다
+    if (this.research.ignoreFirstCollapse && !this.collapseSaved) {
+      this.collapseSaved = true
+      this.threat = BATTLE_RULES.collapseThreatReset
+      this.log('불패 진형 · 무너지려던 전열을 다시 세웠습니다.', 'jade')
+      return
+    }
     this.collapses += 1
-    this.players.forEach(unit => { if (unit.troops > 0) unit.troops = Math.max(1, Math.round(unit.troops * (1 - BATTLE_RULES.collapseTroopLoss))) })
+    this.players.forEach(unit => { if (unit.troops > 0) unit.troops = Math.max(1, Math.round(unit.troops * (1 - (this.research.collapseLoss ?? BATTLE_RULES.collapseTroopLoss)))) })
     this.threat = BATTLE_RULES.collapseThreatReset
     this.combo = 0
     this.events.push({ kind: 'collapse', count: this.collapses })
-    this.log(this.collapses >= BATTLE_RULES.collapsesToLose ? '전열이 두 번째로 무너졌습니다.' : '전열 붕괴 · 아군 병력 −20% · 한 번 더 무너지면 패배합니다', 'ember')
+    this.log(this.collapses >= BATTLE_RULES.collapsesToLose ? '전열이 두 번째로 무너졌습니다.' : `전열 붕괴 · 아군 병력 −${Math.round((this.research.collapseLoss ?? BATTLE_RULES.collapseTroopLoss) * 100)}% · 한 번 더 무너지면 패배합니다`, 'ember')
   }
 
   // ── 적 전술 예고 ─────────────────────────────────
@@ -477,7 +499,7 @@ export class BattleCore {
     this.patternsSeen += 1
     const early = this.players.some(unit => this.passive(unit) === 'earlyWarning') ? 0.5 : 0
     const interval = BATTLE_RULES.patternInterval[this.phase] + (hasBattleEffect(this.debuffs, 'slow') || hasBattleEffect(this.debuffs, 'flood') ? 0.6 : 0)
-    const window = Math.min(interval - 0.2, BATTLE_RULES.responseWindow[this.phase] + early)
+    const window = Math.min(interval - 0.2, BATTLE_RULES.responseWindow[this.phase] + early + (this.research.window ?? 0))
     const [low, high] = this.autoPilot?.reaction ?? [0.6, 1.2]
     this.pattern = { def, at: this.t, deadline: this.t + window, judged: false, inputs: new Set(), reactAt: this.t + low + this.rng() * (high - low) }
     this.nextPatternAt = this.t + interval
@@ -508,7 +530,7 @@ export class BattleCore {
       let gauge = BATTLE_RULES.gaugeOnBreak * (hasBattleEffect(this.buffs, 'war-chant') ? 1.25 : 1)
       if (this.players.some(unit => this.passive(unit) === 'gaugeOnBreak')) gauge += 3
       this.gauge = Math.min(100, this.gauge + gauge)
-      this.threat = Math.max(0, this.threat - 10)
+      this.threat = Math.max(0, this.threat - 10 - (this.research.breakThreat ?? 0))
       this.players.forEach(unit => { if (this.passive(unit) === 'cdOnBreak') unit.cd = Math.max(0, unit.cd - (unit.def.passive?.value ?? 1)) })
       this.lastCommandFailed = false
       this.log(`${label ?? this.players[lane]?.general.name ?? '아군'} · ${open.def.label} 파훼 · 연계 ${this.combo} · 적 사기 −${morale}`, 'jade')
@@ -548,7 +570,7 @@ export class BattleCore {
   // ── 전술 명령 ────────────────────────────────────
   tacticCost(tactic: BattleTactic): number {
     if (this.freeTactic) return 0
-    return Math.round(BATTLE_RULES.tacticCost[tactic] * (hasBattleEffect(this.buffs, 'tactic-discount') ? 0.7 : 1))
+    return Math.round(BATTLE_RULES.tacticCost[tactic] * (hasBattleEffect(this.buffs, 'tactic-discount') ? 0.7 : 1) * (1 - (this.research.tacticCost ?? 0)))
   }
 
   useTactic(tactic: BattleTactic): boolean {
@@ -612,6 +634,7 @@ export class BattleCore {
     if (this.bond?.id === 'five-tigers' && (unit.def.type === '돌격' || unit.def.type === '사격')) mult += 0.1
     if (this.bond?.id === 'lu-bu-army') mult += 0.08
     if (!preview && this.pendingFlankBonus > 0 && id === 'flankCharge') mult += this.pendingFlankBonus
+    if (unit.def.type === '돌격') mult += this.research.chargeSkill ?? 0
     for (const effect of fx) {
       if (effect.k === 'power') mult *= effect.mult
       if (effect.k !== 'cond') continue
@@ -637,12 +660,12 @@ export class BattleCore {
     if (hasBattleEffect(this.debuffs, 'flood')) debuffMult *= 1.15
     if (hasBattleEffect(this.debuffs, 'rage')) debuffMult *= 1.25
     for (const effect of fx) if (effect.k === 'afterDebuff' && hasBattleEffect(this.debuffs, 'silence')) debuffMult *= effect.value
-    const combo = 1 + Math.min(this.combo, 8) * (hasBattleEffect(this.buffs, 'chain-fury') ? 0.055 : 0.05)
+    const combo = 1 + Math.min(this.combo, 8) * (hasBattleEffect(this.buffs, 'chain-fury') ? 0.055 : 0.05) * (1 + (this.research.combo ?? 0))
     const flat = hasBattleEffect(this.buffs, 'hawk-eye') ? 4 : 0
     power = (power * mult + flat) * buffMult * debuffMult * combo
     const hits = fx.find((effect): effect is Extract<SkillFx, { k: 'hits' }> => effect.k === 'hits')
     if (hits) power *= hits.n * hits.each
-    return Math.round(Math.min(SKILL_MORALE_CAP, power) * 10) / 10
+    return Math.round(Math.min(SKILL_MORALE_CAP + (this.research.capBonus ?? 0), power) * 10) / 10
   }
 
   castSkill(lane: number): boolean {
@@ -766,7 +789,7 @@ export class BattleCore {
     for (const unit of this.enemies) {
       if (!unit.skillOn || unit.troops <= 0 || silenced) continue
       unit.cd -= delta
-      if (!unit.warned && unit.cd <= BATTLE_RULES.enemySkillWarning) {
+      if (!unit.warned && unit.cd <= BATTLE_RULES.enemySkillWarning + (this.research.enemyWarn ?? 0)) {
         unit.warned = true
         this.events.push({ kind: 'enemySkillWarn', lane: unit.lane, name: unit.def.active.name })
         this.log(`적장 스킬 예고 · ${unit.general.name}의 「${unit.def.active.name}」 · 철벽 태세로 막으십시오`, 'ember')
@@ -821,7 +844,7 @@ export class BattleCore {
     this.runAutoPilot()
     this.enemySkills(dt)
     this.autoCombat(dt)
-    const burnRate = 2.2 * (hasBattleEffect(this.buffs, 'east-wind') ? 1.5 : 1) * (hasBattleEffect(this.debuffs, 'chain') ? 1.5 : 1)
+    const burnRate = 2.2 * (hasBattleEffect(this.buffs, 'east-wind') ? 1.5 : 1) * (hasBattleEffect(this.debuffs, 'chain') ? 1.5 : 1) * (1 + (this.research.fire ?? 0))
     const drain = BATTLE_RULES.moraleDrain * (hasBattleEffect(this.buffs, 'rally-banner') ? 1.35 : 1)
       + (hasBattleEffect(this.debuffs, 'burning') ? burnRate : 0)
       + (hasBattleEffect(this.debuffs, 'fear') ? 1.5 : 0)
@@ -836,7 +859,8 @@ export class BattleCore {
     if (this.phase >= 2) return this.finish(true, 'morale')
     this.phase += 1
     const fracture = hasBattleEffect(this.debuffs, 'fracture') ? 0.85 : 1
-    this.moraleMax = Math.round((BATTLE_RULES.moraleByPhase[this.phase] * this.moraleScale + this.moraleBonus) * fracture)
+    const finalAct = this.phase === 2 ? 1 - (this.research.finalActMorale ?? 0) : 1
+    this.moraleMax = Math.round((BATTLE_RULES.moraleByPhase[this.phase] * this.moraleScale + this.moraleBonus) * fracture * finalAct)
     this.morale = this.moraleMax
     this.combo = 0
     this.events.push({ kind: 'phase', phase: this.phase })

@@ -1,3 +1,4 @@
+import { createResearch, normalizeResearch, researchMods, researchCostText, startResearch } from './research'
 import cityRoutes from '../../server/city-routes.json'
 import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
@@ -133,10 +134,16 @@ export interface FactionTerritorySnapshot {
 export interface ResearchNode {
   id: string
   name: string
-  branch: '농정' | '상업' | '군제' | '학술'
-  tier: 1 | 2 | 3 | 4 | 5
+  branch: '부국' | '강병' | '지략' | '제패' | '인재'
+  tier: 1 | 2 | 3 | 4 | 5 | 6
   description: string
   cost: Partial<Record<ResourceKey, number>>
+  /** 갈림길: 같은 단계의 a/b 중 하나만 */
+  choice?: 'a' | 'b'
+  durationMs: number
+  /** 진행 중이면 시작·완료 시각(ms) */
+  startedAt?: number
+  endsAt?: number
   prerequisite?: string
   unlocked: boolean
 }
@@ -332,11 +339,11 @@ export function cooldownRemaining(lastAt: number | undefined, cooldownMs: number
 }
 
 export function incomeCooldownRemaining(state: StrategyState, now = Date.now()): number {
-  return cooldownRemaining(state.lastIncomeCollectedAt, INCOME_COOLDOWN_MS, now)
+  return cooldownRemaining(state.lastIncomeCollectedAt, INCOME_COOLDOWN_MS * (1 - researchMods(state).incomeCooldown), now)
 }
 
 export function conquestCooldownRemaining(state: StrategyState, now = Date.now()): number {
-  return cooldownRemaining(state.lastConquestAt, CONQUEST_COOLDOWN_MS, now)
+  return cooldownRemaining(state.lastConquestAt, CONQUEST_COOLDOWN_MS * (1 - researchMods(state).siegeCooldown), now)
 }
 
 export function defenseCooldownRemaining(state: StrategyState, now = Date.now()): number {
@@ -490,7 +497,7 @@ export function deployCityGarrison(state: StrategyState, cityId: string): CityGa
   const generalIds = state.formation.slice(0, 3)
   if (!generalIds.length) return { ok: false, message: '먼저 출전 진형에 무장을 편성하십시오.', count: city.garrisons?.length ?? 0 }
   const generals = generalIds.map(id => findGeneral(state, id)).filter((general): general is General => Boolean(general))
-  const power = generals.reduce((total, general) => total + combatPower(general), 0)
+  const power = Math.round(generals.reduce((total, general) => total + combatPower(general), 0) * (1 + researchMods(state).newGarrison))
   const averageLevel = Math.round(generals.reduce((total, general) => total + general.level, 0) / generals.length)
   city.garrisons ??= []
   city.garrisons.push({ id: `player-${city.id}-${Date.now()}-${city.garrisons.length}`, generalIds, averageLevel, power, source: 'player', label: `${state.faction} 수비 진형 ${city.garrisons.length + 1}` })
@@ -513,41 +520,9 @@ export function normalizeInitialSeasonTerritories(state: StrategyState): boolean
   })
   return changed
 }
-function createResearch(): ResearchNode[] {
-  const node = (id: string, name: string, branch: ResearchNode['branch'], tier: ResearchNode['tier'], description: string, cost: Partial<Record<ResourceKey, number>>, prerequisite?: string): ResearchNode => ({ id, name, branch, tier, description, cost, prerequisite, unlocked: false })
-  const series = (branch: ResearchNode['branch'], prefix: string, entries: Array<[string, string]>, firstPrerequisite: string): ResearchNode[] => entries.map(([name, description], index) => {
-    const id = `${prefix}-${index + 1}`
-    const tier = Math.min(5, Math.floor(index / 3) + 1) as ResearchNode['tier']
-    const cost = { influence: 520 + index * 115, [branch === '농정' ? 'grain' : branch === '상업' ? 'silver' : branch === '군제' ? 'iron' : 'wood']: 700 + index * 140 } as Partial<Record<ResourceKey, number>>
-    return node(id, name, branch, tier, description, cost, index === 0 ? firstPrerequisite : `${prefix}-${index}`)
-  })
-  return [
-    node('irrigation', '수리 관개', '농정', 1, '모든 농장의 식량 산출량 +18%.', { influence: 420, silver: 700 }),
-    node('granary', '대형 의창', '농정', 2, '수확 시 식량을 추가로 비축합니다.', { influence: 850, grain: 1800 }, 'irrigation'),
-    node('coinage', '상평 주화', '상업', 1, '모든 시장의 은전 수입 +22%.', { influence: 480, silver: 950 }),
-    node('silk-road', '서역 교역로', '상업', 2, '시장 수입에 영향력 보너스를 더합니다.', { influence: 900, wood: 1600 }, 'coinage'),
-    node('drill', '오부 훈련', '군제', 1, '병영이 있는 도시의 방어도 +12.', { influence: 520, iron: 900 }),
-    node('crossbow', '연노 제식', '군제', 2, '전투 시작 시 아군 사기 +8.', { influence: 980, iron: 1700 }, 'drill'),
-    node('bureaucracy', '구품 정무', '학술', 1, '내정 행동으로 얻는 영향력 +20%.', { influence: 600, silver: 850 }),
-    node('taixue', '태학 개편', '학술', 2, '서원 레벨에 따라 병서를 추가로 얻습니다.', { influence: 1100, grain: 1200 }, 'bureaucracy'),
-    ...series('농정', 'agri', [
-      ['윤작 농법', '농장 생산량 +7%, 수확 식량 +5%.'], ['수리 제방', '도시 번영도에 따른 식량 보너스가 증가합니다.'], ['곡물 품종개량', '수확 식량 +9%.'], ['대형 저수지', '모든 아군 도시의 식량 생산량 +8%.'], ['농기구 표준화', '농정 건물 강화 비용의 목재 부담을 줄입니다.'], ['구휼 창고', '수확 시 민심이 낮은 도시의 식량 손실을 방지합니다.'], ['토지 측량', '영토가 늘어날수록 수확 영향력이 증가합니다.'], ['관개 운하망', '아군 도시가 5곳 이상이면 식량 생산량 +12%.'], ['천문 농시', '수확 명망 보너스가 증가합니다.'], ['풍년 의례', '수확 시 추가 식량과 명망을 획득합니다.'], ['국가 둔전', '전선 도시의 식량 생산 패널티를 완화합니다.'], ['태평 농정', '농정 계열 효과가 한 단계 더 강화됩니다.'],
-    ], 'granary'),
-    ...series('상업', 'trade', [
-      ['시장 세제개혁', '시장 은전 수입 +7%.'], ['염철 전매', '철과 은전 수입에 소폭 보너스를 줍니다.'], ['상단 보호령', '세력전 보급 비용의 은전 부담을 줄입니다.'], ['도량형 통일', '모든 자원 수확량 +4%.'], ['역참망', '도시 선택과 출정 보급 효율이 증가합니다.'], ['수운 조운', '강동·형주 도시의 은전 수입이 증가합니다.'], ['국경 시장', '중립 도시 점령 시 추가 은전을 확보합니다.'], ['상인 길드', '아군 도시 수에 비례해 은전 수입이 증가합니다.'], ['무역 호위대', '세력전 승리 시 공헌도 보너스를 얻습니다.'], ['해상 교역', '강동 전선 점령 보상이 증가합니다.'], ['천하 통상로', '전 영토 수입의 상업 보너스가 강화됩니다.'], ['황금 장부', '상업 계열 효과가 한 단계 더 강화됩니다.'],
-    ], 'silk-road'),
-    ...series('군제', 'military', [
-      ['군량 수송', '공성 출정 식량 비용을 줄입니다.'], ['방패 진형', '아군 도시 방어전의 성벽 회복량이 증가합니다.'], ['기병 교련', '출정 전투력이 증가합니다.'], ['성벽 보강', '모든 아군 도시의 기본 방어도가 상승합니다.'], ['봉화 연락망', '방어전 재정비 시간이 감소합니다.'], ['공성 병기학', '공성 출정 피해량이 증가합니다.'], ['정예 징집', '세력전 공격력이 증가합니다.'], ['수성 전술', '방어전 패배 시 성벽 피해를 줄입니다.'], ['기동 군단', '세력전 재편성 시간이 감소합니다.'], ['연합 작전', '아군 도시 수에 비례해 전투력이 증가합니다.'], ['천하 군제', '공성·세력전 승리 보상을 강화합니다.'], ['무적 진영', '군제 계열 효과가 한 단계 더 강화됩니다.'], ['패왕의 병서', '전선 전투의 최종 전투력이 크게 증가합니다.'],
-    ], 'crossbow'),
-    ...series('학술', 'scholar', [
-      ['문서 행정', '연구 비용의 영향력 부담을 줄입니다.'], ['인재 등용', '장수 성장에 필요한 병서 수급이 증가합니다.'], ['역사 편찬', '전투 승리 명망 보너스가 증가합니다.'], ['법령 정비', '건물 강화 비용을 일부 절감합니다.'], ['군국 교육', '장수의 통솔과 책략 효과가 강화됩니다.'], ['천문 관측', '전투 패턴 대응 보너스가 증가합니다.'], ['의학 전서', '방어전 패배 후 민심 손실을 완화합니다.'], ['병법 주석', '세력전 공격력에 추가 보정이 붙습니다.'], ['외교 사절', '중립 도시 공성 비용을 줄입니다.'], ['구주 지도', '지도상의 모든 도시 정보를 해금합니다.'], ['옥패 기록원', '세력전 공헌도 획득량이 증가합니다.'], ['대학 체계', '연구 완료 시 추가 영향력을 돌려받습니다.'], ['천하 문명', '학술 계열 효과가 한 단계 더 강화됩니다.'],
-    ], 'taixue'),
-  ]
-}
-
-export function ensureResearchRoster(state: StrategyState): void {
-  const existing = new Set(state.research.map(node => node.id))
-  state.research.push(...createResearch().filter(node => !existing.has(node.id)))
+/** 저장된 연구를 새 30개 체계에 맞춘다(예전 연구 완료분은 자원 환급). 환급이 있으면 그 내역을 돌려준다. */
+export function ensureResearchRoster(state: StrategyState): Partial<Record<ResourceKey, number>> | null {
+  return normalizeResearch(state)
 }
 
 // Historical figures from the late Eastern Han and Three Kingdoms period.
@@ -1123,8 +1098,9 @@ export function equipmentPower(state: StrategyState, generalId: string): number 
   return Math.round(bonus.leadership * 1.15 + bonus.martial * 1.25 + bonus.stratagem * 0.9 + bonus.speed * 0.65)
 }
 
-function equipmentCost(item: Equipment): Partial<Record<ResourceKey, number>> {
-  return { silver: 420 + item.level * 260, iron: 100 + item.level * 75 }
+export function equipmentCost(item: Equipment, state?: StrategyState): Partial<Record<ResourceKey, number>> {
+  const cut = 1 - (state ? researchMods(state).enhanceCost : 0)
+  return { silver: Math.round((420 + item.level * 260) * cut), iron: Math.round((100 + item.level * 75) * cut) }
 }
 
 export function enhanceEquipment(state: StrategyState, id: string): UpgradeResult {
@@ -1132,7 +1108,7 @@ export function enhanceEquipment(state: StrategyState, id: string): UpgradeResul
   const item = state.equipmentInventory.find(candidate => candidate.id === id)
   if (!item) return { ok: false, message: '장비를 찾을 수 없습니다.' }
   if (item.level >= 20) return { ok: false, message: '장비가 이미 최고 강화 레벨입니다.' }
-  const cost = equipmentCost(item)
+  const cost = equipmentCost(item, state)
   if (!spendResources(state, cost)) return { ok: false, message: `강화 재화가 부족합니다. 은전 ${formatNumber(cost.silver ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요` }
   const quantity = item.quantity ?? 1
   if (quantity > 1) {
@@ -1175,19 +1151,19 @@ export function unequipEquipment(state: StrategyState, generalId: string, type: 
   return { ok: true, message: state.lastNotice }
 }
 
-function rollEquipmentGrade(): EquipmentGrade {
+function rollEquipmentGrade(legendaryBonus = 0): EquipmentGrade {
   const roll = Math.random() * 100
-  if (roll < 5) return 'legendary'
-  if (roll < 17) return 'unique'
+  if (roll < 5 + legendaryBonus) return 'legendary'
+  if (roll < 17 + legendaryBonus) return 'unique'
   if (roll < 45) return 'rare'
   return 'normal'
 }
 
-function createDrawnEquipment(index: number): Equipment {
+function createDrawnEquipment(index: number, legendaryBonus = 0): Equipment {
   const type = (['weapon', 'armor', 'accessory'] as EquipmentType[])[Math.floor(Math.random() * 3)]
   const sets = Object.keys(EQUIPMENT_SET_META) as EquipmentSet[]
   const set = sets[Math.floor(Math.random() * sets.length)]
-  const grade = rollEquipmentGrade()
+  const grade = rollEquipmentGrade(legendaryBonus)
   const meta = EQUIPMENT_GRADE_META[grade]
   const setMeta = EQUIPMENT_SET_META[set]
   const names: Record<EquipmentType, string[]> = { weapon: ['청룡 장도', '패왕 철극', '유성 비수'], armor: ['현무 중갑', '백린 갑주', '천군 전포'], accessory: ['옥패 부적', '군령 인장', '천책 죽간'] }
@@ -1252,17 +1228,18 @@ export function drawEquipment(state: StrategyState, count = 1): EquipmentDrawRes
   const cost = count === 10 ? 2200 : 240
   if (state.honor < cost) return { ok: false, message: `명망이 부족합니다. 장비 뽑기에는 ${formatNumber(cost)} 명망이 필요합니다.`, rewards: [] }
   state.honor -= cost
-  const rewards = Array.from({ length: count }, (_, index) => createDrawnEquipment(index))
+  const legendaryBonus = researchMods(state).legendaryRate
+  const rewards = Array.from({ length: count }, (_, index) => createDrawnEquipment(index, legendaryBonus))
   rewards.forEach(item => addEquipmentToInventory(state, item))
   state.lastEquipmentDraw = rewards
   state.lastNotice = `${count}회 장비 뽑기 완료 · ${rewards.map(item => `${EQUIPMENT_GRADE_META[item.grade].label} ${item.name}`).join(', ')}`
   return { ok: true, message: state.lastNotice, rewards }
 }
 
-function weightedGrade(): Grade {
+function weightedGrade(boosted = false): Grade {
   const roll = Math.random() * 100
-  if (roll < 2) return 5
-  if (roll < 10) return 4
+  if (roll < (boosted ? 3 : 2)) return 5
+  if (roll < (boosted ? 13 : 10)) return 4
   if (roll < 30) return 3
   if (roll < 65) return 2
   return 1
@@ -1285,13 +1262,19 @@ export interface RecruitResult {
   rewards: General[]
 }
 
+/** 무장 모집 명망 비용(구현령 −10%) */
+export function recruitCost(state: StrategyState, count = 1): number {
+  return Math.round((count === 10 ? 900 : 100) * (1 - researchMods(state).recruitCost))
+}
+
 export function recruit(state: StrategyState, count = 1): RecruitResult {
-  const cost = count === 10 ? 900 : 100
+  const cost = recruitCost(state, count)
+  const boosted = researchMods(state).recruitRate
   if (state.honor < cost) return { ok: false, message: '명망이 부족합니다. 전투에서 명망을 모아 다시 시도하십시오.', general: null, rewards: [] }
   state.honor -= cost
   const rewards: General[] = []
   for (let index = 0; index < count; index += 1) {
-    const reward = createSummonedGeneral(weightedGrade())
+    const reward = createSummonedGeneral(weightedGrade(boosted))
     rewards.push(reward)
     const owned = findGeneral(state, reward.id)
     if (owned) {
@@ -1308,7 +1291,7 @@ export function recruit(state: StrategyState, count = 1): RecruitResult {
         owned.skillRank = Math.min(5, (owned.skillRank ?? previousStars) + 1)
         owned.skillPower = (owned.skillPower ?? 100) + 18
       } else {
-        state.manuals += 8
+        state.manuals += Math.round(8 * (1 + researchMods(state).manuals))
       }
     } else {
       state.generals.push(reward)
@@ -1329,8 +1312,9 @@ export interface UpgradeResult { ok: boolean; message: string }
 export function upgrade(state: StrategyState, id: string): UpgradeResult {
   const general = findGeneral(state, id)
   if (!general) return { ok: false, message: '무장을 찾을 수 없습니다.' }
-  const silverCost = 650 + general.level * 350
-  const manualCost = 12 + general.level * 2
+  const levelCut = 1 - researchMods(state).levelCost
+  const silverCost = Math.round((650 + general.level * 350) * levelCut)
+  const manualCost = Math.round((12 + general.level * 2) * levelCut)
   if (state.silver < silverCost || state.manuals < manualCost) return { ok: false, message: `강화 재료가 부족합니다. 은전 ${formatNumber(silverCost)} · 병서 ${manualCost} 필요` }
   state.silver -= silverCost
   state.resources.silver = state.silver
@@ -1426,14 +1410,6 @@ function wallDamageFromPower(power: number): number {
   return Math.max(1, Math.min(CITY_DEFENSE_BY_LEVEL[5], Math.trunc(power)))
 }
 
-function researchUnlocked(state: StrategyState, id: string): boolean {
-  return state.research.some(node => node.id === id && node.unlocked)
-}
-
-function researchCount(state: StrategyState, prefix: string): number {
-  return state.research.filter(node => node.id.startsWith(prefix) && node.unlocked).length
-}
-
 export function cityIncome(city: City, state?: StrategyState): Resources {
   if (city.owner !== (state?.faction ?? '촉한')) return { grain: 0, silver: 0, wood: 0, iron: 0, influence: 0 }
   const productionMultiplier = CITY_PRODUCTION_MULTIPLIER[city.level as Grade] ?? CITY_PRODUCTION_MULTIPLIER[5]
@@ -1441,34 +1417,32 @@ export function cityIncome(city: City, state?: StrategyState): Resources {
   const market = buildingLevel(city, 'commerce')
   const workshop = buildingLevel(city, 'workshop')
   const academy = buildingLevel(city, 'academy')
-  const grainBonus = state && researchUnlocked(state, 'irrigation') ? 1.18 : 1
-  const granaryBonus = state && researchUnlocked(state, 'granary') ? 1.12 : 1
-  const silverBonus = state && researchUnlocked(state, 'coinage') ? 1.22 : 1
-  const tradeBonus = state && researchUnlocked(state, 'silk-road') ? 1.15 : 1
-  const influenceBonus = state && researchUnlocked(state, 'bureaucracy') ? 1.2 : 1
-  const agricultureBonus = state ? 1 + researchCount(state, 'agri-') * 0.018 : 1
-  const tradeBonusFromTree = state ? 1 + researchCount(state, 'trade-') * 0.016 : 1
-  const scholarshipBonus = state ? 1 + researchCount(state, 'scholar-') * 0.01 : 1
+  const mods = state ? researchMods(state) : null
+  const all = 1 + (mods?.allIncome ?? 0)
+  const grainBonus = (1 + (mods?.grain ?? 0)) * all
+  const silverBonus = (1 + (mods?.silver ?? 0)) * all
+  const materialBonus = (1 + (mods?.woodIron ?? 0)) * all
+  const influenceBonus = (1 + (mods?.influence ?? 0)) * all
   return {
-    grain: Math.round((170 + farm * 210 + city.prosperity * 2.2) * productionMultiplier * grainBonus * granaryBonus * agricultureBonus * CITY_INCOME_REWARD_MULTIPLIER),
-    silver: Math.round((120 + market * 155 + city.prosperity * 1.4) * productionMultiplier * silverBonus * tradeBonus * tradeBonusFromTree * CITY_INCOME_REWARD_MULTIPLIER),
-    wood: Math.round((80 + workshop * 120) * productionMultiplier * CITY_INCOME_REWARD_MULTIPLIER),
-    iron: Math.round((45 + workshop * 82) * productionMultiplier * CITY_INCOME_REWARD_MULTIPLIER),
-    influence: Math.round((35 + market * 28 + academy * 44) * productionMultiplier * influenceBonus * tradeBonus * scholarshipBonus * CITY_INCOME_REWARD_MULTIPLIER),
+    grain: Math.round((170 + farm * 210 + city.prosperity * 2.2) * productionMultiplier * grainBonus * CITY_INCOME_REWARD_MULTIPLIER),
+    silver: Math.round((120 + market * 155 + city.prosperity * 1.4) * productionMultiplier * silverBonus * CITY_INCOME_REWARD_MULTIPLIER),
+    wood: Math.round((80 + workshop * 120) * productionMultiplier * materialBonus * CITY_INCOME_REWARD_MULTIPLIER),
+    iron: Math.round((45 + workshop * 82) * productionMultiplier * materialBonus * CITY_INCOME_REWARD_MULTIPLIER),
+    influence: Math.round((35 + market * 28 + academy * 44) * productionMultiplier * influenceBonus * CITY_INCOME_REWARD_MULTIPLIER),
   }
 }
 
 export function conquestPower(state: StrategyState): number {
   const formationPower = totalPower(state)
-  const commandBonus = state.research.some(node => node.id === 'drill' && node.unlocked) ? 120 : 0
-  return formationPower + commandBonus + state.cities.filter(city => city.owner === state.faction).length * 35 + researchCount(state, 'military-') * 42 + researchCount(state, 'scholar-') * 12
+  return formationPower + state.cities.filter(city => city.owner === state.faction).length * 35
 }
 
-export function conquestCost(city: City): Partial<Record<ResourceKey, number>> {
+export function conquestCost(city: City, state?: StrategyState): Partial<Record<ResourceKey, number>> {
+  const cut = 1 - (state ? researchMods(state).siegeCost : 0)
   return {
-    grain: 650 + city.level * 250,
-    silver: 550 + city.level * 250,
-    iron: 180 + city.level * 120,
+    grain: Math.round((650 + city.level * 250) * cut),
+    silver: Math.round((550 + city.level * 250) * cut),
+    iron: Math.round((180 + city.level * 120) * cut),
   }
 }
 
@@ -1511,7 +1485,14 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
   state.lastDefenseAt = now
   const garrisons = (city.garrisons ?? []).filter(garrison => garrison.source === 'player')
   const raidPower = neutralRaidPower(neutralRaidLevelFor(state, city.id))
-  const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.map(garrison => garrison.power), defeated: city.defendersDefeated ?? 0, defense: city.defense, allowCapture: false })
+  const mods = researchMods(state)
+  const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.map(garrison => garrison.power * (1 + mods.raidGarrison)), defeated: city.defendersDefeated ?? 0, defense: city.defense, allowCapture: false })
+  if (result.attackerWon && mods.raidWallDamage < 1) {
+    // 성벽 보강·철옹성: 성벽이 받는 피해를 줄인다
+    const reduced = Math.round(result.damage * mods.raidWallDamage)
+    result.defense = Math.min(city.defense, result.defense + (result.damage - reduced))
+    result.damage = reduced
+  }
   const defender = result.defenderIndex >= 0 ? garrisons[result.defenderIndex] : undefined
   const held = !result.attackerWon
   city.garrisons = garrisons
@@ -1521,7 +1502,7 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
     state.factionWarScore += 100
     state.lastNotice = `${city.name} 방어 성공 · ${defender?.label ?? '수비대'}가 습격대(전력 ${formatNumber(raidPower)})를 막았습니다 · 성벽 방어도 유지 · 세력전 공헌 +100`
   } else {
-    city.prosperity = Math.max(20, city.prosperity - 4)
+    city.prosperity = Math.max(20, city.prosperity - Math.round(4 * (1 - mods.prosperityLoss)))
     state.lastNotice = defender
       ? `${city.name} 방어 실패 · ${defender.label} 격파 · 성벽 방어도 -${formatNumber(result.damage)} · 남은 수비대 ${result.remaining}`
       : `${city.name} 수비대가 없어 성벽이 습격당했습니다 · 성벽 방어도 -${formatNumber(result.damage)} · 아군 진형을 수비병으로 세우십시오`
@@ -1543,11 +1524,11 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   const wait = factionBattleCooldownRemaining(state, now)
   if (wait > 0) return { ok: false, won: false, message: `세력전 부대가 재편성 중입니다. ${Math.ceil(wait / 1000)}초 후 다시 공격할 수 있습니다.`, damage: 0 }
   const honorCost = FACTION_WAR_HONOR_COST[city.level] ?? FACTION_WAR_HONOR_COST[5]
-  const goldReward = FACTION_WAR_GOLD_REWARD[city.level] ?? FACTION_WAR_GOLD_REWARD[5]
+  const goldReward = Math.round((FACTION_WAR_GOLD_REWARD[city.level] ?? FACTION_WAR_GOLD_REWARD[5]) * (1 + researchMods(state).factionGold))
   if (state.honor < honorCost) return { ok: false, won: false, message: `최종 세력전에 필요한 명망이 부족합니다. 명망 ${honorCost} 필요`, damage: 0 }
   state.honor -= honorCost
   state.lastFactionBattleAt = now
-  const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70 + researchCount(state, 'military-') * 45 + researchCount(state, 'scholar-') * 15
+  const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70
   const factionPower = 300 + city.level * 250 + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
   const won = attackPower >= factionPower * 0.75
   addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: 0, note: won ? `최종 세력전 승리 · 명망 -${honorCost} · 금화 +${goldReward}` : `최종 세력전 패배 · 명망 -${honorCost}` })
@@ -1576,7 +1557,7 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
   if (!eligibility.allowed) return { ok: false, captured: false, message: eligibility.reason, damage: 0 }
   const conquestWait = conquestCooldownRemaining(state, now)
   if (conquestWait > 0) return { ok: false, captured: false, message: `공성 준비 중입니다. ${Math.ceil(conquestWait / 1000)}초 후 다시 출정할 수 있습니다.`, damage: 0 }
-  const cost = city.defense <= 55 ? {} : conquestCost(city)
+  const cost = city.defense <= 55 ? {} : conquestCost(city, state)
   if (!spendResources(state, cost)) return { ok: false, captured: false, message: `출정 자원이 부족합니다. 식량 ${formatNumber(cost.grain ?? 0)} · 은전 ${formatNumber(cost.silver ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요`, damage: 0 }
   state.lastConquestAt = now
   const power = conquestPower(state)
@@ -1589,7 +1570,7 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
   // Repeated failed assaults weaken the wall; once it reaches the breach threshold,
   // even a low-power roster can finally break the current garrison.
   const won = advantage >= 0.72 || city.defense <= cityWallCapacity(city) * 0.55
-  const damage = wallDamageFromPower(power)
+  const damage = Math.round(wallDamageFromPower(power) * (1 + researchMods(state).siegeDamage))
   addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: won ? damage : 0, note: won ? '공성 성공 · 수비병 격파와 점령 진전이 반영되었습니다.' : '공성 실패 · 성벽만 약화되었습니다.' })
   if (!won) {
     state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage: 0 }
@@ -1624,7 +1605,7 @@ export function resolveConquestBattle(state: StrategyState, cityId: string, batt
   if (!Array.isArray(city.garrisons)) city.garrisons = defenseLineForCity(city)
   const defenseLine = defenseLineForCity(city)
   const defeated = Math.max(0, Math.min(defenseLine.length, city.defendersDefeated ?? 0))
-  const damage = wallDamageFromPower(conquestPower(state))
+  const damage = Math.round(wallDamageFromPower(conquestPower(state)) * (1 + researchMods(state).siegeDamage))
   city.defendersDefeated = Math.min(defenseLine.length, defeated + 1)
   const breachThreshold = cityBreachThreshold(city)
   city.defense = Math.max(breachThreshold, city.defense - damage)
@@ -1677,7 +1658,8 @@ export function collectIncome(state: StrategyState, now = Date.now()): { ok: boo
   state.resources.iron += gain.iron
   state.resources.influence += gain.influence
   state.honor += Math.floor(gain.influence / 4)
-  if (researchUnlocked(state, 'taixue')) state.manuals += Math.max(1, Math.floor(gain.influence / 180))
+  const harvestMods = researchMods(state)
+  if (harvestMods.harvestManuals) state.manuals += Math.round(Math.max(1, Math.floor(gain.influence / 200)) * (1 + harvestMods.manuals))
   state.lastNotice = `내정 수확 완료 · 식량 +${formatNumber(gain.grain)} · 은전 +${formatNumber(gain.silver)} · 영향력 +${formatNumber(gain.influence)}`
   return { ok: true, message: state.lastNotice, gain }
 }
@@ -1690,12 +1672,13 @@ export function selectCity(state: StrategyState, id: string): { ok: boolean; mes
   return { ok: true, message: state.lastNotice }
 }
 
-export function buildingCost(building: CityBuilding): Partial<Record<ResourceKey, number>> {
+export function buildingCost(building: CityBuilding, state?: StrategyState): Partial<Record<ResourceKey, number>> {
   const level = building.level
+  const cut = 1 - (state ? researchMods(state).buildingCost : 0)
   return {
-    silver: 420 + level * 280,
-    wood: 260 + level * 190,
-    iron: building.kind === 'barracks' || building.kind === 'workshop' ? 210 + level * 135 : 80 + level * 45,
+    silver: Math.round((420 + level * 280) * cut),
+    wood: Math.round((260 + level * 190) * cut),
+    iron: Math.round((building.kind === 'barracks' || building.kind === 'workshop' ? 210 + level * 135 : 80 + level * 45) * cut),
   }
 }
 
@@ -1706,7 +1689,7 @@ export function upgradeBuilding(state: StrategyState, cityId: string, buildingId
   const building = city.buildings.find(item => item.id === buildingId)
   if (!building) return { ok: false, message: '건물을 찾을 수 없습니다.' }
   if (building.level >= building.maxLevel) return { ok: false, message: `${building.name}은(는) 이미 최고 단계입니다.` }
-  const cost = buildingCost(building)
+  const cost = buildingCost(building, state)
   if (!spendResources(state, cost)) return { ok: false, message: `내정 자원이 부족합니다. 은전 ${formatNumber(cost.silver ?? 0)} · 목재 ${formatNumber(cost.wood ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요` }
   building.level += 1
   city.prosperity = Math.min(100, city.prosperity + (building.kind === 'agriculture' || building.kind === 'commerce' ? 4 : 2))
@@ -1717,19 +1700,12 @@ export function upgradeBuilding(state: StrategyState, cityId: string, buildingId
 }
 
 export function researchCost(node: ResearchNode): string {
-  return Object.entries(node.cost).map(([key, value]) => `${RESOURCE_META[key as ResourceKey].label} ${formatNumber(value ?? 0)}`).join(' · ')
+  return researchCostText(node.cost, Object.fromEntries(Object.entries(RESOURCE_META).map(([key, meta]) => [key, meta.label])) as Record<ResourceKey, string>)
 }
 
-export function unlockResearch(state: StrategyState, id: string): { ok: boolean; message: string } {
-  const node = state.research.find(item => item.id === id)
-  if (!node) return { ok: false, message: '연구 항목을 찾을 수 없습니다.' }
-  if (node.unlocked) return { ok: false, message: '이미 완료한 연구입니다.' }
-  if (node.prerequisite && !researchUnlocked(state, node.prerequisite)) return { ok: false, message: '선행 연구를 먼저 완료하십시오.' }
-  if (!spendResources(state, node.cost)) return { ok: false, message: `연구 자원이 부족합니다. ${researchCost(node)}` }
-  node.unlocked = true
-  if (node.id.startsWith('scholar-') && node.id.endsWith('-12')) state.resources.influence += 180
-  state.lastNotice = `연구 완료 · ${node.name} 효과가 천하에 적용됩니다.`
-  return { ok: true, message: state.lastNotice }
+/** 연구 시작(시간이 걸린다). 예전 이름을 유지해 화면·저장 흐름을 그대로 쓴다. */
+export function unlockResearch(state: StrategyState, id: string, now = Date.now()): { ok: boolean; message: string } {
+  return startResearch(state, id, now)
 }
 
 export function formatNumber(value: number): string {

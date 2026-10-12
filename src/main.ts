@@ -1,3 +1,4 @@
+import { cancelResearch, researchMods, rushResearch, settleResearch } from './game/research'
 import './styles/main.css'
 import './styles/theme-color.css'
 import './styles/territory-map.css'
@@ -67,6 +68,15 @@ function syncSteam(): void {
 }
 if (isSteamDesktop()) window.setInterval(syncSteam, 5000)
 let localSaveDirty = false
+let pendingResearchRefund: string | null = null
+/** 연구 체계를 맞추고, 예전 연구를 환급했다면 알림을 예약한다 */
+function syncResearchRoster(): void {
+  const refund = ensureResearchRoster(state)
+  if (!refund) return
+  const labels: Record<string, string> = { grain: '식량', silver: '은전', wood: '목재', iron: '철', influence: '영향력' }
+  pendingResearchRefund = `기술 연구가 5분야 6단계 체계로 바뀌어 예전 연구 자원을 돌려드렸습니다 · ${Object.entries(refund).map(([key, value]) => `${labels[key] ?? key} ${new Intl.NumberFormat('ko-KR').format(value ?? 0)}`).join(' · ')}`
+  localSaveDirty = true
+}
 
 type PendingTerritoryBattle = { cityId: string; damage: number; won: boolean; captured: boolean }
 
@@ -173,7 +183,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
 }
 
 ensureCityRoster(state)
-ensureResearchRoster(state)
+syncResearchRoster()
 ensureEquipmentState(state)
 let arena: Arena
 let pendingTicket: RunTicket | null = null
@@ -203,7 +213,7 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   if (mode === 'guest') restoreLocalGame(GUEST_GAME_SAVE_KEY)
   ensureCityRoster(state)
   const normalizedTerritories = normalizeInitialSeasonTerritories(state)
-  ensureResearchRoster(state)
+  syncResearchRoster()
   ensureEquipmentState(state)
   const receivedDailyGold = ensurePrelaunchDailyGold(state)
   const migratedStarter = migrateLegacyStarterRoster(state)
@@ -223,9 +233,16 @@ function resetAccountSavePipeline(): void {
 }
 
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
+  const mods = researchMods(state)
+  // 전투 규칙에 연구(강병·지략) 보정을 함께 넘긴다
+  arena?.setResearch(mods.battle)
+  const boost = 1 + mods.formationStats // 천하 인재: 출전 무장 능력치 +3%
   return state.formation.map(id => {
     const general = findGeneral(state, id)
-    return general ? withEquipmentStats(general, equipmentBonus(state, id)) : null
+    if (!general) return null
+    const equipped = withEquipmentStats(general, equipmentBonus(state, id))
+    if (boost === 1) return equipped
+    return { ...equipped, leadership: Math.round(equipped.leadership * boost), martial: Math.round(equipped.martial * boost), stratagem: Math.round(equipped.stratagem * boost), speed: Math.round(equipped.speed * boost), attack: Math.round(equipped.attack * boost), defense: Math.round(equipped.defense * boost) }
   }).filter((general): general is NonNullable<typeof general> => Boolean(general))
 }
 
@@ -632,6 +649,18 @@ const ui = new StrategyUI(root, {
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
   },
+  onResearchCancel: () => {
+    const result = cancelResearch(state)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onResearchRush: () => {
+    const result = rushResearch(state)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave(true)
+  },
   onScenarioStart: id => {
     const scenario = scenarioById(id)
     if (!scenario) return
@@ -770,7 +799,7 @@ const ui = new StrategyUI(root, {
       window.localStorage.removeItem(GUEST_ACCESS_KEY)
       Object.assign(state, createInitialState())
       ensureCityRoster(state)
-      ensureResearchRoster(state)
+      syncResearchRoster()
       ensureEquipmentState(state)
       localSaveDirty = false
       authView = { status: session.status, name: session.user?.name ?? null }
@@ -881,7 +910,8 @@ arena = new Arena(canvas, {
       state.wins += 1
       // 반복 전투 보상은 별 수에 비례(3개 100% · 2개 80% · 1개 60%). 시나리오는 최초 클리어 보상만.
       const rate = [0, 0.6, 0.8, 1][result.stars] ?? 0.6
-      const honor = Math.round((wasDuel ? 120 : 180) * rate)
+      const honorBoost = 1 + researchMods(state).battleHonor
+      const honor = Math.round((wasDuel ? 120 : 180) * rate * honorBoost)
       const silver = Math.round((wasDuel ? 600 : 1200) * rate)
       if (!wasScenario) {
         state.honor += honor
@@ -895,7 +925,7 @@ arena = new Arena(canvas, {
         const reward = firstClearReward(activeScenario, state.scenarioCleared)
         if (reward) {
           state.scenarioCleared.push(activeScenario.id)
-          state.gold += reward.gold; state.honor += reward.honor; state.silver += reward.silver; state.manuals += reward.manuals
+          state.gold += reward.gold; state.honor += Math.round(reward.honor * honorBoost); state.silver += reward.silver; state.manuals += Math.round(reward.manuals * (1 + researchMods(state).manuals))
           state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
           state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 클리어 · ${starText} · 금화 +${reward.gold} · 모든 재화 보상 획득`
         } else state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · ${starText}`
@@ -937,6 +967,23 @@ if (gameAccess) {
   if (state.factionConfirmed) ui.render(state)
   else ui.showFactionSelection()
 } else ui.showAccessGate()
+
+// 기술 연구 타이머: 1초마다 완료를 확인하고, 연구 화면이면 남은 시간만 갱신한다.
+window.setInterval(() => {
+  if (pendingResearchRefund && state.factionConfirmed && gameAccess) {
+    ui.notify(pendingResearchRefund, 'jade')
+    pendingResearchRefund = null
+    queueAccountSave()
+  }
+  const finished = settleResearch(state)
+  if (finished.length) {
+    ui.notify(`연구 완료 · ${finished.map(node => node.name).join(' · ')}`, 'jade')
+    queueAccountSave(true)
+    if (state.section === 'research' || state.section === 'territory') ui.render(state)
+    return
+  }
+  if (state.section === 'research') ui.updateResearchTimer(state)
+}, 1000)
 
 window.setInterval(() => {
   const snapshot = arena.getSnapshot()
@@ -1034,7 +1081,7 @@ async function refreshAccount(): Promise<void> {
       ensureCityRoster(state)
       if (normalizeInitialSeasonTerritories(state)) localSaveDirty = true
       if (Array.isArray(game.research)) state.research = game.research
-      ensureResearchRoster(state)
+      syncResearchRoster()
       if (typeof game.selectedCityId === 'string') state.selectedCityId = game.selectedCityId
       state.lastIncomeCollectedAt = game.lastIncomeCollectedAt
       state.lastConquestAt = game.lastConquestAt

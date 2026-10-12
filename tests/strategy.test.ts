@@ -166,29 +166,26 @@ describe('commander attributes', () => {
     expect(state.formation[2]).toBe(initialFormation[2])
   })
 
-  it('starts with 58 technologies across four branches', () => {
+  it('starts with 40 timed technologies (30 tiers) across five branches', () => {
     const state = createInitialState()
-    expect(state.research).toHaveLength(58)
-    expect(new Set(state.research.map(node => node.id)).size).toBe(58)
-    expect(state.research.filter(node => node.branch === '농정')).toHaveLength(14)
-    expect(state.research.filter(node => node.branch === '군제')).toHaveLength(15)
+    expect(state.research).toHaveLength(40)
+    expect(new Set(state.research.map(node => node.id)).size).toBe(40)
+    expect(state.research.filter(node => node.branch === '부국')).toHaveLength(8)
+    expect(state.research.every(node => node.durationMs > 0)).toBe(true)
   })
 
-  it('backfills the 50 new technologies into legacy eight-node saves', () => {
+  it('rebuilds legacy research saves into the new tree', () => {
     const state = createInitialState()
     state.research = state.research.slice(0, 8)
     ensureResearchRoster(state)
-    expect(state.research).toHaveLength(58)
-    expect(state.research.some(node => node.id === 'military-13')).toBe(true)
+    expect(state.research).toHaveLength(40)
+    expect(state.research.some(node => node.id === 'talent-6b')).toBe(true)
   })
 
-  it('requires the expanded research chain before unlocking a later technology', () => {
+  it('requires the previous tier before starting a later technology', () => {
     const state = createInitialState()
-    expect(unlockResearch(state, 'agri-2').ok).toBe(false)
-    expect(unlockResearch(state, 'irrigation').ok).toBe(true)
-    expect(unlockResearch(state, 'granary').ok).toBe(true)
-    expect(unlockResearch(state, 'agri-1').ok).toBe(true)
-    expect(unlockResearch(state, 'agri-2').ok).toBe(true)
+    expect(unlockResearch(state, 'econ-2', 0).ok).toBe(false)
+    expect(unlockResearch(state, 'econ-1', 0).ok).toBe(true)
   })
 
   it('starts with three equipment slots and applies equipped stats to formation power', () => {

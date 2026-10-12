@@ -1,5 +1,6 @@
 import { OFFICIAL_LAUNCH } from '../../server/launch.mjs'
-import { templateGeneral, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
+import { RESEARCH_BRANCHES, RESEARCH_MINUTES, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
+import { templateGeneral, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
 import { SCENARIOS, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
 import type { BattleResult } from '../game/battle-core'
@@ -152,6 +153,8 @@ export interface StrategyUiCallbacks {
   onCollectIncome: () => void
   onBuildingUpgrade: (cityId: string, buildingId: string) => void
   onResearch: (id: string) => void
+  onResearchCancel: () => void
+  onResearchRush: () => void
   onBattleStart: () => void
   onScenarioStart: (id: string) => void
   onBattleMove: (index: number) => void
@@ -260,6 +263,22 @@ export class StrategyUI {
     window.addEventListener('keydown', event => {
       if (event.key === 'Escape' && this.territoryMap.fullscreen) this.territoryMap.setFullscreen(false)
     })
+  }
+
+  /** 연구 화면의 남은 시간·진행 막대·즉시 완료 비용만 고친다(전체 다시 그리기 없음) */
+  updateResearchTimer(state: StrategyState): void {
+    const active = activeResearch(state)
+    if (!active || active.endsAt === undefined) return
+    const remaining = Math.max(0, active.endsAt - Date.now())
+    const remainingEl = this.root.querySelector<HTMLElement>('[data-research-remaining]')
+    if (!remainingEl) return
+    remainingEl.textContent = formatDuration(remaining)
+    const bar = this.root.querySelector<HTMLElement>('[data-research-progress]')
+    if (bar) bar.style.width = `${Math.min(100, Math.max(0, (1 - remaining / active.durationMs) * 100)).toFixed(1)}%`
+    const rush = this.root.querySelector<HTMLElement>('[data-research-rush]')
+    if (rush) rush.textContent = `즉시 완료 · 금화 ${rushCost(remaining)}`
+    const card = this.root.querySelector<HTMLElement>('.research-node.is-active .research-running')
+    if (card) card.textContent = `연구 중 · ${formatDuration(remaining)}`
   }
 
   render(state: StrategyState): void {
@@ -412,7 +431,7 @@ export class StrategyUI {
     const overlay = document.createElement('div')
     overlay.className = 'recruit-results'
     const cards = rewards.map((general, index) => `<div class="recruit-result-card ${general.grade === 5 ? 'recruit-result-card--five-star' : ''}" style="--grade:${GRADE_META[general.grade].color};--accent:${general.accent};--reveal-delay:${Math.min(index, 9) * 70}ms"><span class="recruit-result-index">${String(index + 1).padStart(2, '0')}</span>${this.ritualPortrait(general)}<div><b>${escapeHtml(general.name)}</b><small>${general.grade}등급 · ${GRADE_META[general.grade].label} · Lv.${general.level}</small></div></div>`).join('')
-    overlay.innerHTML = `<div class="recruit-results-backdrop"></div><div class="recruit-results-panel"><div class="recruit-results-heading"><div><span class="eyebrow">10 SUMMON RESULTS</span><h2>열 명의 무장이 응답했습니다</h2><p>획득한 무장은 도감에 기록되고, 중복 인장은 성급 성장에 사용됩니다.</p></div><button class="mini-action" data-action="close-recruit-results">닫기</button></div><div class="recruit-results-grid">${cards}</div><div class="recruit-results-actions"><button class="action-button action-button--outline" data-action="reroll-recruit"><span>10명 다시 뽑기</span><b>✦ 900</b></button><button class="action-button action-button--primary" data-action="close-recruit-results">결과 확인 완료 <span>→</span></button></div></div>`
+    overlay.innerHTML = `<div class="recruit-results-backdrop"></div><div class="recruit-results-panel"><div class="recruit-results-heading"><div><span class="eyebrow">10 SUMMON RESULTS</span><h2>열 명의 무장이 응답했습니다</h2><p>획득한 무장은 도감에 기록되고, 중복 인장은 성급 성장에 사용됩니다.</p></div><button class="mini-action" data-action="close-recruit-results">닫기</button></div><div class="recruit-results-grid">${cards}</div><div class="recruit-results-actions"><button class="action-button action-button--outline" data-action="reroll-recruit"><span>10명 다시 뽑기</span><b>✦ ${this.renderedState ? formatNumber(recruitCost(this.renderedState, 10)) : '900'}</b></button><button class="action-button action-button--primary" data-action="close-recruit-results">결과 확인 완료 <span>→</span></button></div></div>`
     this.root.appendChild(overlay)
     requestAnimationFrame(() => overlay.classList.add('is-visible'))
   }
@@ -681,7 +700,7 @@ export class StrategyUI {
 
   private recruitSection(state: StrategyState): string {
     const result = state.lastRecruit
-    return `<section class="page-section page-section--recruit"><div class="section-heading section-heading--compact"><div><span class="eyebrow">SUMMONING HALL · 02</span><h1>무장 모집</h1><p class="heading-copy">한 장의 인장이 진형 전체를 바꿉니다.</p></div><div class="section-counter"><span>보유 무장</span><strong>${state.generals.length}<small> / ${allGenerals().length}</small></strong></div></div><div class="recruit-layout"><div class="recruit-pedestal glass-card"><div class="pedestal-glow"></div><div class="summon-banner" role="img" aria-label="옥패의 부름에 응답하는 삼국의 무장들"><figure class="summon-banner__slide summon-banner__slide--solo"><img src="/assets/ui/recruit-montage.webp" alt="" width="720" height="900" draggable="false"><figcaption><b>군웅할거</b><span>천하의 영웅이 모인다</span></figcaption></figure><img class="summon-banner__jade" src="/assets/ui/jade-summon.svg" alt="" width="64" height="80" draggable="false"></div><div class="recruit-copy"><span class="pill pill--gold">무료 게임 내 재화</span><h2>옥패의 부름</h2><p>역사 속 무장들이 인장 너머에서 응답합니다.<br>중복 무장은 즉시 성급으로 전환됩니다.</p></div><div class="recruit-actions"><button class="action-button action-button--primary" data-action="recruit" data-count="1"><span>1회 모집</span><b>✦ 100</b></button><button class="action-button action-button--outline" data-action="recruit" data-count="10"><span>10회 연속 모집</span><b>✦ 900</b></button></div><div class="fair-play-note"><span>◎</span><span>현금 결제 없음 · 모집 확률 상시 공개</span></div></div><div class="recruit-side"><div class="glass-card rate-card"><div class="card-header"><div><span class="eyebrow">DROP TABLE</span><h3>모집 확률</h3></div><span class="rate-note">1회 기준</span></div>${([5, 4, 3, 2, 1] as const).map(grade => `<div class="rate-row"><span class="grade-dot" style="--grade:${GRADE_META[grade].color}"></span><span>${grade}등급 <small>${GRADE_META[grade].label}</small></span><strong>${GRADE_META[grade].rate}</strong><div class="rate-track"><i style="width:${GRADE_META[grade].rate}"></i></div></div>`).join('')}<div class="rate-footnote">* 중복 획득 시 해당 무장의 성급이 +1 상승합니다. 최대 5성.</div></div>${result ? `<div class="glass-card recruit-result"><span class="eyebrow">LATEST ACQUISITION</span><div class="result-card-row">${this.portrait(result, 'general-portrait--large')}<div><h3>${result.name}<span class="star-row">${'★'.repeat(result.stars)}${'☆'.repeat(5 - result.stars)}</span></h3><p>${result.epithet}</p><small>${result.grade}등급 · ${result.role} · Lv.${result.level}</small></div></div><p class="result-note">${state.lastNotice}</p></div>` : '<div class="glass-card empty-result"><span class="empty-rune">✦</span><p>모집 결과가 이곳에 기록됩니다.</p></div>'}</div></div></section>`
+    return `<section class="page-section page-section--recruit"><div class="section-heading section-heading--compact"><div><span class="eyebrow">SUMMONING HALL · 02</span><h1>무장 모집</h1><p class="heading-copy">한 장의 인장이 진형 전체를 바꿉니다.</p></div><div class="section-counter"><span>보유 무장</span><strong>${state.generals.length}<small> / ${allGenerals().length}</small></strong></div></div><div class="recruit-layout"><div class="recruit-pedestal glass-card"><div class="pedestal-glow"></div><div class="summon-banner" role="img" aria-label="옥패의 부름에 응답하는 삼국의 무장들"><figure class="summon-banner__slide summon-banner__slide--solo"><img src="/assets/ui/recruit-montage.webp" alt="" width="720" height="900" draggable="false"><figcaption><b>군웅할거</b><span>천하의 영웅이 모인다</span></figcaption></figure><img class="summon-banner__jade" src="/assets/ui/jade-summon.svg" alt="" width="64" height="80" draggable="false"></div><div class="recruit-copy"><span class="pill pill--gold">무료 게임 내 재화</span><h2>옥패의 부름</h2><p>역사 속 무장들이 인장 너머에서 응답합니다.<br>중복 무장은 즉시 성급으로 전환됩니다.</p></div><div class="recruit-actions"><button class="action-button action-button--primary" data-action="recruit" data-count="1"><span>1회 모집</span><b>✦ ${formatNumber(recruitCost(state, 1))}</b></button><button class="action-button action-button--outline" data-action="recruit" data-count="10"><span>10회 연속 모집</span><b>✦ ${formatNumber(recruitCost(state, 10))}</b></button></div><div class="fair-play-note"><span>◎</span><span>현금 결제 없음 · 모집 확률 상시 공개</span></div></div><div class="recruit-side"><div class="glass-card rate-card"><div class="card-header"><div><span class="eyebrow">DROP TABLE</span><h3>모집 확률</h3></div><span class="rate-note">1회 기준</span></div>${([5, 4, 3, 2, 1] as const).map(grade => `<div class="rate-row"><span class="grade-dot" style="--grade:${GRADE_META[grade].color}"></span><span>${grade}등급 <small>${GRADE_META[grade].label}</small></span><strong>${GRADE_META[grade].rate}</strong><div class="rate-track"><i style="width:${GRADE_META[grade].rate}"></i></div></div>`).join('')}<div class="rate-footnote">* 중복 획득 시 해당 무장의 성급이 +1 상승합니다. 최대 5성.${state.research.some(node => node.id === 'talent-3a' && node.unlocked) ? '<br>* 명장 발굴 연구 적용 중: 5등급 3%, 4등급 10%' : ''}</div></div>${result ? `<div class="glass-card recruit-result"><span class="eyebrow">LATEST ACQUISITION</span><div class="result-card-row">${this.portrait(result, 'general-portrait--large')}<div><h3>${result.name}<span class="star-row">${'★'.repeat(result.stars)}${'☆'.repeat(5 - result.stars)}</span></h3><p>${result.epithet}</p><small>${result.grade}등급 · ${result.role} · Lv.${result.level}</small></div></div><p class="result-note">${state.lastNotice}</p></div>` : '<div class="glass-card empty-result"><span class="empty-rune">✦</span><p>모집 결과가 이곳에 기록됩니다.</p></div>'}</div></div></section>`
   }
 
   private rosterSection(state: StrategyState): string {
@@ -736,7 +755,7 @@ export class StrategyUI {
     const grade = EQUIPMENT_GRADE_META[item.grade]
     const set = EQUIPMENT_SET_META[item.set]
     const specialty = equipmentSpecialty(item)
-    return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}" style="--grade:${grade.color}"><div class="equipment-card-top"><span class="equipment-type"><img loading="lazy" decoding="async" width="21" height="21" src="${equipmentImage(item.type)}" alt="" /> ${EQUIPMENT_TYPE_META[item.type].label}</span><span class="equipment-grade">${grade.label}${(item.quantity ?? 1) > 1 ? ` · x${item.quantity}` : ''}</span></div><img loading="lazy" decoding="async" width="72" height="72" class="equipment-image ${item.grade === 'mythic' ? 'equipment-image--mythic' : ''}" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /><h4>${item.name}</h4><p>${set.label} · ${item.skillName}</p><div class="equipment-stat"><b>${item.mainStat}</b><strong>+${equipmentValue(item)}</strong><span>Lv.${item.level}/20</span></div><small>${item.skillDescription}</small>${specialty ? `<div class="equipment-specialty"><b>특기 · ${escapeHtml(specialty.label)}</b><span>${escapeHtml(specialty.description)}</span></div>` : ''}<div class="equipment-card-actions"><button class="mini-action" data-action="equipment-enhance" data-equipment-id="${item.id}">강화 · 은전 ${formatNumber(420 + item.level * 260)}</button>${equipped ? `<button class="mini-action" data-action="equipment-unequip" data-equipment-type="${item.type}" data-general-id="${generalId}">장착 해제</button>` : `<button class="mini-action" data-action="equipment-equip" data-equipment-id="${item.id}" data-general-id="${generalId}">장착</button>`}</div></article>`
+    return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}" style="--grade:${grade.color}"><div class="equipment-card-top"><span class="equipment-type"><img loading="lazy" decoding="async" width="21" height="21" src="${equipmentImage(item.type)}" alt="" /> ${EQUIPMENT_TYPE_META[item.type].label}</span><span class="equipment-grade">${grade.label}${(item.quantity ?? 1) > 1 ? ` · x${item.quantity}` : ''}</span></div><img loading="lazy" decoding="async" width="72" height="72" class="equipment-image ${item.grade === 'mythic' ? 'equipment-image--mythic' : ''}" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /><h4>${item.name}</h4><p>${set.label} · ${item.skillName}</p><div class="equipment-stat"><b>${item.mainStat}</b><strong>+${equipmentValue(item)}</strong><span>Lv.${item.level}/20</span></div><small>${item.skillDescription}</small>${specialty ? `<div class="equipment-specialty"><b>특기 · ${escapeHtml(specialty.label)}</b><span>${escapeHtml(specialty.description)}</span></div>` : ''}<div class="equipment-card-actions"><button class="mini-action" data-action="equipment-enhance" data-equipment-id="${item.id}">강화 · 은전 ${formatNumber(equipmentCost(item, this.renderedState ?? undefined).silver ?? 0)}</button>${equipped ? `<button class="mini-action" data-action="equipment-unequip" data-equipment-type="${item.type}" data-general-id="${generalId}">장착 해제</button>` : `<button class="mini-action" data-action="equipment-equip" data-equipment-id="${item.id}" data-general-id="${generalId}">장착</button>`}</div></article>`
   }
 
   private equipmentMiniCard(item: Equipment): string {
@@ -962,7 +981,7 @@ export class StrategyUI {
     const canManage = city.owner === state.faction
     const capitalFaction = capitalFactionForCity(city.id)
     const eligibility = conquestEligibility(state, city.id)
-    const defense = Math.min(100, city.defense + (state.research.some(node => node.id === 'drill' && node.unlocked) ? 12 : 0))
+    const defense = Math.min(100, city.defense)
     const wallCapacity = cityWallCapacity(city)
     const metrics = [['민심', city.prosperity], ['성벽', defense], ['도시 등급', city.level * 20]] as const
     const siege = Math.min(100, city.conquestProgress ?? 0)
@@ -990,7 +1009,7 @@ export class StrategyUI {
   }
 
   private conquestCard(city: City, state: StrategyState, siege: number, eligibility: ReturnType<typeof conquestEligibility>): string {
-    const cost = conquestCost(city)
+    const cost = conquestCost(city, state)
     const power = conquestPower(state)
     const costText = `${icon('grain', 'gi--inline')} ${formatNumber(cost.grain ?? 0)} · ${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
     const garrisonCount = city.garrisons?.length ?? 3
@@ -1010,21 +1029,48 @@ export class StrategyUI {
     return `<div class="conquest-card defense-card"><div class="conquest-card-head"><div><span class="eyebrow">성 방어</span><h3>방어병 ${garrisonCount}/100부대</h3></div><strong>${formatNumber(power)} 전투력</strong></div><p>현재 출전 진형을 이 도시에 수비병으로 세울 수 있습니다. 상대는 배치된 수비병을 모두 격파해야 점령할 수 있습니다.</p><div class="territory-actions"><button class="action-button action-button--primary conquest-button" data-action="garrison-deploy" data-city="${city.id}" ${canDeploy ? '' : 'disabled'}>현재 덱 수비병 배치</button><button class="action-button action-button--outline conquest-button" data-action="defense" data-city="${city.id}">수비전 출격 <span>${cost}</span></button></div></div>`
   }
   private buildingRow(city: City, building: CityBuilding, canManage: boolean): string {
-    const cost = buildingCost(building)
+    const cost = buildingCost(building, this.renderedState ?? undefined)
     const costText = `${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('wood', 'gi--inline')} ${formatNumber(cost.wood ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
     const maxed = building.level >= building.maxLevel
     return `<div class="building-row"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed ? 'disabled' : ''}>${maxed ? '최고 단계' : `강화 · ${costText}`}</button></div>`
   }
 
   private researchSection(state: StrategyState): string {
-    const branches = ['농정', '상업', '군제', '학술'] as const
-    return `<section class="page-section page-section--research"><div class="section-heading section-heading--compact"><div><span class="eyebrow">CELESTIAL RESEARCH · 05</span><h1>기술 연구</h1><p class="heading-copy">총 58개 기술을 서원과 도시에서 모은 영향력으로 해금해 국정·전투·영토의 방향을 설계합니다.</p></div><div class="section-counter"><span>보유 영향력</span><strong>${formatNumber(state.resources.influence)}</strong></div></div><div class="resource-strip glass-card resource-strip--research">${this.resourceTokens(state)}</div><div class="research-grid">${branches.map(branch => `<div class="glass-card research-branch"><div class="research-branch-head"><span class="branch-rune">${branch === '농정' ? '▦' : branch === '상업' ? '◇' : branch === '군제' ? '⚔' : '✧'}</span><div><span class="eyebrow">${branch} BRANCH</span><h3>${branch} 연구 · ${state.research.filter(node => node.branch === branch).length}개</h3></div></div><div class="research-nodes">${state.research.filter(node => node.branch === branch).map(node => this.researchCard(node, state)).join('')}</div></div>`).join('')}</div></section>`
+    const now = Date.now()
+    const active = activeResearch(state)
+    const doneCount = state.research.filter(node => node.unlocked).length
+    const effects = researchSummary(state)
+    const activePanel = active && active.endsAt !== undefined
+      ? (() => {
+        const remaining = Math.max(0, active.endsAt - now)
+        const progress = Math.min(100, Math.max(0, (1 - remaining / active.durationMs) * 100))
+        return `<div class="research-active glass-card is-running"><div class="research-active__copy"><span class="eyebrow">진행 중인 연구 · ${active.branch} ${active.tier}단계</span><h3>${active.name}</h3><p>${active.description}</p></div><div class="research-active__timer"><strong data-research-remaining>${formatDuration(remaining)}</strong><small>남음 · 전체 ${formatDuration(active.durationMs)}</small><div class="research-progress"><i data-research-progress style="width:${progress.toFixed(1)}%"></i></div></div><div class="research-active__actions"><button class="mini-action mini-action--rush" data-action="research-rush"><span data-research-rush>즉시 완료 · 금화 ${rushCost(remaining)}</span></button><button class="mini-action" data-action="research-cancel">연구 취소 (전액 환급)</button></div></div>`
+      })()
+      : `<div class="research-active glass-card"><div class="research-active__copy"><span class="eyebrow">연구소 대기 중</span><h3>진행 중인 연구가 없습니다</h3><p>아래에서 연구를 골라 시작하십시오. 연구는 한 번에 하나씩, 정해진 시간이 지나면 자동으로 완료됩니다.</p></div><div class="research-times">${RESEARCH_MINUTES.map((minutes, index) => `<span><b>${index + 1}단계</b>${formatDuration(minutes * 60_000)}</span>`).join('')}</div></div>`
+    const columns = RESEARCH_BRANCHES.map(branch => {
+      const nodes = state.research.filter(node => node.branch === branch.id)
+      const done = nodes.filter(node => node.unlocked).length
+      const tiers = [1, 2, 3, 4, 5, 6].map(tier => {
+        const row = nodes.filter(node => node.tier === tier)
+        if (row.length > 1) return `<div class="research-choice"><span class="research-choice__label">${tier}단계 갈림길 · 둘 중 하나</span><div class="research-choice__pair">${row.map(node => this.researchCard(node, state, now)).join('<i class="research-choice__or">또는</i>')}</div></div>`
+        return row.map(node => this.researchCard(node, state, now)).join('')
+      }).join('')
+      return `<div class="glass-card research-branch research-branch--${branch.prefix}"><div class="research-branch-head"><span class="branch-rune">${branch.prefix === 'econ' ? '▦' : branch.prefix === 'army' ? '⚔' : branch.prefix === 'strat' ? '✧' : branch.prefix === 'realm' ? '◈' : '✦'}</span><div><span class="eyebrow">${branch.hint}</span><h3>${branch.id} · ${done}/6단계</h3></div></div><div class="research-nodes">${tiers}</div></div>`
+    }).join('')
+    const summary = `<details class="research-summary glass-card" ${effects.length ? 'open' : ''}><summary>적용 중인 연구 효과 · ${effects.length}개</summary>${effects.length ? `<ul>${effects.map(line => `<li>${escapeHtml(line)}</li>`).join('')}</ul>` : '<p>아직 완료한 연구가 없습니다.</p>'}</details>`
+    return `<section class="page-section page-section--research"><div class="section-heading section-heading--compact"><div><span class="eyebrow">기술 연구 · 5분야 30단계</span><h1>기술 연구</h1><p class="heading-copy">부국·강병·지략·제패·인재 다섯 분야를 6단계씩, 모두 40개 연구 가운데 단계마다 하나씩 완성합니다. 단계가 오를수록 연구 시간이 길어지고(5분 → 8시간), 3·6단계는 둘 중 하나를 고르는 갈림길입니다.</p></div><div class="section-counter"><span>완료 단계</span><strong>${doneCount}<small> / 30</small></strong></div></div><div class="resource-strip glass-card resource-strip--research">${this.resourceTokens(state)}</div>${activePanel}<div class="research-grid research-grid--five">${columns}</div>${summary}</section>`
   }
 
-  private researchCard(node: ResearchNode, state: StrategyState): string {
-    const locked = Boolean(node.prerequisite && !state.research.some(item => item.id === node.prerequisite && item.unlocked))
-    return `<article class="research-node ${node.unlocked ? 'is-unlocked' : ''} ${locked ? 'is-locked' : ''}"><div class="research-tier">TIER ${node.tier}</div><div><h4>${node.name}</h4><p>${node.description}</p></div><div class="research-node-footer"><span>${node.unlocked ? '✓ 연구 완료' : locked ? '선행 연구 필요' : researchCost(node)}</span>${node.unlocked ? '<span class="research-check">적용 중</span>' : `<button class="mini-action mini-action--research" data-action="research" data-research="${node.id}" ${locked ? 'disabled' : ''}>연구 시작 <span>→</span></button>`}</div></article>`
+  private researchCard(node: ResearchNode, state: StrategyState, now: number): string {
+    const status = researchStatus(state, node)
+    const footer = status === 'done' ? '<span class="research-check">✓ 적용 중</span>'
+      : status === 'active' ? `<span class="research-running">연구 중 · ${formatDuration(Math.max(0, (node.endsAt ?? now) - now))}</span>`
+      : status === 'locked' ? `<span class="research-lock">${node.tier - 1}단계 완료 필요</span>`
+      : status === 'busy' ? '<span class="research-lock">다른 연구 진행 중</span>'
+      : `<button class="mini-action mini-action--research" data-action="research" data-research="${node.id}">${status === 'switch' ? '이쪽으로 바꾸기' : '연구 시작'} <span>→</span></button>`
+    return `<article class="research-node is-${status}"><div class="research-node-top"><span class="research-tier">${node.tier}단계${node.choice ? ` · ${node.choice === 'a' ? '갑' : '을'}` : ''}</span><span class="research-time">⏱ ${formatDuration(node.durationMs)}</span></div><h4>${node.name}</h4><p>${node.description}</p><div class="research-node-footer"><span class="research-cost">${researchCost(node)}</span>${footer}</div>${status === 'switch' ? '<small class="research-switch-note">바꾸면 같은 단계의 다른 연구 효과는 사라집니다.</small>' : ''}</article>`
   }
+
 
   private portraitAsset(general: General): string {
     return `/assets/generals-realistic-webp/${general.id}.webp`
@@ -1210,6 +1256,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.12', '기술 연구 개편 · 단계별 연구 시간', '기술 연구를 부국·강병·지략·제패·인재 5분야 6단계(40개 연구)로 새로 짰습니다. 연구에는 단계별 시간이 걸립니다(1단계 5분 · 2단계 20분 · 3단계 1시간 · 4단계 2시간 · 5단계 4시간 · 6단계 8시간). 한 번에 하나만 진행하며, 취소하면 자원을 모두 돌려받고 금화로 즉시 완료할 수 있습니다(남은 10분당 금화 1개). 3·6단계는 둘 중 하나를 고르는 갈림길이고, 강병·지략 연구는 새 전투 규칙(병력·피해·전열 붕괴·예고 대응·스킬)에 바로 적용됩니다. 예전 연구에 쓴 자원은 모두 환급됩니다.', '완료', 'jade'],
       ['2026.10.12', '상단바 정리', '로그인 버튼이 재화 칸을 가리던 문제를 고쳤습니다. 10만 이상인 재화는 만·억 단위로 짧게 보이고(마우스를 올리면 정확한 값), 긴 이름은 말줄임으로 줄이며 로그아웃은 항상 보입니다.', '완료', 'jade'],
       ['2026.10.12', '실사 3D 모델 적용', '여포·조조·제갈량 전용 모델과 기병·창병·궁병 장수 모델, 실사 전장 지형을 넣었습니다. 서로 달랐던 크기·방향을 맞춰 말은 모두 같은 크기, 병사는 같은 키로 보이며, 무장은 대기·걷기·질주·공격·스킬 동작을 합니다. 부대 병사도 실사 모델로 바뀌고 적군은 붉은 기운으로 구분됩니다. 모델은 전투를 시작할 때 불러오며, 그동안은 기존 모형으로 바로 싸울 수 있습니다.', '완료', 'gold'],
       ['2026.10.12', '전투 화면 전면 개편', '노을 하늘과 겹겹의 산맥, 멀리 성채가 보이는 넓은 전장으로 바꿨습니다. 무장마다 고유 무기(청룡언월도·방천화극·장팔사모·깃털 부채 등)와 갑옷·망토·말을 새로 만들고, 부대마다 병사 수십 명이 대열을 이루며 양 진영 뒤에 대군과 깃발이 늘어섭니다. 빛번짐·색보정, 포물선 화살 사격, 스킬을 쓰면 무장 실사 초상이 화면을 가로지르는 컷인 연출을 넣었습니다. 휴대폰에서는 자동으로 가벼운 설정을 씁니다.', '완료', 'gold'],
@@ -1357,6 +1404,8 @@ export class StrategyUI {
     else if (action === 'collect-income') this.callbacks.onCollectIncome()
     else if (action === 'building-upgrade') this.callbacks.onBuildingUpgrade(button.dataset.city ?? '', button.dataset.building ?? '')
     else if (action === 'research') this.callbacks.onResearch(button.dataset.research ?? '')
+    else if (action === 'research-cancel') this.callbacks.onResearchCancel()
+    else if (action === 'research-rush') this.callbacks.onResearchRush()
     else if (action === 'scenario-select') { this.scenarioSelectedId = button.dataset.scenarioId ?? this.scenarioSelectedId; if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'scenario-start') this.callbacks.onScenarioStart(button.dataset.scenarioId ?? '')
     else if (action === 'battle-start') this.callbacks.onBattleStart()
