@@ -8,6 +8,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { AnimatedHero, bakedTroop, heroModelFor, loadModel, troopModelFor } from './battle-models'
 import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
 
 /** 마지막 색보정: 가장자리 어둡게(비네트) · 따뜻한 대비 */
@@ -153,6 +154,9 @@ interface BattleUnit {
   rig: GeneralRig
   squadCtl: Squad
   skillPulse: number
+  /** 실사 3D 모델(불러오면 도형 모델 대신 보인다) */
+  hero: AnimatedHero | null
+  mounted: boolean
 }
 
 interface ArenaEffect {
@@ -256,7 +260,8 @@ export class Arena {
       const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(jade)
       group.add(status.group)
-      const unit: BattleUnit = { group, squad: built.squad.group, model: built.rig.root, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0 }
+      const unit: BattleUnit = { group, squad: built.squad.group, model: built.rig.root, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false }
+      this.attachRealModels(unit)
       this.playerUnits.push(unit)
       this.scene.add(group)
     })
@@ -321,6 +326,22 @@ export class Arena {
     ring.position.y = 0.03
     group.add(ring)
     return { group, rig, squad }
+  }
+
+  /** 실사 모델을 불러와 도형 모델·병사와 바꾼다(불러오기 전에는 도형 모델로 바로 싸울 수 있다) */
+  private attachRealModels(unit: BattleUnit): void {
+    const name = heroModelFor(unit.general)
+    unit.mounted = name === 'lubu' || name === 'caocao' || name === 'zhugeliang' || name === 'cavalry'
+    void loadModel(name).then(gltf => {
+      if (unit.hero || !unit.group.parent && !this.playerUnits.includes(unit)) return
+      const hero = new AnimatedHero(gltf)
+      hero.root.rotation.y = Math.PI // 모델은 +Z를 본다 → 부대 앞(-Z)으로
+      hero.root.scale.setScalar(1.18) // 무장은 병사보다 한눈에 띄게 조금 크게
+      unit.group.add(hero.root)
+      unit.rig.root.visible = false
+      unit.hero = hero
+    }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
+    void bakedTroop(troopModelFor(unit.general.role)).then(baked => unit.squadCtl.upgrade(baked.geometry, baked.material)).catch(() => {})
   }
 
   private clearUnits(): void {
@@ -697,7 +718,8 @@ export class Arena {
       const maxTroops = this.core!.enemies[index]?.maxTroops ?? this.troopCapacity(general)
       const status = this.createTroopStatus(ember)
       group.add(status.group)
-      this.enemyUnits.push({ group, squad: built.squad.group, model: built.rig.root, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0 })
+      this.enemyUnits.push({ group, squad: built.squad.group, model: built.rig.root, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false })
+      this.attachRealModels(this.enemyUnits[this.enemyUnits.length - 1])
       this.scene.add(group)
     })
     this.playerUnits.forEach((unit, index) => {
@@ -782,12 +804,13 @@ export class Arena {
         }
         break
       }
-      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) unit.attackMotion = 1; break }
+      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) { unit.attackMotion = 1; unit.hero?.playOnce('Attack') } break }
       case 'heal': { const unit = this.unitAt(event.side, event.lane); if (unit && event.amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(event.amount), 0x7be3a2); break }
       case 'skill': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
         unit.skillPulse = 1
+        unit.hero?.playOnce('Skill')
         this.callbacks.onSkillCast?.({ side: event.side, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
         if (event.side === 'player') {
           this.spawnSlashWave(unit.general, Math.max(20, event.morale * 10), event.name)
@@ -865,7 +888,10 @@ export class Arena {
     unit.hitFlash = Math.max(0, unit.hitFlash - delta)
     unit.group.position.y = 0
     unit.squadCtl.update(elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.hitReact, unit.troops / Math.max(1, unit.maxTroops))
-    animateGeneral(unit.rig, elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.skillPulse, unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0)
+    if (unit.hero) {
+      unit.hero.update(delta * (this.paused ? 0 : this.speed), moving, unit.mounted)
+      unit.hero.setFlash(unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0)
+    } else animateGeneral(unit.rig, elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.skillPulse, unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0)
     unit.motionPulse -= delta
     if (moving && unit.motionPulse <= 0) {
       unit.motionPulse = 0.72 + (unit.motionPhase % 0.35)

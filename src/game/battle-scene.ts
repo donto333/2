@@ -2,12 +2,18 @@
 // 외부 3D 파일 없이 도형과 직접 그린 질감으로 만든다. 전투 규칙(battle-core)과는 무관하다.
 import * as THREE from 'three'
 import type { General } from './strategy'
+import { loadModel } from './battle-models'
 
 export type Team = 'player' | 'enemy'
 export type SceneQuality = 'low' | 'high'
 
 /** 휴대폰·저사양에서는 그림자 해상도·풀·대군 수를 줄인다. */
 export function detectSceneQuality(): SceneQuality {
+  // 직접 고르기: 주소에 ?quality=low|high, 또는 localStorage 'cheonharo.quality'
+  try {
+    const forced = new URLSearchParams(location.search).get('quality') ?? localStorage.getItem('cheonharo.quality')
+    if (forced === 'low' || forced === 'high') return forced
+  } catch { /* 저장소를 못 쓰면 자동 */ }
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
   const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? 4 : 4
   return coarse || cores <= 4 ? 'low' : 'high'
@@ -161,49 +167,83 @@ export function soldierGeometry(kind: 'infantry' | 'archer' | 'cavalry' | 'pike'
 export interface Squad {
   group: THREE.Group
   update: (t: number, moving: boolean, attack: number, hit: number, alive: number) => void
+  /** 실사 모델(자세를 굳힌 도형)로 교체: 병사가 커지므로 간격을 넓히고 수를 줄인다 */
+  upgrade: (geometry: THREE.BufferGeometry, material: THREE.Material) => void
 }
 export function createSquad(role: General['role'], team: Team, quality: SceneQuality): Squad {
   const kind = role === '기병' ? 'cavalry' : role === '궁병' ? 'archer' : role === '보병' ? 'pike' : 'infantry'
+  const r = rng(role.length * 97 + (team === 'enemy' ? 13 : 7))
+  const layout = (cols: number, rows: number, gapX: number, gapZ: number, aisle: number, front: number) => {
+    const list: Array<{ x: number; z: number; phase: number; jitter: number }> = []
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        let x = (col - (cols - 1) / 2) * gapX
+        x += Math.sign(x || (col % 2 ? 1 : -1)) * aisle
+        list.push({ x: x + (r() - 0.5) * gapX * 0.2, z: front + row * gapZ + (r() - 0.5) * gapZ * 0.15, phase: r() * Math.PI * 2, jitter: r() })
+      }
+    }
+    return list
+  }
   const cols = kind === 'cavalry' ? 5 : 7
   const rows = quality === 'low' ? 3 : kind === 'cavalry' ? 3 : 4
-  const count = cols * rows
+  let base = layout(cols, rows, kind === 'cavalry' ? 0.62 : 0.46, (kind === 'cavalry' ? 0.62 : 0.46) * 1.05, 0.55, 0.5)
+  let count = base.length
+  let yaw = 0
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.18 })
-  const mesh = new THREE.InstancedMesh(soldierGeometry(kind, team), material, count)
+  let mesh = new THREE.InstancedMesh(soldierGeometry(kind, team), material, count)
   mesh.castShadow = quality === 'high'
-  mesh.receiveShadow = false
   mesh.frustumCulled = false
-  const gap = kind === 'cavalry' ? 0.62 : 0.46
-  const base: Array<{ x: number; z: number; phase: number; jitter: number }> = []
-  const r = rng(role.length * 97 + (team === 'enemy' ? 13 : 7))
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      let x = (col - (cols - 1) / 2) * gap
-      x += Math.sign(x || (col % 2 ? 1 : -1)) * 0.55
-      base.push({ x: x + (r() - 0.5) * 0.1, z: 0.5 + row * gap * 1.05 + (r() - 0.5) * 0.1, phase: r() * Math.PI * 2, jitter: r() })
+  const tintAll = (target: THREE.InstancedMesh, realistic: boolean) => {
+    const tint = new THREE.Color()
+    for (let i = 0; i < base.length; i += 1) {
+      const v = (realistic ? 0.92 : 0.82) + base[i].jitter * (realistic ? 0.14 : 0.3)
+      // 실사 모델은 양 진영이 같은 옷이라, 적은 붉은 기운으로 물들여 구분한다
+      if (realistic && team === 'enemy') tint.setRGB(v * 1.08, v * 0.72, v * 0.66)
+      else if (realistic) tint.setRGB(v * 0.84, v * 0.96, v * 1.02)
+      else tint.setRGB(v, v * (0.97 + r() * 0.05), v * (0.94 + r() * 0.08))
+      target.setColorAt(i, tint)
     }
+    if (target.instanceColor) target.instanceColor.needsUpdate = true
   }
-  const tint = new THREE.Color()
-  for (let i = 0; i < count; i += 1) { const v = 0.82 + base[i].jitter * 0.3; mesh.setColorAt(i, tint.setRGB(v, v * (0.97 + r() * 0.05), v * (0.94 + r() * 0.08))) }
+  tintAll(mesh, false)
   const group = new THREE.Group()
   group.add(mesh)
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), e = new THREE.Euler()
+  let bobScale = 1
   const update = (t: number, moving: boolean, attack: number, hit: number, alive: number) => {
     const visible = Math.max(0, Math.min(count, Math.ceil(count * alive)))
     mesh.count = visible
     const lunge = Math.sin(Math.min(1, attack) * Math.PI)
     for (let i = 0; i < visible; i += 1) {
       const b = base[i]
-      const bob = moving ? Math.abs(Math.sin(t * (kind === 'cavalry' ? 9 : 7) + b.phase)) * 0.07 : Math.sin(t * 1.4 + b.phase) * 0.012
-      p.set(b.x + Math.sin(t * 0.7 + b.phase) * 0.02, bob, b.z - lunge * (kind === 'archer' ? 0.05 : 0.35) * (0.6 + b.jitter * 0.4) + hit * 0.12)
-      e.set(moving ? -0.08 : 0, Math.sin(t * 0.5 + b.phase) * 0.06, Math.sin(t * (moving ? 7 : 1.4) + b.phase) * (moving ? 0.05 : 0.015))
+      const bob = (moving ? Math.abs(Math.sin(t * (kind === 'cavalry' ? 9 : 7) + b.phase)) * 0.07 : Math.sin(t * 1.4 + b.phase) * 0.012) * bobScale
+      p.set(b.x + Math.sin(t * 0.7 + b.phase) * 0.02, bob, b.z - lunge * (kind === 'archer' ? 0.05 : 0.35) * (0.6 + b.jitter * 0.4) * bobScale + hit * 0.12)
+      e.set(moving ? -0.06 : 0, yaw + Math.sin(t * 0.5 + b.phase) * 0.06, Math.sin(t * (moving ? 7 : 1.4) + b.phase) * (moving ? 0.04 : 0.012))
       q.setFromEuler(e)
       m.compose(p, q, s)
       mesh.setMatrixAt(i, m)
     }
     mesh.instanceMatrix.needsUpdate = true
   }
+  const upgrade = (geometry: THREE.BufferGeometry, realMaterial: THREE.Material) => {
+    const cav = kind === 'cavalry'
+    const [c2, r2] = quality === 'low' ? (cav ? [2, 1] : [3, 2]) : (cav ? [2, 2] : [4, 3])
+    base = cav ? layout(c2, r2, 1.25, 3.0, 0.9, 1.4) : layout(c2, r2, 0.82, 0.86, 0.75, 0.75)
+    count = base.length
+    yaw = Math.PI // 실사 모델은 +Z를 보도록 맞춰 두었다 → 부대 앞(-Z)으로 돌린다
+    bobScale = 1.6
+    const next = new THREE.InstancedMesh(geometry, realMaterial, count)
+    next.castShadow = quality === 'high'
+    next.frustumCulled = false
+    tintAll(next, true)
+    group.remove(mesh)
+    mesh.dispose()
+    mesh = next
+    group.add(mesh)
+    update(0, false, 0, 0, 1)
+  }
   update(0, false, 0, 0, 1)
-  return { group, update }
+  return { group, update, upgrade }
 }
 
 // ── 무장 모델 ────────────────────────────────────────────────
@@ -550,14 +590,14 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
 
   // 원경 산맥 3겹(멀수록 하늘색에 묻힌다)
   const ridge = (radius: number, height: number, color: number, seed: number, from = -Math.PI * 0.98, to = -Math.PI * 0.02) => {
-    const segments = 120
+    const segments = 240
     const positions: number[] = []
     const r = rng(seed)
     const offsets = Array.from({ length: 6 }, () => r() * 10)
     for (let i = 0; i <= segments; i += 1) {
       const a = from + (to - from) * (i / segments)
       const x = Math.cos(a) * radius, z = Math.sin(a) * radius
-      const n = Math.sin(a * 7 + offsets[0]) * 0.35 + Math.sin(a * 17 + offsets[1]) * 0.2 + Math.abs(Math.sin(a * 31 + offsets[2])) * 0.25 + Math.sin(a * 53 + offsets[3]) * 0.08
+      const n = Math.sin(a * 5 + offsets[0]) * 0.38 + Math.sin(a * 11 + offsets[1]) * 0.2 + Math.abs(Math.sin(a * 19 + offsets[2])) * 0.16 + Math.sin(a * 37 + offsets[3]) * 0.04
       const y = height * (0.55 + n)
       positions.push(x, -4, z, x, y, z)
     }
@@ -566,7 +606,10 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
     geometry.setIndex(index)
-    const ridgeMesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, fog: false, side: THREE.DoubleSide }))
+    const haze = new THREE.Color(0xc89a86), baseColor = new THREE.Color(color), vc: number[] = []
+    for (let i = 0; i < positions.length / 3; i += 1) { const top = i % 2 === 1; const c = top ? baseColor.clone().lerp(haze, 0.35) : baseColor.clone().multiplyScalar(0.85); vc.push(c.r, c.g, c.b) }
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(vc, 3))
+    const ridgeMesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }))
     ridgeMesh.renderOrder = -15
     scene.add(ridgeMesh)
   }
@@ -661,6 +704,17 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
   ground.receiveShadow = true
   scene.add(ground)
 
+  // 사용자 제공 실사 전장(2:1 섬 지형): 긴 쪽을 앞뒤로, 땅 높이가 0이 되게 얹는다
+  const ISLAND = { scale: 3.6, halfX: 8.82 * 3.6 / 2 + 0.6, halfZ: 17.66 * 3.6 / 2 + 0.6, z: -4 }
+  const inIsland = (x: number, z: number) => Math.abs(x) < ISLAND.halfX && Math.abs(z - ISLAND.z) < ISLAND.halfZ
+  void loadModel('battlefield').then(gltf => {
+    const island = gltf.scene
+    island.scale.setScalar(ISLAND.scale)
+    island.rotation.y = Math.PI / 2
+    island.position.set(0, 0.867 * ISLAND.scale + 0.02, ISLAND.z)
+    scene.add(island)
+  }).catch(() => { /* 모델이 없으면 기본 지형만 */ })
+
   // 풀 덤불(인스턴스) — 전장 가운데는 비운다
   const tuftCount = quality === 'high' ? 2600 : 900
   const tuftGeo = mergeColored([
@@ -675,6 +729,7 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
   for (let tries = 0; placed < tuftCount && tries < tuftCount * 4; tries += 1) {
     const x = (tr() - 0.5) * 110, z = (tr() - 0.5) * 90 - 6
     if (Math.abs(x) < 9 && z > -12 && z < 12) continue
+    if (inIsland(x, z)) continue
     if (Math.abs(x - Math.sin(z * 0.12) * 1.6) < 2.6) continue
     dummy.position.set(x, terrainHeight(x, z), z)
     dummy.rotation.set(0, tr() * 6.28, 0)
@@ -692,7 +747,7 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
   for (let i = 0; i < 40; i += 1) {
     const a = tr() * Math.PI * 2, rr = 15 + tr() * 30
     let rx = Math.cos(a) * rr, rz = Math.sin(a) * rr * 0.8 - 8
-    if (rz > 4 && Math.abs(rx) < 24) rx = Math.sign(rx || 1) * (24 + tr() * 8)
+    if ((rz > 4 && Math.abs(rx) < 24) || inIsland(rx, rz)) rx = Math.sign(rx || 1) * (24 + tr() * 8)
     dummy.position.set(rx, terrainHeight(rx, rz) + 0.1, rz)
     dummy.rotation.set(tr(), tr() * 6, tr())
     dummy.scale.set(0.4 + tr() * 1.4, 0.3 + tr() * 0.8, 0.4 + tr() * 1.2)
@@ -708,10 +763,10 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
     { geometry: new THREE.ConeGeometry(0.95, 1.9, 7), color: 0x32462a, matrix: M(0, 3.5, 0) },
     { geometry: new THREE.ConeGeometry(0.6, 1.5, 7), color: 0x3a522e, matrix: M(0, 4.3, 0) },
   ])
-  const pines = new THREE.InstancedMesh(pine, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }), 46)
+  const pines = new THREE.InstancedMesh(pine, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), 46)
   for (let i = 0; i < 46; i += 1) {
     const side = i % 2 ? 1 : -1
-    const x = side * (24 + tr() * 30), z = -40 + tr() * 56
+    const x = side * (30 + tr() * 30), z = -50 + tr() * 50
     dummy.position.set(x, terrainHeight(x, z) - 0.2, z)
     dummy.rotation.set(0, tr() * 6, 0); dummy.scale.setScalar(0.9 + tr() * 1.1)
     dummy.updateMatrix(); pines.setMatrixAt(i, dummy.matrix)
