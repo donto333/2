@@ -366,7 +366,7 @@ export const GRADE_POWER_MULTIPLIER: Record<Grade, number> = {
 }
 
 const BUILDING_LIBRARY: Omit<CityBuilding, 'level'>[] = [
-  { id: 'farm', name: '屯田 농장', kind: 'agriculture', maxLevel: 5, description: '식량 생산량과 도시의 민생을 높입니다.' },
+  { id: 'farm', name: '둔전 농장', kind: 'agriculture', maxLevel: 5, description: '식량 생산량과 도시의 민생을 높입니다.' },
   { id: 'market', name: '교역 시장', kind: 'commerce', maxLevel: 5, description: '은전과 영향력 수입을 늘립니다.' },
   { id: 'barracks', name: '정예 병영', kind: 'barracks', maxLevel: 5, description: '도시 방어도와 출정 준비를 강화합니다.' },
   { id: 'workshop', name: '병기 공방', kind: 'workshop', maxLevel: 5, description: '목재와 철 생산을 확보합니다.' },

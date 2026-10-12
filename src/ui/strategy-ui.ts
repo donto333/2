@@ -569,26 +569,26 @@ export class StrategyUI {
           <div class="topbar-actions"><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}">${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : this.auth.status === 'offline' ? '오프라인 모드' : 'Manus 로그인'}</button></div>
         </header>
         <aside class="sidebar">
-          <div class="sidebar-label">본진</div>
+          ${this.navGroup('본진')}
           ${this.navButton('overview', icon('overview'), '본영', state.section)}
-          ${this.navButton('recruit', icon('recruit'), '모집 · 장비', state.section, state.lastRecruit ? 'NEW' : '')}
           ${this.navButton('roster', icon('roster'), '보유 무장', state.section, `${state.generals.length}`)}
           ${this.navButton('codex', icon('codex'), '무장 도감', state.section, `${allGenerals().length}`)}
           ${this.navButton('formation', icon('formation'), '출전 편성', state.section, `${state.formation.length}/3`)}
+          ${this.navGroup('육성')}
+          ${this.navButton('recruit', icon('recruit'), '모집 · 장비', state.section, state.lastRecruit ? 'NEW' : '')}
           ${this.navButton('equipment', icon('equipment'), '장비 관리', state.section, `${equipmentInventoryCount(state)}`)}
-          ${this.navButton('territory', icon('territory'), '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === state.faction).length}`)}
           ${this.navButton('research', icon('research'), '기술 연구', state.section)}
-          <div class="sidebar-rule"></div><div class="sidebar-label">작전</div>
+          ${this.navButton('territory', icon('territory'), '영토 · 내정', state.section, `${state.cities.filter(city => city.owner === state.faction).length}`)}
+          ${this.navGroup('전투')}
           ${this.navButton('battle', icon('battle'), '시나리오', state.section)}
           ${this.navButton('duel', icon('duel'), '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
-          ${this.navButton('shop', icon('shop'), '상점', state.section, `${state.gold}금화`)}
           ${this.navButton('rank', icon('rank'), '천하 랭킹', state.section)}
+          ${this.navGroup('소통')}
           ${this.navButton('board', icon('board'), '진영 게시판', state.section)}
+          ${this.navButton('shop', icon('shop'), '상점', state.section)}
           ${this.navButton('updates', icon('updates'), '업데이트 기록', state.section, 'NEW')}
           ${this.navButton('account', icon('account'), '계정 관리', state.section)}
-          ${this.canOpenBalance() ? `<a class="nav-button nav-button--link" href="./balance.html" data-nav><span class="nav-icon">${icon('balance')}</span><span>밸런스 테스트</span><b>${OFFICIAL_LAUNCH ? '운영' : 'TEST'}</b></a>` : ''}
-          ${this.isAdmin() ? '<div class="sidebar-rule"></div><div class="sidebar-label">운영</div>' : ''}
-          ${this.isAdmin() ? this.navButton('admin', icon('admin'), '관리자 센터', state.section, 'LIVE') : ''}
+          ${this.canOpenBalance() || this.isAdmin() ? `<div class="nav-ops">${this.canOpenBalance() ? `<a class="nav-button nav-button--link nav-button--ops" href="./balance.html" data-nav><span class="nav-icon">${icon('balance')}</span><span>밸런스 테스트</span></a>` : ''}${this.isAdmin() ? this.navButton('admin', icon('admin'), '관리자 센터', state.section).replace('class="nav-button ', 'class="nav-button nav-button--ops ') : ''}</div>` : ''}
           <div class="sidebar-spacer"></div>
           <div class="sidebar-profile"><div class="profile-orb">${state.faction.slice(0, 1)}</div><div><strong>${state.faction} 진영</strong><small>옥패 07 · Lv.12</small></div></div>
         </aside>
@@ -601,7 +601,14 @@ export class StrategyUI {
   }
 
   private navButton(section: Section, icon: string, label: string, current: Section, badge = ''): string {
-    return `<button class="nav-button ${current === section ? 'is-active' : ''}" data-action="section" data-section="${section}" data-nav><span class="nav-icon">${icon}</span><span>${label}</span>${badge ? `<b>${badge}</b>` : ''}</button>`
+    // 배지: 숫자는 금테 작은 상자, 새 소식(NEW)은 붉은 「새」 표시
+    const mark = !badge ? '' : badge === 'NEW' ? '<b class="nav-badge nav-badge--new">새</b>' : `<b class="nav-badge">${badge}</b>`
+    return `<button class="nav-button ${current === section ? 'is-active' : ''}" data-action="section" data-section="${section}" data-nav><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>${mark}</button>`
+  }
+
+  /** 메뉴 분류 패(칠기 목패 위 금박 패) */
+  private navGroup(label: string): string {
+    return `<div class="nav-group"><span>${label}</span></div>`
   }
 
   private renderSection(state: StrategyState): string {
@@ -637,7 +644,7 @@ export class StrategyUI {
 
   private recruitSection(state: StrategyState): string {
     const result = state.lastRecruit
-    return `<section class="page-section page-section--recruit"><div class="section-heading section-heading--compact"><div><span class="eyebrow">SUMMONING HALL · 02</span><h1>무장 모집</h1><p class="heading-copy">한 장의 인장이 진형 전체를 바꿉니다.</p></div><div class="section-counter"><span>보유 무장</span><strong>${state.generals.length}<small> / ${allGenerals().length}</small></strong></div></div><div class="recruit-layout"><div class="recruit-pedestal glass-card"><div class="pedestal-glow"></div><div class="summon-banner" role="img" aria-label="옥패의 부름에 응답하는 삼국의 무장들"><figure class="summon-banner__slide summon-banner__slide--solo"><img src="/assets/ui/recruit-montage.webp" alt="" width="720" height="900" draggable="false"><figcaption><b>群雄割據</b><span>군웅할거 · 천하의 영웅이 모인다</span></figcaption></figure><img class="summon-banner__jade" src="/assets/ui/jade-summon.svg" alt="" width="64" height="80" draggable="false"></div><div class="recruit-copy"><span class="pill pill--gold">무료 게임 내 재화</span><h2>옥패의 부름</h2><p>역사 속 무장들이 인장 너머에서 응답합니다.<br>중복 무장은 즉시 성급으로 전환됩니다.</p></div><div class="recruit-actions"><button class="action-button action-button--primary" data-action="recruit" data-count="1"><span>1회 모집</span><b>✦ 100</b></button><button class="action-button action-button--outline" data-action="recruit" data-count="10"><span>10회 연속 모집</span><b>✦ 900</b></button></div><div class="fair-play-note"><span>◎</span><span>현금 결제 없음 · 모집 확률 상시 공개</span></div></div><div class="recruit-side"><div class="glass-card rate-card"><div class="card-header"><div><span class="eyebrow">DROP TABLE</span><h3>모집 확률</h3></div><span class="rate-note">1회 기준</span></div>${([5, 4, 3, 2, 1] as const).map(grade => `<div class="rate-row"><span class="grade-dot" style="--grade:${GRADE_META[grade].color}"></span><span>${grade}등급 <small>${GRADE_META[grade].label}</small></span><strong>${GRADE_META[grade].rate}</strong><div class="rate-track"><i style="width:${GRADE_META[grade].rate}"></i></div></div>`).join('')}<div class="rate-footnote">* 중복 획득 시 해당 무장의 성급이 +1 상승합니다. 최대 5성.</div></div>${result ? `<div class="glass-card recruit-result"><span class="eyebrow">LATEST ACQUISITION</span><div class="result-card-row">${this.portrait(result, 'general-portrait--large')}<div><h3>${result.name}<span class="star-row">${'★'.repeat(result.stars)}${'☆'.repeat(5 - result.stars)}</span></h3><p>${result.epithet}</p><small>${result.grade}등급 · ${result.role} · Lv.${result.level}</small></div></div><p class="result-note">${state.lastNotice}</p></div>` : '<div class="glass-card empty-result"><span class="empty-rune">✦</span><p>모집 결과가 이곳에 기록됩니다.</p></div>'}</div></div></section>`
+    return `<section class="page-section page-section--recruit"><div class="section-heading section-heading--compact"><div><span class="eyebrow">SUMMONING HALL · 02</span><h1>무장 모집</h1><p class="heading-copy">한 장의 인장이 진형 전체를 바꿉니다.</p></div><div class="section-counter"><span>보유 무장</span><strong>${state.generals.length}<small> / ${allGenerals().length}</small></strong></div></div><div class="recruit-layout"><div class="recruit-pedestal glass-card"><div class="pedestal-glow"></div><div class="summon-banner" role="img" aria-label="옥패의 부름에 응답하는 삼국의 무장들"><figure class="summon-banner__slide summon-banner__slide--solo"><img src="/assets/ui/recruit-montage.webp" alt="" width="720" height="900" draggable="false"><figcaption><b>군웅할거</b><span>천하의 영웅이 모인다</span></figcaption></figure><img class="summon-banner__jade" src="/assets/ui/jade-summon.svg" alt="" width="64" height="80" draggable="false"></div><div class="recruit-copy"><span class="pill pill--gold">무료 게임 내 재화</span><h2>옥패의 부름</h2><p>역사 속 무장들이 인장 너머에서 응답합니다.<br>중복 무장은 즉시 성급으로 전환됩니다.</p></div><div class="recruit-actions"><button class="action-button action-button--primary" data-action="recruit" data-count="1"><span>1회 모집</span><b>✦ 100</b></button><button class="action-button action-button--outline" data-action="recruit" data-count="10"><span>10회 연속 모집</span><b>✦ 900</b></button></div><div class="fair-play-note"><span>◎</span><span>현금 결제 없음 · 모집 확률 상시 공개</span></div></div><div class="recruit-side"><div class="glass-card rate-card"><div class="card-header"><div><span class="eyebrow">DROP TABLE</span><h3>모집 확률</h3></div><span class="rate-note">1회 기준</span></div>${([5, 4, 3, 2, 1] as const).map(grade => `<div class="rate-row"><span class="grade-dot" style="--grade:${GRADE_META[grade].color}"></span><span>${grade}등급 <small>${GRADE_META[grade].label}</small></span><strong>${GRADE_META[grade].rate}</strong><div class="rate-track"><i style="width:${GRADE_META[grade].rate}"></i></div></div>`).join('')}<div class="rate-footnote">* 중복 획득 시 해당 무장의 성급이 +1 상승합니다. 최대 5성.</div></div>${result ? `<div class="glass-card recruit-result"><span class="eyebrow">LATEST ACQUISITION</span><div class="result-card-row">${this.portrait(result, 'general-portrait--large')}<div><h3>${result.name}<span class="star-row">${'★'.repeat(result.stars)}${'☆'.repeat(5 - result.stars)}</span></h3><p>${result.epithet}</p><small>${result.grade}등급 · ${result.role} · Lv.${result.level}</small></div></div><p class="result-note">${state.lastNotice}</p></div>` : '<div class="glass-card empty-result"><span class="empty-rune">✦</span><p>모집 결과가 이곳에 기록됩니다.</p></div>'}</div></div></section>`
   }
 
   private rosterSection(state: StrategyState): string {
@@ -823,7 +830,7 @@ export class StrategyUI {
 
   private mapViewport(state: StrategyState): string {
     const home = FACTION_CAPITALS[state.faction]
-    return `<div class="map-viewport" data-map-viewport data-lod="far"><div class="map-world map-canvas" data-map-world><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}${MAP_REGION_LABELS.map(region => `<span class="map-label map-label--province" style="left:${region.x}%;top:${region.y}%">${region.name}<small>${region.hanja}</small></span>`).join('')}</div><div class="map-controls"><button type="button" data-map-action="zoom-in" data-map-zoom-in aria-label="확대">＋</button><button type="button" data-map-action="zoom-out" data-map-zoom-out aria-label="축소">－</button><button type="button" data-map-action="home" data-home="${home}" aria-label="내 영토로">⌖</button><button type="button" data-map-action="fullscreen" aria-label="지도 전체 화면">${this.territoryMap.fullscreen ? '✕' : '⛶'}</button></div><div class="map-hint"><span class="hint-touch">두 손가락으로 확대 · 끌어서 이동 · 눌러서 도시 선택</span><span class="hint-mouse">휠로 확대 · 끌어서 이동 · 눌러서 도시 선택</span></div></div>`
+    return `<div class="map-viewport" data-map-viewport data-lod="far"><div class="map-world map-canvas" data-map-world><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}${MAP_REGION_LABELS.map(region => `<span class="map-label map-label--province" style="left:${region.x}%;top:${region.y}%">${region.name}</span>`).join('')}</div><div class="map-controls"><button type="button" data-map-action="zoom-in" data-map-zoom-in aria-label="확대">＋</button><button type="button" data-map-action="zoom-out" data-map-zoom-out aria-label="축소">－</button><button type="button" data-map-action="home" data-home="${home}" aria-label="내 영토로">⌖</button><button type="button" data-map-action="fullscreen" aria-label="지도 전체 화면">${this.territoryMap.fullscreen ? '✕' : '⛶'}</button></div><div class="map-hint"><span class="hint-touch">두 손가락으로 확대 · 끌어서 이동 · 눌러서 도시 선택</span><span class="hint-mouse">휠로 확대 · 끌어서 이동 · 눌러서 도시 선택</span></div></div>`
   }
 
   private attachTerritoryMap(state: StrategyState): void {
@@ -1166,7 +1173,8 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
-      ['2026.10.12', '무장 모집 그림 · 천하 인장', '무장 모집의 「옥패의 부름」에 여러 장수가 모인 군웅할거 그림을 넣고, 모서리에 비취 옥패를 달았습니다. 왼쪽 위 천하 로고는 「天下」 주홍 인장으로 바꿨습니다.', '완료', 'gold'],
+      ['2026.10.12', '왼쪽 메뉴 새 디자인', '메뉴를 한 줄 목록으로 바꾸고 본진·육성·전투·소통 네 묶음으로 나눴습니다. 옻칠한 나무판 위에 금박 분류 패를 달고, 선택한 메뉴는 금테 두른 붉은 칠기 패로 보입니다. 화면의 한자 표기는 모두 한글로 바꿨습니다.', '완료', 'gold'],
+      ['2026.10.12', '무장 모집 그림 · 천하 인장', '무장 모집의 「옥패의 부름」에 여러 장수가 모인 군웅할거 그림을 넣고, 모서리에 비취 옥패를 달았습니다. 왼쪽 위 천하 로고는 「천하」 주홍 인장으로 바꿨습니다.', '완료', 'gold'],
       ['2026.10.12', '유저 대련 전투 화면 전환 수정', '유저 대련을 시작해도 시나리오 목록이 그대로 보이던 문제를 고쳐, 바로 전투 화면으로 넘어가도록 했습니다.', '완료', 'jade'],
       ['2026.10.12', '밸런스 조정 테스트 페이지', '아군·적군 3명씩 편성과 장비(세트·등급·강화)를 정하고 게임과 같은 전투 규칙으로 수십~수천 판을 시뮬레이션해 승률·별 분포·전투 시간·무장별 스킬 기여를 봅니다. 한 판 상세 기록, 레벨 차이 분석, 설정 공유 링크를 지원합니다. 정식 출시 전에는 누구나, 출시 후에는 운영자 계정만 열 수 있습니다.', '완료', 'jade'],
       ['2026.10.12', '자동 편성 · 자동 장착', '출전 편성 화면에 자동 편성(전투력 상위 10명 중 인연·병종 조합까지 따져 3명 선택, 가운데에 방어형 배치), 자동 장착(출전 무장마다 세트 효과를 포함해 가장 좋은 장비 조합), 둘을 한 번에 하는 버튼을 넣었습니다. 장비 관리 화면에서도 자동 장착을 쓸 수 있습니다.', '완료', 'gold'],
