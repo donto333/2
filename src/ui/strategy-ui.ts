@@ -184,6 +184,8 @@ export class StrategyUI {
   private boardTab: BoardPost['board'] = '전체'
   private duelOpponents: DuelOpponent[] = []
   private latestBattle: BattleSnapshot | null = null
+  private cutInBusyUntil = 0
+  private cutInTimer = 0
   private recruitAnimationActive = false
   private auth: AuthView = { status: 'logged_out', name: null }
   private account: AccountView | null = null
@@ -525,6 +527,26 @@ export class StrategyUI {
     q('[data-bt-auto]')?.classList.toggle('is-on', snapshot.autoPlay)
     const startButton = q('[data-action="battle-start"]')
     if (startButton) startButton.style.display = snapshot.active ? 'none' : 'inline-flex'
+  }
+
+  /** 스킬 컷인: 무장 실사 초상이 사선 띠와 함께 화면을 가로지른다(아군은 왼쪽에서, 적은 오른쪽에서). */
+  showSkillCutIn(info: { side: 'player' | 'enemy'; id: string; name: string; skill: string }): void {
+    if (this.cutInBusyUntil > performance.now() && info.side === 'enemy') return
+    let layer = document.getElementById('skill-cutin')
+    if (!layer) {
+      layer = document.createElement('div')
+      layer.id = 'skill-cutin'
+      layer.setAttribute('aria-live', 'polite')
+      document.body.appendChild(layer)
+    }
+    const portrait = `/assets/generals-realistic-webp/${info.id}.webp`
+    layer.className = `skill-cutin skill-cutin--${info.side}`
+    layer.innerHTML = `<div class="skill-cutin__band"><i class="skill-cutin__lines"></i><div class="skill-cutin__portrait" style="background-image:url('${portrait}')"></div><div class="skill-cutin__text"><small>${escapeHtml(info.name)}</small><strong>${escapeHtml(info.skill)}</strong></div></div>`
+    void layer.offsetWidth
+    layer.classList.add('is-playing')
+    this.cutInBusyUntil = performance.now() + 1400
+    window.clearTimeout(this.cutInTimer)
+    this.cutInTimer = window.setTimeout(() => layer?.classList.remove('is-playing'), 1500)
   }
 
   showBattleResult(result: BattleResult, notice = ''): void {
@@ -1173,6 +1195,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.12', '전투 화면 전면 개편', '노을 하늘과 겹겹의 산맥, 멀리 성채가 보이는 넓은 전장으로 바꿨습니다. 무장마다 고유 무기(청룡언월도·방천화극·장팔사모·깃털 부채 등)와 갑옷·망토·말을 새로 만들고, 부대마다 병사 수십 명이 대열을 이루며 양 진영 뒤에 대군과 깃발이 늘어섭니다. 빛번짐·색보정, 포물선 화살 사격, 스킬을 쓰면 무장 실사 초상이 화면을 가로지르는 컷인 연출을 넣었습니다. 휴대폰에서는 자동으로 가벼운 설정을 씁니다.', '완료', 'gold'],
       ['2026.10.12', '왼쪽 메뉴 새 디자인', '메뉴를 한 줄 목록으로 바꾸고 본진·육성·전투·소통 네 묶음으로 나눴습니다. 옻칠한 나무판 위에 금박 분류 패를 달고, 선택한 메뉴는 금테 두른 붉은 칠기 패로 보입니다. 화면의 한자 표기는 모두 한글로 바꿨습니다.', '완료', 'gold'],
       ['2026.10.12', '무장 모집 그림 · 천하 인장', '무장 모집의 「옥패의 부름」에 여러 장수가 모인 군웅할거 그림을 넣고, 모서리에 비취 옥패를 달았습니다. 왼쪽 위 천하 로고는 「천하」 주홍 인장으로 바꿨습니다.', '완료', 'gold'],
       ['2026.10.12', '유저 대련 전투 화면 전환 수정', '유저 대련을 시작해도 시나리오 목록이 그대로 보이던 문제를 고쳐, 바로 전투 화면으로 넘어가도록 했습니다.', '완료', 'jade'],

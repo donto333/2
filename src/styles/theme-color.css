@@ -563,3 +563,33 @@ body .summon-banner__slide--solo { animation: none; opacity: 1; }
   body .sidebar .nav-badge { display: none; }
   body .sidebar .nav-label { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 }
+
+/* ── 스킬 컷인: 실사 초상 + 사선 띠 + 속도선 ───────────────────── */
+.skill-cutin { position: fixed; inset: 0; z-index: 60; pointer-events: none; display: grid; align-items: center; overflow: hidden; visibility: hidden; }
+.skill-cutin.is-playing { visibility: visible; }
+.skill-cutin__band { position: relative; height: clamp(120px, 24vh, 220px); transform: skewY(-6deg); background: linear-gradient(90deg, rgba(10, 30, 26, .0), rgba(10, 30, 26, .92) 14%, rgba(16, 52, 44, .95) 50%, rgba(10, 30, 26, .92) 86%, rgba(10, 30, 26, 0)); border-top: 2px solid rgba(240, 194, 106, .85); border-bottom: 2px solid rgba(240, 194, 106, .85); box-shadow: 0 0 40px rgba(0, 0, 0, .6); overflow: hidden; opacity: 0; }
+.skill-cutin--enemy .skill-cutin__band { background: linear-gradient(90deg, rgba(40, 8, 6, 0), rgba(52, 10, 8, .92) 14%, rgba(92, 18, 12, .95) 50%, rgba(52, 10, 8, .92) 86%, rgba(40, 8, 6, 0)); border-color: rgba(255, 120, 90, .85); }
+.skill-cutin__lines { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 34px, rgba(255, 236, 200, .16) 34px 36px, transparent 36px 90px); }
+.skill-cutin__portrait { position: absolute; top: -20%; bottom: -20%; left: 6%; width: min(46vw, 420px); background: center 18% / cover no-repeat; transform: skewY(6deg); filter: brightness(1.2) contrast(1.08) saturate(1.1); -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 78%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 78%, transparent); }
+.skill-cutin--enemy .skill-cutin__portrait { left: auto; right: 6%; }
+.skill-cutin__text { position: absolute; top: 50%; left: 50%; transform: translateY(-50%) skewY(6deg); display: grid; gap: 4px; text-shadow: 0 3px 12px rgba(0, 0, 0, .8); }
+.skill-cutin--enemy .skill-cutin__text { left: auto; right: 50%; text-align: right; }
+.skill-cutin__text small { font-size: clamp(13px, 1.6vw, 18px); color: #ffe3a3; letter-spacing: .12em; font-weight: 700; }
+.skill-cutin__text strong { font-size: clamp(30px, 5.4vw, 64px); line-height: 1; color: #fff8ea; font-weight: 900; letter-spacing: .04em; }
+.skill-cutin--enemy .skill-cutin__text strong { color: #ffd2c4; }
+.skill-cutin.is-playing .skill-cutin__band { animation: cutin-band 1.4s cubic-bezier(.2, .8, .2, 1) both; }
+.skill-cutin.is-playing .skill-cutin__portrait { animation: cutin-portrait 1.4s cubic-bezier(.15, .85, .25, 1) both; }
+.skill-cutin--enemy.is-playing .skill-cutin__portrait { animation-name: cutin-portrait-enemy; }
+.skill-cutin.is-playing .skill-cutin__text { animation: cutin-text 1.4s cubic-bezier(.2, .8, .2, 1) both; }
+.skill-cutin.is-playing .skill-cutin__lines { animation: cutin-lines .5s linear infinite; }
+@keyframes cutin-band { 0% { opacity: 0; transform: skewY(-6deg) scaleY(.1); } 12% { opacity: 1; transform: skewY(-6deg) scaleY(1); } 80% { opacity: 1; transform: skewY(-6deg) scaleY(1); } 100% { opacity: 0; transform: skewY(-6deg) scaleY(.6); } }
+@keyframes cutin-portrait { 0% { transform: skewY(6deg) translateX(-60%); opacity: 0; } 18% { transform: skewY(6deg) translateX(0); opacity: 1; } 78% { transform: skewY(6deg) translateX(6%); opacity: 1; } 100% { transform: skewY(6deg) translateX(30%); opacity: 0; } }
+@keyframes cutin-portrait-enemy { 0% { transform: skewY(6deg) translateX(60%); opacity: 0; } 18% { transform: skewY(6deg) translateX(0); opacity: 1; } 78% { transform: skewY(6deg) translateX(-6%); opacity: 1; } 100% { transform: skewY(6deg) translateX(-30%); opacity: 0; } }
+@keyframes cutin-text { 0%, 10% { opacity: 0; letter-spacing: .5em; } 26% { opacity: 1; letter-spacing: .04em; } 80% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes cutin-lines { from { background-position: 0 0; } to { background-position: -90px 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .skill-cutin.is-playing .skill-cutin__band, .skill-cutin.is-playing .skill-cutin__portrait, .skill-cutin.is-playing .skill-cutin__text { animation: cutin-fade 1.2s both; }
+  .skill-cutin.is-playing .skill-cutin__lines { animation: none; }
+}
+@keyframes cutin-fade { 0%, 100% { opacity: 0; } 15%, 80% { opacity: 1; } }
+@media (max-width: 600px) { .skill-cutin__portrait { width: 50vw; left: 0; } .skill-cutin--enemy .skill-cutin__portrait { right: 0; } .skill-cutin__text { left: 46%; right: 4%; } .skill-cutin--enemy .skill-cutin__text { left: 4%; right: 46%; } .skill-cutin__text strong { font-size: clamp(18px, 6vw, 26px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .skill-cutin__text small { font-size: 12px; } }

@@ -3,6 +3,22 @@ import { allGenerals, scaleGeneral, type General } from './strategy'
 import { BattleCore, BATTLE_RULES, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import type { SkillType } from './skills'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
+
+/** 마지막 색보정: 가장자리 어둡게(비네트) · 따뜻한 대비 */
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, vignette: { value: 0.42 }, warmth: { value: 0.06 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float vignette, warmth; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - 0.5; float v = 1.0 - dot(d, d) * vignette * 2.2;
+    c.rgb *= v; c.rgb += vec3(warmth, warmth * 0.45, -warmth * 0.35) * (1.0 - c.rgb);
+    float l = dot(c.rgb, vec3(0.299, 0.587, 0.114)); c.rgb = mix(vec3(l), c.rgb, 1.08); gl_FragColor = c; }`,
+}
 
 export interface BattleUnitStatus {
   lane: number
@@ -101,9 +117,19 @@ export interface BattleTroopStatus {
   alive: boolean
 }
 
+export interface SkillCutIn {
+  side: 'player' | 'enemy'
+  id: string
+  name: string
+  skill: string
+  portraitPath?: string
+}
+
 export interface ArenaCallbacks {
   onEvent: (message: string) => void
   onBattleEnd: (result: BattleResult & { mode: BattleMode }) => void
+  /** 스킬 사용 순간: 화면에 무장 초상 컷인을 띄운다 */
+  onSkillCast?: (info: SkillCutIn) => void
 }
 
 interface BattleUnit {
@@ -124,6 +150,9 @@ interface BattleUnit {
   motionPulse: number
   troopType: TroopType
   attackMotion: number
+  rig: GeneralRig
+  squadCtl: Squad
+  skillPulse: number
 }
 
 interface ArenaEffect {
@@ -134,7 +163,6 @@ interface ArenaEffect {
   dispose: () => void
 }
 
-const WORLD_SIZE = 42
 const jade = 0x52e0c4
 const ember = 0xff8066
 type TroopType = 'cavalry' | 'spearmen' | 'archer'
@@ -142,7 +170,7 @@ export type CommanderArchetype = '무장형' | '책사형' | '지원형'
 export class Arena {
   private readonly renderer: THREE.WebGLRenderer
   private readonly scene = new THREE.Scene()
-  private readonly camera = new THREE.PerspectiveCamera(38, 1, 0.1, 160)
+  private readonly camera = new THREE.PerspectiveCamera(34, 1, 0.1, 400)
   private readonly clock = new THREE.Timer()
   private readonly callbacks: ArenaCallbacks
   private readonly playerUnits: BattleUnit[] = []
@@ -167,155 +195,39 @@ export class Arena {
   private enemyWarning: { name: string; general: string; until: number } | null = null
   private readonly logLines: string[] = []
   private readonly effects: ArenaEffect[] = []
-  private readonly cameraBase = new THREE.Vector3(0, 22, 29)
-  private readonly cameraLookAt = new THREE.Vector3(0, 0, -3)
+  // 카메라: 아군 뒤 낮은 시점에서 적진·성채·노을 하늘까지 한눈에(최근 전쟁 게임식 구도)
+  private readonly cameraBase = new THREE.Vector3(0, 7.4, 18.5)
+  private readonly cameraLookAt = new THREE.Vector3(0, 2.4, -9)
   private cameraShake = 0
   private cameraIntro = 0
   private cameraVictory = 0
+  private readonly quality: SceneQuality
+  private readonly environment: Environment
+  private composer: EffectComposer | null = null
 
   constructor(canvas: HTMLCanvasElement, callbacks: ArenaCallbacks) {
     this.callbacks = callbacks
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.quality = detectSceneQuality()
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: this.quality === 'high', alpha: false, powerPreference: 'high-performance' })
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.quality === 'high' ? 2 : 1.5))
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.12
-    this.scene.background = new THREE.Color(0x2a1810) // 컬러 테마: 따뜻한 해질녘
-    this.scene.fog = new THREE.FogExp2(0x4a3020, 0.016)
+    this.renderer.toneMappingExposure = 1.05
+    this.environment = buildEnvironment(this.scene, this.quality)
     this.camera.position.copy(this.cameraBase)
     this.camera.lookAt(this.cameraLookAt)
-    this.buildLighting()
-    this.buildBackdrop()
-    this.buildTerrain()
-    this.buildGateRuins()
-    this.buildAtmosphere()
+    if (this.quality === 'high') {
+      this.composer = new EffectComposer(this.renderer)
+      this.composer.addPass(new RenderPass(this.scene, this.camera))
+      this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(512, 512), 0.55, 0.45, 0.82))
+      this.composer.addPass(new OutputPass())
+      this.composer.addPass(new ShaderPass(GradeShader))
+    }
     window.addEventListener('resize', this.resize)
     this.resize()
     this.animate()
-  }
-
-  private buildLighting(): void {
-    const sky = new THREE.HemisphereLight(0xf0d2a8, 0x2a1c12, 2.3)
-    this.scene.add(sky)
-    const sun = new THREE.DirectionalLight(0xffd7a0, 5.2)
-    sun.position.set(-14, 28, 12)
-    sun.castShadow = true
-    sun.shadow.mapSize.set(2048, 2048)
-    sun.shadow.camera.left = -30
-    sun.shadow.camera.right = 30
-    sun.shadow.camera.top = 30
-    sun.shadow.camera.bottom = -30
-    this.scene.add(sun)
-    const rim = new THREE.PointLight(jade, 9, 34, 2)
-    rim.position.set(12, 5, -10)
-    this.scene.add(rim)
-    const warm = new THREE.PointLight(ember, 12, 28, 2)
-    warm.position.set(-16, 3, 8)
-    this.scene.add(warm)
-  }
-
-  private buildBackdrop(): void {
-    const loader = new THREE.TextureLoader()
-    loader.load('/assets/battlefield/huanghun-gate.webp', texture => {
-      texture.colorSpace = THREE.SRGBColorSpace
-      texture.anisotropy = Math.min(this.renderer.capabilities.getMaxAnisotropy(), 8)
-      const backdrop = new THREE.Mesh(
-        new THREE.PlaneGeometry(128, 86),
-        new THREE.MeshBasicMaterial({ map: texture, fog: false, depthWrite: false }),
-      )
-      backdrop.position.set(0, 14, -43)
-      backdrop.renderOrder = -10
-      this.scene.add(backdrop)
-    })
-  }
-
-  private buildTerrain(): void {
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 48, 48),
-      new THREE.MeshStandardMaterial({ color: 0x40544d, roughness: 0.96, metalness: 0.01, transparent: true, opacity: 0.76 }),
-    )
-    ground.rotation.x = -Math.PI / 2
-    ground.receiveShadow = true
-    this.scene.add(ground)
-
-    const grid = new THREE.GridHelper(WORLD_SIZE, 14, 0x74aa98, 0x34584f)
-    grid.position.y = 0.012
-    const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material]
-    gridMaterials.forEach(material => { material.transparent = true; material.opacity = 0.035 })
-    this.scene.add(grid)
-
-    const pathShape = new THREE.Shape()
-    pathShape.moveTo(-3.6, 18)
-    pathShape.lineTo(-2.7, 11)
-    pathShape.lineTo(-4.1, 4)
-    pathShape.lineTo(-2.8, -4)
-    pathShape.lineTo(-3.4, -18)
-    pathShape.lineTo(3.4, -18)
-    pathShape.lineTo(2.8, -4)
-    pathShape.lineTo(4.1, 4)
-    pathShape.lineTo(2.7, 11)
-    pathShape.lineTo(3.6, 18)
-    const path = new THREE.Mesh(
-      new THREE.ShapeGeometry(pathShape),
-      new THREE.MeshStandardMaterial({ color: 0x74604d, roughness: 0.94, metalness: 0, transparent: true, opacity: 0.48 }),
-    )
-    path.rotation.x = -Math.PI / 2
-    path.rotation.z = 0.08
-    path.position.set(0, 0.018, -1)
-    path.receiveShadow = true
-    this.scene.add(path)
-
-    const stones = [[-12, -13, 0.8], [11, -11, 1.05], [-15, -3, 0.7], [14, 1, 1.2], [-12, 10, 1.1], [12, 14, 0.72]] as const
-    stones.forEach(([x, z, size], index) => {
-      const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 1), new THREE.MeshStandardMaterial({ color: index % 2 ? 0x34433f : 0x3d4a44, roughness: 0.86, metalness: 0.02 }))
-      stone.position.set(x, size * 0.58, z)
-      stone.scale.y = 0.7
-      stone.rotation.set(0.1 * index, 0.55 * index, 0.18 * index)
-      stone.castShadow = true
-      this.scene.add(stone)
-    })
-  }
-
-  private buildGateRuins(): void {
-    const basalt = new THREE.MeshStandardMaterial({ color: 0x1d2c2d, roughness: 0.94, metalness: 0.08 })
-    const pillarGeometry = new THREE.CylinderGeometry(0.72, 1.05, 5.8, 7)
-    for (const x of [-11, 11]) {
-      const pillar = new THREE.Mesh(pillarGeometry, basalt)
-      pillar.position.set(x, 2.9, -18)
-      pillar.rotation.z = x < 0 ? -0.025 : 0.025
-      pillar.castShadow = true
-      this.scene.add(pillar)
-    }
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(23, 0.72, 0.86), basalt)
-    lintel.position.set(0, 5.55, -18)
-    lintel.castShadow = true
-    this.scene.add(lintel)
-  }
-
-  private buildAtmosphere(): void {
-    const dust = new THREE.Group()
-    const material = new THREE.MeshBasicMaterial({ color: 0xb8d9ce, transparent: true, opacity: 0.14 })
-    for (let index = 0; index < 85; index += 1) {
-      const mote = new THREE.Mesh(new THREE.SphereGeometry(0.025 + (index % 4) * 0.012, 5, 5), material)
-      mote.position.set(((index * 17) % 40) - 20, 1.2 + ((index * 11) % 110) / 24, ((index * 23) % 38) - 19)
-      dust.add(mote)
-    }
-    this.scene.add(dust)
-
-    for (let index = 0; index < 3; index += 1) {
-      const banner = new THREE.Group()
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 4.2, 8), new THREE.MeshStandardMaterial({ color: 0xc6a56d, metalness: 0.5, roughness: 0.45 }))
-      pole.position.y = 2.1
-      const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.9, 4, 4), new THREE.MeshStandardMaterial({ color: index === 1 ? 0x6d2830 : 0x143d3b, side: THREE.DoubleSide, roughness: 0.9 }))
-      cloth.position.set(0.65, 3.45, 0)
-      cloth.rotation.y = -0.08
-      banner.add(pole, cloth)
-      banner.position.set(-13 + index * 13, 0, -9 + (index % 2) * 3)
-      banner.rotation.y = index % 2 ? -0.2 : 0.14
-      this.scene.add(banner)
-    }
   }
 
   private troopCapacity(general: General): number {
@@ -339,13 +251,12 @@ export class Arena {
     this.clearUnits()
     const positions = [new THREE.Vector3(-4.2, 0, 6), new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(4.2, 0, 6)]
     this.generals.forEach((general, index) => {
-      const group = this.createUnit(general, jade, positions[index] ?? positions[0])
-      const squad = group.getObjectByName(`realistic-squad-${general.role}`) as THREE.Group
-      const model = group.userData.model as THREE.Group
+      const built = this.createUnit(general, jade, positions[index] ?? positions[0])
+      const group = built.group
       const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(jade)
       group.add(status.group)
-      const unit: BattleUnit = { group, squad, model, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0 }
+      const unit: BattleUnit = { group, squad: built.squad.group, model: built.rig.root, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0 }
       this.playerUnits.push(unit)
       this.scene.add(group)
     })
@@ -395,190 +306,21 @@ export class Arena {
     this.enemyWarning = null
   }
 
-  private createUnit(general: General, teamColor: number, position: THREE.Vector3): THREE.Group {
+  private createUnit(general: General, teamColor: number, position: THREE.Vector3): { group: THREE.Group; rig: GeneralRig; squad: Squad } {
+    const team = teamColor === ember ? 'enemy' : 'player'
     const group = new THREE.Group()
     group.position.copy(position)
     group.userData.baseY = 0
-    const mounted = general.role === '기병'
-    const bannerColor = teamColor === ember ? 0x8e3340 : general.accent
-    const banner = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.75), new THREE.MeshStandardMaterial({ color: bannerColor, side: THREE.DoubleSide, roughness: 0.8 }))
-    banner.position.set(-0.38, mounted ? 2.35 : 2.15, 0)
-    banner.rotation.y = Math.PI / 2
-    const model = this.createGeneralModel(general, teamColor)
-    group.userData.model = model
-    group.add(this.createSquad(teamColor, mounted, general.role), model, banner)
-    return group
-  }
-
-  private createGeneralModel(general: General, teamColor: number): THREE.Group {
-    const model = new THREE.Group()
-    model.name = `model-${general.id}`
-    model.userData.archetype = this.commanderArchetype(general)
-    const procedural = new THREE.Group()
-    model.add(procedural)
-    const seed = [...general.id].reduce((sum, character) => sum + character.charCodeAt(0), 0)
-    const accent = new THREE.Color(general.accent)
-    const team = new THREE.Color(teamColor)
-    const armorColor = accent.clone().lerp(team, 0.28)
-    const darkColor = armorColor.clone().multiplyScalar(0.38)
-    const metal = new THREE.MeshStandardMaterial({ color: armorColor, roughness: 0.58, metalness: 0.5 })
-    const darkMetal = new THREE.MeshStandardMaterial({ color: darkColor, roughness: 0.72, metalness: 0.32 })
-    const skin = new THREE.MeshStandardMaterial({ color: 0xc78e74, roughness: 0.9 })
-    const trim = new THREE.MeshStandardMaterial({ color: 0xd8b574, roughness: 0.42, metalness: 0.62 })
-    const weapon = new THREE.Group()
-    weapon.name = 'signature-weapon'
-
-    if (general.role === '기병') {
-      const horse = new THREE.Mesh(new THREE.SphereGeometry(0.64, 12, 8), darkMetal)
-      horse.scale.set(1.35, 0.64, 1.28)
-      horse.position.set(0, 0.55, 0.28)
-      procedural.add(horse)
-      for (const x of [-0.38, 0.38]) {
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.62, 6), darkMetal)
-        leg.position.set(x, 0.25, 0.28)
-        procedural.add(leg)
-      }
-      const mane = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.78, 7), metal)
-      mane.rotation.z = Math.PI / 2
-      mane.position.set(-0.6, 0.86, 0.25)
-      procedural.add(mane)
-    }
-
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.46, 0.86, 8), metal)
-    torso.position.y = general.role === '기병' ? 1.25 : 0.86
-    torso.scale.x = 0.82 + (seed % 3) * 0.08
-    torso.castShadow = true
-    procedural.add(torso)
-    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.17, 0.38), darkMetal)
-    shoulder.position.y = torso.position.y + 0.26
-    shoulder.castShadow = true
-    procedural.add(shoulder)
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.29, 12, 8), skin)
-    head.position.y = torso.position.y + 0.78
-    head.castShadow = true
-    procedural.add(head)
-    const helmet = new THREE.Mesh(new THREE.ConeGeometry(0.39, 0.34 + (seed % 2) * 0.08, 8), metal)
-    helmet.position.y = head.position.y + 0.29
-    helmet.castShadow = true
-    procedural.add(helmet)
-    const plume = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.42, 6), trim)
-    plume.position.set((seed % 2 ? 0.08 : -0.08), helmet.position.y + 0.3, 0)
-    plume.rotation.z = seed % 2 ? -0.18 : 0.18
-    procedural.add(plume)
-    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.64, 6), darkMetal)
-    const armR = armL.clone()
-    armL.position.set(-0.46, torso.position.y + 0.02, 0)
-    armR.position.set(0.46, torso.position.y + 0.02, 0)
-    armL.rotation.z = 0.18
-    armR.rotation.z = -0.18
-    procedural.add(armL, armR)
-
-    if (general.role === '궁병') {
-      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 6, 18, Math.PI * 1.55), trim)
-      bow.position.set(-0.47, torso.position.y + 0.22, -0.15)
-      bow.rotation.y = Math.PI / 2
-      weapon.add(bow)
-      const string = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.72, 5), trim)
-      string.position.set(-0.47, torso.position.y + 0.22, -0.14)
-      string.rotation.z = Math.PI / 2
-      weapon.add(string)
-    } else if (general.role === '책사') {
-      const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.8, 7), trim)
-      staff.position.set(0.52, torso.position.y - 0.04, 0)
-      staff.rotation.z = -0.08
-      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.14, 1), new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.7, metalness: 0.35, roughness: 0.32 }))
-      orb.position.set(0.45, torso.position.y + 0.86, 0)
-      weapon.add(staff, orb)
-    } else {
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(general.role === '기병' ? 0.11 : 0.14, general.role === '기병' ? 1.9 : 1.35, 0.07), trim)
-      blade.position.set(0.58, torso.position.y + 0.18, -0.02)
-      blade.rotation.z = general.role === '기병' ? -0.16 : -0.28
-      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.1), trim)
-      guard.position.set(0.58, torso.position.y - 0.4, -0.02)
-      guard.rotation.z = blade.rotation.z
-      weapon.add(blade, guard)
-    }
-    weapon.userData.motionPhase = (seed % 17) / 17
-    model.userData.weapon = weapon
-    procedural.add(weapon)
-    model.scale.setScalar(general.role === '기병' ? 1.1 : 1.02 + (seed % 3) * 0.04)
-
-    return model
-  }
-
-  private createSquad(teamColor: number, mounted: boolean, role: General['role']): THREE.Group {
-    const squad = new THREE.Group()
-    squad.name = `realistic-squad-${role}`
-    const markerColor = teamColor === ember ? 0x9b3448 : 0x45c7a4
-    const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x071218, transparent: true, opacity: 0.38, depthWrite: false })
-    const shadow = new THREE.Mesh(new THREE.CircleGeometry(mounted ? 1.55 : 1.2, 28), shadowMaterial)
-    shadow.rotation.x = -Math.PI / 2
-    shadow.position.set(0, 0.025, 0.72)
-    squad.add(shadow)
-    const formationMarker = new THREE.Mesh(new THREE.RingGeometry(mounted ? 1.35 : 1.02, mounted ? 1.43 : 1.1, 32), new THREE.MeshBasicMaterial({ color: markerColor, transparent: true, opacity: 0.72, side: THREE.DoubleSide, depthWrite: false }))
-    formationMarker.rotation.x = -Math.PI / 2
-    formationMarker.position.set(0, 0.04, 0.72)
-    squad.add(formationMarker)
-    const imageName = role === '기병' ? 'cavalry' : role === '궁병' ? 'archer' : 'infantry'
-    const textureLoader = new THREE.TextureLoader()
-    const imageMaterial = new THREE.MeshBasicMaterial({ color: teamColor === ember ? 0xffd0d0 : 0xe2fff4, transparent: true, opacity: 0.98, side: THREE.DoubleSide, depthWrite: false, fog: false })
-    const texturePath = `/assets/troops/${imageName}.webp`
-    for (let index = 0; index < 5; index += 1) {
-      const soldier = new THREE.Group()
-      const column = index % 3
-      const row = Math.floor(index / 3)
-      soldier.position.set((column - 1) * (mounted ? 0.88 : 0.68), 0, 0.7 + row * (mounted ? 0.78 : 0.62))
-      soldier.add(this.createTroopFigure(role, teamColor))
-      const soldierMaterial = imageMaterial.clone()
-      const soldierMesh = new THREE.Mesh(new THREE.PlaneGeometry(mounted ? 1.18 : 0.86, mounted ? 1.77 : 1.48), soldierMaterial)
-      soldierMesh.position.y = mounted ? 1.02 : 0.82
-      soldierMesh.position.z = -0.06
-      soldierMesh.renderOrder = 4
-      soldier.add(soldierMesh)
-      textureLoader.load(texturePath, texture => {
-        texture.colorSpace = THREE.SRGBColorSpace
-        texture.anisotropy = 2
-        soldierMaterial.map = texture
-        soldierMaterial.needsUpdate = true
-      })
-      squad.add(soldier)
-    }
-    squad.scale.setScalar(mounted ? 0.8 : 0.86)
-    return squad
-  }
-
-  private createTroopFigure(role: General['role'], teamColor: number): THREE.Group {
-    const figure = new THREE.Group()
-    const armor = new THREE.MeshStandardMaterial({ color: teamColor === ember ? 0x8f3d4b : 0x2d8e7f, roughness: 0.72, metalness: 0.25 })
-    const dark = new THREE.MeshStandardMaterial({ color: 0x172629, roughness: 0.86, metalness: 0.12 })
-    const skin = new THREE.MeshStandardMaterial({ color: 0xb97862, roughness: 0.95 })
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.17, 0.34, 6), armor)
-    torso.position.y = 0.42
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 8, 6), skin)
-    head.position.y = 0.7
-    figure.add(torso, head)
-    if (role === '기병') {
-      const horse = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.24, 0.62), dark)
-      horse.position.set(0, 0.2, 0.08)
-      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 0.38, 6), dark)
-      neck.position.set(0, 0.42, -0.2)
-      neck.rotation.x = -0.45
-      figure.add(horse, neck)
-    } else if (role === '궁병') {
-      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.018, 5, 12, Math.PI * 1.5), new THREE.MeshStandardMaterial({ color: 0xe4b96c, metalness: 0.45, roughness: 0.5 }))
-      bow.position.set(0.2, 0.48, -0.12)
-      bow.rotation.y = Math.PI / 2
-      figure.add(bow)
-    } else {
-      const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.82, 5), new THREE.MeshStandardMaterial({ color: 0xd9b36c, metalness: 0.5, roughness: 0.42 }))
-      spear.position.set(0.18, 0.64, -0.04)
-      spear.rotation.z = -0.16
-      figure.add(spear)
-    }
-    figure.scale.setScalar(role === '기병' ? 0.9 : 0.78)
-    figure.position.z = -0.08
-    figure.traverse(node => { const mesh = node as THREE.Mesh; mesh.castShadow = true; mesh.receiveShadow = true })
-    return figure
+    const rig = createGeneralModel(general, team)
+    const squad = createSquad(general.role, team, this.quality)
+    group.userData.model = rig.root
+    group.add(squad.group, rig.root)
+    // 발밑 진영 고리(아군 청록 · 적 붉은색)
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 0.98, 40), new THREE.MeshBasicMaterial({ color: team === 'enemy' ? 0xff5a3c : 0x5ae0c0, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }))
+    ring.rotation.x = -Math.PI / 2
+    ring.position.y = 0.03
+    group.add(ring)
+    return { group, rig, squad }
   }
 
   private clearUnits(): void {
@@ -593,7 +335,7 @@ export class Arena {
 
   private createTroopStatus(color: number): { group: THREE.Group; fill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> } {
     const group = new THREE.Group()
-    group.position.set(0, 3.15, 0)
+    group.position.set(0, 3.9, 0)
     group.renderOrder = 8
     const background = new THREE.Mesh(new THREE.PlaneGeometry(1.65, 0.11), new THREE.MeshBasicMaterial({ color: 0x1c120c, transparent: true, opacity: 0.78, depthTest: false, depthWrite: false }))
     const fill = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.065), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.96, depthTest: false, depthWrite: false }))
@@ -743,38 +485,42 @@ export class Arena {
     })
   }
 
+  /** 화살 일제 사격: 짧은 화살들이 포물선을 그리며 적진에 떨어진다 */
   private spawnArrowVolley(): void {
-    for (let index = 0; index < 3; index += 1) {
-      const start = new THREE.Vector3((index - 1) * 4.2, 2.2 + index * 0.25, 6.2)
-      const end = new THREE.Vector3((index - 1) * 3.6, 0.9, -8.2 - index * 0.7)
-      const group = new THREE.Group()
-      const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]), new THREE.LineBasicMaterial({ color: 0xf5f3dc, transparent: true, opacity: 0.84, blending: THREE.AdditiveBlending }))
-      trail.scale.z = start.distanceTo(end)
-      const head = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.26, 5), new THREE.MeshBasicMaterial({ color: 0xf6c56d, blending: THREE.AdditiveBlending }))
-      head.rotation.x = -Math.PI / 2
-      head.position.z = -0.23
-      group.add(trail, head)
-      group.position.copy(start)
-      group.lookAt(end)
-      this.addEffect({
-        object: group,
-        age: 0,
-        life: 0.95,
-        tick: effect => {
-          const progress = Math.min(effect.age / effect.life, 1)
-          group.position.lerpVectors(start, end, progress)
-          group.scale.setScalar(1 - progress * 0.18)
-          trail.material.opacity = 0.84 * (1 - progress * 0.5)
-          if (progress > 0.92 && effect.age - 0.016 <= effect.life * 0.92) this.spawnImpact(end, 18, 0xf6c56d)
-        },
-        dispose: () => {
-          trail.geometry.dispose()
-          trail.material.dispose()
-          head.geometry.dispose()
-          head.material.dispose()
-        },
-      })
+    const archers = this.playerUnits.filter(unit => unit.troops > 0)
+    if (!archers.length || !this.enemyUnits.length) return
+    const arrowGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.7, 4)
+    arrowGeo.rotateX(Math.PI / 2)
+    const material = new THREE.MeshBasicMaterial({ color: 0xffe2a8, transparent: true, opacity: 0.95 })
+    const group = new THREE.Group()
+    const arrows: Array<{ mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; delay: number }> = []
+    for (let i = 0; i < 14; i += 1) {
+      const shooter = archers[i % archers.length]
+      const target = this.enemyUnits[i % this.enemyUnits.length]
+      const from = shooter.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2.4, 1.4, 1.2 + Math.random()))
+      const to = target.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2.6, 0.2, -0.6 - Math.random() * 1.8))
+      const mesh = new THREE.Mesh(arrowGeo, material)
+      mesh.visible = false
+      group.add(mesh)
+      arrows.push({ mesh, from, to, delay: Math.random() * 0.25 })
     }
+    const prev = new THREE.Vector3(), cur = new THREE.Vector3()
+    const at = (a: typeof arrows[number], k: number, out: THREE.Vector3) => out.lerpVectors(a.from, a.to, k).setY(THREE.MathUtils.lerp(a.from.y, a.to.y, k) + Math.sin(k * Math.PI) * 4.2)
+    this.addEffect({
+      object: group, age: 0, life: 1.35,
+      tick: effect => {
+        for (const a of arrows) {
+          const k = (effect.age - a.delay) / 1.0
+          if (k <= 0 || k >= 1) { a.mesh.visible = false; continue }
+          a.mesh.visible = true
+          at(a, k, cur); at(a, Math.max(0, k - 0.03), prev)
+          a.mesh.position.copy(cur)
+          a.mesh.lookAt(cur.clone().add(cur.clone().sub(prev)))
+        }
+        if (effect.age > 1.05 && effect.age - 0.02 <= 1.05) this.spawnImpact(this.enemyUnits[0].group.position.clone(), 18, 0xf6c56d)
+      },
+      dispose: () => { arrowGeo.dispose(); material.dispose() },
+    })
   }
 
   private skillColor(general: General): number {
@@ -945,14 +691,13 @@ export class Arena {
     this.cameraShake = 0.12
     deck.forEach((general, index) => {
       const position = new THREE.Vector3(-4.4 + index * 4.4, 0, -8 - index * 0.9)
-      const group = this.createUnit(general, ember, position)
+      const built = this.createUnit(general, ember, position)
+      const group = built.group
       group.rotation.y = Math.PI
-      const model = group.userData.model as THREE.Group
       const maxTroops = this.core!.enemies[index]?.maxTroops ?? this.troopCapacity(general)
       const status = this.createTroopStatus(ember)
       group.add(status.group)
-      const squad = group.getObjectByName(`realistic-squad-${general.role}`) as THREE.Group
-      this.enemyUnits.push({ group, squad, model, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0 })
+      this.enemyUnits.push({ group, squad: built.squad.group, model: built.rig.root, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0 })
       this.scene.add(group)
     })
     this.playerUnits.forEach((unit, index) => {
@@ -1042,7 +787,8 @@ export class Arena {
       case 'skill': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
-        unit.model.userData.skillPulse = 1
+        unit.skillPulse = 1
+        this.callbacks.onSkillCast?.({ side: event.side, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
         if (event.side === 'player') {
           this.spawnSlashWave(unit.general, Math.max(20, event.morale * 10), event.name)
           this.spawnSkillBurst(new THREE.Vector3(0, 1.1, -5.5), this.skillColor(unit.general))
@@ -1114,36 +860,16 @@ export class Arena {
     unit.group.position.addScaledVector(unit.knockback, delta * 7)
     unit.knockback.multiplyScalar(Math.max(0, 1 - delta * 8))
     unit.hitReact = Math.max(0, unit.hitReact - delta * 3.8)
-    const hitPulse = unit.hitReact > 0 ? Math.sin(unit.hitReact * Math.PI) * unit.hitReact : 0
-    unit.model.scale.set(1 + hitPulse * 0.16, 1 - hitPulse * 0.1, 1 + hitPulse * 0.16)
-    unit.squad.scale.set(1 + hitPulse * 0.08, 1 - hitPulse * 0.05, 1 + hitPulse * 0.08)
-    unit.group.position.y = Math.sin(elapsed * 1.6 + unit.motionPhase) * 0.035
-    unit.squad.position.z = 0.7 + Math.sin(elapsed * 2.2 + unit.motionPhase) * (moving ? 0.11 : 0.04)
-    unit.squad.rotation.y = Math.sin(elapsed * 1.4 + unit.motionPhase) * (moving ? 0.035 : 0.015)
-    this.animateTroopMotion(unit, delta, elapsed)
+    unit.attackMotion = Math.max(0, unit.attackMotion - delta * 2.6)
+    unit.skillPulse = Math.max(0, unit.skillPulse - delta * 1.1)
+    unit.hitFlash = Math.max(0, unit.hitFlash - delta)
+    unit.group.position.y = 0
+    unit.squadCtl.update(elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.hitReact, unit.troops / Math.max(1, unit.maxTroops))
+    animateGeneral(unit.rig, elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.skillPulse, unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0)
     unit.motionPulse -= delta
     if (moving && unit.motionPulse <= 0) {
       unit.motionPulse = 0.72 + (unit.motionPhase % 0.35)
-      this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, unit.group.rotation.y === 0 ? 0.7 : -0.7)), color === ember ? 0xb68f70 : 0xa4a08a)
-    }
-    unit.hitFlash = Math.max(0, unit.hitFlash - delta)
-    unit.model.traverse(node => { const mesh = node as THREE.Mesh; if (mesh.material && !Array.isArray(mesh.material) && 'emissiveIntensity' in mesh.material) (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = unit.hitFlash > 0 ? 0.75 : 0 })
-    this.animateModel(unit.model, unit.general, elapsed + unit.motionPhase)
-  }
-
-  private animateTroopMotion(unit: BattleUnit, delta: number, elapsed: number): void {
-    unit.attackMotion = Math.max(0, unit.attackMotion - delta * 3.2)
-    const progress = 1 - unit.attackMotion
-    const direction = unit.group.rotation.y === Math.PI ? 1 : -1
-    if (unit.troopType === 'cavalry') {
-      unit.squad.position.z = 0.7 + direction * Math.sin(progress * Math.PI) * 0.9 + Math.sin(elapsed * 4 + unit.motionPhase) * 0.04
-      unit.squad.rotation.x = Math.sin(progress * Math.PI) * direction * 0.12
-    } else if (unit.troopType === 'spearmen') {
-      unit.squad.position.z = 0.7 + direction * Math.sin(progress * Math.PI) * 0.42
-      unit.squad.rotation.x = Math.sin(progress * Math.PI) * direction * 0.2
-    } else {
-      unit.squad.position.z = 0.7 + Math.sin(elapsed * 2.2 + unit.motionPhase) * 0.06
-      unit.squad.rotation.x = progress > 0 ? Math.sin(progress * Math.PI) * 0.18 : 0
+      this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, unit.group.rotation.y === 0 ? 1.4 : -1.4)), color === ember ? 0xb68f70 : 0xa4a08a)
     }
   }
 
@@ -1274,33 +1000,15 @@ export class Arena {
     const selected = this.playerUnits[this.selectedUnit]
     const focusX = this.battleActive && selected ? selected.group.position.x * 0.12 : 0
     const focusZ = this.battleActive ? Math.max(-4.5, Math.min(2.5, frontZ * 0.18 - 2.2)) : this.cameraLookAt.z
+    // 세로 화면(휴대폰)은 가로 시야가 좁으니 카메라를 뒤로 물려 세 레인이 모두 보이게 한다
+    const aspect = this.camera.aspect || 1
+    const pull = aspect < 0.8 ? 1.75 : aspect < 1.25 ? 1.3 : 1
     this.camera.position.set(
-      this.cameraBase.x + focusX + (Math.random() - 0.5) * shake,
-      this.cameraBase.y + (Math.random() - 0.5) * shake * 0.55,
-      this.cameraBase.z + introOffset + victoryOffset + (this.battleActive ? frontZ * 0.06 : 0),
+      this.cameraLookAt.x + (this.cameraBase.x - this.cameraLookAt.x) * pull + focusX + (Math.random() - 0.5) * shake,
+      this.cameraLookAt.y + (this.cameraBase.y - this.cameraLookAt.y) * pull + (Math.random() - 0.5) * shake * 0.55,
+      this.cameraLookAt.z + (this.cameraBase.z - this.cameraLookAt.z) * pull + introOffset + victoryOffset + (this.battleActive ? frontZ * 0.06 : 0),
     )
     this.camera.lookAt(this.cameraLookAt.x + focusX, this.cameraLookAt.y + (this.cameraVictory > 0 ? 1.2 : 0), focusZ)
-  }
-
-  private animateModel(model: THREE.Group, general: General | undefined, elapsed: number): void {
-    if (!general) return
-    const phase = Number(model.userData.weapon?.userData.motionPhase ?? 0)
-    const motion = elapsed * (1.8 + general.speed / 160) + phase * Math.PI * 2
-    model.rotation.z = Math.sin(motion) * 0.035
-    model.position.y = Math.sin(motion * 1.7) * 0.045
-    const weapon = model.userData.weapon as THREE.Group | undefined
-    if (weapon) weapon.rotation.z = Math.sin(motion * 1.35) * 0.1
-    const skillPulse = Number(model.userData.skillPulse ?? 0)
-    if (skillPulse > 0) {
-      const archetype = model.userData.archetype as CommanderArchetype
-      const accent = archetype === '책사형' ? 0.12 : archetype === '지원형' ? 0.08 : 0.18
-      model.rotation.y = Math.sin((1 - skillPulse) * Math.PI) * accent
-      model.scale.setScalar(1 + Math.sin((1 - skillPulse) * Math.PI) * 0.12)
-      model.userData.skillPulse = Math.max(0, skillPulse - 0.016)
-    } else {
-      model.rotation.y = 0
-      model.scale.setScalar(1)
-    }
   }
 
   private animate = (): void => {
@@ -1309,7 +1017,9 @@ export class Arena {
     this.clock.update()
     const delta = Math.min(this.clock.getDelta(), 0.05)
     this.update(delta)
-    this.renderer.render(this.scene, this.camera)
+    this.environment.update(this.clock.getElapsed(), delta)
+    if (this.composer) this.composer.render(delta)
+    else this.renderer.render(this.scene, this.camera)
   }
 
   private resize = (): void => {
@@ -1318,6 +1028,8 @@ export class Arena {
     this.camera.aspect = width / Math.max(height, 1)
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height, false)
+    this.composer?.setPixelRatio(this.renderer.getPixelRatio())
+    this.composer?.setSize(width, height)
   }
 
   dispose(): void {

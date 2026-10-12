@@ -856,6 +856,7 @@ const ui = new StrategyUI(root, {
 
 arena = new Arena(canvas, {
   onEvent: message => ui.notify(message),
+  onSkillCast: info => ui.showSkillCutIn(info),
   onBattleEnd: result => {
     state.battleScore = Math.max(state.battleScore, result.score)
     const siege = pendingSiege
