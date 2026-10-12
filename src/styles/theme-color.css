@@ -497,3 +497,19 @@ body .summon-seal.summon-seal--jade i { bottom: -22px; left: 50%; transform: tra
 @keyframes jade-sway { 0%, 100% { transform: rotate(-1.6deg); } 50% { transform: rotate(1.6deg); } }
 @media (prefers-reduced-motion: reduce) { body .summon-seal.summon-seal--jade img { animation: none; } }
 @media (max-width: 600px) { body .summon-seal.summon-seal--jade { width: 150px; height: 188px; } }
+
+/* 무장 모집 대표 그림: 군웅할거 ↔ 도원결의가 천천히 바뀐다 */
+body .summon-banner { position: relative; z-index: 1; width: min(320px, 78%); aspect-ratio: 4 / 5; margin: 0 auto 26px; border: 1px solid var(--gold-line); box-shadow: 0 0 0 4px rgba(42, 20, 12, .85), 0 0 0 5px rgba(240, 194, 106, .35), 0 18px 40px rgba(0, 0, 0, .5); background: #1c110b; }
+body .summon-banner::after { content: ''; position: absolute; inset: 8px; border: 1px solid rgba(255, 227, 163, .28); pointer-events: none; }
+body .summon-banner__slide { position: absolute; inset: 0; margin: 0; overflow: hidden; animation: summon-fade 16s ease-in-out infinite; }
+body .summon-banner__slide--two { animation-delay: -8s; }
+body .summon-banner__slide img { width: 100%; height: 100%; object-fit: cover; display: block; animation: summon-drift 16s ease-in-out infinite; }
+body .summon-banner__slide--two img { animation-delay: -8s; }
+body .summon-banner__slide figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 34px 14px 14px; background: linear-gradient(180deg, transparent, rgba(20, 10, 6, .88)); display: grid; gap: 2px; text-align: center; }
+body .summon-banner__slide figcaption b { font: 700 22px/1.1 serif; letter-spacing: .18em; color: var(--gold-hi); text-shadow: 0 2px 8px rgba(0, 0, 0, .8); }
+body .summon-banner__slide figcaption span { font-size: 12px; color: #f3e3c3; letter-spacing: .04em; }
+body .summon-banner__jade { position: absolute; right: -22px; bottom: -26px; width: 64px; height: 80px; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .55)); animation: jade-sway 6s ease-in-out infinite; transform-origin: 50% 2%; }
+@keyframes summon-fade { 0%, 42% { opacity: 1; } 50%, 92% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes summon-drift { 0% { transform: scale(1.02); } 50% { transform: scale(1.08) translateY(-1.5%); } 100% { transform: scale(1.02); } }
+@media (prefers-reduced-motion: reduce) { body .summon-banner__slide, body .summon-banner__slide img, body .summon-banner__jade { animation: none; } body .summon-banner__slide--two { opacity: 0; } }
+@media (max-width: 600px) { body .summon-banner { width: min(250px, 72%); } body .summon-banner__slide figcaption b { font-size: 18px; } body .summon-banner__jade { width: 50px; height: 62px; right: -16px; bottom: -20px; } }
