@@ -1,8 +1,9 @@
 import { OFFICIAL_LAUNCH } from '../../server/launch.mjs'
 import { TUTORIAL_REWARD, TUTORIAL_STEPS, nextTutorialStep, tutorialFinished, DAILY_BONUS, DAILY_BONUS_ID, MISSIONS, dailyBonusReady, ensureMissions, missionStatus, rewardText, type MissionDef } from '../game/missions'
+import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResource } from '../game/shop'
 import { effectsSetting, qualitySetting, setEffectsSetting, setQualitySetting, type EffectsSetting, type QualitySetting } from '../game/settings'
 import { RESEARCH_BRANCHES, RESEARCH_MINUTES, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
-import { templateGeneral, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
+import { templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
 import { SCENARIOS, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
 import type { BattleResult } from '../game/battle-core'
@@ -11,6 +12,13 @@ import { TerritoryMapController, type MapCity } from './territory-map'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
 const equipmentImage = (type: EquipmentType): string => `/assets/equipment/${type}.webp`
+/** 상점 구매 기록(이 기기 · 최근 10건) */
+export function readPurchaseLog(): Array<{ text: string; at: number }> {
+  try { const value = JSON.parse(localStorage.getItem('cheonharo.purchases') ?? '[]'); return Array.isArray(value) ? value.slice(0, 10) : [] } catch { return [] }
+}
+export function recordPurchase(text: string): void {
+  try { localStorage.setItem('cheonharo.purchases', JSON.stringify([{ text, at: Date.now() }, ...readPurchaseLog()].slice(0, 10))) } catch { /* 저장 불가 */ }
+}
 const STAT_LABEL: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
 type RosterSort = 'power' | 'level' | 'grade' | 'name' | 'role'
 type EquipmentSort = 'grade' | 'level' | 'name'
@@ -248,7 +256,7 @@ export class StrategyUI {
   private equipmentIndex = new Map<string, Equipment>()
   private equipmentSortCache: { key: string; items: Equipment[] } | null = null
   private readonly equipmentRowHeight = 286
-  private shopTab: 'gold' | 'resources' | 'mythic' = 'gold'
+  private shopTab: 'gold' | 'resources' | 'mythic' = 'resources'
   private territorySyncText = '서버 원장 대기'
   private scenarioSelectedId = SCENARIOS[0]?.id ?? ''
   private battleViewActive = false
@@ -1358,19 +1366,77 @@ export class StrategyUI {
 
   private shopSection(state: StrategyState): string {
     const statLabels: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
-    const goldCards = GOLD_PACKAGES.map(goldPackage => `<article class="shop-item shop-item--gold glass-card"><div class="shop-item-icon shop-item-icon--gold">${icon('gold')}</div><div class="shop-item-copy"><span class="pill pill--mythic">금화 충전</span><h2>${escapeHtml(goldPackage.name)}</h2><p>${escapeHtml(goldPackage.description)}</p><small>금화 +${goldPackage.gold}개 · 1개당 1,500원</small></div><button class="action-button action-button--primary" data-action="gold-purchase" data-package-id="${goldPackage.id}" ${GOLD_PURCHASE_ENABLED ? '' : 'disabled'}>${GOLD_PURCHASE_ENABLED ? `₩ ${goldPackage.priceKRW.toLocaleString('ko-KR')} · 충전` : '정식 출시 전 구매 잠금'}</button></article>`).join('')
-    const resourceCards = RESOURCE_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--resource glass-card"><div class="shop-item-icon shop-item-icon--resource">${icon(product.resource)}</div><div class="shop-item-copy"><span class="pill pill--resource">자원 패키지</span><h2>${escapeHtml(RESOURCE_META[product.resource].label)} ${product.goldCost}금화</h2><p>${escapeHtml(product.description)}</p><small>${RESOURCE_META[product.resource].label} +${formatNumber(product.amount)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="cash-shop-purchase" data-product-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
-    const honorCards = HONOR_SHOP_PACKAGES.map(product => `<article class="shop-item shop-item--honor glass-card"><div class="shop-item-icon shop-item-icon--gold">${icon('honor')}</div><div class="shop-item-copy"><span class="pill pill--resource">명망 패키지</span><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.description)}</p><small>명망 +${formatNumber(product.honor)} · 금화 ${product.goldCost}개</small></div><button class="action-button action-button--primary" data-action="honor-shop-purchase" data-package-id="${product.id}" ${state.gold < product.goldCost ? 'disabled' : ''}>금화 ${product.goldCost}개로 교환</button></article>`).join('')
-    const mythicCards = MYTHIC_SHOP_EQUIPMENT.map(item => { const specialty = equipmentSpecialty(item); return `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon"><img class="equipment-image--mythic" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /></div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small>${specialty ? `<strong class="shop-specialty">특기 · ${escapeHtml(specialty.label)} · ${escapeHtml(specialty.description)}</strong>` : ''}</div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" ${state.mythicFragments < 20 ? 'disabled' : ''}>조각 20개로 구매</button></article>` }).join('')
-    const cards = this.shopTab === 'gold' ? goldCards : this.shopTab === 'resources' ? resourceCards + honorCards : mythicCards
-    const description = this.shopTab === 'gold' ? '금화 1개를 1,500원 기준으로 충전해 자원 패키지를 교환하십시오.' : this.shopTab === 'resources' ? '금화로 영토·강화·연구에 필요한 자원 패키지를 교환합니다.' : '유저 대련 승리로 얻은 신화장비 조각으로 장비를 교환합니다.'
-    const notice = this.shopTab === 'gold' ? '정식 출시 전 혜택' : this.shopTab === 'resources' ? '자원 패키지 안내' : '대련 승리 보상'
-    const noticeText = this.shopTab === 'gold' ? '정식 출시 전에는 매일 금화 100개를 지급합니다. 금화 테스트 충전은 정식 출시 지시 전까지 잠겨 있습니다.' : this.shopTab === 'resources' ? '기존 현금 자원 패키지는 삭제하고, 자원 25종과 명망 3·5·10·20·50·100금화 패키지를 제공합니다. 금화 1개는 명망 100개로 교환됩니다.' : '유저 대련에서 승리할 때마다 신화장비 조각 1개를 획득합니다. 신화 장비 뽑기는 제공하지 않습니다.'
-    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">CELESTIAL MARKET · SHOP</span><h1>상점</h1><p class="heading-copy">${description}</p></div><div class="shop-balances glass-card"><div><span>보유 금화</span><strong>${icon('gold', 'gi--inline')} ${formatNumber(state.gold)}</strong></div><div><span>보유 명망</span><strong>${icon('honor', 'gi--inline')} ${formatNumber(state.honor)}</strong></div><div><span>신화 조각</span><strong>${icon('mythic', 'gi--inline')} ${state.mythicFragments}</strong></div></div></div><div class="shop-tabs" role="tablist"><button class="shop-tab ${this.shopTab === 'gold' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="gold">금화 충전 <small>5종</small></button><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">자원·명망 <small>31종</small></button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비 <small>12종</small></button></div><div class="shop-notice glass-card"><strong>${notice}</strong><span>${noticeText}</span></div><div class="shop-grid">${cards}</div></section>`
+    const nameOf = (resource: ShopResource) => resource === 'honor' ? '명망' : RESOURCE_META[resource].label
+    const iconOf = (resource: ShopResource) => icon(resource === 'honor' ? 'honor' : resource)
+    const holdingOf = (resource: ShopResource) => resource === 'honor' ? state.honor : resource === 'silver' ? state.silver : state.resources[resource]
+    const all = shopPackages()
+    const buyButton = (item: ShopPackage, label = `${item.goldCost}금화`) => {
+      const short = item.goldCost - state.gold
+      const bonus = packageBonus(item, all)
+      const action = item.kind === 'honor' ? 'honor-shop-purchase' : 'cash-shop-purchase'
+      const idAttr = item.kind === 'honor' ? `data-package-id="${item.id}"` : `data-product-id="${item.id}"`
+      return `<button class="shop-buy ${bonus >= 0.4 ? 'is-best' : ''}" data-action="${action}" ${idAttr} data-cost="${item.goldCost}" data-label="${escapeHtml(`${nameOf(item.resource)} +${formatNumber(item.amount)}`)}" ${short > 0 ? 'disabled' : ''}><b>${label}</b><span>+${formatNumber(item.amount)}</span>${bonus >= 0.05 ? `<em>+${Math.round(bonus * 100)}% 이득</em>` : '<em class="is-plain">기본</em>'}${short > 0 ? `<small>금화 ${short}개 부족</small>` : ''}</button>`
+    }
+    const balances = `<div class="shop-balances shop-balances--strip glass-card"><span>${icon('gold', 'gi--inline')} 금화 <b>${formatNumber(state.gold)}</b></span><span>${icon('honor', 'gi--inline')} 명망 <b>${formatNumber(state.honor)}</b></span><span>${icon('mythic', 'gi--inline')} 신화 조각 <b>${state.mythicFragments}</b></span><span>◆ 낙양 강화석 <b>${state.mythicStones}</b></span></div>`
+    const tabs = `<div class="shop-tabs shop-tabs--row" role="tablist"><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">자원·명망</button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비</button><button class="shop-tab ${this.shopTab === 'gold' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="gold">금화 충전</button></div>`
+    let body = ''
+    if (this.shopTab === 'gold') {
+      if (GOLD_PURCHASE_ENABLED) body = `<div class="shop-grid">${GOLD_PACKAGES.map(goldPackage => `<article class="shop-item shop-item--gold glass-card"><div class="shop-item-icon shop-item-icon--gold">${icon('gold')}</div><div class="shop-item-copy"><span class="pill pill--mythic">금화 충전</span><h2>${escapeHtml(goldPackage.name)}</h2><small>금화 +${goldPackage.gold}개 · 1개당 1,500원</small></div><button class="action-button action-button--primary" data-action="gold-purchase" data-package-id="${goldPackage.id}">₩ ${goldPackage.priceKRW.toLocaleString('ko-KR')} · 충전</button></article>`).join('')}</div>`
+      else {
+        const gotToday = state.prelaunchGoldDayKey === dayKey()
+        body = `<div class="glass-card shop-prelaunch"><span class="eyebrow">정식 출시 전</span><h2>매일 금화 100개를 드립니다</h2><p>금화 충전은 정식 출시 때 열립니다. 그 전까지는 접속하면 하루 한 번 금화 100개가 지급됩니다.</p><strong class="${gotToday ? 'is-done' : ''}">${gotToday ? '오늘 금화를 받았습니다' : '오늘 금화는 접속·동기화 때 자동으로 지급됩니다'}</strong></div>`
+      }
+    } else if (this.shopTab === 'resources') {
+      const needs = shopNeeds(state)
+      const needCard = needs.length ? `<div class="glass-card shop-needs"><div class="card-header"><div><span class="eyebrow">지금 필요한 것</span><h3>모자란 자원 추천</h3></div></div><ul>${needs.map(need => `<li><div><strong>${escapeHtml(need.reason)}</strong><small>${nameOf(need.resource)} ${formatNumber(need.short)} 부족 · 보유 ${formatNumber(holdingOf(need.resource))}</small></div>${need.item ? buyButton(need.item) : '<small class="shop-needs__none">묶음 하나로는 부족합니다</small>'}</li>`).join('')}</ul></div>` : '<div class="glass-card shop-needs shop-needs--ok"><span class="eyebrow">지금 필요한 것</span><p>다음 연구·건물 강화·10회 모집에 필요한 자원이 모두 충분합니다.</p></div>'
+      const resources: ShopResource[] = ['grain', 'silver', 'wood', 'iron', 'influence', 'honor']
+      const rows = resources.map(resource => `<div class="shop-row"><div class="shop-row__head">${iconOf(resource)}<div><strong>${nameOf(resource)}</strong><small>보유 ${formatNumber(holdingOf(resource))}</small></div></div><div class="shop-row__buys">${all.filter(item => item.resource === resource).map(item => buyButton(item)).join('')}</div></div>`).join('')
+      body = `${needCard}<div class="shop-notice glass-card"><strong>교환 안내</strong><span>금화로 자원과 명망을 바꿉니다. 큰 묶음일수록 금화 1개당 더 많이 받습니다 · 금화 1개 = 명망 100 기준. 금화 20개 이상은 한 번 더 확인합니다.</span></div><div class="glass-card shop-table">${rows}</div>${this.purchaseLogCard()}`
+    } else {
+      const fragments = state.mythicFragments
+      const progress = Math.min(1, fragments / MYTHIC_FRAGMENT_COST)
+      const duelsLeft = duelAttemptsRemaining(state)
+      const formation = state.formation.map(id => state.generals.find(general => general.id === id)).filter((general): general is General => Boolean(general))
+      const preview = (item: Equipment) => {
+        // 출전 무장 중 이 종류 칸이 가장 약한 무장에게 끼웠을 때
+        const options = formation.map(general => {
+          const currentId = state.equipmentLoadouts[general.id]?.[item.type]
+          const current = currentId ? state.equipmentInventory.find(entry => entry.id === currentId) : undefined
+          return { general, current, gain: equipmentValue(item) - (current && current.mainStat === item.mainStat ? equipmentValue(current) : 0) }
+        }).sort((x, y) => y.gain - x.gain)
+        const best = options[0]
+        return best ? `<p class="shop-preview">${escapeHtml(best.general.name)}에게 장착 시 ${statLabels[item.mainStat]} <b>+${best.gain}</b> <small>(지금 ${EQUIPMENT_TYPE_META[item.type].label}: ${best.current ? escapeHtml(best.current.name) : '비어 있음'})</small></p>` : ''
+      }
+      const cards = MYTHIC_SHOP_EQUIPMENT.map(item => { const specialty = equipmentSpecialty(item); return `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon"><img class="equipment-image--mythic" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /></div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small>${specialty ? `<strong class="shop-specialty">특기 · ${escapeHtml(specialty.label)} · ${escapeHtml(specialty.description)}</strong>` : ''}${preview(item)}<span class="shop-progress"><i style="width:${progress * 100}%"></i><em>조각 ${Math.min(fragments, MYTHIC_FRAGMENT_COST)}/${MYTHIC_FRAGMENT_COST}</em></span></div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" data-cost-fragments="${MYTHIC_FRAGMENT_COST}" data-label="${escapeHtml(item.name)}" ${fragments < MYTHIC_FRAGMENT_COST ? 'disabled' : ''}>${fragments < MYTHIC_FRAGMENT_COST ? `조각 ${MYTHIC_FRAGMENT_COST - fragments}개 더 필요` : `조각 ${MYTHIC_FRAGMENT_COST}개로 교환`}</button></article>` }).join('')
+      body = `<div class="glass-card shop-mythic-guide"><div class="shop-mythic-guide__bar"><span>신화 조각 <b>${fragments}</b> / ${MYTHIC_FRAGMENT_COST}</span><i><b style="width:${progress * 100}%"></b></i></div><p>유저 대련 승리 1회 = 조각 1개 · 하루 최대 5개 · 오늘 남은 대련 <b>${duelsLeft}회</b></p><p class="shop-mythic-guide__stone">신화장비는 낙양 강화석으로만 강화합니다(낙양 점령 1회당 1개 · 보유 ${state.mythicStones}개).</p><button class="action-button action-button--outline" data-action="section" data-section="duel">유저 대련 하러 가기 →</button></div><div class="shop-grid">${cards}</div>${this.purchaseLogCard()}`
+    }
+    const description = this.shopTab === 'gold' ? '금화 충전 안내' : this.shopTab === 'resources' ? '금화로 자원과 명망을 바꿉니다. 지금 모자란 것을 먼저 추천합니다.' : '유저 대련에서 모은 신화 조각으로 신화장비를 교환합니다.'
+    return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">천하 상점</span><h1>상점</h1><p class="heading-copy">${description}</p></div></div>${balances}${tabs}${body}</section>`
+  }
+
+  /** 이 기기에서 최근 구매 10건 */
+  private purchaseLogCard(): string {
+    const log = readPurchaseLog()
+    if (!log.length) return ''
+    return `<div class="glass-card shop-log"><span class="eyebrow">최근 구매</span><ul>${log.map(entry => `<li><span>${escapeHtml(entry.text)}</span><small>${new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(entry.at))}</small></li>`).join('')}</ul></div>`
+  }
+
+  /** 구매 확인 창(금화 20개 이상 · 신화 조각 교환) */
+  private confirmPurchase(title: string, detail: string, onOk: () => void): void {
+    document.querySelector('.shop-confirm')?.remove()
+    const modal = document.createElement('div')
+    modal.className = 'shop-confirm'
+    modal.innerHTML = `<div class="shop-confirm__card"><span class="eyebrow">구매 확인</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(detail)}</p><div class="shop-confirm__actions"><button class="action-button action-button--outline" data-confirm-no>취소</button><button class="action-button action-button--primary" data-confirm-yes>구매</button></div></div>`
+    const close = () => modal.remove()
+    modal.addEventListener('click', event => { if (event.target === modal) close() })
+    modal.querySelector('[data-confirm-no]')?.addEventListener('click', close)
+    modal.querySelector('[data-confirm-yes]')?.addEventListener('click', () => { close(); onOk() })
+    document.body.appendChild(modal)
   }
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.13', '상점 개편', '자원·명망은 자원마다 한 줄로 모아 묶음을 나란히 보여 주고, 큰 묶음에는 "+50% 이득"처럼 금화당 이득을 표시합니다. 상단 "지금 필요한 것"에서 다음 연구·건물 강화·공성·10회 모집에 모자란 자원과 그걸 채우는 가장 작은 묶음을 추천합니다. 금화 20개 이상은 한 번 더 확인하고, 금화가 모자란 묶음은 "금화 N개 부족"으로 표시합니다. 신화 장비 탭에 조각 진행 막대·대련 남은 횟수·출전 무장 장착 시 오르는 능력이 보이며, 최근 구매 10건을 확인할 수 있습니다. 금화 충전 탭은 정식 출시 전 안내로 바꿨습니다.', '완료', 'gold'],
       ['2026.10.13', '전투 밸런스·재미 개선', '레벨이 높은 적일수록 예고 파훼 효과가 커져, 잘 대응하면 레벨 차를 뒤집을 수 있습니다(적 피해도 조금 완화). 대응하지 않으면 위협도가 쌓여 전열이 무너집니다. 별 3개는 병력 60% 이상·붕괴 없음·예고 파훼율 60% 이상이 필요합니다. 치유·수호 스킬도 연계와 사기 피해를 줍니다. 새 예고 "거짓 후퇴"(누르지 말고 버티기)와 "전면 공세"(세 레인 모두)가 추가됐고, 적장 스킬 예고 중 같은 레인의 공격형 스킬로 적 스킬을 끊을 수 있습니다. 적 부대가 무너지면 그 레인 아군이 옆을 지원합니다. 무장 이름표·두꺼운 병력 막대·적장 경고 원이 생기고, 피해 숫자는 큰 타격에만 뜹니다. 남은 20초에는 경고가 뜹니다.', '완료', 'jade'],
       ['2026.10.13', '처음 시작 안내 · 바뀐 점 안내 · 승패 요인', '처음 시작하는 분을 위해 본영에 6단계 시작 안내가 생겼습니다(편성 확인 → 첫 승리 → 내정 수확 → 연구 시작 → 무장 모집 → 임무 보상). 다음에 갈 메뉴가 반짝이며, 모두 마치면 명망·은전·병서 보상을 드립니다. 규칙이 크게 바뀌면 접속할 때 한 번 "새로 바뀐 점" 안내가 뜹니다. 전투 결과 화면에 승패 요인(전투 연구, 병종 상성, 장비, 인연)과 졌을 때 다음에 키울 것이 표시됩니다.', '완료', 'jade'],
       ['2026.10.13', '임무 · 알림 · 낙양전 기록 · 신화 강화', '본영에 일일 임무 5개(모두 받으면 추가 보상)와 주간 임무 4개가 생겼습니다. 기술 연구가 끝났을 때 다른 탭을 보고 있으면 브라우저 알림과 탭 제목으로 알려 드립니다. 영토의 낙양을 고르면 최근 12주 낙양 주인과 진영별 공헌, 공헌 상위 장수를 볼 수 있습니다. 신화장비 카드에 강화 후 능력과 최대 능력이 미리 보이고, 강화에 성공하면 축하 연출이 나옵니다. 장비 능력 이름도 한글(통솔·무력·모략·속도)로 바꿨습니다.', '완료', 'gold'],
@@ -1560,9 +1626,17 @@ export class StrategyUI {
     else if (action === 'board-refresh') this.callbacks.onBoardRefresh((button.dataset.board ?? this.boardTab) as BoardPost['board'])
     else if (action === 'board-tab') this.callbacks.onBoardRefresh((button.dataset.board ?? '전체') as BoardPost['board'])
     else if (action === 'store') this.callbacks.onStore()
-    else if (action === 'shop-purchase') this.callbacks.onShopPurchase(button.dataset.equipmentId ?? 'shop-mythic-martial-weapon')
-    else if (action === 'cash-shop-purchase') this.callbacks.onCashShopPurchase(button.dataset.productId ?? '')
-    else if (action === 'honor-shop-purchase') this.callbacks.onHonorShopPurchase(button.dataset.packageId ?? '')
+    else if (action === 'shop-purchase') {
+      const id = button.dataset.equipmentId ?? 'shop-mythic-martial-weapon'
+      const remain = (this.renderedState?.mythicFragments ?? 0) - MYTHIC_FRAGMENT_COST
+      this.confirmPurchase(`${button.dataset.label ?? '신화장비'} 교환`, `신화 조각 ${MYTHIC_FRAGMENT_COST}개를 씁니다 · 교환 후 ${Math.max(0, remain)}개 남음`, () => this.callbacks.onShopPurchase(id))
+    }
+    else if (action === 'cash-shop-purchase' || action === 'honor-shop-purchase') {
+      const cost = Number(button.dataset.cost ?? 0)
+      const buy = () => action === 'cash-shop-purchase' ? this.callbacks.onCashShopPurchase(button.dataset.productId ?? '') : this.callbacks.onHonorShopPurchase(button.dataset.packageId ?? '')
+      if (cost >= 20) this.confirmPurchase(`금화 ${cost}개 → ${button.dataset.label ?? ''}`, `구매 후 금화 ${Math.max(0, (this.renderedState?.gold ?? 0) - cost)}개 남음`, buy)
+      else buy()
+    }
     else if (action === 'gold-purchase') this.callbacks.onGoldPurchase(button.dataset.packageId ?? '')
     else if (action === 'shop-tab') {
       this.shopTab = button.dataset.shopTab === 'mythic' ? 'mythic' : button.dataset.shopTab === 'resources' ? 'resources' : 'gold'

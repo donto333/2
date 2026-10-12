@@ -50,7 +50,7 @@ import {
   type FactionTerritorySnapshot,
   type Faction,
 } from './game/strategy'
-import { StrategyUI, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
+import { StrategyUI, recordPurchase, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 
@@ -996,18 +996,20 @@ const ui = new StrategyUI(root, {
   },
   onShopPurchase: equipmentId => {
     const result = purchaseMythicEquipment(state, equipmentId)
-    if (result.ok) queueAccountSave(true)
+    if (result.ok) { queueAccountSave(true); recordPurchase(result.message) }
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
   },
   onCashShopPurchase: productId => {
     const result = purchaseResourcePackage(state, productId)
+    if (result.ok) recordPurchase(result.message)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
   },
   onHonorShopPurchase: packageId => {
     const result = purchaseHonorPackage(state, packageId)
+    if (result.ok) recordPurchase(result.message)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
