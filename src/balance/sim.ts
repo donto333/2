@@ -190,7 +190,7 @@ export function runSingle(config: BalanceConfig, rng?: () => number): { result: 
 export interface SweepPoint { offset: number; enemyLevel: number; winRate: number; avgTime: number }
 
 /** 레벨 차이 분석: 적 레벨만 바꿔 가며 승률을 잰다. */
-export async function runLevelSweep(config: BalanceConfig, offsets = [-6, -4, -2, 0, 2, 4, 6], onProgress?: (done: number, total: number) => void): Promise<SweepPoint[]> {
+export async function runLevelSweep(config: BalanceConfig, offsets = [-10, -5, 0, 5, 10, 15, 20, 25, 30], onProgress?: (done: number, total: number) => void): Promise<SweepPoint[]> {
   const runs = Math.max(30, Math.round(config.settings.runs / 4))
   const points: SweepPoint[] = []
   for (let index = 0; index < offsets.length; index += 1) {
