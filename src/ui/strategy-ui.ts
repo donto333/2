@@ -1,5 +1,5 @@
 import { OFFICIAL_LAUNCH } from '../../server/launch.mjs'
-import { DAILY_BONUS, DAILY_BONUS_ID, MISSIONS, dailyBonusReady, ensureMissions, missionStatus, rewardText, type MissionDef } from '../game/missions'
+import { TUTORIAL_REWARD, TUTORIAL_STEPS, nextTutorialStep, tutorialFinished, DAILY_BONUS, DAILY_BONUS_ID, MISSIONS, dailyBonusReady, ensureMissions, missionStatus, rewardText, type MissionDef } from '../game/missions'
 import { effectsSetting, qualitySetting, setEffectsSetting, setQualitySetting, type EffectsSetting, type QualitySetting } from '../game/settings'
 import { RESEARCH_BRANCHES, RESEARCH_MINUTES, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
 import { templateGeneral, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
@@ -164,6 +164,8 @@ export interface StrategyUiCallbacks {
   onResearch: (id: string) => void
   onResearchCancel: () => void
   onMissionClaim: (id: string) => void
+  /** 처음 시작 안내: 보상 받기(false) · 닫기(true) */
+  onTutorial: (skip: boolean) => void
   /** 전투 효과 설정이 바뀜 */
   onEffectsSetting?: () => void
   onResearchRush: () => void
@@ -229,6 +231,8 @@ export class StrategyUI {
   private adminBoard: AdminBoardState = { postingEnabled: true, posts: [] }
   private cityDamageRankings: CityDamageRanking[] = []
   private luoyangHistory: LuoyangHistory | null = null
+  /** 처음 시작 안내: 다음에 가야 할 메뉴(반짝임) */
+  private coachSection: string | null = null
   private cityDamageRankingCityId = ''
   private rosterSort: RosterSort = 'power'
   private rosterSortDescending = true
@@ -295,6 +299,7 @@ export class StrategyUI {
   }
 
   render(state: StrategyState): void {
+    this.coachSection = nextTutorialStep(state)?.section ?? null
     const previousSection = this.renderedState?.section
     this.renderedState = state
     if (previousSection === 'equipment' && state.section === 'equipment') {
@@ -637,7 +642,7 @@ export class StrategyUI {
     this.cutInTimer = window.setTimeout(() => layer?.classList.remove('is-playing'), 1500)
   }
 
-  showBattleResult(result: BattleResult, notice = ''): void {
+  showBattleResult(result: BattleResult, notice = '', factors: Array<{ label: string; text: string; tone: 'good' | 'bad' | 'neutral' }> = []): void {
     const stars = [1, 2, 3].map(index => `<i class="${index <= result.stars ? 'is-on' : ''}">★</i>`).join('')
     const reason = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '남은 병력 비율로 판정했습니다' }[result.reason]
     const rows = [
@@ -650,7 +655,7 @@ export class StrategyUI {
     const checks = result.won ? `<ul class="result-checks"><li class="is-on">승리</li><li class="${result.troopRatio >= 0.5 ? 'is-on' : ''}">병력 50% 이상</li><li class="${result.collapses === 0 ? 'is-on' : ''}">전열 붕괴 없음</li></ul>` : ''
     const modal = document.createElement('div')
     modal.className = 'result-modal'
-    modal.innerHTML = `<div class="result-card"><span class="eyebrow">작전 결과</span><div class="result-mark">${result.won ? '승리' : '패배'}</div>${result.won ? `<div class="result-stars">${stars}</div>` : ''}<h2>${escapeHtml(reason)}</h2>${checks}<div class="result-grid">${rows}</div>${notice ? `<p>${escapeHtml(notice)}</p>` : ''}<div class="result-score"><span>작전 점수</span><strong>${formatNumber(result.score)}</strong></div><button class="action-button action-button--primary" data-action="close-result">확인</button></div>`
+    modal.innerHTML = `<div class="result-card"><span class="eyebrow">작전 결과</span><div class="result-mark">${result.won ? '승리' : '패배'}</div>${result.won ? `<div class="result-stars">${stars}</div>` : ''}<h2>${escapeHtml(reason)}</h2>${checks}<div class="result-grid">${rows}</div>${factors.length ? `<div class="result-factors"><span class="eyebrow">승패 요인</span><ul>${factors.map(item => `<li class="is-${item.tone}"><b>${escapeHtml(item.label)}</b><span>${escapeHtml(item.text)}</span></li>`).join('')}</ul></div>` : ''}${notice ? `<p>${escapeHtml(notice)}</p>` : ''}<div class="result-score"><span>작전 점수</span><strong>${formatNumber(result.score)}</strong></div><button class="action-button action-button--primary" data-action="close-result">확인</button></div>`
     this.root.appendChild(modal)
     requestAnimationFrame(() => modal.classList.add('is-visible'))
   }
@@ -713,7 +718,8 @@ export class StrategyUI {
   private navButton(section: Section, icon: string, label: string, current: Section, badge = ''): string {
     // 배지: 숫자는 금테 작은 상자, 새 소식(NEW)은 붉은 「새」 표시
     const mark = !badge ? '' : badge === 'NEW' ? '<b class="nav-badge nav-badge--new">새</b>' : `<b class="nav-badge">${badge}</b>`
-    return `<button class="nav-button ${current === section ? 'is-active' : ''}" data-action="section" data-section="${section}" data-nav><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>${mark}</button>`
+    const coach = this.coachSection === section && current !== section ? 'nav-coach' : ''
+    return `<button class="nav-button ${current === section ? 'is-active' : ''} ${coach}" data-action="section" data-section="${section}" data-nav><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>${mark}</button>`
   }
 
   /** 메뉴 분류 패(칠기 목패 위 금박 패) */
@@ -742,9 +748,32 @@ export class StrategyUI {
   private overviewSection(state: StrategyState): string {
     return `<section class="page-section page-section--overview"><div class="section-heading"><div><span class="eyebrow">THE WARRIOR'S PATH · 01</span><h1>다음 한 수를<br><em>준비하십시오.</em></h1><p class="heading-copy">무장을 영입하고, 성장을 증명하고,<br>당신의 이름을 전장에 새깁니다.</p></div><button class="ghost-button" data-action="section" data-section="rank">천하 전적 보기 <span>↗</span></button></div>
       <div class="command-hero"><div class="hero-copy"><span class="pill pill--jade">오늘의 작전</span><h2>황혼의 관문</h2><p>협곡 너머에서 적의 깃발이 감지되었습니다.<br>정예 무장을 편성하고 선제 기동을 지휘하세요.</p><div class="hero-actions"><button class="action-button action-button--primary" data-action="section" data-section="battle">시나리오 입장 <span>→</span></button><button class="action-button action-button--quiet" data-action="section" data-section="recruit">무장 모집 <span>✦</span></button></div></div><div class="hero-stat"><span class="stat-label">작전 전투력</span><strong>${formatNumber(totalPower(state))}</strong><span class="stat-delta">▲ 12.4% <small>지난 작전 대비</small></span><div class="hero-sigil">✦</div></div></div>
-      ${this.missionCard(state)}
+      ${this.tutorialCard(state)}${this.missionCard(state)}
       <div class="overview-grid"><div class="glass-card formation-card"><div class="card-header"><div><span class="eyebrow">CURRENT FORMATION</span><h3>출전 진형</h3></div><button class="text-button" data-action="section" data-section="roster">편성 변경</button></div><div class="formation-row">${state.formation.map(id => { const general = state.generals.find(item => item.id === id); return general ? this.miniGeneral(general) : '' }).join('')}</div><div class="formation-footer"><span><i class="status-dot"></i> 출전 준비 완료</span><span class="muted">${state.formation.length}/3 슬롯</span></div></div><div class="glass-card notice-card"><div class="card-header"><div><span class="eyebrow">FIELD INTEL</span><h3>전장 기록</h3></div><span class="intel-icon">⌁</span></div><p class="notice-text">${state.lastNotice}</p><div class="notice-meta"><span>마지막 기록 · 방금 전</span><button class="text-button" data-action="section" data-section="battle">작전 보기 →</button></div></div></div>
       <div class="section-footnote"><span class="footnote-line"></span><span>제1장 · 옥패의 계절</span><span class="footnote-line"></span></div></section>`
+  }
+
+  /** 본영: 처음 시작 안내(6단계 · 모두 마치면 보상) */
+  private tutorialCard(state: StrategyState): string {
+    const missions = ensureMissions(state)
+    if (missions.tutorialDone) return ''
+    const done = new Set(missions.tutorial ?? [])
+    const next = nextTutorialStep(state)
+    const steps = TUTORIAL_STEPS.map((step, index) => `<li class="${done.has(step.id) ? 'is-done' : next?.id === step.id ? 'is-next' : ''}"><span class="tut-num">${done.has(step.id) ? '✓' : index + 1}</span><div><strong>${step.label}</strong><small>${step.hint}</small></div>${!done.has(step.id) ? `<button class="mini-action" data-action="section" data-section="${step.section}">바로 가기</button>` : ''}</li>`).join('')
+    const finished = tutorialFinished(state)
+    return `<div class="glass-card tutorial-card"><div class="card-header"><div><span class="eyebrow">처음 시작 안내 · ${done.size}/${TUTORIAL_STEPS.length}</span><h3>${finished ? '모든 안내를 마쳤습니다!' : `다음: ${next?.label ?? ''}`}</h3></div><button class="text-button" data-action="tutorial-skip">안내 닫기</button></div><ol class="tutorial-steps">${steps}</ol><div class="tutorial-reward"><span>모두 마치면 · ${rewardText(TUTORIAL_REWARD)}</span><button class="mini-action mini-action--research" data-action="tutorial-claim" ${finished ? '' : 'disabled'}>보상 받기</button></div></div>`
+  }
+
+  /** 바뀐 규칙 안내(접속 때 한 번) */
+  showNoticePopup(items: Array<[string, string]>, onClose: () => void): void {
+    document.querySelector('.notice-popup')?.remove()
+    const popup = document.createElement('div')
+    popup.className = 'notice-popup'
+    popup.innerHTML = `<div class="notice-popup__card"><span class="eyebrow">새로 바뀐 점</span><h2>이렇게 달라졌습니다</h2><ul>${items.map(([title, text]) => `<li><b>${escapeHtml(title)}</b><span>${escapeHtml(text)}</span></li>`).join('')}</ul><div class="notice-popup__actions"><button class="action-button action-button--outline" data-notice-more>업데이트 기록 보기</button><button class="action-button action-button--primary" data-notice-close>확인</button></div></div>`
+    const close = () => { popup.remove(); onClose() }
+    popup.querySelector('[data-notice-close]')?.addEventListener('click', close)
+    popup.querySelector('[data-notice-more]')?.addEventListener('click', () => { close(); this.callbacks.onSection('updates') })
+    document.body.appendChild(popup)
   }
 
   /** 본영: 일일·주간 임무 */
@@ -1340,6 +1369,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.13', '처음 시작 안내 · 바뀐 점 안내 · 승패 요인', '처음 시작하는 분을 위해 본영에 6단계 시작 안내가 생겼습니다(편성 확인 → 첫 승리 → 내정 수확 → 연구 시작 → 무장 모집 → 임무 보상). 다음에 갈 메뉴가 반짝이며, 모두 마치면 명망·은전·병서 보상을 드립니다. 규칙이 크게 바뀌면 접속할 때 한 번 "새로 바뀐 점" 안내가 뜹니다. 전투 결과 화면에 승패 요인(전투 연구, 병종 상성, 장비, 인연)과 졌을 때 다음에 키울 것이 표시됩니다.', '완료', 'jade'],
       ['2026.10.13', '임무 · 알림 · 낙양전 기록 · 신화 강화', '본영에 일일 임무 5개(모두 받으면 추가 보상)와 주간 임무 4개가 생겼습니다. 기술 연구가 끝났을 때 다른 탭을 보고 있으면 브라우저 알림과 탭 제목으로 알려 드립니다. 영토의 낙양을 고르면 최근 12주 낙양 주인과 진영별 공헌, 공헌 상위 장수를 볼 수 있습니다. 신화장비 카드에 강화 후 능력과 최대 능력이 미리 보이고, 강화에 성공하면 축하 연출이 나옵니다. 장비 능력 이름도 한글(통솔·무력·모략·속도)로 바꿨습니다.', '완료', 'gold'],
       ['2026.10.13', '전투 연출 강화', '맞으면 병사들이 조금씩 다르게 뒤로 밀리며 젖혀지고(기병은 크게), 병력이 줄어든 만큼 병사가 뒤로 쓰러지며 사라집니다. 승리하면 무장들이 무기를 연달아 치켜들고 금빛 기둥이 솟으며, 진 쪽은 뒤로 물러나 흐려집니다. 병종 상성(기병>궁병>창병>기병)이 유리하면 "상성 우위!"가 뜨고, 무장 버튼에 같은 레인 적장과의 상성이 표시됩니다. 관우(청룡언월도)·장비(장팔사모)·조운·마초(창)·전위·장료(극)·허저·서황(대도) 등 이름난 무장은 고유 무기를 듭니다.', '완료', 'jade'],
       ['2026.10.13', '안정성 · 성능 개선', '금화·신화장비 조각·낙양 강화석은 이제 서버가 기준입니다(일일 금화, 시나리오 최초 클리어, 세력전 승리, 유저 대련 보상은 서버가 확인한 뒤 지급). 낙양전 시간은 기기 시간대와 무관하게 한국 시간 일요일 20:00~24:00로 맞췄습니다. 계정 관리에 그래픽 품질·전투 효과 설정을 추가했고, 전투 중 화면이 버벅이면 효과를 자동으로 줄입니다. 첫 전투 진입 때 멈칫하지 않도록 모델을 미리 준비합니다.', '완료', 'jade'],
@@ -1497,6 +1527,8 @@ export class StrategyUI {
     else if (action === 'setting-quality') { setQualitySetting((button.dataset.value ?? 'auto') as QualitySetting); this.notify('그래픽 품질을 바꿨습니다. 새로고침하면 적용됩니다.', 'jade'); if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'setting-effects') { setEffectsSetting((button.dataset.value ?? 'auto') as EffectsSetting); this.callbacks.onEffectsSetting?.(); if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'mission-claim') this.callbacks.onMissionClaim(button.dataset.mission ?? '')
+    else if (action === 'tutorial-claim') this.callbacks.onTutorial(false)
+    else if (action === 'tutorial-skip') this.callbacks.onTutorial(true)
     else if (action === 'research-cancel') this.callbacks.onResearchCancel()
     else if (action === 'research-rush') this.callbacks.onResearchRush()
     else if (action === 'scenario-select') { this.scenarioSelectedId = button.dataset.scenarioId ?? this.scenarioSelectedId; if (this.renderedState) this.render(this.renderedState) }

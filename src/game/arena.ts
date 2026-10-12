@@ -317,6 +317,19 @@ export class Arena {
   }
 
   /** 기술 연구(강병·지략) 보정: 다음 전투부터 적용 */
+  /** 결과 화면용: 같은 레인 적장과의 병종 상성 유리·불리 레인 수 */
+  matchupSummary(): { adv: number; dis: number } {
+    let adv = 0, dis = 0
+    this.generals.forEach((general, lane) => {
+      const foe = this.enemyDeck[lane]
+      if (!foe) return
+      const value = matchup(general.role, foe.role)
+      if (value > 1) adv += 1
+      else if (value < 1) dis += 1
+    })
+    return { adv, dis }
+  }
+
   /** 전투 효과 설정을 다시 읽는다(계정 관리에서 바꾸면 바로 적용) */
   applyEffectsSetting(): void {
     const setting = effectsSetting()

@@ -6,7 +6,7 @@ import { ManusAuth } from '../manus-auth.js'
 import { createLeaderboardClient, type Result, type RunTicket } from '../leaderboard.js'
 import { Arena } from './game/arena'
 import { preloadStrikeModels } from './game/battle-models'
-import { claimMission, ensureMissions, recordMission, type MissionEvent } from './game/missions'
+import { claimMission, closeTutorial, ensureMissions, recordMission, type MissionEvent } from './game/missions'
 import { isSteamDesktop, syncSteamAchievements } from './platform/steam'
 import {
   createInitialState,
@@ -374,6 +374,20 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
   }
 }
 
+/** 바뀐 규칙 안내: 이 기기에서 이 판을 아직 안 봤으면 접속 때 한 번 보여 준다 */
+const NOTICE_ID = '2026-10-13'
+const NOTICE_ITEMS: Array<[string, string]> = [
+  ['기술 연구 개편', '5분야 6단계로 바뀌고 단계별 연구 시간(5분~8시간)이 생겼습니다. 예전 연구에 쓴 자원은 돌려드렸습니다.'],
+  ['신화장비 강화', '이제 낙양 강화석으로만 강화합니다. 낙양을 점령한 진영의 유저가 주 1개씩 받습니다.'],
+  ['일일·주간 임무', '본영에서 임무를 확인하고 보상을 받으십시오. 처음이라면 시작 안내를 따라가 보세요.'],
+  ['전투 연출', '병종별 공격 동작, 스킬 연출, 병종 상성 표시, 이름난 무장의 고유 무기가 추가됐습니다.'],
+  ['금화 지급 방식', '금화·신화 조각은 서버가 확인한 뒤 지급합니다(일일 금화, 시나리오 최초 클리어, 세력전, 대련).'],
+]
+function showNoticeOnce(): void {
+  try { if (window.localStorage.getItem('cheonharo.noticeSeen') === NOTICE_ID) return } catch { return }
+  ui.showNoticePopup(NOTICE_ITEMS, () => { try { window.localStorage.setItem('cheonharo.noticeSeen', NOTICE_ID) } catch { /* 무시 */ } })
+}
+
 /** 임무 진행: 목표를 채우면 알려 주고 본영에서 받게 한다 */
 function mission(event: MissionEvent, amount = 1): void {
   const done = recordMission(state, event, amount)
@@ -401,6 +415,29 @@ function askNotificationOnce(): void {
     window.localStorage.setItem('cheonharo.notifyAsked', '1')
     void Notification.requestPermission()
   } catch { /* 무시 */ }
+}
+
+/** 결과 화면의 "승패 요인": 연구 · 병종 상성 · 장비 · 인연, 지면 다음에 키울 것 하나를 권한다 */
+function battleFactors(won: boolean): Array<{ label: string; text: string; tone: 'good' | 'bad' | 'neutral' }> {
+  const factors: Array<{ label: string; text: string; tone: 'good' | 'bad' | 'neutral' }> = []
+  const battleResearch = state.research.filter(node => node.unlocked && (node.branch === '강병' || node.branch === '지략'))
+  factors.push(battleResearch.length
+    ? { label: '전투 연구', text: `${battleResearch.length}개 적용 · ${battleResearch.slice(0, 3).map(node => node.name).join(', ')}${battleResearch.length > 3 ? ' 외' : ''}`, tone: 'good' }
+    : { label: '전투 연구', text: '적용된 강병·지략 연구가 없습니다', tone: 'bad' })
+  const edge = arena.matchupSummary()
+  factors.push({ label: '병종 상성', text: edge.adv || edge.dis ? `유리 ${edge.adv}레인 · 불리 ${edge.dis}레인` : '상성 차이 없음', tone: edge.adv > edge.dis ? 'good' : edge.dis > edge.adv ? 'bad' : 'neutral' })
+  const slots = state.formation.reduce((sum, id) => sum + Object.keys(state.equipmentLoadouts[id] ?? {}).length, 0)
+  factors.push({ label: '장비', text: `출전 무장 장착 ${slots}/${state.formation.length * 3}칸`, tone: slots >= state.formation.length * 2 ? 'good' : 'bad' })
+  const bond = arena.getSnapshot().bond
+  factors.push({ label: '인연', text: bond ? bond.split(' · ')[0] : '발동한 인연 없음', tone: bond ? 'good' : 'neutral' })
+  if (!won) {
+    const advice = !battleResearch.length ? '기술 연구에서 강병 1단계(오부 훈련)부터 시작해 보십시오.'
+      : edge.dis > edge.adv ? '출전 편성에서 레인 순서를 바꿔 상성이 유리하게 맞서도록 해 보십시오.'
+      : slots < state.formation.length * 2 ? '장비 관리에서 "자동 장착"으로 빈 칸을 채워 보십시오.'
+      : '무장 레벨업과 장비 강화로 전투력을 올려 보십시오.'
+    factors.push({ label: '다음 한 수', text: advice, tone: 'neutral' })
+  }
+  return factors
 }
 
 function isMember(): boolean {
@@ -547,6 +584,7 @@ async function deleteBoardPost(id: number, password: string): Promise<void> {
 }
 const ui = new StrategyUI(root, {
   onSection: (section: Section) => {
+    if (section === 'formation') mission('visitFormation')
     if (section === 'board' && authView.status !== 'authenticated') {
       ui.notify('진영 게시판은 회원 로그인 후 이용할 수 있습니다.', 'ember')
       return
@@ -757,6 +795,13 @@ const ui = new StrategyUI(root, {
   },
   onMissionClaim: id => {
     const result = claimMission(state, id)
+    if (result.ok) mission('missionClaim')
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onTutorial: skip => {
+    const result = closeTutorial(state, skip)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
@@ -1065,7 +1110,7 @@ arena = new Arena(canvas, {
     // state.section이 battle로 남는 전투도 결과 모달 전에 전체화면을 종료한다.
     ui.updateBattle(arena.getSnapshot())
     ui.render(state)
-    ui.showBattleResult(result, state.lastNotice)
+    ui.showBattleResult(result, state.lastNotice, battleFactors(result.won))
     syncSteam()
     if (siege) {
       queueAccountSave(true)
@@ -1095,7 +1140,9 @@ if (gameAccess) {
 } else ui.showAccessGate()
 
 // 기술 연구 타이머: 1초마다 완료를 확인하고, 연구 화면이면 남은 시간만 갱신한다.
+let noticeChecked = false
 window.setInterval(() => {
+  if (!noticeChecked && state.factionConfirmed && gameAccess) { noticeChecked = true; showNoticeOnce() }
   if (pendingResearchRefund && state.factionConfirmed && gameAccess) {
     ui.notify(pendingResearchRefund, 'jade')
     pendingResearchRefund = null

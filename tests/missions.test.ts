@@ -14,7 +14,7 @@ describe('daily and weekly missions', () => {
   it('tracks progress, pays rewards once, and resets daily missions next day', () => {
     const state = createInitialState()
     const day1 = Date.UTC(2026, 9, 13, 3, 0)
-    expect(recordMission(state, 'battleWin', 1, day1)).toEqual([])
+    expect(recordMission(state, 'battleWin', 1, day1)).not.toContain('전투 승리 3회')
     expect(recordMission(state, 'battleWin', 2, day1)).toContain('전투 승리 3회')
     const honor = state.honor
     expect(claimMission(state, 'd-win', day1).ok).toBe(true)

@@ -737,3 +737,42 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 @keyframes mfx-ring{0%{transform:scale(.3);opacity:1}100%{transform:scale(2.2);opacity:0}}
 @keyframes mfx-pop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
 .mission-row .mini-action{flex:0 0 auto;width:auto;min-width:88px}
+
+/* 전투 결과: 승패 요인 */
+.result-factors{margin:12px 0 4px;text-align:left}
+.result-factors ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.result-factors li{display:grid;grid-template-columns:76px 1fr;gap:8px;padding:5px 8px;font-size:12.5px;border-left:3px solid rgba(232,209,162,.3);background:rgba(29,17,10,.4)}
+.result-factors li b{color:#d8b46a}
+.result-factors li.is-good{border-left-color:#5ec79e}
+.result-factors li.is-bad{border-left-color:#e0715a}
+.result-factors li span{color:#e6dcc8}
+
+/* 처음 시작 안내 */
+.tutorial-card{margin:18px 0 0;padding:16px 18px;border-color:rgba(243,207,114,.45)}
+.tutorial-steps{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tutorial-steps li{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid rgba(232,209,162,.14);background:rgba(29,17,10,.45)}
+.tutorial-steps li div{flex:1;min-width:0}
+.tutorial-steps strong{display:block;color:#eee7d9;font-size:13px}
+.tutorial-steps small{display:block;color:#a99b82;font-size:11.5px;line-height:1.4}
+.tutorial-steps .mini-action{flex:0 0 auto;width:auto}
+.tut-num{display:grid;place-items:center;flex:0 0 26px;height:26px;border-radius:50%;border:1px solid rgba(232,209,162,.4);color:#d8b46a;font-weight:700;font-size:12px}
+.tutorial-steps li.is-done{opacity:.55}
+.tutorial-steps li.is-done .tut-num{background:#3d8a6c;border-color:#5ec79e;color:#fff}
+.tutorial-steps li.is-next{border-color:rgba(243,207,114,.7);box-shadow:0 0 14px rgba(243,207,114,.18) inset}
+.tutorial-reward{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;color:#e8c98a;font-size:12.5px}
+.tutorial-reward .mini-action{width:auto}
+@media (max-width:1100px){.tutorial-steps{grid-template-columns:1fr 1fr}}
+@media (max-width:640px){.tutorial-steps{grid-template-columns:1fr}}
+.nav-button.nav-coach{position:relative;box-shadow:0 0 0 2px rgba(243,207,114,.75),0 0 16px rgba(243,207,114,.45);animation:nav-coach 1.6s ease-in-out infinite}
+@keyframes nav-coach{50%{box-shadow:0 0 0 2px rgba(243,207,114,.35),0 0 4px rgba(243,207,114,.2)}}
+
+/* 바뀐 규칙 안내 팝업 */
+.notice-popup{position:fixed;inset:0;z-index:8500;display:grid;place-items:center;padding:16px;background:rgba(8,5,3,.72)}
+.notice-popup__card{width:min(560px,100%);max-height:88vh;overflow:auto;padding:22px 24px;background:linear-gradient(160deg,#2c1c12,#1a110b);border:1px solid rgba(224,177,82,.45);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.notice-popup__card h2{margin:6px 0 12px;color:#f6e7c4;font-size:20px}
+.notice-popup__card ul{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.notice-popup__card li{display:grid;gap:2px;padding:9px 11px;border-left:3px solid #d8b46a;background:rgba(255,240,200,.04)}
+.notice-popup__card li b{color:#f3cf72;font-size:13.5px}
+.notice-popup__card li span{color:#d9cfbb;font-size:12.5px;line-height:1.55}
+.notice-popup__actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.tutorial-reward .mini-action{flex:0 0 auto;min-width:96px}

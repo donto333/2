@@ -2,7 +2,7 @@
 // 보상은 명망·은전·자원·병서처럼 이 게임이 직접 관리하는 재화만 준다(금화는 서버 원장 대상이라 제외).
 import type { ResourceKey, StrategyState } from './strategy'
 
-export type MissionEvent = 'income' | 'battleWin' | 'researchStart' | 'researchDone' | 'recruit' | 'enhance' | 'siege' | 'duel'
+export type MissionEvent = 'income' | 'battleWin' | 'researchStart' | 'researchDone' | 'recruit' | 'enhance' | 'siege' | 'duel' | 'visitFormation' | 'missionClaim'
 type Reward = Partial<Record<ResourceKey | 'honor' | 'manuals', number>>
 export interface MissionDef { id: string; scope: 'daily' | 'weekly'; event: MissionEvent; goal: number; label: string; reward: Reward }
 
@@ -21,7 +21,22 @@ export const MISSIONS: MissionDef[] = [
 export const DAILY_BONUS: Reward = { honor: 500, silver: 5000 }
 export const DAILY_BONUS_ID = 'd-all'
 
-export interface MissionState { dayKey: string; weekKey: string; progress: Record<string, number>; claimed: string[] }
+export interface MissionState {
+  dayKey: string; weekKey: string; progress: Record<string, number>; claimed: string[]
+  /** 처음 시작 안내: 마친 단계, 끝(보상 받음·건너뜀) 여부 */
+  tutorial?: string[]; tutorialDone?: boolean
+}
+
+/** 처음 시작 안내 6단계 */
+export const TUTORIAL_STEPS: Array<{ id: string; label: string; hint: string; section: string; event: MissionEvent }> = [
+  { id: 't-formation', label: '출전 편성 확인', hint: '세 레인에 출전할 무장을 확인합니다.', section: 'formation', event: 'visitFormation' },
+  { id: 't-battle', label: '첫 전투 승리', hint: '시나리오에서 첫 전투를 이겨 보십시오.', section: 'battle', event: 'battleWin' },
+  { id: 't-income', label: '내정 수확', hint: '영토에서 아군 도시의 재화를 거둡니다.', section: 'territory', event: 'income' },
+  { id: 't-research', label: '기술 연구 시작', hint: '강병 1단계 「오부 훈련」을 추천합니다(5분).', section: 'research', event: 'researchStart' },
+  { id: 't-recruit', label: '무장 모집', hint: '명망으로 새 무장을 모집합니다.', section: 'recruit', event: 'recruit' },
+  { id: 't-mission', label: '임무 보상 받기', hint: '본영의 오늘의 임무에서 보상을 받습니다.', section: 'overview', event: 'missionClaim' },
+]
+export const TUTORIAL_REWARD: Reward = { honor: 1000, silver: 10000, manuals: 200 }
 
 const SEOUL = 9 * 60 * 60 * 1000
 export function seoulDay(now = Date.now()): string {
@@ -37,7 +52,8 @@ export function seoulWeek(now = Date.now()): string {
 export function ensureMissions(state: StrategyState, now = Date.now()): MissionState {
   const day = seoulDay(now), week = seoulWeek(now)
   // 같은 객체를 고쳐 쓴다(다른 곳에서 잡아 둔 참조가 끊기지 않게)
-  if (!state.missions || typeof state.missions !== 'object') state.missions = { dayKey: day, weekKey: week, progress: {}, claimed: [] }
+  // 이미 시나리오를 여럿 깬 기존 유저에게는 처음 시작 안내를 띄우지 않는다
+  if (!state.missions || typeof state.missions !== 'object') state.missions = { dayKey: day, weekKey: week, progress: {}, claimed: [], tutorialDone: (state.scenarioCleared?.length ?? 0) >= 3 }
   const missions = state.missions
   if (!missions.progress || typeof missions.progress !== 'object') missions.progress = {}
   if (!Array.isArray(missions.claimed)) missions.claimed = []
@@ -58,6 +74,11 @@ export function ensureMissions(state: StrategyState, now = Date.now()): MissionS
 export function recordMission(state: StrategyState, event: MissionEvent, amount = 1, now = Date.now()): string[] {
   const missions = ensureMissions(state, now)
   const completed: string[] = []
+  if (!missions.tutorialDone) {
+    const done = new Set(missions.tutorial ?? [])
+    for (const step of TUTORIAL_STEPS) if (step.event === event && !done.has(step.id)) { done.add(step.id); completed.push(`안내: ${step.label}`) }
+    missions.tutorial = [...done]
+  }
   for (const mission of MISSIONS) {
     if (mission.event !== event) continue
     const before = missions.progress[mission.id] ?? 0
@@ -110,4 +131,26 @@ export function claimMission(state: StrategyState, id: string, now = Date.now())
   missions.claimed.push(mission.id)
   grant(state, mission.reward)
   return { ok: true, message: `임무 완료 · ${mission.label} · ${rewardText(mission.reward)}` }
+}
+
+/** 다음에 할 안내 단계(없으면 null) */
+export function nextTutorialStep(state: StrategyState): (typeof TUTORIAL_STEPS)[number] | null {
+  const missions = ensureMissions(state)
+  if (missions.tutorialDone) return null
+  const done = new Set(missions.tutorial ?? [])
+  return TUTORIAL_STEPS.find(step => !done.has(step.id)) ?? null
+}
+export function tutorialFinished(state: StrategyState): boolean {
+  const missions = ensureMissions(state)
+  return TUTORIAL_STEPS.every(step => (missions.tutorial ?? []).includes(step.id))
+}
+/** 안내를 모두 마치면 보상, skip이면 보상 없이 닫는다 */
+export function closeTutorial(state: StrategyState, skip = false): { ok: boolean; message: string } {
+  const missions = ensureMissions(state)
+  if (missions.tutorialDone) return { ok: false, message: '이미 끝낸 안내입니다.' }
+  if (skip) { missions.tutorialDone = true; return { ok: true, message: '시작 안내를 닫았습니다.' } }
+  if (!tutorialFinished(state)) return { ok: false, message: '안내 단계를 모두 마치면 보상을 받을 수 있습니다.' }
+  missions.tutorialDone = true
+  grant(state, TUTORIAL_REWARD)
+  return { ok: true, message: `시작 안내 완료 · ${rewardText(TUTORIAL_REWARD)}` }
 }
