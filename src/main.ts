@@ -738,6 +738,7 @@ const ui = new StrategyUI(root, {
     arena.setOpponentDeck(deck, 'duel')
     arena.setGenerals(battleGenerals())
     arena.startBattle()
+    ui.updateBattle(arena.getSnapshot())
     ui.render(state)
     ui.updateBattle(arena.getSnapshot())
     ui.notify('유저 대련을 시작했습니다. 상대 덱의 전력을 돌파하십시오.')

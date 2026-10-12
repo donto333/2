@@ -264,6 +264,7 @@ export class StrategyUI {
     }
     if (state.section !== 'equipment') this.equipmentScrollTop = 0
     if (state.section !== 'battle') this.battleViewActive = false
+    else if (this.latestBattle?.active) this.battleViewActive = true // 전투가 진행 중이면 그리는 순서와 관계없이 전투 화면
     this.root.innerHTML = this.shell(state)
     ensureIconSprite()
     this.attachTerritoryMap(state)
@@ -1165,6 +1166,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.12', '유저 대련 전투 화면 전환 수정', '유저 대련을 시작해도 시나리오 목록이 그대로 보이던 문제를 고쳐, 바로 전투 화면으로 넘어가도록 했습니다.', '완료', 'jade'],
       ['2026.10.12', '밸런스 조정 테스트 페이지', '아군·적군 3명씩 편성과 장비(세트·등급·강화)를 정하고 게임과 같은 전투 규칙으로 수십~수천 판을 시뮬레이션해 승률·별 분포·전투 시간·무장별 스킬 기여를 봅니다. 한 판 상세 기록, 레벨 차이 분석, 설정 공유 링크를 지원합니다. 정식 출시 전에는 누구나, 출시 후에는 운영자 계정만 열 수 있습니다.', '완료', 'jade'],
       ['2026.10.12', '자동 편성 · 자동 장착', '출전 편성 화면에 자동 편성(전투력 상위 10명 중 인연·병종 조합까지 따져 3명 선택, 가운데에 방어형 배치), 자동 장착(출전 무장마다 세트 효과를 포함해 가장 좋은 장비 조합), 둘을 한 번에 하는 버튼을 넣었습니다. 장비 관리 화면에서도 자동 장착을 쓸 수 있습니다.', '완료', 'gold'],
       ['2026.10.12', '전투 상단 바', '전투 중 화면 맨 위에 멈춤·×2 배속·전투 중지 버튼을 넣었습니다. 멈추면 전투 시간과 적의 행동이 모두 멈추고, 전투 중지는 한 번 더 눌러 확인하면 보상 없이 시나리오 목록으로 돌아갑니다. ×2 배속은 처음부터 쓸 수 있습니다.', '완료', 'gold'],
