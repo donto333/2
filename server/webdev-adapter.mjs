@@ -27,11 +27,11 @@ var decodeOAuthState = (state) => {
 import { parse as parseCookieHeader2 } from "cookie";
 
 // starters/web-db-user-v1/server/db.ts
-import { eq, sql } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 
 // starters/web-db-user-v1/drizzle/schema.ts
-import { int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, int, mediumtext, mysqlEnum, mysqlTable, primaryKey, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 var users = mysqlTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
@@ -95,9 +95,29 @@ var factionTerritoryStates = mysqlTable("faction_territory_states", {
   lastRaidData: text("lastRaidData"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
 });
+var cityDamageRankings = mysqlTable("city_damage_rankings", {
+  cityId: varchar("cityId", { length: 64 }).notNull(),
+  userId: int("userId").notNull(),
+  faction: mysqlEnum("faction", ["촉한", "위나라", "오나라"]).notNull(),
+  displayName: varchar("displayName", { length: 128 }).notNull(),
+  totalDamage: bigint("totalDamage", { mode: "number" }).default(0).notNull(),
+  battleCount: int("battleCount").default(0).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+}, table => ({ pk: primaryKey({ columns: [table.cityId, table.userId] }) }));
 var factionTerritoryAiState = mysqlTable("faction_territory_ai_state", {
   id: int("id").primaryKey(),
   lastTickAt: timestamp("lastTickAt")
+});
+var neutralAiBattleLogs = mysqlTable("neutral_ai_battle_logs", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  cityId: varchar("cityId", { length: 64 }).notNull(),
+  occurredAt: timestamp("occurredAt", { fsp: 3 }).notNull(),
+  attackerName: varchar("attackerName", { length: 128 }).notNull(),
+  attackerKind: mysqlEnum("attackerKind", ["user", "ai"]).default("ai").notNull(),
+  defenderName: varchar("defenderName", { length: 128 }).notNull(),
+  won: int("won").default(0).notNull(),
+  damage: int("damage").default(0).notNull(),
+  note: text("note").notNull()
 });
 var luoyangWeeklyResults = mysqlTable("luoyang_weekly_results", {
   weekKey: varchar("weekKey", { length: 16 }).primaryKey(),
@@ -363,16 +383,27 @@ function applyRaidToRow(target, attackerCityId, attackerLevel, now, { allowCaptu
   return { set, result, lastRaid };
 }
 
-function factionTerritoryView(row) {
+function factionTerritoryView(row, battleLogs = []) {
   const garrisons = parseGarrisons(row);
   return {
     garrisons: { list: garrisons.list.map(({ id, power, averageLevel, label }) => ({ id, power: Number(power), averageLevel: Number(averageLevel) || 1, label: String(label ?? "") })), defeated: garrisons.defeated },
     lastRaid: parseLastRaid(row),
+    battleLogs: battleLogs.slice(-30).map(log => ({ id: `server-ai-${log.id}`, timestamp: new Date(log.occurredAt).getTime(), attackerName: log.attackerName, attackerKind: log.attackerKind, defenderName: log.defenderName, won: Boolean(log.won), damage: Math.max(0, Number(log.damage) || 0), note: log.note })),
     cityId: row.cityId,
     owner: row.owner,
     conquestProgress: Math.max(0, Math.min(100, Number(row.conquestProgress) || 0)),
     defense: Math.max(0, Math.min(CITY_DEFENSE_BY_LEVEL[5], Number(row.defense) || 0)),
     prosperity: Math.max(0, Math.min(100, Number(row.prosperity) || 0)),
+    battleLogs: battleLogs.slice(-30).map(log => ({
+      id: `server-ai-${log.id}`,
+      timestamp: new Date(log.occurredAt).getTime(),
+      attackerName: log.attackerName,
+      attackerKind: log.attackerKind,
+      defenderName: log.defenderName,
+      won: Boolean(log.won),
+      damage: Math.max(0, Number(log.damage) || 0),
+      note: log.note
+    })),
     version: Number(row.version) || 1,
     updatedAt: row.updatedAt
   };
@@ -456,7 +487,14 @@ async function getFactionTerritories(userId) {
   if (userId) await grantLuoyangBox(db, userId);
   const rows = await db.select().from(factionTerritoryStates);
   const byCityId = new Map(rows.map(row => [row.cityId, row]));
-  return FACTION_TERRITORY_SEED.map(city => factionTerritoryView(byCityId.get(city.cityId) ?? city));
+  const logs = await db.select().from(neutralAiBattleLogs).where(inArray(neutralAiBattleLogs.cityId, FACTION_TERRITORY_SEED.map(city => city.cityId))).orderBy(asc(neutralAiBattleLogs.occurredAt));
+  const logsByCityId = new Map();
+  for (const log of logs) {
+    const cityLogs = logsByCityId.get(log.cityId) ?? [];
+    cityLogs.push(log);
+    logsByCityId.set(log.cityId, cityLogs.slice(-30));
+  }
+  return FACTION_TERRITORY_SEED.map(city => factionTerritoryView(byCityId.get(city.cityId) ?? city, logsByCityId.get(city.cityId) ?? []));
 }
 async function recordFactionTerritoryBattle(userId, input) {
   const db = await getDb();
@@ -497,13 +535,27 @@ async function recordFactionTerritoryBattle(userId, input) {
       updatedByUserId: userId
     }).where(eq(factionTerritoryStates.cityId, input.cityId));
   });
+  if (input.won && damage > 0) {
+    const profile = await db.select({ name: users.name, faction: gameAccountStates.faction }).from(gameAccountStates).leftJoin(users, eq(users.id, gameAccountStates.userId)).where(eq(gameAccountStates.userId, userId)).limit(1);
+    const displayName = String(profile[0]?.name ?? '이름 없는 장군').slice(0, 128);
+    const faction = profile[0]?.faction ?? '촉한';
+    await db.insert(cityDamageRankings).values({ cityId: input.cityId, userId, faction, displayName, totalDamage: damage, battleCount: 1 }).onDuplicateKeyUpdate({
+      set: {
+        faction,
+        displayName,
+        totalDamage: sql`${cityDamageRankings.totalDamage} + ${damage}`,
+        battleCount: sql`${cityDamageRankings.battleCount} + 1`
+      }
+    });
+  }
   return getFactionTerritories(userId);
 }
-async function userFaction(db, userId) {
-  const account = await db.select({ faction: gameAccountStates.faction }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
-  return account[0]?.faction ?? "촉한";
+async function getCityDamageRankings(cityId) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (!FACTION_TERRITORY_IDS.has(cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
+  return db.select({ userId: cityDamageRankings.userId, faction: cityDamageRankings.faction, displayName: cityDamageRankings.displayName, totalDamage: cityDamageRankings.totalDamage, battleCount: cityDamageRankings.battleCount, updatedAt: cityDamageRankings.updatedAt }).from(cityDamageRankings).where(eq(cityDamageRankings.cityId, cityId)).orderBy(desc(cityDamageRankings.totalDamage), asc(cityDamageRankings.updatedAt)).limit(10);
 }
-/** 아군 도시에 수비대를 세운다(진영 공용). 클라이언트의 deployCityGarrison과 같은 규칙: 새로 세우면 격파 기록이 초기화된다. */
 async function deployFactionGarrison(userId, input) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -1105,6 +1157,7 @@ export {
   protectedProcedure,
   updateGameState,
   recordFactionTerritoryBattle,
+  getCityDamageRankings,
   deployFactionGarrison,
   recordFactionDefense,
   updateUserRole,

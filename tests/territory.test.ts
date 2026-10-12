@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CITY_DEFENSE_BY_LEVEL, CITY_PRODUCTION_MULTIPLIER, cityBreachThreshold, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, resolveConquestBattle, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CITY_DEFENSE_BY_LEVEL, CITY_INCOME_REWARD_MULTIPLIER, CITY_PRODUCTION_MULTIPLIER, cityBreachThreshold, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, resolveConquestBattle, unlockResearch, upgradeBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -71,6 +71,16 @@ describe('territory and governance', () => {
     expect(findCity(state, 'xiangyang')?.buildings.find(building => building.id === 'farm')?.level).toBe(4)
   })
 
+  it('merges server neutral AI battle logs into the selected city history', () => {
+    const state = createInitialState()
+    const merged = mergeFactionTerritories(state, [{
+      cityId: 'chengdu', owner: '촉한', conquestProgress: 0, defense: 9000, prosperity: 48,
+      battleLogs: [{ id: 'server-ai-17', timestamp: 1000, attackerName: '중립 인공지능 습격대 · hanzhong', attackerKind: 'ai', defenderName: '촉한', won: true, damage: 1500, note: '성벽 방어도 -1500' }],
+    }])
+    expect(merged).toBe(1)
+    expect(findCity(state, 'chengdu')?.battleLogs?.at(-1)).toMatchObject({ attackerKind: 'ai', damage: 1500, note: '성벽 방어도 -1500' })
+  })
+
   it('collects production from owned cities without collecting enemy yields', () => {
     const state = createInitialState()
     const before = { ...state.resources }
@@ -95,6 +105,14 @@ describe('territory and governance', () => {
       expect(production[3][key]).toBe(production[0][key] * CITY_PRODUCTION_MULTIPLIER[4])
       expect(production[4][key]).toBe(production[0][key] * CITY_PRODUCTION_MULTIPLIER[5])
     }
+  })
+
+  it('applies the tenfold city income reward multiplier before collection', () => {
+    const state = createInitialState()
+    const city = findCity(state, 'hanzhong')!
+    const income = cityIncome({ ...city, owner: '촉한', level: 1, prosperity: 50, buildings: city.buildings.map(building => ({ ...building, level: 1 })) })
+    expect(CITY_INCOME_REWARD_MULTIPLIER).toBe(10)
+    expect(income).toEqual({ grain: 4900, silver: 3450, wood: 2000, iron: 1270, influence: 1070 })
   })
 
   it('upgrades a selected allied building and rejects enemy cities', () => {
@@ -199,7 +217,7 @@ describe('territory and governance', () => {
     const state = createInitialState()
     expect(conquestEligibility(state, 'chengdu').allowed).toBe(false)
     expect(conquestEligibility(state, 'ye').reason).toContain('위나라의 본성')
-    expect(conquestEligibility(state, 'luoyang').allowed).toBe(false)
+    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 12, 12, 0, 0)).allowed).toBe(false)
     expect(conquestEligibility(state, 'fucheng').allowed).toBe(true)
     expect(conquestEligibility(state, 'hanzhong').allowed).toBe(false) // 부성을 거쳐야 하는 원거리
     const beforeGrain = state.resources.grain

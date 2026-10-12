@@ -1,7 +1,7 @@
 import cityRoutes from '../../server/city-routes.json'
 import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
-export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'updates' | 'account' | 'admin'
+export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
 export type ResourceKey = 'grain' | 'silver' | 'wood' | 'iron' | 'influence'
@@ -87,6 +87,7 @@ export const TERRITORY_TEST_WEAKENING_ENABLED = true
 export const TERRITORY_TEST_WEAKENING_RATIO = 0.10
 export const DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL: Record<Grade, number> = { 1: 10, 2: 15, 3: 20, 4: 25, 5: 30 }
 export const CITY_PRODUCTION_MULTIPLIER: Record<Grade, number> = { 1: 1, 2: 3, 3: 5, 4: 10, 5: 20 }
+export const CITY_INCOME_REWARD_MULTIPLIER = 10
 export function cityDefenseForLevel(level: number): number {
   return CITY_DEFENSE_BY_LEVEL[level as Grade] ?? CITY_DEFENSE_BY_LEVEL[5]
 }
@@ -120,6 +121,7 @@ export interface FactionTerritorySnapshot {
   conquestProgress: number
   defense: number
   prosperity: number
+  battleLogs?: CityBattleLog[]
   version?: number
   updatedAt?: string | Date
   /** 서버에 저장된 진영 공용 수비대 (server/021_city_garrisons.sql). 구버전 서버에는 없다. */
@@ -616,6 +618,11 @@ const CORE_LIBRARY: General[] = [
 type ExpansionSpec = [string, string, string, Role, Grade, string, string, string]
 
 const EXPANSION_SPECS: ExpansionSpec[] = [
+  ['zhang-jiao', '장각', '천공장군의 황천 개벽', '책사', 5, '태평요술', '황건의 깃발을 세워 적의 사기를 꺾고 아군의 전술 게이지를 크게 회복한다.', '각'],
+  ['zhang-bo', '장보', '지공장군의 부적 계략', '책사', 4, '부적 계략', '적 전열에 혼란을 남기고 다음 책략 피해를 증폭한다.', '보'],
+  ['zhang-liang', '장량', '인공장군의 황건 선봉', '보병', 4, '황건 선봉', '보병 전열을 단단히 묶어 중앙 돌파 피해를 줄인다.', '량'],
+  ['guan-hai', '관해', '황건의 백파 맹장', '보병', 3, '백파 격돌', '적 선봉을 강하게 압박해 짧은 시간 동안 방어를 약화한다.', '관'],
+  ['zhou-cang', '주창', '황건을 거친 충직한 장수', '기병', 3, '황건 추격', '측면 기동 뒤 적 후방에 추가 피해를 입힌다.', '주'],
   ['liu-bei', '유비', '현덕의 인덕과 쌍검', '보병', 5, '인덕의 결집', '아군 전체의 사기를 끌어올리고 전열을 회복한다.', '유'],
   ['cao-cao', '조조', '맹덕의 천하 제패', '기병', 5, '위무의 질주', '적의 약한 측면을 포착해 전군의 공격력을 높인다.', '조'],
   ['sun-quan', '손권', '중모의 강동 수호', '궁병', 4, '강동의 결의', '아군 궁병의 사거리와 명중률을 강화한다.', '손'],
@@ -691,7 +698,7 @@ const withSkillText = (general: General): General => {
   const def = GENERAL_SKILLS[general.id]
   return def ? { ...general, skillName: def.active.name, skillDescription: def.active.desc } : general
 }
-const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText)
+const LIBRARY: General[] = Array.from(new Map([...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText).map(general => [general.id, general] as const)).values())
 
 /** 도감(Lv1) 원형. 성장 전 능력치가 필요한 스킬 공식에서 쓴다. */
 export function templateGeneral(id: string): General | undefined {
@@ -870,6 +877,13 @@ export function mergeFactionTerritories(state: StrategyState, snapshots: Faction
     city.conquestProgress = Math.max(0, Math.min(100, Math.trunc(snapshot.conquestProgress)))
     city.defense = Math.max(0, Math.min(cityDefenseForLevel(city.level), Math.trunc(snapshot.defense)))
     city.prosperity = Math.max(0, Math.min(100, Math.trunc(snapshot.prosperity)))
+    if (Array.isArray(snapshot.battleLogs) && snapshot.battleLogs.length) {
+      const existing = Array.isArray(city.battleLogs) ? city.battleLogs : []
+      const knownIds = new Set(existing.map(log => log.id))
+      city.battleLogs = [...existing, ...snapshot.battleLogs.filter(log => !knownIds.has(log.id))]
+        .sort((left, right) => left.timestamp - right.timestamp)
+        .slice(-30)
+    }
     mergeServerGarrisons(state, city, snapshot, wasAlly)
     mergeLastRaid(state, city, snapshot)
     merged += 1
@@ -1439,11 +1453,11 @@ export function cityIncome(city: City, state?: StrategyState): Resources {
   const tradeBonusFromTree = state ? 1 + researchCount(state, 'trade-') * 0.016 : 1
   const scholarshipBonus = state ? 1 + researchCount(state, 'scholar-') * 0.01 : 1
   return {
-    grain: Math.round((170 + farm * 210 + city.prosperity * 2.2) * productionMultiplier * grainBonus * granaryBonus * agricultureBonus),
-    silver: Math.round((120 + market * 155 + city.prosperity * 1.4) * productionMultiplier * silverBonus * tradeBonus * tradeBonusFromTree),
-    wood: Math.round((80 + workshop * 120) * productionMultiplier),
-    iron: Math.round((45 + workshop * 82) * productionMultiplier),
-    influence: Math.round((35 + market * 28 + academy * 44) * productionMultiplier * influenceBonus * tradeBonus * scholarshipBonus),
+    grain: Math.round((170 + farm * 210 + city.prosperity * 2.2) * productionMultiplier * grainBonus * granaryBonus * agricultureBonus * CITY_INCOME_REWARD_MULTIPLIER),
+    silver: Math.round((120 + market * 155 + city.prosperity * 1.4) * productionMultiplier * silverBonus * tradeBonus * tradeBonusFromTree * CITY_INCOME_REWARD_MULTIPLIER),
+    wood: Math.round((80 + workshop * 120) * productionMultiplier * CITY_INCOME_REWARD_MULTIPLIER),
+    iron: Math.round((45 + workshop * 82) * productionMultiplier * CITY_INCOME_REWARD_MULTIPLIER),
+    influence: Math.round((35 + market * 28 + academy * 44) * productionMultiplier * influenceBonus * tradeBonus * scholarshipBonus * CITY_INCOME_REWARD_MULTIPLIER),
   }
 }
 

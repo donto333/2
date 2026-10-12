@@ -78,6 +78,8 @@ describe('commander attributes', () => {
     const generals = allGenerals()
     expect(generals).toHaveLength(70)
     expect(new Set(generals.map(general => general.id)).size).toBe(70)
+    expect(generals.filter(general => ['장각', '장보', '장량', '관해', '주창'].includes(general.name))).toHaveLength(5)
+
     expect(generals.some(general => general.id === 'liu-bei')).toBe(true)
     expect(generals.some(general => general.id === 'da-qiao')).toBe(true)
   })

@@ -37,6 +37,8 @@ import {
   recruit,
   selectCity,
   toggleFormation,
+  autoFormation,
+  autoEquip,
   unlockResearch,
   unlockSkill,
   upgrade,
@@ -46,9 +48,8 @@ import {
   type FactionTerritorySnapshot,
   type Faction,
 } from './game/strategy'
-import { StrategyUI, type AccountView, type AuthView, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
-import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
-import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
+import { StrategyUI, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
+import { firstClearReward, scenarioById, type ScenarioDefinition } from './game/scenarios'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -63,7 +64,7 @@ const state: StrategyState = createInitialState()
 
 // Steam 데스크톱 버전: 진행도에 따라 업적을 해금한다 (웹에서는 아무 일도 하지 않음).
 function syncSteam(): void {
-  syncSteamAchievements({ wins: state.wins, generalCount: state.generals.length, scenarioClearedCount: clearedScenarioCount(state.scenarioCleared) })
+  syncSteamAchievements({ wins: state.wins, generalCount: state.generals.length, scenarioClearedCount: state.scenarioCleared.length })
 }
 if (isSteamDesktop()) window.setInterval(syncSteam, 5000)
 let localSaveDirty = false
@@ -225,7 +226,17 @@ function resetAccountSavePipeline(): void {
 function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
   return state.formation.map(id => {
     const general = findGeneral(state, id)
-    return general ? withEquipmentStats(general, equipmentBonus(state, id)) : null
+    if (!general) return null
+    const bonus = equipmentBonus(state, id)
+    return {
+      ...general,
+      leadership: general.leadership + bonus.leadership,
+      martial: general.martial + bonus.martial,
+      stratagem: general.stratagem + bonus.stratagem,
+      speed: general.speed + bonus.speed,
+      attack: general.attack + Math.round(bonus.martial * 0.45),
+      defense: general.defense + Math.round(bonus.leadership * 0.35),
+    }
   }).filter((general): general is NonNullable<typeof general> => Boolean(general))
 }
 
@@ -242,7 +253,7 @@ function duelDeckFor(opponent: DuelOpponent): ReturnType<typeof allGenerals> {
   const catalog = allGenerals()
   const seed = [...opponent.id].reduce((sum, character) => sum + character.charCodeAt(0), opponent.score)
   const deck = [0, 1, 2].map(index => catalog[(seed + index * 17) % catalog.length])
-  return deck.map(general => scaleGeneral({ ...general, level: 1, stars: 1 }, Math.max(1, Math.min(30, Math.round(opponent.score / 1800) + (general.grade - 2))), Math.max(1, Math.min(5, general.stars))))
+  return deck.map(general => ({ ...general, level: Math.max(1, Math.min(30, Math.round(opponent.score / 1800) + (general.grade - 2))), stars: Math.max(1, Math.min(5, general.stars)) }))
 }
 
 function siegeDeckFor(cityId: string): ReturnType<typeof allGenerals> {
@@ -252,16 +263,8 @@ function siegeDeckFor(cityId: string): ReturnType<typeof allGenerals> {
   return [0, 1, 2].map(index => {
     const template = catalog[(seed + index * 13) % catalog.length]
     const level = Math.max(1, Math.min(30, (city?.level ?? 1) * 5 + index * 2))
-    const scaled = scaleGeneral({ ...template, level: 1, stars: 1 }, level, Math.max(1, Math.min(5, city?.level ?? 1)))
-    return { ...scaled, id: template.id, skillUnlocked: true }
+    return { ...template, id: `siege-${cityId}-${index}`, level, stars: Math.max(1, Math.min(5, city?.level ?? 1)), skillUnlocked: true }
   })
-}
-
-/** 공성: 성벽 방어도가 남아 있을수록 적 사기 최대치 +0~50 */
-function siegeMoraleBonus(cityId: string): number {
-  const city = state.cities.find(item => item.id === cityId)
-  if (!city) return 0
-  return Math.round(50 * Math.max(0, Math.min(1, city.defense / Math.max(1, cityDefenseForLevel(city.level)))))
 }
 
 const DUMMY_DUEL_STORAGE_KEY = 'cheonharo.duel.dummy-opponents.v1'
@@ -389,9 +392,56 @@ async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: n
     ui.notify('전투 결과는 로컬에 반영되었습니다. 서버 기록은 다음 영토 동기화에서 자동 재시도합니다.', 'jade')
   }
 }
-
+async function refreshCityDamageRankings(cityId: string): Promise<void> {
+  ui.setCityDamageRankings(cityId, [])
+  if (authView.status !== 'authenticated' || !cityId) return
+  try {
+    const rankings = await ManusAuth.query('territory.damageRanking', { cityId }) as CityDamageRanking[]
+    ui.setCityDamageRankings(cityId, rankings)
+  } catch {
+    ui.setCityDamageRankings(cityId, [])
+  }
+}
+async function refreshBoard(board: BoardPost['board'] = '전체'): Promise<void> {
+  if (authView.status !== 'authenticated') {
+    ui.notify('게시판은 회원 로그인 후 이용할 수 있습니다.', 'ember')
+    return
+  }
+  try {
+    const posts = await ManusAuth.query('board.list', { board }) as BoardPost[]
+    ui.setBoardPosts(posts, board)
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시판을 불러오지 못했습니다.', 'ember')
+  }
+}
+async function createBoardPost(board: BoardPost['board'], title: string, content: string, password: string): Promise<void> {
+  if (authView.status !== 'authenticated') {
+    ui.notify('게시글 작성은 회원 로그인 후 이용할 수 있습니다.', 'ember')
+    return
+  }
+  try {
+    await ManusAuth.mutate('board.create', { board, title: title.trim(), content: content.trim(), password })
+    ui.notify('게시글을 올렸습니다.', 'jade')
+    await refreshBoard(board)
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시글 작성에 실패했습니다.', 'ember')
+  }
+}
+async function deleteBoardPost(id: number, password: string): Promise<void> {
+  try {
+    await ManusAuth.mutate('board.delete', { id, password })
+    ui.notify('게시글을 삭제했습니다.', 'jade')
+    await refreshBoard()
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시글 삭제에 실패했습니다.', 'ember')
+  }
+}
 const ui = new StrategyUI(root, {
   onSection: (section: Section) => {
+    if (section === 'board' && authView.status !== 'authenticated') {
+      ui.notify('진영 게시판은 회원 로그인 후 이용할 수 있습니다.', 'ember')
+      return
+    }
     if (section === 'admin' && accountView?.role !== 'admin') {
       state.section = 'overview'
       ui.render(state)
@@ -421,11 +471,14 @@ const ui = new StrategyUI(root, {
       installDummyDuelOpponents()
       void refreshDuelOpponents()
     }
+    if (section === 'board') void refreshBoard()
+    if (section === 'territory') void refreshCityDamageRankings(state.selectedCityId)
     ui.render(state)
     if (section === 'account') void refreshAccount()
     if (section === 'admin') {
       void refreshAdminAccounts()
       void refreshAdminGameData()
+      void refreshAdminBoard()
     }
   },
   onRecruit: count => {
@@ -456,21 +509,6 @@ const ui = new StrategyUI(root, {
     ui.notify(state.lastNotice)
     queueAccountSave()
   },
-  onEquipmentDraw: count => {
-    const result = drawEquipment(state, count)
-    if (result.ok) queueAccountSave(true)
-    ui.render(state)
-    ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) {
-      ui.showEquipmentResults(result.rewards)
-    }
-  },
-  onEquipmentEnhance: id => {
-    const result = enhanceEquipment(state, id)
-    if (result.ok) queueAccountSave(true)
-    ui.render(state)
-    ui.notify(result.message, result.ok ? 'jade' : 'ember')
-  },
   onAutoFormation: withEquipment => {
     const formed = autoFormation(state)
     const equipped = withEquipment && formed.ok ? autoEquip(state) : null
@@ -485,6 +523,21 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok && result.changed) queueAccountSave()
+  },
+  onEquipmentDraw: count => {
+    const result = drawEquipment(state, count)
+    if (result.ok) queueAccountSave(true)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) {
+      ui.showEquipmentResults(result.rewards)
+    }
+  },
+  onEquipmentEnhance: id => {
+    const result = enhanceEquipment(state, id)
+    if (result.ok) queueAccountSave(true)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
   },
   onEquipmentEquip: (generalId, itemId) => {
     const result = equipEquipment(state, generalId, itemId)
@@ -508,6 +561,9 @@ const ui = new StrategyUI(root, {
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
   },
+  onCityDamageRankingRefresh: id => {
+    void refreshCityDamageRankings(id)
+  },
   onTerritoryRefresh: () => {
     void refreshFactionTerritories(true)
   },
@@ -518,8 +574,8 @@ const ui = new StrategyUI(root, {
       pendingSiege = { cityId: id, result }
       duelActive = false
       state.section = 'battle'
-      ui.setBattleAutoAvailable(false)
-      arena.setSiegeDeck(siegeDeckFor(id), siegeMoraleBonus(id))
+      arena.setScenarioDifficulty(0.86)
+      arena.setSiegeDeck(siegeDeckFor(id))
       arena.setGenerals(battleGenerals())
       arena.startBattle()
       // 전투 스냅샷을 먼저 반영해야 battleViewActive가 켜진 상태로 렌더링된다.
@@ -586,26 +642,25 @@ const ui = new StrategyUI(root, {
     activeScenario = scenario
     duelActive = false
     state.section = 'battle'
-    // 적 덱: 그 시대에 실제로 맞섰던 상대(진영별), 장 안에서 뒤 사건일수록 강해진다.
-    const enemyLevel = scenarioEnemyLevel(scenario)
-    const deck = scenarioEnemyIds(scenario, state.faction).map((id, index) => {
-      const base = templateGeneral(id) ?? allGenerals()[index]
-      return { ...scaleGeneral({ ...base, level: 1, stars: 1 }, enemyLevel + index - 1, Math.min(5, 1 + Math.floor(enemyLevel / 12))), skillUnlocked: enemyLevel >= 6 }
+    const catalog = allGenerals()
+    const deck = scenario.deck.map((name, index) => {
+      const base = catalog.find(general => general.name === name) ?? catalog[index % catalog.length]
+      return { ...base, level: scenario.difficulty.enemyLevel, skillUnlocked: true }
     })
-    arena.setOpponentDeck(deck, 'scenario')
+    arena.setScenarioDifficulty(scenario.difficulty.pressure)
+    arena.setOpponentDeck(deck)
     arena.setGenerals(battleGenerals())
     arena.startBattle()
-    ui.setBattleAutoAvailable(scenarioStars(state.scenarioCleared, scenario.id) >= 3)
     ui.updateBattle(arena.getSnapshot())
     ui.render(state)
     ui.updateBattle(arena.getSnapshot())
-    ui.notify(`${scenario.year}년 ${scenario.title} · 대화형 시나리오 전투를 시작합니다.`, 'jade')
+    ui.notify(`${scenario.year}년 ${scenario.title} · ${scenario.difficulty.label} ${scenario.difficulty.stage}단계 · 적 레벨 ${scenario.difficulty.enemyLevel}`, 'jade')
   },
   onBattleStart: () => {
-    ui.setBattleAutoAvailable(false)
     scenarioActive = false
     activeScenario = null
     duelActive = false
+    arena.setScenarioDifficulty(0.86)
     arena.setOpponentDeck(null)
     state.section = 'battle'
     arena.setGenerals(battleGenerals())
@@ -624,38 +679,8 @@ const ui = new StrategyUI(root, {
     arena.commandMove(index)
     ui.updateBattle(arena.getSnapshot())
   },
-  onBattleSkill: index => {
-    arena.castSkill(index)
-    ui.updateBattle(arena.getSnapshot())
-  },
-  onBattleSpeed: speed => {
-    arena.setSpeed(speed)
-    ui.updateBattle(arena.getSnapshot())
-  },
-  onBattlePause: on => {
-    arena.setPaused(on)
-    ui.updateBattle(arena.getSnapshot())
-  },
-  onBattleStop: () => {
-    // 전투 중지: 결과·보상 없이 끝내고 시나리오 목록(전투 메뉴 첫 화면)으로 돌아간다.
-    const siege = pendingSiege
-    arena.stopBattle()
-    scenarioActive = false
-    activeScenario = null
-    duelActive = false
-    pendingTicket = null
-    if (siege) {
-      pendingSiege = null
-      queueAccountSave(true)
-      void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })
-    }
-    state.section = 'battle'
-    ui.updateBattle(arena.getSnapshot())
-    ui.render(state)
-    ui.notify('전투를 중지했습니다. 시나리오 목록으로 돌아갑니다. (보상 없음)')
-  },
-  onBattleAuto: on => {
-    arena.setAutoPlay(on)
+  onBattleSkill: () => {
+    arena.castSkill()
     ui.updateBattle(arena.getSnapshot())
   },
   onBattleTactic: tactic => {
@@ -681,8 +706,8 @@ const ui = new StrategyUI(root, {
     }
     duelActive = true
     state.section = 'battle'
-    ui.setBattleAutoAvailable(false)
-    arena.setOpponentDeck(deck, 'duel')
+    arena.setScenarioDifficulty(0.86)
+    arena.setOpponentDeck(deck)
     arena.setGenerals(battleGenerals())
     arena.startBattle()
     ui.render(state)
@@ -736,6 +761,15 @@ const ui = new StrategyUI(root, {
   onRankRefresh: () => {
     void refreshLeaderboard()
   },
+  onBoardRefresh: board => {
+    void refreshBoard(board)
+  },
+  onBoardPost: (board, title, content, password) => {
+    void createBoardPost(board, title, content, password)
+  },
+  onBoardDelete: (id, password) => {
+    void deleteBoardPost(id, password)
+  },
   onStore: () => {
     state.section = 'shop'
     ui.render(state)
@@ -780,6 +814,15 @@ const ui = new StrategyUI(root, {
   onAdminGameDataSave: data => {
     void saveAdminGameData(data)
   },
+  onAdminBoardRefresh: () => {
+    void refreshAdminBoard()
+  },
+  onAdminBoardPostingToggle: enabled => {
+    void setAdminBoardPosting(enabled)
+  },
+  onAdminBoardDelete: id => {
+    void deleteAdminBoardPost(id)
+  },
 })
 
 arena = new Arena(canvas, {
@@ -799,39 +842,40 @@ arena = new Arena(canvas, {
         siege.result = { ...siege.result, damage: resolved.damage, message: resolved.message }
       }
       state.lastNotice = siege.result.message
+      // 공성 결과 뒤에는 시나리오 목록이 아니라 방금 공격한 도시의
+      // 공성 메뉴(도시 관리 카드)로 바로 돌아가도록 전투 맥락을 보존한다.
+      state.selectedCityId = siege.cityId
+      state.section = 'territory'
       pendingSiege = null
     } else if (result.won) {
       state.wins += 1
-      // 반복 전투 보상은 별 수에 비례(3개 100% · 2개 80% · 1개 60%). 시나리오는 최초 클리어 보상만.
-      const rate = [0, 0.6, 0.8, 1][result.stars] ?? 0.6
-      const honor = Math.round((wasDuel ? 120 : 180) * rate)
-      const silver = Math.round((wasDuel ? 600 : 1200) * rate)
+      // 시나리오 전투는 최초 클리어 보상만 사용한다. 일반 전투 공통 보상까지
+      // 더하면 완료 시나리오 재전투에서 명망·은전이 반복 지급된다.
       if (!wasScenario) {
-        state.honor += honor
-        state.silver += silver
+        state.honor += wasDuel ? 120 : 180
+        state.silver += wasDuel ? 600 : 1200
         state.resources.silver = state.silver
       }
       if (wasDuel) state.mythicFragments += 1
       if (scenarioActive && activeScenario) {
-        const improved = recordScenarioStars(state.scenarioCleared, activeScenario.id, result.stars)
-        const starText = `별 ${result.stars}개${improved && result.stars >= 3 ? ' · 자동 전투 해금' : ''}`
         const reward = firstClearReward(activeScenario, state.scenarioCleared)
         if (reward) {
           state.scenarioCleared.push(activeScenario.id)
           state.gold += reward.gold; state.honor += reward.honor; state.silver += reward.silver; state.manuals += reward.manuals
           state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
-          state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 클리어 · ${starText} · 금화 +${reward.gold} · 모든 재화 보상 획득`
-        } else state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · ${starText}`
-      } else state.lastNotice = wasDuel ? `유저 대련 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver} · 신화장비 조각 +1` : `전투 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver.toLocaleString('ko-KR')}`
-    } else {
-      state.lastNotice = '전투 패배 · 보상 없음 · 무장 배치와 성장 상태를 다시 점검하십시오.'
+          state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 클리어 · 금화 +${reward.gold} · 모든 재화 보상 획득`
+        } else state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · 최초 클리어 보상은 이미 획득했습니다.`
+      } else state.lastNotice = wasDuel ? '유저 대련에서 승리했습니다. 명망 +120 · 은전 +600 · 신화장비 조각 +1' : `황혼의 관문을 돌파했습니다. 명망 +180 · 은전 +1,200`
     }
     scenarioActive = false
     activeScenario = null
     duelActive = false
     if (wasScenario) queueAccountSave(true)
+    // Arena가 비활성 상태가 된 것을 먼저 UI에 전달한다. 시나리오·대련처럼
+    // state.section이 battle로 남는 전투도 결과 모달 전에 전체화면을 종료한다.
+    ui.updateBattle(arena.getSnapshot())
     ui.render(state)
-    ui.showBattleResult(result, state.lastNotice)
+    ui.showBattleResult(result.won, result.score)
     syncSteam()
     if (siege) {
       queueAccountSave(true)
@@ -1132,6 +1176,36 @@ async function saveAccountName(name: string): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : '계정 정보 저장에 실패했습니다.'
     ui.notify(message, 'ember')
+  }
+}
+
+async function refreshAdminBoard(): Promise<void> {
+  try {
+    const result = await ManusAuth.query('admin.boardSettings') as AdminBoardState
+    ui.setAdminBoard(result)
+    ui.render(state)
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시판 운영 정보를 불러오지 못했습니다.', 'ember')
+  }
+}
+
+async function setAdminBoardPosting(enabled: boolean): Promise<void> {
+  try {
+    await ManusAuth.mutate('admin.setBoardPosting', { enabled })
+    await refreshAdminBoard()
+    ui.notify(enabled ? '일반 사용자의 게시글 작성을 허용했습니다.' : '일반 사용자의 게시글 작성을 제한했습니다.')
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '게시판 작성 제한 설정에 실패했습니다.', 'ember')
+  }
+}
+
+async function deleteAdminBoardPost(id: number): Promise<void> {
+  try {
+    await ManusAuth.mutate('admin.deleteBoardPost', { id })
+    await refreshAdminBoard()
+    ui.notify('관리자 권한으로 게시글을 삭제했습니다.', 'jade')
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '관리자 게시글 삭제에 실패했습니다.', 'ember')
   }
 }
 

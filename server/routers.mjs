@@ -1,8 +1,9 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getFactionTerritories, getGameState, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
+import { createBoardPost, deleteBoardPost, deleteBoardPostAsAdmin, getBoardSettings, listAdminBoardPosts, listBoardPosts, setBoardPostingEnabled } from './board.mjs'
 
 // 계정 상태 숫자 한도: DB 컬럼(int / int unsigned)이 담을 수 있는 범위 안에서 넉넉하게 잡는다.
 // 예전 한도(병법서·승리·낙양 상자·신화 조각 1,000,000)를 넘은 계정은 저장 자체가 거절되었다.
@@ -52,6 +53,12 @@ export const gameRouter = router({
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 영토 전투를 기록할 수 없습니다.')
       return recordFactionTerritoryBattle(ctx.user.id, input)
     }),
+    damageRanking: protectedProcedure.input(z.object({ cityId: z.string().trim().min(1).max(64) }).strict()).query(({ input }) => getCityDamageRankings(input.cityId)),
+  }),
+  board: router({
+    list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']) })).query(({ ctx, input }) => listBoardPosts(ctx.user, input.board)),
+    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
+    delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => deleteBoardPost(ctx.user, input.id, input.password)),
     deployGarrison: protectedProcedure.input(z.object({
       cityId: z.string().trim().min(1).max(64),
       garrisonId: z.string().trim().min(1).max(96),

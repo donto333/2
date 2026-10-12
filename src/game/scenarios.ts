@@ -14,6 +14,14 @@ export interface ScenarioDialogueLine {
   text: string
 }
 
+export interface ScenarioDifficulty {
+  stage: number
+  tier: 1 | 2 | 3 | 4 | 5
+  label: string
+  enemyLevel: number
+  pressure: number
+}
+
 export interface ScenarioDefinition {
   id: string
   chapter: string
@@ -24,9 +32,7 @@ export interface ScenarioDefinition {
   dialogue: ScenarioDialogueLine[]
   deck: string[]
   reward: ScenarioReward
-  chapterIndex: number
-  entryIndex: number
-  entryCount: number
+  difficulty: ScenarioDifficulty
 }
 
 type ChapterSeed = { chapter: string; era: string; deck: string[]; entries: Array<[number, string, string]> }
@@ -41,6 +47,17 @@ const CHAPTERS: ChapterSeed[] = [
   { chapter: '2.7', era: '제갈량의 북벌', deck: ['제갈량', '조운', '위연'], entries: [[227, '출사표', '출사표를 올리고 한실 부흥을 향한 북벌을 시작한다.'], [228, '가정 전투', '가정의 고지를 잃지 않도록 보급로와 후퇴선을 지킨다.'], [229, '석정 전투, 진창 전투', '두 전선의 계책을 엮어 진창의 철문을 흔든다.'], [230, '손권의 황제 등극', '오의 새 황제 등극으로 삼국의 외교 균형이 변한다.'], [231, '기산 전투', '기산의 능선을 장악하고 장기전에 대비한다.'], [232, '이엄 실각', '군량을 둘러싼 내분을 수습하고 지휘 체계를 바로 세운다.'], [233, '마지막 북벌 준비', '마지막 원정을 위해 병력과 책략을 다시 가다듬는다.'], [234, '추풍오장원', '오장원의 가을바람 속에서 숙명의 결전을 맞는다.']] },
   { chapter: '2.8', era: '제갈량의 사후', deck: ['조운', '위연', '제갈량'], entries: [[235, '제갈량의 뒤를 잇는 강유', '강유가 스승의 유지를 이어 새로운 북벌을 준비한다.'], [238, '공손연의 난', '요동에서 일어난 반란이 중원의 국경까지 번지기 전에 진압한다.'], [241, '작피 전투, 상용 기습책', '작피의 전투와 상용의 기습을 연계해 적의 허리를 친다.'], [249, '고평릉 사변, 강유의 북벌', '궁정의 정변을 틈타 강유가 다시 북방으로 진군한다.'], [253, '제갈각의 북벌, 계속되는 강유의 북벌', '두 나라의 북벌이 맞물린 시대의 격랑을 돌파한다.'], [257, '제갈탄의 난', '수춘의 반란군을 진압하고 마지막 내전을 끝낸다.'], [263, '촉한멸망전', '촉한의 마지막 성벽에서 역사의 끝과 새로운 시작을 마주한다.']] },
 ]
+
+const SCENARIO_DECKS: Readonly<Record<number, readonly [string, string, string]>> = {
+  184: ['장량', '관해', '주창'], 185: ['한수', '관해', '주창'], 186: ['손견', '동탁', '조홍'], 187: ['장보', '장량', '관해'], 188: ['장로', '관평', '관흥'], 189: ['동탁', '조홍', '진궁'], 190: ['원소', '손견', '조홍'], 191: ['공손찬', '원소', '문추'], 192: ['동탁', '손견', '초선'],
+  193: ['조조', '유비', '장비'], 194: ['조조', '여포', '진궁'], 195: ['손책', '주유', '태사자'], 196: ['조조', '순욱', '순유'], 197: ['원술', '손책', '조조'], 198: ['여포', '조조', '공손찬'],
+  199: ['원술', '조조', '손책'], 200: ['조조', '원소', '장료'], 201: ['유비', '손책', '조운'], 202: ['원소', '조조', '곽가'], 203: ['원소', '장합', '조조'], 204: ['조조', '장합', '원소'], 205: ['조조', '장합', '원소'], 206: ['조조', '순유', '장료'],
+  207: ['유비', '제갈량', '조조'], 208: ['주유', '제갈량', '조조'], 209: ['주유', '조인', '유비'], 210: ['유비', '손권', '주유'], 211: ['조조', '마초', '가후'], 212: ['유비', '방통', '법정'], 213: ['유비', '방통', '조운'],
+  214: ['유비', '조조', '손권'], 215: ['장료', '손권', '감녕'], 216: ['조조', '손권', '감녕'], 217: ['조조', '유비', '황충'], 218: ['황충', '유비', '조조'], 219: ['관우', '여몽', '육손'],
+  220: ['관우', '여몽', '조조'], 221: ['유비', '손권', '육손'], 222: ['유비', '육손', '손권'], 223: ['유비', '제갈량', '맹획'], 224: ['손권', '장료', '조인'], 225: ['제갈량', '맹획', '축융'], 226: ['제갈량', '사마의', '조운'],
+  227: ['제갈량', '조운', '사마의'], 228: ['제갈량', '사마의', '장합'], 229: ['제갈량', '사마의', '육손'], 230: ['손권', '육손', '제갈량'], 231: ['제갈량', '사마의', '장합'], 232: ['제갈량', '사마의', '조운'], 233: ['제갈량', '사마의', '조운'], 234: ['제갈량', '사마의', '조운'],
+  235: ['제갈량', '사마의', '조운'], 238: ['사마의', '조조', '장료'], 241: ['손권', '육손', '사마의'], 249: ['사마의', '제갈량', '조운'], 253: ['손권', '육손', '제갈량'], 257: ['사마의', '조조', '장료'], 263: ['제갈량', '사마의', '조운'],
+}
 
 const REWARD = (chapterIndex: number, entryIndex: number): ScenarioReward => ({
   gold: 10 + chapterIndex * 5 + entryIndex * 2,
@@ -62,15 +79,28 @@ export const SCENARIOS: ScenarioDefinition[] = CHAPTERS.flatMap((chapter, chapte
   summary,
   dialogue: [
     { speaker: '전령', text: `${year}년, ${title}의 전운이 전장을 덮었습니다.` },
-    { speaker: chapter.deck[0], text: summary },
+    { speaker: SCENARIO_DECKS[year]?.[0] ?? chapter.deck[0], text: summary },
     { speaker: '지휘관', text: '진형을 갖추고 이 전투를 끝내자. 승리하면 군량과 금화를 백성에게 돌리겠다.' },
   ],
-  deck: chapter.deck,
+  deck: [...(SCENARIO_DECKS[year] ?? chapter.deck)],
   reward: REWARD(chapterIndex, entryIndex),
-  chapterIndex,
-  entryIndex,
-  entryCount: chapter.entries.length,
-})))
+}))).map((scenario, index) => {
+  const chapterIndex = Number(scenario.chapter.split('.')[1]) - 1
+  const stage = chapterIndex + 1
+  const tier = Math.min(5, Math.floor(chapterIndex * 5 / 8) + 1) as 1 | 2 | 3 | 4 | 5
+  const labels = ['초급', '중급', '고급', '극상', '전설']
+  const tierBase = [0.86, 1.02, 1.18, 1.36, 1.55][tier - 1]
+  return {
+    ...scenario,
+    difficulty: {
+      stage,
+      tier,
+      label: labels[tier - 1],
+      enemyLevel: Math.round(1 + (chapterIndex * 29) / 7),
+      pressure: Number((tierBase + (index % 12) * 0.012).toFixed(3)),
+    },
+  }
+})
 
 export function scenarioById(id: string): ScenarioDefinition | undefined {
   return SCENARIOS.find(scenario => scenario.id === id)
@@ -78,56 +108,4 @@ export function scenarioById(id: string): ScenarioDefinition | undefined {
 
 export function firstClearReward(scenario: ScenarioDefinition, clearedIds: readonly string[]): ScenarioReward | null {
   return clearedIds.includes(scenario.id) ? null : scenario.reward
-}
-
-// ── 시나리오 적 덱 (전투 개선안 · 촉 시점 기준, 위·오는 같은 사건의 반대편) ──
-type FactionKey = '촉한' | '위나라' | '오나라'
-interface EnemyPlan { levels: [number, number]; deck: Record<FactionKey, string[]>; byYear?: Record<number, Partial<Record<FactionKey, string[]>>> }
-const YELLOW_TURBANS = ['zhang-jiao', 'zhang-bo', 'zhang-liang']
-const YELLOW_VANGUARD = ['zhang-liang', 'guan-hai', 'zhou-cang']
-const DONG_ZHUO = ['dong-zhuo', 'lu-bu', 'gao-shun']
-const same = (deck: string[]): Record<FactionKey, string[]> => ({ 촉한: deck, 위나라: deck, 오나라: deck })
-
-const ENEMY_PLANS: EnemyPlan[] = [
-  { levels: [1, 8], deck: same(DONG_ZHUO), byYear: { 184: same(YELLOW_VANGUARD), 185: same(YELLOW_TURBANS), 186: same(YELLOW_TURBANS), 187: same(['zhang-bo', 'zhang-liang', 'guan-hai']), 188: same(YELLOW_TURBANS), 189: same(YELLOW_TURBANS) } },
-  { levels: [8, 14], deck: { 촉한: ['lu-bu', 'chen-gong', 'gao-shun'], 위나라: ['lu-bu', 'chen-gong', 'gao-shun'], 오나라: ['yuan-shu', 'wen-ping', 'song-xian'] }, byYear: { 197: same(['yuan-shu', 'wen-ping', 'song-xian']) } },
-  { levels: [14, 20], deck: same(['yuan-shao', 'yan-liang', 'wen-chou']) },
-  { levels: [20, 26], deck: { 촉한: ['cao-cao', 'cao-ren', 'zhang-liao'], 위나라: ['zhou-yu', 'huang-gai', 'zhuge-liang'], 오나라: ['cao-cao', 'cao-ren', 'zhang-liao'] }, byYear: { 211: same(['ma-chao', 'ma-teng', 'han-sui']) } },
-  { levels: [26, 32], deck: { 촉한: ['zhang-he', 'xu-huang', 'cao-hong'], 위나라: ['huang-zhong', 'fa-zheng', 'zhao-yun'], 오나라: ['zhang-liao', 'yue-jin', 'li-dian'] }, byYear: { 215: { 촉한: ['zhang-liao', 'yue-jin', 'li-dian'], 위나라: ['sun-quan', 'gan-ning', 'ling-tong'] } } },
-  { levels: [32, 38], deck: { 촉한: ['lu-xun', 'lu-meng', 'gan-ning'], 위나라: ['guan-yu', 'guan-ping', 'zhang-bao'], 오나라: ['liu-bei', 'guan-xing', 'zhang-bao'] }, byYear: { 225: same(['meng-huo', 'zhu-rong', 'guan-hai']) } },
-  { levels: [38, 44], deck: { 촉한: ['simayi', 'zhang-he', 'xu-huang'], 위나라: ['zhuge-liang', 'zhao-yun', 'wei-yan'], 오나라: ['simayi', 'zhang-he', 'xu-huang'] } },
-  { levels: [44, 50], deck: { 촉한: ['simayi', 'zhang-he', 'yu-jin'], 위나라: ['wei-yan', 'wang-ping', 'guan-xing'], 오나라: ['simayi', 'zhang-he', 'yu-jin'] } },
-]
-
-export function scenarioEnemyIds(scenario: ScenarioDefinition, faction: string): string[] {
-  const plan = ENEMY_PLANS[scenario.chapterIndex] ?? ENEMY_PLANS[0]
-  const key: FactionKey = faction === '위나라' || faction === '오나라' ? faction : '촉한'
-  return plan.byYear?.[scenario.year]?.[key] ?? plan.deck[key]
-}
-
-/** 장 안에서 뒤 사건일수록 높아지는 적 평균 레벨 */
-export function scenarioEnemyLevel(scenario: ScenarioDefinition): number {
-  const [low, high] = (ENEMY_PLANS[scenario.chapterIndex] ?? ENEMY_PLANS[0]).levels
-  const span = Math.max(1, scenario.entryCount - 1)
-  return Math.round(low + (high - low) * scenario.entryIndex / span)
-}
-
-// ── 별 기록: scenarioCleared 목록 안에 'stars:<별>:<id>'로 함께 저장한다(DB 변경 없음) ──
-const STAR_PREFIX = 'stars:'
-export function scenarioStars(cleared: readonly string[], id: string): number {
-  const entry = cleared.find(item => item.startsWith(STAR_PREFIX) && item.endsWith(`:${id}`))
-  return entry ? Number(entry.split(':')[1]) || 0 : 0
-}
-
-export function recordScenarioStars(cleared: string[], id: string, stars: number): boolean {
-  const best = scenarioStars(cleared, id)
-  if (stars <= best) return false
-  const index = cleared.findIndex(item => item.startsWith(STAR_PREFIX) && item.endsWith(`:${id}`))
-  if (index >= 0) cleared.splice(index, 1)
-  cleared.push(`${STAR_PREFIX}${Math.min(3, stars)}:${id}`)
-  return true
-}
-
-export function clearedScenarioCount(cleared: readonly string[]): number {
-  return cleared.filter(item => !item.startsWith(STAR_PREFIX)).length
 }
