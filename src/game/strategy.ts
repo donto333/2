@@ -1392,9 +1392,10 @@ export interface ConquestEligibility {
 export function capitalFactionForCity(cityId: string): Faction | undefined {
   return (Object.entries(FACTION_CAPITALS) as Array<[Faction, string]>).find(([, capitalId]) => capitalId === cityId)?.[0]
 }
+/** 낙양전 창: 한국 시간 일요일 20:00~24:00 (서버와 같은 기준 · 기기 시간대와 무관) */
 export function isLuoyangSiegeWindow(now = Date.now()): boolean {
-  const date = new Date(now)
-  return date.getDay() === 0 && date.getHours() >= 20 && date.getHours() < 24
+  const seoul = new Date(now + 9 * 60 * 60 * 1000)
+  return seoul.getUTCDay() === 0 && seoul.getUTCHours() >= 20
 }
 export function conquestEligibility(state: StrategyState, cityId: string, now = Date.now()): ConquestEligibility {
   const city = findCity(state, cityId)
@@ -1470,6 +1471,8 @@ export interface TerritoryBattleResult {
   won: boolean
   message: string
   damage: number
+  /** 세력전 승리 금화(회원은 서버가 지급하므로 화면에서 되돌린 뒤 서버 지급분을 더한다) */
+  gold?: number
 }
 
 function territoryBattleCost(city: City): Partial<Record<ResourceKey, number>> {
@@ -1540,6 +1543,7 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   if (state.honor < honorCost) return { ok: false, won: false, message: `최종 세력전에 필요한 명망이 부족합니다. 명망 ${honorCost} 필요`, damage: 0 }
   state.honor -= honorCost
   state.lastFactionBattleAt = now
+  let goldGranted = 0
   const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70
   const factionPower = 300 + city.level * 250 + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
   const won = attackPower >= factionPower * 0.75
@@ -1551,13 +1555,14 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
     city.conquestProgress = 100
     state.gold += goldReward
     state.factionWarScore += 150
+    goldGranted = goldReward
     if (city.id === LUOYANG_ID) state.lastNotice = `${city.name} 최종 세력전 승리 · 금화 +${goldReward} · 자정까지 수비한 진영이 주간 승자가 됩니다.`
     else state.lastNotice = `${city.name} 최종 세력전 승리 · 금화 +${goldReward} · 적 세력을 몰아내고 영토를 확보했습니다.`
   } else {
     state.factionWarScore = Math.max(0, state.factionWarScore - 40)
     state.lastNotice = `${city.name} 최종 세력전 패배 · 명망 ${honorCost}를 소모했지만 적 세력이 성을 지켰습니다.`
   }
-  return { ok: true, won, message: state.lastNotice, damage: 0 }
+  return { ok: true, won, message: state.lastNotice, damage: 0, gold: goldGranted }
 }
 
 export function launchConquest(state: StrategyState, cityId: string, now = Date.now()): ConquestResult {

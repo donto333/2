@@ -10,6 +10,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { AnimatedHero, heroModelFor, strikeModelFor, troopModelFor } from './battle-models'
 import { STRIKE_FRAMES } from './battle-rig'
+import { effectsSetting } from './settings'
 import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
 import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
 
@@ -222,6 +223,11 @@ export class Arena {
   private readonly environment: Environment
   private composer: EffectComposer | null = null
   private research: BattleResearch | null = null
+  /** 효과 줄이기: 설정 '줄임', 또는 '자동'인데 낮은 품질이거나 화면이 버벅일 때 */
+  private reducedFx = false
+  private fpsLow = false
+  private fpsFrames = 0
+  private fpsTime = 0
   /** 연출용 시간 흐름: 스킬 기 모으기 슬로모션 · 강타 순간 멈춤(실제 초) */
   private slowMo = 0
   private hitStop = 0
@@ -252,6 +258,7 @@ export class Arena {
     }
     window.addEventListener('resize', this.resize)
     this.resize()
+    this.applyEffectsSetting()
     this.animate()
   }
 
@@ -308,6 +315,30 @@ export class Arena {
   }
 
   /** 기술 연구(강병·지략) 보정: 다음 전투부터 적용 */
+  /** 전투 효과 설정을 다시 읽는다(계정 관리에서 바꾸면 바로 적용) */
+  applyEffectsSetting(): void {
+    const setting = effectsSetting()
+    this.reducedFx = setting === 'reduced' || (setting === 'auto' && (this.quality === 'low' || this.fpsLow))
+  }
+
+  /** 전투 중 3초 평균 프레임이 28 아래면 효과를 줄이고 화면 해상도를 낮춘다(자동 설정일 때) */
+  private watchFrameRate(realDelta: number): void {
+    if (this.fpsLow || !this.battleActive || this.paused) { this.fpsFrames = 0; this.fpsTime = 0; return }
+    this.fpsFrames += 1
+    this.fpsTime += realDelta
+    if (this.fpsTime < 3) return
+    const fps = this.fpsFrames / this.fpsTime
+    this.fpsFrames = 0
+    this.fpsTime = 0
+    if (fps >= 28) return
+    this.fpsLow = true
+    this.applyEffectsSetting()
+    if (effectsSetting() === 'auto') {
+      this.renderer.setPixelRatio(1)
+      this.resize()
+    }
+  }
+
   setResearch(research: BattleResearch | null): void {
     this.research = research
   }
@@ -787,7 +818,7 @@ export class Arena {
     unit.knockback.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.11 : -0.11, 0, side === 'enemy' ? -0.3 : 0.3))
     this.cameraShake = Math.min(0.62, this.cameraShake + (amount >= 160 ? 0.18 : 0.06))
     if (amount >= 160) this.hitStop = Math.max(this.hitStop, 0.06)
-    this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, amount >= 120 ? 1.3 : 0.9))
+    if (!this.reducedFx) this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, amount >= 120 ? 1.3 : 0.9))
     if (amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember)
   }
 
@@ -831,7 +862,7 @@ export class Arena {
   private troopVolley(unit: BattleUnit, target: BattleUnit, side: 'player' | 'enemy'): void {
     const color = side === 'player' ? 0xffe2a8 : 0xffb48a
     const release = 0.6 // 궁병 자세에서 시위를 놓는 순간(초)
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < (this.reducedFx ? 2 : 5); i += 1) {
       const delay = release + Math.random() * 0.2
       this.fx(this.later(delay, () => {
         if (unit.troops <= 0) return
@@ -863,7 +894,7 @@ export class Arena {
     this.cameraFocus = { target: origin.clone(), age: 0, life: side === 'player' ? 1.35 : 1.05, strength: side === 'player' ? 0.7 : 0.5, side }
     this.fx(groundCircle(origin, color, 2.4, SKILL_RELEASE + 0.9))
     this.fx(lightPillar(origin, color, 0.9, 5.5, SKILL_RELEASE + 0.35))
-    this.fx(chargeMotes(origin, color))
+    if (!this.reducedFx) this.fx(chargeMotes(origin, color))
     const label = this.makeTextSprite(name, `#${color.toString(16).padStart(6, '0')}`, 1.25)
     label.position.copy(origin).add(new THREE.Vector3(0, 4.3, 0))
     this.addEffect({
@@ -889,7 +920,7 @@ export class Arena {
         case '돌격': {
           const start = origin.clone().setY(0)
           const end = this.frontOf(unit, dash, 0)
-          this.fx(dashTrail(start, end, color))
+          if (!this.reducedFx) this.fx(dashTrail(start, end, color))
           this.fx(this.later(CHARGE_STRIKE - SKILL_RELEASE, () => {
             const hitAt = target ? target.group.position.clone() : end.clone()
             this.fx(slashArc(hitAt.clone().setY(1.2), this.facing(unit), color, 2.4, false, 0.55))
@@ -1098,6 +1129,7 @@ export class Arena {
   }
 
   private update(realDelta: number): void {
+    this.watchFrameRate(realDelta)
     // 강타 순간 멈춤(아주 짧게) · 스킬 기 모으기 슬로모션
     const scale = this.hitStop > 0 ? 0.05 : this.slowMo > 0 ? 0.32 : 1
     this.hitStop = Math.max(0, this.hitStop - realDelta)
@@ -1134,7 +1166,7 @@ export class Arena {
     this.cameraShake = Math.max(0, this.cameraShake - delta * 1.8)
     const introOffset = this.cameraIntro > 0 ? (this.cameraIntro / 1.35) * 3.8 : 0
     const victoryOffset = this.cameraVictory > 0 ? (1 - this.cameraVictory / 1.5) * 2.8 : 0
-    const shake = this.cameraShake
+    const shake = this.cameraShake * (this.reducedFx ? 0.4 : 1)
     const living = [...this.playerUnits, ...this.enemyUnits].filter(unit => unit.troops > 0)
     const frontZ = living.length ? living.reduce((sum, unit) => sum + unit.group.position.z, 0) / living.length : this.cameraLookAt.z
     const selected = this.playerUnits[this.selectedUnit]

@@ -50,6 +50,24 @@ export function troopModelFor(role: General['role']): ModelName {
 
 export type HeroAction = 'Idle' | 'Walk' | 'Gallop' | 'Attack' | 'Skill'
 
+/**
+ * 첫 전투에서 멈칫하지 않도록 본영 화면에 있을 때 모델을 하나씩 미리 불러와 굽는다.
+ * 굽기는 메인 스레드를 잠깐 쓰므로 모델 사이에 쉬는 틈을 둔다.
+ */
+export function preloadStrikeModels(names: ModelName[] = ['lancer', 'cavalry', 'archer', 'lubu', 'caocao', 'zhugeliang']): void {
+  let index = 0
+  const idle = (run: () => void) => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number }
+    if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 3000 }); else window.setTimeout(run, 400)
+  }
+  const next = () => {
+    const name = names[index++]
+    if (!name) return
+    void strikeModelFor(name).catch(() => {}).finally(() => idle(next))
+  }
+  idle(next)
+}
+
 /** 모델 하나의 병종별 공격 자세 묶음(불러온 뒤 한 번만 굽는다) */
 export function strikeModelFor(name: ModelName): Promise<StrikeModel> {
   return loadModel(name).then(gltf => strikeModel(name, gltf))

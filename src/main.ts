@@ -5,6 +5,7 @@ import './styles/territory-map.css'
 import { ManusAuth } from '../manus-auth.js'
 import { createLeaderboardClient, type Result, type RunTicket } from '../leaderboard.js'
 import { Arena } from './game/arena'
+import { preloadStrikeModels } from './game/battle-models'
 import { isSteamDesktop, syncSteamAchievements } from './platform/steam'
 import {
   createInitialState,
@@ -33,6 +34,7 @@ import {
   mergeFactionTerritories,
   migrateLegacyStarterRoster,
   ensurePrelaunchDailyGold,
+  dayKey,
   FACTION_CAPITALS,
   findGeneral,
   recruit,
@@ -217,7 +219,8 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   const normalizedTerritories = normalizeInitialSeasonTerritories(state)
   syncResearchRoster()
   ensureEquipmentState(state)
-  const receivedDailyGold = ensurePrelaunchDailyGold(state)
+  // 회원의 일일 금화는 서버가 지급한다(serverGrant('daily')).
+  const receivedDailyGold = mode === 'guest' ? ensurePrelaunchDailyGold(state) : false
   const migratedStarter = migrateLegacyStarterRoster(state)
   if (receivedDailyGold || migratedStarter || normalizedTerritories) persistLocalGame()
   localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories) && mode === 'guest'
@@ -356,6 +359,8 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
     const snapshots = await ManusAuth.query('territory.list') as FactionTerritorySnapshot[]
     const merged = mergeFactionTerritories(state, snapshots)
     await claimLuoyangReward()
+    // 재기록된 세력전 점령이 있으면 서버가 적립한 금화를 받아 온다
+    if (retried) await serverGrant('faction', undefined, researchMods(state).factionGold)
     persistLocalGame()
     ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
     ui.render(state)
@@ -363,6 +368,31 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
   } catch {
     ui.setTerritorySync('서버 원장 연결 대기')
     if (notify) ui.notify('서버 원장 연결이 지연되고 있습니다. 로컬 작전 결과는 보존되며 다시 시도합니다.', 'jade')
+  }
+}
+
+function isMember(): boolean {
+  return authView.status === 'authenticated' && gameAccess === 'member'
+}
+
+/**
+ * 금화·신화 조각은 서버 원장이 기준이다(저장은 줄이는 것만 반영된다).
+ * 회원이 받을 보상은 서버에 요청해 서버가 확인·지급한 만큼만 화면에 더한다.
+ */
+async function serverGrant(kind: 'daily' | 'scenario' | 'faction' | 'duel', key?: string, bonus?: number): Promise<void> {
+  if (!isMember()) return
+  try {
+    const result = await ManusAuth.mutate('account.grant', { kind, ...(key ? { key } : {}), ...(bonus ? { bonus: Math.min(1, Math.max(0, bonus)) } : {}) }) as { granted: number; fragments: number; reason: string }
+    if (!result.granted && !result.fragments) return
+    state.gold += Math.max(0, Math.trunc(result.granted))
+    state.mythicFragments += Math.max(0, Math.trunc(result.fragments))
+    if (kind === 'daily') state.prelaunchGoldDayKey = dayKey()
+    queueAccountSave(true)
+    ui.render(state)
+    const label = kind === 'daily' ? '오늘의 금화' : kind === 'scenario' ? '시나리오 최초 클리어' : kind === 'faction' ? '세력전 승리' : '유저 대련 승리'
+    ui.notify(`${label} · ${result.granted ? `금화 +${result.granted}` : ''}${result.fragments ? `신화장비 조각 +${result.fragments}` : ''} (서버 지급)`, 'jade')
+  } catch {
+    // 연결이 끊기면 서버가 아직 지급하지 않은 것이므로 다음 기회에 다시 받는다(일일 금화·세력전 적립분).
   }
 }
 
@@ -649,11 +679,16 @@ const ui = new StrategyUI(root, {
   },
   onFactionBattle: id => {
     const result = launchFactionBattle(state, id)
+    // 회원의 세력전 금화는 서버가 점령을 기록한 뒤 지급한다: 화면에 먼저 더한 금화는 되돌린다.
+    const serverGold = isMember() && result.won && (result.gold ?? 0) > 0
+    if (serverGold) state.gold -= result.gold ?? 0
     ui.render(state)
     ui.notify(result.message, result.ok && result.won ? 'jade' : 'ember')
     if (result.ok) {
       queueAccountSave()
-      void recordFactionTerritoryBattle(id, { damage: result.damage, won: result.won, captured: result.won })
+      void recordFactionTerritoryBattle(id, { damage: result.damage, won: result.won, captured: result.won }).then(() => {
+        if (serverGold) void serverGrant('faction', undefined, researchMods(state).factionGold)
+      })
     }
   },
   onCollectIncome: () => {
@@ -673,6 +708,10 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
+  },
+  onEffectsSetting: () => {
+    arena?.applyEffectsSetting()
+    ui.notify('전투 효과 설정을 바꿨습니다.', 'jade')
   },
   onResearchCancel: () => {
     const result = cancelResearch(state)
@@ -943,14 +982,19 @@ arena = new Arena(canvas, {
         state.silver += silver
         state.resources.silver = state.silver
       }
-      if (wasDuel) state.mythicFragments += 1
+      if (wasDuel) {
+        if (isMember()) void serverGrant('duel')
+        else state.mythicFragments += 1
+      }
       if (scenarioActive && activeScenario) {
         const improved = recordScenarioStars(state.scenarioCleared, activeScenario.id, result.stars)
         const starText = `별 ${result.stars}개${improved && result.stars >= 3 ? ' · 자동 전투 해금' : ''}`
         const reward = firstClearReward(activeScenario, state.scenarioCleared)
         if (reward) {
           state.scenarioCleared.push(activeScenario.id)
-          state.gold += reward.gold; state.honor += Math.round(reward.honor * honorBoost); state.silver += reward.silver; state.manuals += Math.round(reward.manuals * (1 + researchMods(state).manuals))
+          if (isMember()) void serverGrant('scenario', activeScenario.id)
+          else state.gold += reward.gold
+          state.honor += Math.round(reward.honor * honorBoost); state.silver += reward.silver; state.manuals += Math.round(reward.manuals * (1 + researchMods(state).manuals))
           state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
           state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 클리어 · ${starText} · 금화 +${reward.gold} · 모든 재화 보상 획득`
         } else state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · ${starText}`
@@ -985,6 +1029,8 @@ arena = new Arena(canvas, {
     queueAccountSave()
   },
 })
+// 첫 전투에서 멈칫하지 않도록 본영에 있을 때 무장·병사 모델과 공격 자세를 미리 준비한다
+window.setTimeout(() => preloadStrikeModels(), 2500)
 
 ui.setAuth(authView)
 if (gameAccess) {
@@ -1125,7 +1171,7 @@ async function refreshAccount(): Promise<void> {
       if (Array.isArray(game.scenarioCleared)) state.scenarioCleared = game.scenarioCleared.filter((id: string): id is string => typeof id === 'string')
       ensureDuelDailyState(state)
       ensureEquipmentState(state)
-      if (ensurePrelaunchDailyGold(state)) localSaveDirty = true
+      void serverGrant('daily')
       const migratedStarter = migrateLegacyStarterRoster(state)
       if (migratedStarter) {
         persistLocalGame()

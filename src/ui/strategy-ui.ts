@@ -1,4 +1,5 @@
 import { OFFICIAL_LAUNCH } from '../../server/launch.mjs'
+import { effectsSetting, qualitySetting, setEffectsSetting, setQualitySetting, type EffectsSetting, type QualitySetting } from '../game/settings'
 import { RESEARCH_BRANCHES, RESEARCH_MINUTES, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
 import { templateGeneral, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
@@ -154,6 +155,8 @@ export interface StrategyUiCallbacks {
   onBuildingUpgrade: (cityId: string, buildingId: string) => void
   onResearch: (id: string) => void
   onResearchCancel: () => void
+  /** 전투 효과 설정이 바뀜 */
+  onEffectsSetting?: () => void
   onResearchRush: () => void
   onBattleStart: () => void
   onScenarioStart: (id: string) => void
@@ -1194,7 +1197,20 @@ export class StrategyUI {
   }
 
 
+  /** 이 기기 설정: 그래픽 품질(새로고침 후) · 전투 효과(바로 적용) */
+  private deviceSettingsCard(): string {
+    const quality = qualitySetting(), effects = effectsSetting()
+    const seg = (action: string, current: string, items: Array<[string, string]>) => `<div class="setting-seg">${items.map(([value, label]) => `<button class="setting-seg__btn ${current === value ? 'is-active' : ''}" data-action="${action}" data-value="${value}">${label}</button>`).join('')}</div>`
+    return `<div class="glass-card device-settings"><div class="card-header"><div><span class="eyebrow">이 기기 설정</span><h3>화면 · 전투 효과</h3></div></div><div class="setting-row"><div><strong>그래픽 품질</strong><small>낮음은 빛 번짐·그림자를 끄고 병사 수를 줄입니다. 새로고침하면 적용됩니다.</small></div>${seg('setting-quality', quality, [['auto', '자동'], ['high', '높음'], ['low', '낮음']])}</div><div class="setting-row"><div><strong>전투 효과</strong><small>줄임은 불꽃·화살 수와 화면 흔들림을 줄입니다. 바로 적용됩니다. 자동은 화면이 버벅이면 스스로 줄입니다.</small></div>${seg('setting-effects', effects, [['auto', '자동'], ['full', '전체'], ['reduced', '줄임']])}</div></div>`
+  }
+
   private accountSection(): string {
+    const html = this.accountMain()
+    const at = html.lastIndexOf('</section>')
+    return at < 0 ? html : `${html.slice(0, at)}${this.deviceSettingsCard()}${html.slice(at)}`
+  }
+
+  private accountMain(): string {
     if (this.auth.status !== 'authenticated') {
       return `<section class="page-section page-section--account"><div class="section-heading section-heading--compact"><div><span class="eyebrow">ACCOUNT COMMAND · 06</span><h1>계정 관리</h1><p class="heading-copy">계정 정보를 확인하고 전적 동기화에 사용할 표시 이름을 관리합니다.</p></div></div><div class="glass-card account-gate"><div class="account-gate-mark">◎</div><h2>Manus 계정으로 연결하십시오</h2><p>로그인하면 계정 정보, 천하 랭킹, 전적 동기화를 한 곳에서 관리할 수 있습니다.</p><button class="action-button action-button--primary" data-action="login">Manus 로그인 <span>→</span></button></div></section>`
     }
@@ -1256,6 +1272,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.13', '안정성 · 성능 개선', '금화·신화장비 조각·낙양 강화석은 이제 서버가 기준입니다(일일 금화, 시나리오 최초 클리어, 세력전 승리, 유저 대련 보상은 서버가 확인한 뒤 지급). 낙양전 시간은 기기 시간대와 무관하게 한국 시간 일요일 20:00~24:00로 맞췄습니다. 계정 관리에 그래픽 품질·전투 효과 설정을 추가했고, 전투 중 화면이 버벅이면 효과를 자동으로 줄입니다. 첫 전투 진입 때 멈칫하지 않도록 모델을 미리 준비합니다.', '완료', 'jade'],
       ['2026.10.13', '신화장비 강화 · 낙양 강화석', '신화장비는 이제 은전·철로 강화할 수 없고, 낙양 강화석으로만 강화합니다. 강화석 1개로 1회(+1단계) 강화하며, 주간 낙양전에서 낙양을 점령한 진영의 유저가 점령 1회(주 1회)마다 1개를 받습니다. 보유 개수는 장비 관리 화면에서 확인할 수 있습니다.', '완료', 'gold'],
       ['2026.10.12', '병종별 공격 동작', '일반 공격 때 병종마다 다른 동작을 합니다. 창병은 세워 든 창을 앞으로 눕혀 힘껏 찌르고, 기병은 상체를 비틀며 칼을 머리 위로 들었다가 앞아래로 내리치며(여포는 방천화극을 크게 휘두름), 궁병은 활을 앞으로 겨누고 시위를 턱까지 당겼다 놓습니다. 무장뿐 아니라 부대 병사들도 조금씩 시차를 두고 같은 동작을 하며, 궁병 부대는 시위를 놓는 순간 화살이 날아갑니다.', '완료', 'jade'],
       ['2026.10.12', '전투 동작 · 스킬 연출', '일반 공격 때 무장이 뒤로 당겼다가 튀어나가 베고(칼빛 궤적), 궁병은 화살·책사는 기탄을 날리며 맞는 순간에 피해 숫자가 뜹니다. 스킬은 기를 모으는 순간 잠깐 느려지고 카메라가 무장에게 다가가며, 바닥 진법 문양·빛기둥과 함께 종류별로 발동합니다(돌격: 적진까지 돌진해 두 번 베기 · 사격: 화살 세례 · 계략: 번개나 불기둥 · 통솔: 충격파와 아군 기운 · 수호: 방패막 · 치유: 회복 빛). 맞으면 몸이 뒤로 젖혀지고, 병력이 다하면 쓰러지며 사라집니다.', '완료', 'jade'],
@@ -1407,6 +1424,8 @@ export class StrategyUI {
     else if (action === 'collect-income') this.callbacks.onCollectIncome()
     else if (action === 'building-upgrade') this.callbacks.onBuildingUpgrade(button.dataset.city ?? '', button.dataset.building ?? '')
     else if (action === 'research') this.callbacks.onResearch(button.dataset.research ?? '')
+    else if (action === 'setting-quality') { setQualitySetting((button.dataset.value ?? 'auto') as QualitySetting); this.notify('그래픽 품질을 바꿨습니다. 새로고침하면 적용됩니다.', 'jade'); if (this.renderedState) this.render(this.renderedState) }
+    else if (action === 'setting-effects') { setEffectsSetting((button.dataset.value ?? 'auto') as EffectsSetting); this.callbacks.onEffectsSetting?.(); if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'research-cancel') this.callbacks.onResearchCancel()
     else if (action === 'research-rush') this.callbacks.onResearchRush()
     else if (action === 'scenario-select') { this.scenarioSelectedId = button.dataset.scenarioId ?? this.scenarioSelectedId; if (this.renderedState) this.render(this.renderedState) }

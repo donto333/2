@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -83,6 +83,14 @@ export const gameRouter = router({
     me: protectedProcedure.query(({ ctx }) => accountView(ctx.user)),
     gameState: protectedProcedure.query(({ ctx }) => getGameState(ctx.user.id)),
     luoyangReward: protectedProcedure.query(({ ctx }) => getLuoyangReward(ctx.user.id)),
+    grant: protectedProcedure.input(z.object({
+      kind: z.enum(['daily', 'scenario', 'faction', 'duel']),
+      key: z.string().max(96).optional(),
+      bonus: z.number().min(0).max(1).optional(),
+    })).mutation(({ ctx, input }) => {
+      if (ctx.user.isCron) throw new Error('예약 실행 계정은 보상을 받을 수 없습니다.')
+      return grantCurrency(ctx.user.id, input)
+    }),
     saveGameState: protectedProcedure.input(z.object({
       honor: z.number().int().min(0).max(SAVE_INT_MAX),
       silver: z.number().int().min(0).max(SAVE_INT_MAX),

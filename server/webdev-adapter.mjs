@@ -68,6 +68,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
   luoyangRewardWeekKey: varchar("luoyangRewardWeekKey", { length: 16 }),
   mythicFragments: int("mythicFragments").default(0).notNull(),
   mythicStones: int("mythicStones").default(0).notNull(),
+  grantLedger: mediumtext("grantLedger"),
   duelAttemptsToday: int("duelAttemptsToday").default(0).notNull(),
   duelDayKey: varchar("duelDayKey", { length: 16 }),
   prelaunchGoldDayKey: varchar("prelaunchGoldDayKey", { length: 16 }),
@@ -317,7 +318,7 @@ function parseStateJson(value) {
   }
 }
 function gameStateView(row) {
-  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, ...base } = row;
+  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, grantLedger: _grantLedger, ...base } = row;
   return {
     ...base,
     generals: parseStateJson(generalData),
@@ -553,6 +554,15 @@ async function recordFactionTerritoryBattle(userId, input) {
       version: sql`${factionTerritoryStates.version} + 1`,
       updatedByUserId: userId
     }).where(eq(factionTerritoryStates.cityId, input.cityId));
+    if (captured) {
+      // 세력전 승리 금화는 서버가 점령을 기록하는 이 순간에만 적립하고, 유저가 grant(faction)으로 받아 간다.
+      const accounts = await tx.select({ grantLedger: gameAccountStates.grantLedger }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1).for("update");
+      if (accounts[0]) {
+        const ledger = parseStateJson(accounts[0].grantLedger) ?? {};
+        ledger.factionPending = (Number(ledger.factionPending) || 0) + (FACTION_WAR_GOLD[CITY_LEVEL_BY_ID[input.cityId]] ?? FACTION_WAR_GOLD[5]);
+        await tx.update(gameAccountStates).set({ grantLedger: JSON.stringify(ledger) }).where(eq(gameAccountStates.userId, userId));
+      }
+    }
   });
   if (input.won && damage > 0) {
     const profile = await db.select({ name: users.name, faction: gameAccountStates.faction }).from(gameAccountStates).leftJoin(users, eq(users.id, gameAccountStates.userId)).where(eq(gameAccountStates.userId, userId)).limit(1);
@@ -647,15 +657,78 @@ async function listDuelOpponents(viewerId, limit = 12) {
     };
   }).filter(Boolean).sort((left, right) => right.score - left.score).slice(0, Math.max(1, Math.min(50, limit)));
 }
+// 금화·신화 조각·낙양 강화석은 서버 원장이 기준이다.
+// 클라이언트 저장은 이 값을 "줄이는" 것(사용)만 할 수 있고, 늘리는 것은 grantCurrency·낙양 보상만 한다.
+const SERVER_LEDGER_KEYS = ["gold", "mythicFragments", "mythicStones"];
 async function updateGameState(userId, input) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   // 낙양 보상 주차는 서버만 정한다: 클라이언트가 옛 주차로 덮어써 보상이 두 번 나가지 않게 한다.
   const { luoyangRewardWeekKey: _ignoredWeekKey, ...values } = input;
+  const current = await db.select({ gold: gameAccountStates.gold, mythicFragments: gameAccountStates.mythicFragments, mythicStones: gameAccountStates.mythicStones }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
+  for (const key of SERVER_LEDGER_KEYS) {
+    if (values[key] === undefined) continue;
+    const serverValue = current[0] ? Number(current[0][key] ?? 0) : 0;
+    values[key] = Math.max(0, Math.min(Number(values[key]), serverValue));
+  }
   await db.insert(gameAccountStates).values({ userId, ...values }).onDuplicateKeyUpdate({ set: values });
   // The client already owns the canonical state. Avoid a second full-row read
   // (including large JSON inventories) after every write.
-  return { ok: true, userId };
+  return { ok: true, userId, gold: values.gold, mythicFragments: values.mythicFragments, mythicStones: values.mythicStones };
+}
+
+const PRELAUNCH_DAILY_GOLD = 100;
+const PRELAUNCH_GOLD_ENABLED = true;
+const FACTION_WAR_GOLD = { 1: 20, 2: 40, 3: 60, 4: 80, 5: 100 };
+const DUEL_DAILY_LIMIT = 5;
+function seoulDayKey(now = Date.now()) {
+  return new Date(now + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+/**
+ * 서버가 확인한 뒤에만 금화·신화 조각을 늘린다.
+ *  - daily: 정식 출시 전 매일 금화(한국 날짜 기준 하루 1회)
+ *  - scenario: 시나리오 최초 클리어 금화(시나리오마다 1회, 금액은 시나리오 번호로 서버가 계산)
+ *  - faction: 세력전 승리 금화(서버가 점령을 기록할 때 적립해 둔 만큼만)
+ *  - duel: 유저 대련 승리 신화 조각(하루 5회)
+ */
+async function grantCurrency(userId, input) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  return db.transaction(async tx => {
+    const rows = await tx.select().from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1).for("update");
+    const account = rows[0];
+    if (!account) return { granted: 0, kind: input.kind, reason: "계정 정보를 찾을 수 없습니다." };
+    const ledger = parseStateJson(account.grantLedger) ?? {};
+    const today = seoulDayKey();
+    let gold = 0, fragments = 0, reason = "";
+    if (input.kind === "daily") {
+      if (!PRELAUNCH_GOLD_ENABLED) reason = "일일 금화 지급 기간이 아닙니다.";
+      else if (ledger.daily === today) reason = "오늘 금화를 이미 받았습니다.";
+      else { gold = PRELAUNCH_DAILY_GOLD; ledger.daily = today; }
+    } else if (input.kind === "scenario") {
+      const match = /^scenario-(\d+)-(\d+)-(\d+)$/.exec(String(input.key ?? ""));
+      const claimed = Array.isArray(ledger.scenarios) ? ledger.scenarios : [];
+      if (!match) reason = "알 수 없는 시나리오입니다.";
+      else if (claimed.includes(input.key)) reason = "이미 받은 시나리오 보상입니다.";
+      else { gold = 10 + Number(match[2]) * 5 + Number(match[3]) * 2; ledger.scenarios = [...claimed, input.key].slice(-500); }
+    } else if (input.kind === "faction") {
+      const pending = Number(ledger.factionPending) || 0;
+      if (pending <= 0) reason = "받을 세력전 보상이 없습니다.";
+      else {
+        const bonus = Math.min(0.2, Math.max(0, Number(input.bonus) || 0));
+        gold = Math.round(pending * (1 + bonus));
+        ledger.factionPending = 0;
+      }
+    } else if (input.kind === "duel") {
+      const count = ledger.duelDay === today ? Number(ledger.duelCount) || 0 : 0;
+      if (count >= DUEL_DAILY_LIMIT) reason = "오늘 받을 수 있는 대련 보상을 모두 받았습니다.";
+      else { fragments = 1; ledger.duelDay = today; ledger.duelCount = count + 1; }
+    }
+    if (gold || fragments) {
+      await tx.update(gameAccountStates).set({ gold: sql`${gameAccountStates.gold} + ${gold}`, mythicFragments: sql`${gameAccountStates.mythicFragments} + ${fragments}`, grantLedger: JSON.stringify(ledger) }).where(eq(gameAccountStates.userId, userId));
+    }
+    return { kind: input.kind, granted: gold, fragments, reason };
+  });
 }
 
 // starters/web-db-user-v1/server/_core/cookies.ts
@@ -1178,6 +1251,7 @@ export {
   getGameState,
   getFactionTerritories,
   getLuoyangReward,
+  grantCurrency,
   listDuelOpponents,
   listGameStates,
   listUsers,

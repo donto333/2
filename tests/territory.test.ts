@@ -272,13 +272,15 @@ describe('territory and governance', () => {
   it('keeps Xiangyang and Luoyang protected by their special rules', () => {
     const state = createInitialState()
     expect(conquestEligibility(state, 'xiangyang').reason).toContain('인공지능 진영의 수도')
-    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 19, 59))).toBe(false)
-    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 20, 0))).toBe(true)
-    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 12, 0, 0))).toBe(false)
-    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 19, 59)).reason).toContain('일요일 저녁 8시')
-    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 20, 0)).allowed).toBe(true)
+    // 한국 시간 일요일 20:00 = UTC 11:00, 24:00 = UTC 15:00 (기기 시간대와 무관)
+    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 10, 59))).toBe(false)
+    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 11, 0))).toBe(true)
+    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 14, 59))).toBe(true)
+    expect(isLuoyangSiegeWindow(Date.UTC(2026, 9, 11, 15, 0))).toBe(false)
+    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 10, 59)).reason).toContain('일요일 저녁 8시')
+    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 11, 0)).allowed).toBe(true)
     state.faction = '오나라'
-    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 20, 0)).allowed).toBe(true)
+    expect(conquestEligibility(state, 'luoyang', Date.UTC(2026, 9, 11, 11, 0)).allowed).toBe(true)
   })
 
   it('requires a broken wall and consumes tiered honor for faction warfare', () => {
