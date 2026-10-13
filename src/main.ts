@@ -1,4 +1,5 @@
 import { cancelResearch, researchMods, rushResearch, settleResearch } from './game/research'
+import './styles/fonts.css'
 import './styles/main.css'
 import './styles/theme-color.css'
 import './styles/territory-map.css'

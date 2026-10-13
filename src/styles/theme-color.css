@@ -231,7 +231,7 @@ body .codex-lock-note, body .rate-footnote, body .empty-result p, body .empty-re
 @media (max-width: 760px) {
   body .sidebar { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   body .sidebar { height: 128px; min-height: 128px; gap: 3px; background: linear-gradient(180deg, rgba(64, 24, 15, .96), rgba(36, 15, 9, .97)); border-top: 1px solid var(--gold-line); border-right: 0; }
-  body .nav-button { font-size: 11px; line-height: 1.15; gap: 2px; padding: 4px 1px; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  body .nav-button { font-size: 12px; line-height: 1.15; gap: 2px; padding: 4px 1px; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   body .nav-button > span:not(.nav-icon) { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   body .nav-icon { font-size: 15px; }
 }
@@ -317,14 +317,14 @@ body .bt-unit.is-down { opacity: .45; filter: grayscale(.8); }
 body .bt-unit.is-long-pressed { transform: scale(.97); }
 body .bt-unit-main { display: grid; grid-template-columns: 48px 1fr; grid-template-rows: auto auto auto; column-gap: 10px; align-items: center; text-align: left; background: none; padding: 0; color: var(--cream); }
 body .bt-unit-main .bt-portrait { grid-row: 1 / 4; width: 48px; height: 48px; border-radius: 10px; }
-body .bt-unit-lane { font-size: 11.5px; color: var(--gold); font-weight: 700; }
+body .bt-unit-lane { font-size: 12px; color: var(--gold); font-weight: 700; }
 body .bt-unit-main strong { font-size: 15px; }
-body .bt-unit-main small { font-size: 11.5px; color: var(--cream-soft); }
+body .bt-unit-main small { font-size: 12px; color: var(--cream-soft); }
 body .bt-unit-troops { grid-column: 1 / 3; height: 6px; margin-top: 6px; border-radius: 999px; background: rgba(20, 10, 4, .55); overflow: hidden; }
 body .bt-unit-troops i { display: block; height: 100%; background: linear-gradient(90deg, #3f9f74, var(--jade)); transition: width .2s; }
 body .bt-unit-skill { position: relative; display: grid; gap: 1px; padding: 6px 8px; border-radius: 9px; text-align: left; color: var(--cream); background: conic-gradient(rgba(10, 5, 2, .65) var(--cd), rgba(184, 50, 42, .55) 0); border: 1px solid rgba(240, 194, 106, .25); }
 body .bt-unit-skill b { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-body .bt-unit-skill small { font-size: 11px; color: var(--cream-soft); }
+body .bt-unit-skill small { font-size: 12px; color: var(--cream-soft); }
 body .bt-unit.is-ready .bt-unit-skill { background: linear-gradient(135deg, var(--lacquer-hi), var(--lacquer)); border-color: var(--gold); box-shadow: 0 0 14px rgba(220, 77, 60, .5); }
 body .bt-unit-skill:disabled { cursor: default; }
 body .bt-tactic-row { display: grid; grid-template-columns: 1.2fr repeat(3, 1fr); gap: 8px; margin-top: 12px; align-items: stretch; }
@@ -333,8 +333,8 @@ body .bt-bar--gauge > i { background: linear-gradient(90deg, #2f8f8a, var(--jade
 body .bt-tactic { position: relative; display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border-radius: 10px; background: rgba(28, 14, 7, .6); border: 1px solid var(--gold-faint); color: var(--cream); }
 body .bt-tactic span { font-size: 18px; color: var(--gold); }
 body .bt-tactic strong { font-size: 13px; }
-body .bt-tactic small { font-size: 10.5px; color: var(--cream-soft); text-align: center; }
-body .bt-tactic em { position: absolute; top: 4px; right: 6px; font-style: normal; font-size: 11px; color: var(--gold-hi); }
+body .bt-tactic small { font-size: 11px; color: var(--cream-soft); text-align: center; }
+body .bt-tactic em { position: absolute; top: 4px; right: 6px; font-style: normal; font-size: 12px; color: var(--gold-hi); }
 body .bt-tactic:disabled { opacity: .45; }
 body .bt-tactic.is-called:not(:disabled) { border-color: var(--lacquer-hi); box-shadow: 0 0 0 2px var(--lacquer-hi), 0 0 16px rgba(220, 77, 60, .55); }
 body .bt-tactic--guard.is-on { background: rgba(79, 207, 152, .2); border-color: var(--jade); }
@@ -351,7 +351,7 @@ body .result-checks li { padding: 3px 10px; border-radius: 999px; font-size: 12.
 body .result-checks li.is-on { border-color: var(--jade); color: var(--jade); }
 body .result-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 8px 0 12px; }
 body .result-grid div { display: grid; gap: 2px; padding: 6px; border-radius: 8px; background: rgba(20, 10, 4, .4); }
-body .result-grid span { font-size: 11px; color: var(--cream-soft); }
+body .result-grid span { font-size: 12px; color: var(--cream-soft); }
 body .result-grid b { font-size: 15px; color: var(--cream); }
 body .skill-detail-wide { grid-column: 1 / -1; }
 body .skill-detail-weak strong { color: #ff9b7a; }
@@ -367,7 +367,7 @@ body .scenario-stars { display: block; margin-top: 4px; color: var(--gold-hi); }
   body .bt-unit-main strong { font-size: 14px; }
   body .bt-unit-troops { grid-column: 1; width: 100%; }
   body .bt-unit-skill { text-align: center; padding: 6px 4px; }
-  body .bt-unit-skill b { font-size: 11.5px; }
+  body .bt-unit-skill b { font-size: 12px; }
   body .bt-tactic-row { grid-template-columns: repeat(3, 1fr); }
   body .bt-gauge { grid-column: 1 / -1; }
   body .bt-callout strong { font-size: 20px; }
@@ -403,13 +403,13 @@ body .bt-time { color: var(--cream); font-weight: 700; }
 body .bt-hud-chips { position: absolute; top: 10px; right: 14px; display: flex; gap: 6px; }
 body .bt-hud .bt-hud-row:first-child { padding-right: 190px; }
 body .bt-enemies { padding: 10px 12px; border-color: rgba(255, 128, 102, .3); }
-body .bt-enemies-label { display: block; font-size: 11px; font-weight: 800; letter-spacing: .12em; color: #ff9b7a; margin-bottom: 6px; }
+body .bt-enemies-label { display: block; font-size: 12px; font-weight: 800; letter-spacing: .12em; color: #ff9b7a; margin-bottom: 6px; }
 body .bt-enemy-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 body .bt-enemy { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; align-items: center; padding: 5px; border-radius: 10px; background: rgba(120, 30, 20, .25); border: 1px solid rgba(255, 128, 102, .25); }
 body .bt-enemy.is-down { opacity: .4; filter: grayscale(.8); }
 body .bt-enemy-portrait { width: 42px; height: 48px; border-radius: 8px; }
 body .bt-enemy strong { display: block; font-size: 13.5px; color: var(--cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-body .bt-enemy small { display: block; font-size: 11px; color: var(--cream-soft); }
+body .bt-enemy small { display: block; font-size: 12px; color: var(--cream-soft); }
 body .bt-enemy-troops { display: block; height: 5px; margin-top: 4px; border-radius: 999px; background: rgba(20, 10, 4, .6); overflow: hidden; }
 body .bt-enemy-troops i { display: block; height: 100%; background: linear-gradient(90deg, #b8322a, #ff8066); transition: width .2s; }
 body .bt-stage { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; min-height: 0; overflow: hidden; }
@@ -435,7 +435,7 @@ body .app-shell--battle .bt-tactic-row { margin-top: 8px; }
   body .bt-hud .bt-hud-row:first-child { padding-right: 0; }
   body .bt-hud-chips { position: static; margin-top: 6px; }
   body .bt-bar--morale { height: 11px; margin: 5px 0 6px; }
-  body .bt-hud-meta { font-size: 11.5px; margin-top: 5px; }
+  body .bt-hud-meta { font-size: 12px; margin-top: 5px; }
   body .bt-hud-meta [data-bt-bond], body .bt-hud-meta [data-bt-pressure] { display: none; }
   body .bt-enemies { padding: 6px 8px; }
   body .bt-enemies-label { display: none; }
@@ -547,9 +547,9 @@ body .summon-banner__slide--solo { animation: none; opacity: 1; }
     box-shadow: inset 0 0 0 1px #f0c26a, inset 0 0 0 3px rgba(60, 10, 6, .6), 0 4px 10px rgba(80, 10, 6, .5);
   }
   body .sidebar .nav-button.is-active::after { content: ''; position: absolute; right: -6px; top: 50%; width: 10px; height: 10px; transform: translateY(-50%) rotate(45deg); background: #f0c26a; box-shadow: 0 0 8px #f0c26a; }
-  body .sidebar .nav-badge { margin-left: auto; font: 700 11px/1 'Sora', sans-serif; color: #ffe3a3; padding: 4px 6px; border: 1px solid rgba(240, 194, 106, .45); border-radius: 3px; background: rgba(0, 0, 0, .25); }
+  body .sidebar .nav-badge { margin-left: auto; font: 700 12px/1 Pretendard, sans-serif; color: #ffe3a3; padding: 4px 6px; border: 1px solid rgba(240, 194, 106, .45); border-radius: 3px; background: rgba(0, 0, 0, .25); }
   body .sidebar .nav-button.is-active .nav-badge { border-color: #ffe3a3; background: rgba(0, 0, 0, .2); }
-  body .sidebar .nav-badge--new { font: 800 10px/1 inherit; color: #fff; background: #c0392b; border-color: #e8705f; padding: 4px 5px; }
+  body .sidebar .nav-badge--new { font: 800 11px/1 inherit; color: #fff; background: #c0392b; border-color: #e8705f; padding: 4px 5px; }
   body .sidebar .nav-ops { margin-top: 14px; padding-top: 10px; border-top: 1px dashed rgba(240, 194, 106, .25); display: grid; gap: 2px; }
   body .sidebar .nav-ops .nav-button { height: 32px; min-height: 32px; font-size: 12px; font-weight: 500; color: #b9a587; }
   body .sidebar .nav-ops .nav-button .gi { width: 18px; height: 18px; }
@@ -622,29 +622,29 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .research-grid--five{grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:16px}
 .research-grid--five .research-branch{padding:14px 12px}
 .research-grid--five .research-branch-head h3{font-size:14px}
-.research-grid--five .research-branch-head .eyebrow{font-size:10.5px;letter-spacing:.02em}
+.research-grid--five .research-branch-head .eyebrow{font-size:11px;letter-spacing:.02em}
 .research-node{padding:11px 11px 10px}
 .research-node-top{display:flex;justify-content:space-between;align-items:center;gap:6px}
-.research-node .research-tier{font-size:11px;padding:3px 6px;letter-spacing:0}
-.research-time{color:#c9b98f;font-size:11px;white-space:nowrap}
+.research-node .research-tier{font-size:12px;padding:3px 6px;letter-spacing:0}
+.research-time{color:#c9b98f;font-size:12px;white-space:nowrap}
 .research-node h4{margin:8px 0 4px}
 .research-node-footer{flex-wrap:wrap;margin-top:9px;padding-top:8px;gap:6px}
-.research-cost{color:#a99b82;font-size:11px;line-height:1.4}
+.research-cost{color:#a99b82;font-size:12px;line-height:1.4}
 .research-node.is-done{border-color:rgba(224,177,82,.45);background:linear-gradient(120deg,rgba(114,86,29,.38),rgba(34,19,11,.6))}
 .research-node.is-active{border-color:rgba(120,200,170,.55);box-shadow:0 0 0 1px rgba(120,200,170,.25) inset,0 0 18px rgba(120,200,170,.12)}
 .research-node.is-locked,.research-node.is-busy{opacity:.55}
 .research-running{color:#8fd6bb;font-weight:600;font-size:12px}
-.research-lock{color:#8d816c;font-size:11.5px}
-.research-switch-note{display:block;margin-top:6px;color:#c99a6a;font-size:10.5px}
+.research-lock{color:#8d816c;font-size:12px}
+.research-switch-note{display:block;margin-top:6px;color:#c99a6a;font-size:11px}
 .research-choice{border:1px dashed rgba(224,177,82,.28);padding:8px 6px 6px;border-radius:4px}
-.research-choice__label{display:block;margin:0 2px 6px;color:#d8b46a;font-size:11px;font-weight:600}
+.research-choice__label{display:block;margin:0 2px 6px;color:#d8b46a;font-size:12px;font-weight:600}
 .research-choice__pair{display:grid;gap:4px}
-.research-choice__or{display:block;text-align:center;color:#8d816c;font-size:10.5px;font-style:normal}
+.research-choice__or{display:block;text-align:center;color:#8d816c;font-size:11px;font-style:normal}
 .research-active{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;align-items:center;gap:18px;padding:16px 18px;margin-top:4px}
-.research-active h3{margin:6px 0 4px;color:#f2ece1;font:600 17px Sora,sans-serif}
+.research-active h3{margin:6px 0 4px;color:#f2ece1;font:600 17px Pretendard,sans-serif}
 .research-active p{margin:0;color:#a99b82;font-size:12.5px;line-height:1.5}
-.research-active__timer strong{display:block;color:#8fd6bb;font:700 24px Sora,sans-serif}
-.research-active__timer small{color:#9d907d;font-size:11.5px}
+.research-active__timer strong{display:block;color:#8fd6bb;font:700 24px Pretendard,sans-serif}
+.research-active__timer small{color:#9d907d;font-size:12px}
 .research-progress{height:7px;margin-top:8px;background:rgba(232,209,162,.12);border-radius:4px;overflow:hidden}
 .research-progress i{display:block;height:100%;background:linear-gradient(90deg,#4d9f84,#9fe0c4);transition:width .9s linear}
 .research-active__actions{display:grid;gap:7px}
@@ -684,7 +684,7 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 @media (max-width:640px){.setting-row{flex-direction:column;align-items:flex-start}}
 
 /* 전투: 같은 레인 적장과의 병종 상성 */
-.bt-unit-edge{position:absolute;top:4px;right:4px;padding:1px 6px;font-size:10.5px;font-weight:700;border-radius:3px;pointer-events:none}
+.bt-unit-edge{position:absolute;top:4px;right:4px;padding:1px 6px;font-size:11px;font-weight:700;border-radius:3px;pointer-events:none}
 .bt-unit-edge.is-adv{background:rgba(214,164,60,.9);color:#2a1a08}
 .bt-unit-edge.is-dis{background:rgba(70,78,86,.85);color:#d8dde2}
 .bt-unit-main{position:relative}
@@ -696,7 +696,7 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .mission-cols ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
 .mission-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid rgba(232,209,162,.12);background:rgba(29,17,10,.45)}
 .mission-row strong{display:block;color:#eee7d9;font-size:13px}
-.mission-row small{display:block;color:#a99b82;font-size:11.5px;margin-top:2px}
+.mission-row small{display:block;color:#a99b82;font-size:12px;margin-top:2px}
 .mission-bar{display:block;height:4px;margin-top:5px;background:rgba(232,209,162,.12);width:160px;max-width:100%}
 .mission-bar i{display:block;height:100%;background:linear-gradient(90deg,#c9963f,#f3cf72)}
 .mission-row.is-ready{border-color:rgba(243,207,114,.55);box-shadow:0 0 12px rgba(243,207,114,.15) inset}
@@ -715,7 +715,7 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .luoyang-history__factions li.is-mine span{color:#f6d58e;font-weight:600}
 .luoyang-history__factions i{display:block;height:6px;background:rgba(232,209,162,.12)}
 .luoyang-history__factions b{display:block;height:100%;background:linear-gradient(90deg,#b0402e,#f0a35a)}
-.luoyang-history__factions em{grid-column:2;font-style:normal;color:#a99b82;font-size:11.5px}
+.luoyang-history__factions em{grid-column:2;font-style:normal;color:#a99b82;font-size:12px}
 .luoyang-history__cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .luoyang-history__weeks li,.luoyang-history__top li{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(232,209,162,.08);font-size:12px;color:#cfc3a9}
 .luoyang-history__weeks b.is-mine{color:#f6d58e}
@@ -723,7 +723,7 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .luoyang-history__empty{color:#a99b82;font-size:12.5px;margin:6px 0 0}
 
 /* 신화장비 강화 */
-.mythic-preview{width:100%;margin-bottom:4px;color:#d9c39a;font-size:11.5px}
+.mythic-preview{width:100%;margin-bottom:4px;color:#d9c39a;font-size:12px}
 .mythic-preview b{color:#f6c56d}
 .mythic-enhance-fx{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;background:radial-gradient(circle at 50% 50%,rgba(90,40,120,.55),rgba(10,6,4,.75));animation:mfx-in .25s ease-out;cursor:pointer}
 .mythic-enhance-fx.is-leaving{opacity:0;transition:opacity .45s}
@@ -753,7 +753,7 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .tutorial-steps li{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid rgba(232,209,162,.14);background:rgba(29,17,10,.45)}
 .tutorial-steps li div{flex:1;min-width:0}
 .tutorial-steps strong{display:block;color:#eee7d9;font-size:13px}
-.tutorial-steps small{display:block;color:#a99b82;font-size:11.5px;line-height:1.4}
+.tutorial-steps small{display:block;color:#a99b82;font-size:12px;line-height:1.4}
 .tutorial-steps .mini-action{flex:0 0 auto;width:auto}
 .tut-num{display:grid;place-items:center;flex:0 0 26px;height:26px;border-radius:50%;border:1px solid rgba(232,209,162,.4);color:#d8b46a;font-weight:700;font-size:12px}
 .tutorial-steps li.is-done{opacity:.55}
@@ -799,18 +799,18 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .shop-row__head{display:flex;align-items:center;gap:8px}
 .shop-row__head .gi{width:28px;height:28px}
 .shop-row__head strong{display:block;color:#f2ece1;font-size:14px}
-.shop-row__head small{color:#a99b82;font-size:11.5px}
+.shop-row__head small{color:#a99b82;font-size:12px}
 .shop-row__buys{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
 .shop-buy{position:relative;display:grid;gap:2px;justify-items:center;padding:8px 4px;border:1px solid rgba(232,209,162,.25);background:rgba(40,24,14,.65);color:#eee3cc;font:inherit;cursor:pointer;transition:.15s}
 .shop-buy:hover:not(:disabled){border-color:rgba(243,207,114,.7);background:rgba(90,55,24,.6)}
 .shop-buy b{color:#f3cf72;font-size:13px}
 .shop-buy span{font-size:12px;color:#e6dcc8}
-.shop-buy em{font-style:normal;font-size:10.5px;color:#8fd6bb;font-weight:700}
+.shop-buy em{font-style:normal;font-size:11px;color:#8fd6bb;font-weight:700}
 .shop-buy em.is-plain{color:#8d816c;font-weight:400}
 .shop-buy.is-best{border-color:rgba(243,207,114,.75);box-shadow:0 0 12px rgba(243,207,114,.2) inset}
 .shop-buy.is-best em{color:#f3cf72}
 .shop-buy:disabled{opacity:.55;cursor:not-allowed}
-.shop-buy small{font-size:10.5px;color:#e8a684}
+.shop-buy small{font-size:11px;color:#e8a684}
 .shop-needs .shop-buy{min-width:110px}
 .shop-prelaunch{padding:22px 24px}
 .shop-prelaunch h2{margin:6px 0;color:#f6e7c4}
@@ -830,7 +830,7 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 .shop-preview small{color:#a99b82}
 .shop-progress{position:relative;display:block;height:16px;margin-top:8px;background:rgba(232,209,162,.1)}
 .shop-progress i{display:block;height:100%;background:linear-gradient(90deg,#6c3fa8,#c793ff)}
-.shop-progress em{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-size:11px;color:#fff}
+.shop-progress em{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-size:12px;color:#fff}
 .shop-log{padding:12px 16px;margin-top:12px}
 .shop-log ul{list-style:none;margin:6px 0 0;padding:0}
 .shop-log li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid rgba(232,209,162,.08);font-size:12.5px;color:#cfc3a9}
@@ -858,16 +858,16 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
   body .app-shell--battle .bt-bar--threat { height: 7px; }
   body .app-shell--battle .bt-hud-meta { margin-top: 5px; font-size: 12px; }
   body .app-shell--battle .bt-enemies { padding: 7px 10px; }
-  body .app-shell--battle .bt-enemies-label { margin-bottom: 4px; font-size: 10.5px; }
+  body .app-shell--battle .bt-enemies-label { margin-bottom: 4px; font-size: 11px; }
   body .app-shell--battle .bt-enemy { grid-template-columns: 32px minmax(0, 1fr); gap: 6px; padding: 3px 5px; }
   body .app-shell--battle .bt-enemy-portrait { width: 32px; height: 36px; border-radius: 6px; }
   body .app-shell--battle .bt-enemy strong { font-size: 12.5px; }
-  body .app-shell--battle .bt-enemy small { font-size: 10.5px; }
+  body .app-shell--battle .bt-enemy small { font-size: 11px; }
 
   /* 전장 위 예고 창: 평소에는 작은 알약, 예고가 뜨면 얇은 띠 */
   body .app-shell--battle .bt-stage { position: relative; }
   body .app-shell--battle .bt-stage .bt-callout { width: min(440px, 100%); padding: 6px 12px 7px; border-radius: 10px; background: rgba(36, 16, 8, .62); }
-  body .app-shell--battle .bt-stage .bt-callout .eyebrow { font-size: 10px; }
+  body .app-shell--battle .bt-stage .bt-callout .eyebrow { font-size: 11px; }
   body .app-shell--battle .bt-stage .bt-callout strong { font-size: 17px; margin: 0 0 2px; }
   body .app-shell--battle .bt-stage .bt-callout p { font-size: 12px; margin: 0 0 5px; }
   body .app-shell--battle .bt-stage .bt-callout .bt-lanes { gap: 6px; margin-bottom: 5px; }
@@ -880,9 +880,9 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 
   /* 전투 기록은 왼쪽 아래 구석에 작게 */
   body .app-shell--battle .bt-feed { position: absolute; left: 0; bottom: 0; width: min(380px, 40%); margin: 0; padding: 5px 10px; background: rgba(20, 8, 4, .5); }
-  body .app-shell--battle .bt-feed .bt-log { font-size: 11.5px; gap: 1px; padding-right: 54px; }
-  body .app-shell--battle .bt-feed .bt-log-toggle { top: 4px; right: 8px; font-size: 11px; }
-  body .app-shell--battle .bt-feed .battle-effect { padding: 3px 6px; font-size: 11.5px; }
+  body .app-shell--battle .bt-feed .bt-log { font-size: 12px; gap: 1px; padding-right: 54px; }
+  body .app-shell--battle .bt-feed .bt-log-toggle { top: 4px; right: 8px; font-size: 12px; }
+  body .app-shell--battle .bt-feed .battle-effect { padding: 3px 6px; font-size: 12px; }
   body .app-shell--battle .battle-effects-empty { display: none; }
   body .app-shell--battle .bt-feed .battle-effects { margin-top: 3px; padding-top: 3px; }
 
@@ -892,14 +892,14 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
   body .app-shell--battle .bt-unit { grid-template-columns: minmax(0, 1fr) minmax(110px, 38%); align-items: stretch; gap: 8px; padding: 6px; border-radius: 10px; }
   body .app-shell--battle .bt-unit-main { grid-template-columns: 38px minmax(0, 1fr); column-gap: 8px; }
   body .app-shell--battle .bt-unit-main .bt-portrait { width: 38px; height: 38px; border-radius: 8px; }
-  body .app-shell--battle .bt-unit-lane { font-size: 10.5px; line-height: 1.1; }
+  body .app-shell--battle .bt-unit-lane { font-size: 11px; line-height: 1.1; }
   body .app-shell--battle .bt-unit-main strong { font-size: 13.5px; line-height: 1.2; }
-  body .app-shell--battle .bt-unit-main small { font-size: 10.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body .app-shell--battle .bt-unit-main small { font-size: 11px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body .app-shell--battle .bt-unit-troops { height: 4px; margin-top: 4px; }
   body .app-shell--battle .bt-unit-skill { align-content: center; padding: 4px 8px; }
   body .app-shell--battle .bt-unit-skill b { font-size: 12px; }
-  body .app-shell--battle .bt-unit-skill small { font-size: 10.5px; }
-  body .app-shell--battle .bt-unit-edge { top: -2px; right: 0; font-size: 10px; padding: 0 5px; }
+  body .app-shell--battle .bt-unit-skill small { font-size: 11px; }
+  body .app-shell--battle .bt-unit-edge { top: -2px; right: 0; font-size: 11px; padding: 0 5px; }
   body .app-shell--battle .bt-tactic-row { margin-top: 6px; gap: 6px; }
   body .app-shell--battle .bt-gauge { gap: 4px; font-size: 12px; }
   body .app-shell--battle .bt-tactic { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 34px 5px 8px; }
@@ -926,3 +926,12 @@ body .stat-delta--none small { color: var(--muted); }
   body .hero-stat .hero-sigil { display: none; }
 }
 body .section-heading .ghost-button { white-space: nowrap; flex-shrink: 0; }
+
+/* ── 글꼴: 본문은 프리텐다드, 큰 제목·이름·예고는 고운바탕. 한글에 맞춘 자간, 숫자 고정 폭 ── */
+:root, body { font-family: Pretendard, 'Noto Sans KR', system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+body .section-heading h1, body .hero-copy h2, body .brand-title, body .faction-selection h1, body .result-card h2, body .bt-callout strong, body .scenario-detail h2, body .recruit-copy h2, body .rank-hero h2, body .notice-popup h2, body .general-line h3, body .bt-paused strong, body .result-mark { font-family: 'Gowun Batang', serif; letter-spacing: -.01em; }
+body .section-heading h1 { font-weight: 700; letter-spacing: -.02em; line-height: 1.12; }
+body .hero-copy h2, body .faction-selection h1, body .result-card h2 { font-weight: 700; }
+body .brand-title { font-weight: 700; letter-spacing: .04em; }
+body .eyebrow, body .sidebar-label, body .stat-label, body .section-footnote, body .pill, body .hud-label, body .bt-enemies-label, body .section-counter span, body .my-record span, body .resource-chip small, body .brand-subtitle { letter-spacing: .03em; }
+body .card-header h3, body .general-line h3 { letter-spacing: -.01em; }

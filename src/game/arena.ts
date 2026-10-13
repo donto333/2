@@ -513,7 +513,7 @@ export class Arena {
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Canvas 2D context is unavailable')
     context.clearRect(0, 0, canvas.width, canvas.height)
-    context.font = '700 76px Sora, sans-serif'
+    context.font = '700 76px Pretendard, sans-serif'
     context.textAlign = 'center'
     context.textBaseline = 'middle'
     context.strokeStyle = 'rgba(4, 12, 14, .86)'

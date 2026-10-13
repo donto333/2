@@ -58,7 +58,7 @@ body .map-viewport .map-label--province {
   justify-items: center;
   gap: 0;
   color: rgba(255, 228, 168, .9);
-  font: 700 16px/1.1 'Noto Serif KR', 'Nanum Myeongjo', 'Batang', serif;
+  font: 700 16px/1.1 'Gowun Batang', serif;
   letter-spacing: .32em;
   white-space: nowrap;
   pointer-events: none;

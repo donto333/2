@@ -143,7 +143,7 @@ cheonharo-standalone.exe --port=4173
 
 ## 에셋 및 라이선스
 
-번들 폰트는 Figtree, Sora, Noto Sans SC이며 라이선스 전문은 `public/fonts/`에 있습니다. 게임 이미지와 파비콘은 `assets/` 및 `public/assets/`에 포함된 프로젝트 에셋을 사용합니다.
+번들 폰트는 프리텐다드(Pretendard)와 고운바탕(Gowun Batang)이며 라이선스 전문은 `public/fonts/`에 있습니다. 게임 이미지와 파비콘은 `assets/` 및 `public/assets/`에 포함된 프로젝트 에셋을 사용합니다.
 
 ## 참고 문서
 

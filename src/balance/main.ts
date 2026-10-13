@@ -1,4 +1,5 @@
 // 밸런스 조정 테스트 페이지 진입점: 열람 권한을 먼저 확인하고, 허용될 때만 화면 코드를 불러온다.
+import '../styles/fonts.css'
 import './balance.css'
 import { checkBalanceAccess, type AccessState } from './access'
 
