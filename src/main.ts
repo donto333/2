@@ -45,6 +45,7 @@ import {
   toggleFormation,
   setFormationSlot,
   upgradeMany,
+  upgradeCost,
   unlockResearch,
   unlockSkill,
   upgrade,
@@ -59,7 +60,8 @@ import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioBy
 import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 import { locale } from './i18n/lang'
 import { startDomTranslation, tr } from './i18n/translate'
-import { BattleCoach, Coach, maybeMenuTour, openBattleGuide, resetCoaching } from './ui/coach'
+import { BattleCoach, Coach, markMenusSeen, maybeMenuTour, openBattleGuide, resetCoaching } from './ui/coach'
+import { ONBOARD_GEAR_COST, Onboarding } from './ui/onboarding'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -213,6 +215,8 @@ let authGeneration = 0
 let duelActive = false
 let scenarioActive = false
 let activeScenario: ScenarioDefinition | null = null
+/** 회원 진행(서버)을 불러왔는가: 튜토리얼은 이것을 기다린다 */
+let accountLoaded = false
 let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
 let pendingSiege: { cityId: string; result: ReturnType<typeof launchConquest> } | null = null
@@ -584,60 +588,66 @@ async function deleteBoardPost(id: number, password: string): Promise<void> {
     ui.notify(error instanceof Error ? error.message : '게시글 삭제에 실패했습니다.', 'ember')
   }
 }
-const ui = new StrategyUI(root, {
-  onSection: (section: Section) => {
-    if (section === 'formation') mission('visitFormation')
-    if (section === 'board' && authView.status !== 'authenticated') {
-      ui.notify('진영 게시판은 회원 로그인 후 이용할 수 있습니다.', 'ember')
-      return
-    }
-    if (section === 'admin' && accountView?.role !== 'admin') {
-      state.section = 'overview'
-      ui.render(state)
-      ui.notify('관리자 권한이 있는 계정만 관리자센터를 이용할 수 있습니다.', 'ember')
-      return
-    }
-    if (scenarioActive && section !== 'battle') {
-      scenarioActive = false
-      activeScenario = null
-      arena.stopBattle()
-    }
-    if (duelActive && section !== 'battle') {
-      duelActive = false
-      arena.stopBattle()
-    }
-    if (pendingSiege && section !== 'battle') {
-      const siege = pendingSiege
-      pendingSiege = null
-      arena.stopBattle()
-      queueAccountSave(true)
-      void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })
-      ui.notify('공성 전투를 종료하고 전황을 저장했습니다.', 'jade')
-    }
-    state.section = section
-    if (section === 'battle' && !scenarioActive) { duelActive = false; arena.setOpponentDeck(null); arena.setGenerals(battleGenerals()); ui.updateBattle(arena.getSnapshot()) }
-    if (section === 'duel') {
-      installDummyDuelOpponents()
-      void refreshDuelOpponents()
-    }
-    if (section === 'board') void refreshBoard()
-    if (section === 'territory') void refreshCityDamageRankings(state.selectedCityId)
+/** 메뉴 옮기기(메뉴 버튼·튜토리얼이 함께 쓴다) */
+function openSection(section: Section): void {
+  if (section === 'formation') mission('visitFormation')
+  if (section === 'board' && authView.status !== 'authenticated') {
+    ui.notify('진영 게시판은 회원 로그인 후 이용할 수 있습니다.', 'ember')
+    return
+  }
+  if (section === 'admin' && accountView?.role !== 'admin') {
+    state.section = 'overview'
     ui.render(state)
-    if (section === 'account') void refreshAccount()
-    if (section === 'admin') {
-      void refreshAdminAccounts()
-      void refreshAdminGameData()
-      void refreshAdminBoard()
-    }
-  },
+    ui.notify('관리자 권한이 있는 계정만 관리자센터를 이용할 수 있습니다.', 'ember')
+    return
+  }
+  if (scenarioActive && section !== 'battle') {
+    scenarioActive = false
+    activeScenario = null
+    arena.stopBattle()
+  }
+  if (duelActive && section !== 'battle') {
+    duelActive = false
+    arena.stopBattle()
+  }
+  if (pendingSiege && section !== 'battle') {
+    const siege = pendingSiege
+    pendingSiege = null
+    arena.stopBattle()
+    queueAccountSave(true)
+    void recordFactionTerritoryBattle(siege.cityId, { damage: siege.result.damage, won: siege.result.damage > 0, captured: siege.result.captured })
+    ui.notify('공성 전투를 종료하고 전황을 저장했습니다.', 'jade')
+  }
+  state.section = section
+  if (section === 'battle' && !scenarioActive) { duelActive = false; arena.setOpponentDeck(null); arena.setGenerals(battleGenerals()); ui.updateBattle(arena.getSnapshot()) }
+  if (section === 'duel') {
+    installDummyDuelOpponents()
+    void refreshDuelOpponents()
+  }
+  if (section === 'board') void refreshBoard()
+  if (section === 'territory') void refreshCityDamageRankings(state.selectedCityId)
+  ui.render(state)
+  if (section === 'account') void refreshAccount()
+  if (section === 'admin') {
+    void refreshAdminAccounts()
+    void refreshAdminGameData()
+    void refreshAdminBoard()
+  }
+}
+
+const ui = new StrategyUI(root, {
+  onSection: (section: Section) => openSection(section),
   onRecruit: count => {
-    const result = recruit(state, count)
+    // 튜토리얼 10회 모집: 무료, 5등급 무장 1명 확정
+    const tutorialPull = count === 10 && onboarding.at('recruit')
+    const result = recruit(state, count, tutorialPull ? { free: true, guaranteeGrade: 5 } : {})
     if (result.ok) mission('recruit', count)
     ui.render(state)
     if (result.ok) syncSteam()
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
     if (result.ok && count === 10) ui.showRecruitResults(result.rewards)
+    if (result.ok && count === 10) onboarding.event('recruit10')
     else if (result.ok && result.general) void ui.playRecruitAnimation(result.general, count)
   },
   onUpgrade: id => {
@@ -645,6 +655,7 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
+    if (result.ok) onboarding.event('upgrade')
   },
   onSkill: id => {
     const result = unlockSkill(state, id)
@@ -657,6 +668,7 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
+    if (result.ok) onboarding.event('upgrade')
   },
   onFormationSlot: (id, slot) => {
     setFormationSlot(state, id, slot)
@@ -673,12 +685,15 @@ const ui = new StrategyUI(root, {
     queueAccountSave()
   },
   onEquipmentDraw: count => {
+    // 튜토리얼: 명망이 모자라면 10회 뽑기만큼 채워 준다
+    if (count === 10 && onboarding.at('gear') && state.honor < ONBOARD_GEAR_COST) state.honor = ONBOARD_GEAR_COST
     const result = drawEquipment(state, count)
     if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) {
       ui.showEquipmentResults(result.rewards)
+      if (count === 10) onboarding.event('gear10')
     }
   },
   onEquipmentEnhance: id => {
@@ -688,6 +703,7 @@ const ui = new StrategyUI(root, {
     if (result.ok && enhanced?.grade === 'mythic') ui.showMythicEnhance(enhanced)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) onboarding.event('enhance')
   },
   onAutoFormation: withEquipment => {
     const formed = autoFormation(state)
@@ -696,6 +712,7 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(equipped?.ok ? `${formed.message} · ${equipped.message}` : formed.message, formed.ok ? 'jade' : 'ember')
     if (formed.ok) queueAccountSave()
+    onboarding.event('auto-formation')
   },
   onAutoEquip: () => {
     const result = autoEquip(state)
@@ -1042,6 +1059,7 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
+    if (result.ok) onboarding.event('honor-buy')
   },
   onGoldPurchase: packageId => {
     const result = purchaseGoldPackage(state, packageId)
@@ -1087,6 +1105,7 @@ arena = new Arena(canvas, {
     const wasScenario = Boolean(scenarioActive && activeScenario)
     const wasDuel = !wasSiege && (duelActive || arena.isDuelBattle())
     if (result.won) mission('battleWin')
+    if (wasScenario) onboarding.event(result.won ? 'scenario-win' : 'scenario-lose')
     if (wasDuel) mission('duel')
     if (wasSiege && siege) {
       // The arena result is authoritative for the visible siege scene. A
@@ -1203,8 +1222,40 @@ let tourSection = ''
 let tourSince = 0
 /** 다른 창(소개·알림·결과·모집 결과·진영 선택)이 떠 있으면 짚어 주기를 미룬다 */
 const overlayOpen = () => Boolean(document.querySelector('.game-intro, .notice-popup, .result-modal, .recruit-results, .battle-guide, .access-gate, .faction-selection, .slot-picker'))
+// 첫 입장 튜토리얼(건너뛸 수 없음). 회원은 서버 진행을 불러온 뒤에 시작한다.
+const onboarding = new Onboarding({
+  state,
+  openSection,
+  prepare: step => {
+    ui.setOnboarding({ freeRecruit: step.id === 'recruit', ...(step.id === 'recruit' ? { summonTab: 'generals' } : step.id === 'gear' ? { summonTab: 'equipment' } : step.id === 'shop' ? { shopTab: 'resources' } : {}) })
+    // 다음 행동에 필요한 재료가 모자라면 채워 준다(튜토리얼이 막히지 않게)
+    if (step.id === 'upgrade') {
+      const target = state.generals.find(general => general.id === state.formation[0]) ?? state.generals[0]
+      if (target) { const cost = upgradeCost(state, target); state.silver = Math.max(state.silver, cost.silver); state.resources.silver = state.silver; state.manuals = Math.max(state.manuals, cost.manuals) }
+    }
+    if (step.id === 'enhance') { state.silver = Math.max(state.silver, 2000); state.resources.silver = state.silver; state.resources.iron = Math.max(state.resources.iron, 600) }
+    if (step.id === 'shop' && state.gold < 10 && !onboardingGoldWait) {
+      onboardingGoldWait = window.setTimeout(() => {
+        // 금화 지급이 늦거나 오지 않으면 명망을 직접 지급하고 넘어간다
+        if (onboarding.at('shop') && state.gold < 10) { state.honor += 1000; ui.render(state); ui.notify('튜토리얼 지원 · 명망 +1,000', 'jade'); onboarding.event('honor-buy') }
+      }, 8000)
+    }
+    ui.render(state)
+  },
+  save: () => { persistLocalGame(); queueAccountSave(true) },
+  busy: () => {
+    const snapshot = arena.getSnapshot()
+    return snapshot.active || !state.factionConfirmed || !gameAccess || (gameAccess === 'member' && !accountLoaded) || overlayOpen() || Boolean(document.querySelector('.coach-layer:not(.coach-layer--forced)'))
+  },
+  notify: message => ui.notify(message, 'jade'),
+  finished: () => { markMenusSeen(['shop', 'recruit', 'formation', 'roster', 'equipment']); ui.notify('튜토리얼을 마쳤습니다. 이제 자유롭게 천하를 누비십시오.', 'jade'); ui.render(state) },
+})
+let onboardingGoldWait = 0
+
 function tickCoaching(snapshot: ReturnType<typeof arena.getSnapshot>): void {
   battleCoach.tick(snapshot)
+  onboarding.tick()
+  if (onboarding.pending) { tourSince = 0; return }
   if (snapshot.active || coach.active || !state.factionConfirmed || !gameAccess || overlayOpen()) { tourSince = 0; return }
   if (tourSection !== state.section) { tourSection = state.section; tourSince = performance.now(); return }
   if (tourSince && performance.now() - tourSince > 700) { tourSince = 0; maybeMenuTour(coach, state.section) }
@@ -1223,6 +1274,7 @@ window.setInterval(() => {
 window.addEventListener('manus-auth-change', (event: Event) => {
   const detail = (event as CustomEvent<{ status: AuthView['status']; user: { name: string | null } | null }>).detail
   authGeneration += 1
+  accountLoaded = false
   resetAccountSavePipeline()
   authView = { status: detail.status, name: detail.user?.name ?? null }
   if (authView.status !== 'authenticated') {
@@ -1341,6 +1393,7 @@ async function refreshAccount(): Promise<void> {
       persistLocalGame()
     }
     accountView = account
+    accountLoaded = true
     ui.setAccount(accountView)
     if (!state.factionConfirmed) {
       ui.showFactionSelection()

@@ -1302,14 +1302,25 @@ export function recruitCost(state: StrategyState, count = 1): number {
   return Math.round((count === 10 ? 900 : 100) * (1 - researchMods(state).recruitCost))
 }
 
-export function recruit(state: StrategyState, count = 1): RecruitResult {
-  const cost = recruitCost(state, count)
+export interface RecruitOptions {
+  /** 명망을 쓰지 않는다(튜토리얼 무료 모집) */
+  free?: boolean
+  /** 이번 모집에 이 등급 이상이 하나도 없으면 한 장을 이 등급으로 바꾼다 */
+  guaranteeGrade?: Grade
+}
+
+export function recruit(state: StrategyState, count = 1, options: RecruitOptions = {}): RecruitResult {
+  const cost = options.free ? 0 : recruitCost(state, count)
   const boosted = researchMods(state).recruitRate
   if (state.honor < cost) return { ok: false, message: '명망이 부족합니다. 전투에서 명망을 모아 다시 시도하십시오.', general: null, rewards: [] }
   state.honor -= cost
+  const floor = options.guaranteeGrade
   const rewards: General[] = []
   for (let index = 0; index < count; index += 1) {
-    const reward = createSummonedGeneral(weightedGrade(boosted))
+    let grade = weightedGrade(boosted)
+    // 확정 등급: 마지막 장까지 그 등급 이상이 없었으면 마지막 장을 그 등급으로
+    if (floor && index === count - 1 && grade < floor && !rewards.some(item => item.grade >= floor)) grade = floor
+    const reward = createSummonedGeneral(grade)
     rewards.push(reward)
     const owned = findGeneral(state, reward.id)
     if (owned) {

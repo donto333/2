@@ -28,6 +28,8 @@ export interface MissionState {
   repeatWins?: number
   /** 처음 시작 안내: 마친 단계, 끝(보상 받음·건너뜀) 여부 */
   tutorial?: string[]; tutorialDone?: boolean
+  /** 첫 입장 튜토리얼(강제): 지금 단계 번호, 끝났는지 */
+  onboardStep?: number; onboardDone?: boolean
 }
 
 /** 처음 시작 안내 6단계 */
@@ -60,6 +62,8 @@ export function ensureMissions(state: StrategyState, now = Date.now()): MissionS
   const missions = state.missions
   if (!missions.progress || typeof missions.progress !== 'object') missions.progress = {}
   if (!Array.isArray(missions.claimed)) missions.claimed = []
+  // 이미 시나리오를 깨거나 전투를 이긴 기존 유저는 첫 입장 튜토리얼을 건너뛴다
+  if (missions.onboardDone === undefined && ((state.scenarioCleared?.length ?? 0) > 0 || (state.wins ?? 0) > 0)) missions.onboardDone = true
   if (missions.dayKey !== day) {
     for (const mission of MISSIONS) if (mission.scope === 'daily') delete missions.progress[mission.id]
     missions.claimed = missions.claimed.filter(id => !id.startsWith('d-'))
@@ -157,4 +161,9 @@ export function closeTutorial(state: StrategyState, skip = false): { ok: boolean
   missions.tutorialDone = true
   grant(state, TUTORIAL_REWARD)
   return { ok: true, message: `시작 안내 완료 · ${rewardText(TUTORIAL_REWARD)}` }
+}
+
+/** 첫 입장 튜토리얼이 남아 있는가 */
+export function onboardingPending(state: StrategyState): boolean {
+  return !ensureMissions(state).onboardDone
 }

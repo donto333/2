@@ -22,7 +22,7 @@ export interface CoachStep {
   expect?: 'click'
 }
 
-interface ShowOptions { index?: number; total?: number; onNext: () => void; onSkip: () => void; nextLabel?: string }
+interface ShowOptions { index?: number; total?: number; onNext: () => void; onSkip: () => void; nextLabel?: string; /** 건너뛸 수 없는 안내(첫 입장 튜토리얼) */ forced?: boolean; seal?: string; waitLabel?: string }
 
 /** 화면 한 곳 비추기 + 말풍선 */
 export class Coach {
@@ -35,12 +35,12 @@ export class Coach {
   show(step: CoachStep, options: ShowOptions): void {
     this.hide()
     const layer = document.createElement('div')
-    layer.className = `coach-layer ${step.expect === 'click' ? 'coach-layer--click' : ''}`
+    layer.className = `coach-layer ${step.expect === 'click' ? 'coach-layer--click' : ''} ${options.forced ? 'coach-layer--forced' : ''}`
     const counter = options.total && options.total > 1 ? `<span class="coach-count">${(options.index ?? 0) + 1} / ${options.total}</span>` : ''
     const next = step.expect === 'click'
-      ? '<span class="coach-wait">빛나는 버튼을 누르십시오</span>'
+      ? `<span class="coach-wait">${esc(options.waitLabel ?? '빛나는 버튼을 누르십시오')}</span>`
       : `<button class="coach-next" data-coach-next>${esc(options.nextLabel ?? '다음')} →</button>`
-    layer.innerHTML = `<div class="coach-block"></div><div class="coach-spot"></div><div class="coach-bubble" role="dialog" aria-live="polite"><div class="coach-head"><span class="coach-seal">안내</span>${counter}</div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p><div class="coach-actions"><button class="coach-skip" data-coach-skip>안내 건너뛰기</button>${next}</div></div>`
+    layer.innerHTML = `<div class="coach-block"></div><div class="coach-spot"></div><div class="coach-bubble" role="dialog" aria-live="polite"><div class="coach-head"><span class="coach-seal">${esc(options.seal ?? '안내')}</span>${counter}</div><strong>${esc(step.title)}</strong><p>${esc(step.body)}</p><div class="coach-actions">${options.forced ? '' : '<button class="coach-skip" data-coach-skip>안내 건너뛰기</button>'}${next}</div></div>`
     layer.querySelector('[data-coach-next]')?.addEventListener('click', () => { this.hide(); options.onNext() })
     layer.querySelector('[data-coach-skip]')?.addEventListener('click', () => { this.hide(); options.onSkip() })
     document.body.appendChild(layer)
@@ -162,6 +162,13 @@ function seenMenus(): Set<string> {
 }
 
 /** 처음 들어간 메뉴면 짚어 주기를 시작한다(시작했으면 true) */
+/** 튜토리얼에서 이미 다룬 메뉴는 짚어 주기를 건너뛴다 */
+export function markMenusSeen(sections: string[]): void {
+  const seen = seenMenus()
+  sections.forEach(section => seen.add(section))
+  store.set(MENU_KEY, JSON.stringify([...seen]))
+}
+
 export function maybeMenuTour(coach: Coach, section: string): boolean {
   const steps = MENU_TOURS[section]
   if (!steps || coach.active) return false
