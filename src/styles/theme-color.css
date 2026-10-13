@@ -1018,3 +1018,95 @@ body .general-portrait.codex-portrait { width: 84px; height: 125px; }
 body .general-portrait.formation-portrait { width: 72px; height: 107px; }
 body .general-portrait.has-portrait.codex-portrait, body .general-portrait.has-portrait.formation-portrait, body .general-portrait.has-portrait.formation-bench-portrait, body .general-portrait.has-portrait.slot-picker__portrait { background-position: center top; background-size: cover; }
 body .general-portrait.formation-bench-portrait { width: 40px; height: 60px; }
+
+/* 도감: 필터·찾기 줄 */
+body .codex-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 16px; }
+body .codex-search { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+body .codex-search input { width: 160px; padding: 7px 10px; border: 1px solid var(--line-bright); background: rgba(20, 10, 4, .55); color: var(--cream); font: inherit; }
+body .codex-toolbar .codex-progress { margin-left: auto; display: grid; gap: 4px; min-width: 160px; }
+body .codex-toolbar .codex-progress i { display: block; height: 4px; background: rgba(232, 209, 162, .12); }
+body .codex-toolbar .codex-progress b { display: block; height: 100%; background: var(--jade); }
+body .codex-toolbar .codex-progress small { color: var(--muted); font-size: 12px; text-align: right; }
+body .codex-card .gcard-skill { margin-top: 8px; }
+body .codex-card .codex-stat-line { display: flex; justify-content: space-between; }
+body .codex-card[hidden] { display: none; }
+body .rank-empty { padding: 28px 10px; text-align: center; color: var(--cream-soft); font-size: 14px; line-height: 1.7; }
+body .rank-empty small { color: var(--muted); font-size: 12px; }
+
+/* 출전 편성: 자리 이름·상성·장착하기 */
+body .formation-slot .formation-slot-index { font-size: 13px; font-weight: 700; color: var(--gold); letter-spacing: .02em; }
+body .formation-slot-main:hover { background: transparent; }
+body .formation-release { margin-top: 6px; font-size: 12px; color: var(--muted); }
+body .formation-release:hover { color: var(--ember, #ff8066); }
+body .formation-enemy { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 10px 8px; padding: 6px 10px; border: 1px solid rgba(232, 209, 162, .14); background: rgba(24, 12, 6, .45); font-size: 12px; color: var(--cream-soft); }
+body .formation-enemy b { font-weight: 700; }
+body .formation-enemy.is-adv { border-color: rgba(214, 164, 60, .55); }
+body .formation-enemy.is-adv b { color: #f2c46a; }
+body .formation-enemy.is-dis { border-color: rgba(150, 160, 170, .4); }
+body .formation-enemy.is-dis b { color: #b9c2ca; }
+body .formation-slot--empty .formation-enemy { margin: 10px 0 0; }
+body .formation-equip { color: var(--jade) !important; }
+
+/* 모집·장비: 안쪽 화면의 큰 제목은 위 묶음 제목과 겹치므로 숨김 */
+body .page-section--summoning .page-section .section-heading h1, body .page-section--summoning .page-section .section-heading .eyebrow { display: none; }
+body .page-section--summoning .page-section .section-heading { margin-bottom: 14px; }
+/* 장비 관리 상단: 출전 무장 장비 현황 */
+body .equipment-management-hero { display: block; }
+body .equip-overview__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+body .equip-overview__head h2 { margin: 0; font: 700 18px 'Gowun Batang', serif; color: var(--cream); }
+body .equip-overview__rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+body .equip-overview__row { display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); background: rgba(24, 12, 6, .5); color: var(--cream); text-align: left; }
+body .equip-overview__row > span { font-size: 12px; color: var(--gold); }
+body .equip-overview__row em { font-style: normal; font-size: 12px; color: var(--jade); }
+body .equip-overview__row.is-missing em { color: #ff9a7a; }
+body .equip-overview__row small { grid-column: 1 / -1; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body .equip-overview__row.is-active { border-color: var(--gold); }
+@media (max-width: 760px) { body .equip-overview__rows { grid-template-columns: 1fr; } }
+/* 보유 장비: 한 줄형 카드 */
+body .equipment-virtual-window > .equipment-card { height: 159px; display: grid; grid-template-columns: 56px minmax(0, 1fr); column-gap: 12px; align-content: start; padding: 10px 12px; }
+body .equipment-virtual-window > .equipment-card > * { grid-column: 2; min-width: 0; }
+body .equipment-virtual-window > .equipment-card > .equipment-image { grid-column: 1; grid-row: 1 / span 4; width: 56px; height: 56px; align-self: center; margin: 0; }
+body .equipment-virtual-window > .equipment-card > small { display: none; }
+body .equipment-virtual-window > .equipment-card h4 { margin: 4px 0 2px; }
+body .equipment-virtual-window > .equipment-card .equipment-specialty { display: block; margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+body .equipment-virtual-window > .equipment-card .equipment-specialty span { margin-left: 6px; color: var(--muted); }
+body .equipment-virtual-window > .equipment-card .equipment-card-actions { grid-column: 1 / -1; margin-top: 8px; }
+body .equipment-virtual-window > .equipment-card .mythic-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 기술 연구: 끝난 단계는 한 줄, 시작할 수 있는 단계는 강조, 모자란 비용은 붉게 */
+body .research-node.is-done { padding-top: 6px; padding-bottom: 6px; opacity: .78; }
+body .research-node.is-done > p, body .research-node.is-done .research-cost, body .research-node.is-done .research-time { display: none; }
+body .research-node.is-done h4 { margin: 2px 0; font-size: 13px; }
+body .research-node.is-done .research-node-footer { margin-top: 2px; }
+body .research-node.is-available { border-color: rgba(246, 197, 109, .6); box-shadow: 0 0 0 1px rgba(246, 197, 109, .25), 0 0 16px rgba(246, 197, 109, .12); }
+body .research-cost.is-short, body .research-active small.is-short { color: #ff9a7a; }
+body .research-active.is-idle { border-color: rgba(246, 197, 109, .45); }
+
+/* 영토: PC에서는 지도(왼쪽, 고정)와 도시 정보(오른쪽)를 나란히 */
+@media (min-width: 1200px) {
+  body .page-section--territory .territory-layout { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; gap: 16px; }
+  body .page-section--territory .territory-map { position: sticky; top: 96px; }
+}
+
+/* 시나리오 추천 편성: 보유 여부와 대체 무장 */
+body .scenario-recommend { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+body .scenario-recommend li { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: var(--cream); }
+body .scenario-recommend li b { width: 14px; color: #ff9a7a; font-size: 12px; }
+body .scenario-recommend li.is-owned b { color: var(--jade); }
+body .scenario-recommend li small { font-size: 12px; color: var(--muted); }
+body .scenario-recommend li em { font-style: normal; color: var(--gold); }
+
+/* 게시판: 글쓰기는 열었을 때만 펼침 · 계정: 로그인 장점 */
+body .board-compose:not(.is-open) form, body .board-compose:not(.is-open) .board-note { display: none; }
+body .board-compose:not(.is-open) { align-self: start; }
+body .board-compose-toggle { color: var(--gold); }
+body .board-empty { padding: 40px 10px; text-align: center; color: var(--cream-soft); line-height: 1.8; }
+body .board-empty small { color: var(--muted); }
+body .account-benefits { list-style: none; margin: 8px 0 16px; padding: 0; display: grid; gap: 6px; color: var(--cream-soft); font-size: 14px; }
+body .account-benefits li::before { content: '✓ '; color: var(--jade); }
+body .page-section--account .device-settings, body .page-section--account .settings-card { margin-bottom: 16px; }
+@media (max-width: 760px) {
+  body .codex-toolbar .filter-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  body .codex-toolbar .filter-tab { flex: 0 0 auto; white-space: nowrap; }
+  body .codex-toolbar .codex-progress { margin-left: 0; width: 100%; }
+}

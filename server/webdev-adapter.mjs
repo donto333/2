@@ -251,7 +251,7 @@ async function updateUserRole(id, role, actorOpenId) {
   await db.update(users).set({ role }).where(eq(users.id, id));
   return getUserByOpenId(target[0].openId);
 }
-const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 7, battleScore: 18460, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한", factionChosen: 0 };
+const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 0, battleScore: 0, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한", factionChosen: 0 };
 const CITY_DEFENSE_BY_LEVEL = { 1: 10000, 2: 20000, 3: 50000, 4: 100000, 5: 1000000 };
 const TERRITORY_TEST_WEAKENING_ENABLED = true;
 const TERRITORY_TEST_WEAKENING_RATIO = 0.1;

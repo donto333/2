@@ -147,7 +147,7 @@ export function researchCostText(cost: Partial<Record<ResourceKey, number>>, lab
   return Object.entries(cost).map(([key, value]) => `${labels[key as ResourceKey]} ${new Intl.NumberFormat('ko-KR').format(value ?? 0)}`).join(' · ')
 }
 
-function canPay(state: StrategyState, cost: Partial<Record<ResourceKey, number>>): boolean {
+export function canPay(state: StrategyState, cost: Partial<Record<ResourceKey, number>>): boolean {
   return Object.entries(cost).every(([key, value]) => (key === 'silver' ? state.silver : state.resources[key as ResourceKey]) >= (value ?? 0))
 }
 function pay(state: StrategyState, cost: Partial<Record<ResourceKey, number>>, sign: 1 | -1): void {

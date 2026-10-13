@@ -292,24 +292,15 @@ function siegeMoraleBonus(cityId: string): number {
   return Math.round(50 * Math.max(0, Math.min(1, city.defense / Math.max(1, cityDefenseForLevel(city.level)))))
 }
 
-const DUMMY_DUEL_STORAGE_KEY = 'cheonharo.duel.dummy-opponents.v1'
-
+/** 겨룰 유저 덱이 없을 때: 내 출전 무장 평균 레벨에 맞춘 훈련 상대 3명(쉬움·보통·어려움) */
 function dummyDuelOpponents(): DuelOpponent[] {
-  const defaults: DuelOpponent[] = [
-    { id: 'dummy-iron-gate', displayName: '철벽 관문의 더미', score: 16800, isDummy: true },
-    { id: 'dummy-jade-banner', displayName: '청람 진형 더미', score: 22100, isDummy: true },
-    { id: 'dummy-wind-tactician', displayName: '질풍 책사 더미', score: 27600, isDummy: true },
-  ]
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(DUMMY_DUEL_STORAGE_KEY) ?? 'null') as unknown
-    if (Array.isArray(saved) && saved.length === defaults.length && saved.every(item => item && typeof item.id === 'string' && typeof item.displayName === 'string' && typeof item.score === 'number' && item.isDummy === true)) {
-      return saved as DuelOpponent[]
-    }
-    window.localStorage.setItem(DUMMY_DUEL_STORAGE_KEY, JSON.stringify(defaults))
-  } catch {
-    // Private browsing or malformed legacy storage: keep the deterministic defaults.
-  }
-  return defaults
+  const deployed = state.formation.map(id => state.generals.find(general => general.id === id)).filter(Boolean) as Array<{ level: number }>
+  const avg = Math.max(1, Math.round(deployed.reduce((sum, general) => sum + general.level, 0) / Math.max(1, deployed.length)))
+  const tiers: Array<[string, string, string, number]> = [['dummy-iron-gate', '철벽 관문 수비대', '쉬움', -3], ['dummy-jade-banner', '청람 진형 부대', '보통', 0], ['dummy-wind-tactician', '질풍 책사단', '어려움', 3]]
+  return tiers.map(([id, displayName, label, offset]) => {
+    const level = Math.max(1, avg + offset)
+    return { id, displayName, score: level * 1800, isDummy: true, note: `${label} · 평균 Lv.${level}` }
+  })
 }
 
 function installDummyDuelOpponents(): void {
@@ -334,11 +325,11 @@ async function refreshDuelOpponents(): Promise<void> {
       // An unavailable authenticated endpoint falls through to the safe training roster.
     }
     installDummyDuelOpponents()
-    ui.notify('실제 유저 덱이 없어 훈련용 더미 덱을 준비했습니다.')
+    ui.notify('겨룰 지휘관 덱이 없어 훈련 상대를 준비했습니다.')
     return
   }
   installDummyDuelOpponents()
-  ui.notify('게스트 모드에서는 훈련용 더미 덱을 사용합니다.')
+  ui.notify('게스트는 훈련 상대와 겨룹니다.')
 }
 
 async function refreshFactionTerritories(notify = false): Promise<void> {
@@ -378,13 +369,13 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
 }
 
 /** 바뀐 규칙 안내: 이 기기에서 이 판을 아직 안 봤으면 접속 때 한 번 보여 준다 */
-const NOTICE_ID = '2026-10-13'
+const NOTICE_ID = '2026-10-13b'
 const NOTICE_ITEMS: Array<[string, string]> = [
-  ['기술 연구 개편', '5분야 6단계로 바뀌고 단계별 연구 시간(5분~8시간)이 생겼습니다. 예전 연구에 쓴 자원은 돌려드렸습니다.'],
-  ['신화장비 강화', '이제 낙양 강화석으로만 강화합니다. 낙양을 점령한 진영의 유저가 주 1개씩 받습니다.'],
-  ['일일·주간 임무', '본영에서 임무를 확인하고 보상을 받으십시오. 처음이라면 시작 안내를 따라가 보세요.'],
-  ['전투 연출', '병종별 공격 동작, 스킬 연출, 병종 상성 표시, 이름난 무장의 고유 무기가 추가됐습니다.'],
-  ['금화 지급 방식', '금화·신화 조각은 서버가 확인한 뒤 지급합니다(일일 금화, 시나리오 최초 클리어, 세력전, 대련).'],
+  ['보유 무장 · 도감', '초상이 잘리지 않는 카드, 병과·등급 필터, 연속 강화, 출전 자리 교체 창이 생겼습니다. 도감에서 이름으로 무장을 찾을 수 있습니다.'],
+  ['출전 편성', '좌·중·우 자리마다 다음 시나리오 적장과의 병종 상성(유리·불리)을 보여 줍니다.'],
+  ['기술 연구 · 영토', '연구소가 비면 추천 연구를 바로 시작할 수 있고, PC 영토 화면은 지도와 도시 정보를 나란히 보여 줍니다.'],
+  ['글꼴 · 화면', '모든 기기에서 같은 한글 글꼴로 보이고, 전투 밖 배경과 PC 전투 화면이 새로워졌습니다.'],
+  ['기술 연구 개편 · 신화장비 강화', '연구는 5분야 6단계(5분~8시간)로, 신화장비는 낙양 강화석으로만 강화합니다.'],
 ]
 function showNoticeOnce(): void {
   try { if (window.localStorage.getItem('cheonharo.noticeSeen') === NOTICE_ID) return } catch { return }
@@ -935,7 +926,7 @@ const ui = new StrategyUI(root, {
     }
     let deck = duelDecks.get(opponentId)
     if (!deck) {
-      const fallback: DuelOpponent = { id: opponentId || 'dummy-fallback', displayName: '훈련용 더미 덱', score: 18000, isDummy: true }
+      const fallback: DuelOpponent = { id: opponentId || 'dummy-fallback', displayName: '훈련 상대', score: 18000, isDummy: true }
       deck = duelDeckFor(fallback)
       duelDecks.set(opponentId || fallback.id, deck)
     }
