@@ -59,6 +59,7 @@ import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioBy
 import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 import { locale } from './i18n/lang'
 import { startDomTranslation, tr } from './i18n/translate'
+import { BattleCoach, Coach, maybeMenuTour, openBattleGuide, resetCoaching } from './ui/coach'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
@@ -384,6 +385,8 @@ const NOTICE_ITEMS: Array<[string, string]> = [
 ]
 function showNoticeOnce(): void {
   try { if (window.localStorage.getItem('cheonharo.noticeSeen') === NOTICE_ID) return } catch { return }
+  // 처음 시작한 사람에게는 '바뀐 점' 대신 따라하기 안내를 보여 준다
+  if (state.scenarioCleared.length === 0) { try { window.localStorage.setItem('cheonharo.noticeSeen', NOTICE_ID) } catch { /* 무시 */ } return }
   ui.showNoticePopup(NOTICE_ITEMS, () => { try { window.localStorage.setItem('cheonharo.noticeSeen', NOTICE_ID) } catch { /* 무시 */ } })
 }
 
@@ -877,16 +880,30 @@ const ui = new StrategyUI(root, {
     ui.notify('작전 개시 · 지휘 명령을 선택하십시오.')
   },
   onBattleMove: index => {
+    if (!battleCoach.allow('move', index)) return
     arena.commandMove(index)
     ui.updateBattle(arena.getSnapshot())
   },
   onBattleSkill: index => {
+    if (!battleCoach.allow('skill', index ?? arena.getSnapshot().selectedUnit)) return
     arena.castSkill(index)
     ui.updateBattle(arena.getSnapshot())
   },
   onBattleSpeed: speed => {
     arena.setSpeed(speed)
     ui.updateBattle(arena.getSnapshot())
+  },
+  onBattleGuide: () => {
+    // 전투 중이면 설명을 보는 동안 멈췄다가, 닫으면 원래대로
+    const before = arena.getSnapshot()
+    const resume = before.active && !before.paused
+    if (resume) { arena.setPaused(true); ui.updateBattle(arena.getSnapshot()) }
+    openBattleGuide(() => { if (resume) { arena.setPaused(false); ui.updateBattle(arena.getSnapshot()) } })
+  },
+  onCoachReset: () => {
+    resetCoaching()
+    battleCoach.reload()
+    ui.notify('따라하기 안내를 처음부터 다시 보여 드립니다. 메뉴를 옮겨 다니면 차례로 나옵니다.', 'jade')
   },
   onBattlePause: on => {
     arena.setPaused(on)
@@ -1179,9 +1196,24 @@ window.setInterval(() => {
   if (state.section === 'research') ui.updateResearchTimer(state)
 }, 1000)
 
+// 따라하기 안내: 처음 들어간 메뉴 짚어 주기 · 첫 전투 따라하기
+const coach = new Coach()
+const battleCoach = new BattleCoach(coach, { pause: on => { arena.setPaused(on); ui.updateBattle(arena.getSnapshot()) } })
+let tourSection = ''
+let tourSince = 0
+/** 다른 창(소개·알림·결과·모집 결과·진영 선택)이 떠 있으면 짚어 주기를 미룬다 */
+const overlayOpen = () => Boolean(document.querySelector('.game-intro, .notice-popup, .result-modal, .recruit-results, .battle-guide, .access-gate, .faction-selection, .slot-picker'))
+function tickCoaching(snapshot: ReturnType<typeof arena.getSnapshot>): void {
+  battleCoach.tick(snapshot)
+  if (snapshot.active || coach.active || !state.factionConfirmed || !gameAccess || overlayOpen()) { tourSince = 0; return }
+  if (tourSection !== state.section) { tourSection = state.section; tourSince = performance.now(); return }
+  if (tourSince && performance.now() - tourSince > 700) { tourSince = 0; maybeMenuTour(coach, state.section) }
+}
+
 window.setInterval(() => {
   const snapshot = arena.getSnapshot()
   if (snapshot.active || state.section === 'battle') ui.updateBattle(snapshot)
+  tickCoaching(snapshot)
   // 전투 화면이 아니면 3D 전장 대신 배경 사진을 보여 준다
   const inBattle = state.section === 'battle' || snapshot.active
   arena.setSceneVisible(inBattle)
