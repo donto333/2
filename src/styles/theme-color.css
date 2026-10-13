@@ -1433,3 +1433,10 @@ body .summon-menu-head.is-info-open .heading-copy { display: block; max-width: 5
 body .summon-menu-head.is-info-open .heading-info { background: #e3b25c; color: #2a1208; }
 /* 전투 화면 위 판은 가볍게(모서리 장식 없이) */
 body .app-shell--battle .glass-card { background: linear-gradient(180deg, rgba(40, 22, 12, .86), rgba(26, 14, 8, .84)); }
+
+/* 아이콘: 메뉴는 금빛 선 그림(한 색), 재화는 평면 */
+body .gi { filter: none; }
+body .nav-icon, body .lobby-shortcut__icon { color: #e3b25c; }
+body .nav-button.is-active .nav-icon { color: #fff1cf; }
+body .nav-button:not(.is-active) .nav-icon .gi { opacity: 1; }
+body .lobby-shortcut__icon .gi { width: 26px; height: 26px; }
