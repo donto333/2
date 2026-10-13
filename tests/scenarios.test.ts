@@ -28,3 +28,14 @@ describe('시나리오 내용', () => {
     })
   })
 })
+
+describe('시나리오 영문판', () => {
+  it('모든 시나리오에 영문 제목과 내용이 있다', () => {
+    SCENARIOS.forEach(scenario => {
+      expect(scenario.titleEn.length).toBeGreaterThan(3)
+      expect(scenario.storyEn.length).toBeGreaterThan(40)
+      expect(scenario.storyEn.length).toBeLessThanOrEqual(200)
+      expect(/[가-힣一-鿿]/.test(scenario.titleEn + scenario.storyEn)).toBe(false)
+    })
+  })
+})

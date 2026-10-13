@@ -19,6 +19,9 @@ export interface ScenarioDefinition {
   summary: string
   /** 시나리오 내용(100자 이내) */
   story: string
+  /** 영문 제목·내용(해외판용) */
+  titleEn: string
+  storyEn: string
   deck: string[]
   reward: ScenarioReward
   chapterIndex: number
@@ -113,6 +116,68 @@ const STORIES = [
   "종회가 검각을 치는 사이 등애가 음평의 험로를 넘어 성도에 이른다. 유선이 항복하기 전, 강유와 함께 마지막 성벽을 지켜라.",
 ]
 
+/** 영문판: [제목, 내용] (사건 순서대로) */
+const STORIES_EN: Array<[string, string]> = [
+  ["The Yellow Turban Rebellion", "As Zhang Jue's Yellow Turbans sweep the land, Liu Bei, Guan Yu and Zhang Fei swear brotherhood in a peach garden. Raise a militia and hold Zhuo against the rebels."],
+  ["Rebellions in the Northwest", "Before the Yellow Turban embers cool, Bian Zhang and Han Sui revolt in Liang Province while the Black Mountain bandits ravage the north. Crush the scattered rebels one by one."],
+  ["Zhang Wen Marches West", "General Zhang Wen leads an expedition against the Liang rebels, with a young Dong Zhuo among his officers. Take the vanguard and break the rebels' momentum."],
+  ["Two Rebellions at Once", "Zhang Chun and Zhang Ju proclaim themselves emperors in Yuyang while Ou Xing rises in Changsha. Put down both revolts, north and south, in turn."],
+  ["Liu Yan Goes His Own Way", "Appointed Governor of Yi Province, Liu Yan enters Shu and builds his own power. Yellow Turban remnants block the roads beyond the court's reach."],
+  ["The Ten Attendants", "Emperor Ling dies, the eunuchs murder He Jin, and Yuan Shao storms the palace to cut them down. In the chaos, Dong Zhuo marches into Luoyang."],
+  ["The Coalition Against Dong Zhuo", "The warlords unite under Yuan Shao against the tyrant who deposed an emperor. Face Dong Zhuo's army and the peerless Lu Bu at Hulao Gate."],
+  ["The Coalition Falls Apart", "Dong Zhuo burns Luoyang and flees to Chang'an, and the coalition scatters. Yuan Shao and Gongsun Zan clash at Jieqiao for control of the north."],
+  ["The Fall of Dong Zhuo", "Through Wang Yun's and Diaochan's scheme, Lu Bu slays Dong Zhuo. Around the same time Sun Jian falls to an arrow at Xian Mountain. Dong Zhuo's remnants eye Chang'an."],
+  ["Massacre in Xu Province", "Avenging his father, Cao Cao sweeps through Xu Province and its people are slaughtered. As Liu Bei, come to Tao Qian's aid, protect the fleeing refugees."],
+  ["The Struggle for Yan Province", "While Cao Cao is tied down in Xu, Chen Gong brings in Lu Bu to seize Yan Province. The battle between Cao Cao and Lu Bu for Puyang begins."],
+  ["Sun Ce Conquers Jiangdong", "Trading the Imperial Seal to Yuan Shu for troops, Sun Ce crosses the Yangtze. Drive out Liu Yao, pacify Jiangdong and earn the name Little Conqueror."],
+  ["Cao Cao Receives the Emperor", "Cao Cao welcomes Emperor Xian, escaped from Chang'an, to Xu and commands the lords in his name. Lu Bu's army moves to block the way."],
+  ["Yuan Shu Claims the Throne", "With the Imperial Seal in hand, Yuan Shu declares himself emperor at Shouchun. Strike his isolated army and win back Huainan."],
+  ["The Siege of Xiapi", "Cao Cao and Liu Bei flood Xiapi and close in on Lu Bu. In the north, Yuan Shao breaks Gongsun Zan's fortress at Yijing."],
+  ["Yuan Shao Turns South", "Yuan Shu has fallen, and Yuan Shao, master of the north, turns his host south. His vanguard Yan Liang and Wen Chou pour toward Baima and Yanjin."],
+  ["The Battle of Guandu", "Yuan Shao's hundred thousand face Cao Cao at Guandu. As supplies run dry, Xu You's betrayal offers a chance to burn the granary at Wuchao."],
+  ["Liu Bei Goes to Jing", "Leaving Yuan Shao, Liu Bei seeks shelter with Liu Biao in Jing Province. In Jiangdong, Sun Ce falls to assassins and Sun Quan takes his place."],
+  ["The Death of Yuan Shao", "Broken by Guandu, Yuan Shao dies of illness without naming an heir. His house begins to crack as Cao Cao marches north."],
+  ["The Yuan Brothers Divided", "Yuan Tan and Yuan Shang turn their swords on each other over the succession. Use their feud to break the Yuan armies one at a time."],
+  ["The Fall of Ye", "Cao Cao diverts the Zhang River to besiege Ye. Even as food runs out, Shen Pei holds to the last. Take the capital of Ji Province."],
+  ["The End of Yuan Tan", "Yuan Tan makes his last stand at Nanpi. Crush him and pacify Ji Province, while Yuan Xi and Yuan Shang flee to the Wuhuan."],
+  ["The Fall of Hu Pass", "Gao Gan rebels in Bing Province behind the steep Hu Pass. Take the pass and the whole north falls into Cao Cao's hands."],
+  ["Three Visits to the Thatched Cottage", "Liu Bei visits three times and wins Zhuge Liang as his strategist. Having crushed the Wuhuan at White Wolf Mountain, Cao Cao now looks south to Jing."],
+  ["The Battle of Red Cliffs", "Cao Cao's vast army reaches the Yangtze after taking Jing. Sun Quan and Liu Bei join hands, and Zhou Yu and Zhuge Liang set his fleet ablaze."],
+  ["Southern Jing Pacified", "Even after Red Cliffs, Cao Ren holds Jiangling firmly. While Zhou Yu besieges Jiangling, Liu Bei takes the four commanderies of southern Jing."],
+  ["A Marriage Alliance", "Sun Quan gives his sister to Liu Bei to seal the alliance. Stop Cao Cao's raid aimed at breaking the union of Wu and Shu."],
+  ["The Battle of Tong Pass", "Ma Chao and Han Sui of Liang face Cao Cao at Tong Pass. Weather the charge of the western cavalry until Jia Xu's scheme turns them against each other."],
+  ["Liu Bei Enters Shu", "Liu Zhang of Yi Province invites Liu Bei to hold off Zhang Lu. Following Pang Tong's plan, Liu Bei turns his army at Jiameng toward Chengdu."],
+  ["The Siege of Luo", "Luo, the last gate before Chengdu, holds out for nearly a year. Pang Tong falls to arrows at Fallen Phoenix Slope, but Liu Bei finally opens its gates."],
+  ["Three Kingdoms Stand", "Liu Zhang surrenders and Liu Bei takes Yi Province. With Wei, Shu and Wu standing like the legs of a tripod, Cao Cao turns west toward Hanzhong."],
+  ["The Battle of Hefei", "Sun Quan's great army surrounds Hefei, but Zhang Liao charges with eight hundred and shakes the Wu host. Hold back Zhang Liao's riders at Xiaoyao Ford."],
+  ["The Battle of Ruxu", "Cao Cao drives south to Ruxu again and Sun Quan meets him with his fleet. Hold the river forts at the Yangtze's mouth and stop the Wei crossing."],
+  ["The Hanzhong Campaign", "On Fa Zheng's advice, Liu Bei marches on Hanzhong. Face Xiahou Yuan and Zhang He of Wei at the mountain gates of Yangping."],
+  ["Mount Dingjun", "Huang Zhong charges down from the heights of Mount Dingjun and cuts down Xiahou Yuan. Seize the high ground and break the Wei formation from above."],
+  ["The Siege of Fancheng", "Guan Yu besieges Fancheng and drowns Yu Jin's seven armies in the flood. But Lu Meng eyes Jing in secret, and Xu Huang's relief force draws near."],
+  ["Fall of Guan Yu", "Having lost Jing, Guan Yu is captured at Maicheng and dies, and Cao Cao passes away in Luoyang. Rally the survivors under Wu's pursuit."],
+  ["An Empire Ends", "When Cao Pi takes the Han throne, Liu Bei declares himself emperor in Chengdu. The eastern campaign to avenge Guan Yu begins."],
+  ["The Battle of Yiling", "Lu Xun sets fire to the Shu camps stretched over seven hundred li. Break through the burning forest and open the emperor's retreat to Baidi."],
+  ["Five-Pronged Invasion", "At Baidi, Liu Bei entrusts his son to Zhuge Liang and dies. Wei invades along five routes, but Zhuge Liang turns them all back."],
+  ["The Battle of Guangling", "Cao Pi brings his fleet down to Guangling. Xu Sheng raises false walls along the river to fool the Wei army. Hold the Yangtze line."],
+  ["Seven Captures of Meng Huo", "When Meng Huo rebels in Nanzhong, Zhuge Liang leads the southern campaign himself. Capture him seven times, release him seven times, and win his heart."],
+  ["Preparing the Northern Expedition", "Cao Pi dies and Cao Rui inherits Wei. With Nanzhong at peace, Zhuge Liang gathers his army in Hanzhong for the march north."],
+  ["The Memorial on Going to War", "Zhuge Liang presents his memorial to Liu Shan and marches north from Hanzhong, the first step to restore the house of Han."],
+  ["The Battle of Jieting", "Ma Su camps on a hilltop and Zhang He cuts off his water. Guard the supply line and cover the retreat before Jieting collapses."],
+  ["Shiting and Chencang", "Lu Xun of Wu crushes Cao Xiu at Shiting. Zhuge Liang strikes at Chencang, but Hao Zhao holds out for over twenty days."],
+  ["Sun Quan Becomes Emperor", "Sun Quan takes the throne and swears with Shu to divide the realm. Meanwhile Cao Zhen of Wei marches on Hanzhong."],
+  ["The Battle of Mount Qi", "Zhuge Liang returns to Mount Qi, moving grain by wooden oxen. While Sima Yi holds fast, Zhang He falls chasing the withdrawing Shu army."],
+  ["The Fall of Li Yan", "Li Yan, in charge of the grain, is caught lying and dismissed. Rebuild the shaken supply line and reorganize the expedition."],
+  ["The Last Expedition Prepared", "Zhuge Liang stockpiles grain and builds gliding horses for one final campaign north. Wei scouts watch the passes."],
+  ["Autumn Wind at Wuzhang Plains", "After a hundred days facing Sima Yi at Wuzhang, Zhuge Liang dies in the autumn wind. Follow his last plan and bring the army home safely."],
+  ["Jiang Wei Carries On", "Jiang Wan and Fei Yi succeed Zhuge Liang, while Jiang Wei trains troops with his master's dream in his heart. Wei's border guards test him."],
+  ["Gongsun Yuan's Rebellion", "Gongsun Yuan of Liaodong calls himself King of Yan and defies Wei. Sima Yi pushes through the monsoon to besiege Xiangping and end the revolt."],
+  ["Quebei and Shangyong", "Quan Cong of Wu meets Wei at Quebei while Shu plans a river raid on Shangyong. Tie the two fronts together and strike Wei in the side."],
+  ["The Gaoping Tombs Incident", "At the Gaoping Tombs, Sima Yi ousts Cao Shuang's faction and seizes power in Wei. Jiang Wei marches north again amid the turmoil."],
+  ["Two Northern Expeditions", "Zhuge Ke of Wu attacks Hefei while Jiang Wei besieges Didao. Shake Wei's defenses while both kingdoms press north at once."],
+  ["Zhuge Dan's Rebellion", "Zhuge Dan of Wei rises against Sima Zhao at Shouchun and calls on Wu for help. The last civil war is fought around the besieged city."],
+  ["The Fall of Shu Han", "While Zhong Hui strikes at Jiange, Deng Ai crosses the perilous Yinping road to reach Chengdu. Stand with Jiang Wei on the last wall before Liu Shan surrenders."],
+]
+
 export const SCENARIOS: ScenarioDefinition[] = CHAPTERS.flatMap((chapter, chapterIndex) => chapter.entries.map(([year, title, summary], entryIndex) => ({
   id: `scenario-${year}-${chapterIndex}-${entryIndex}`,
   chapter: chapter.chapter,
@@ -121,12 +186,14 @@ export const SCENARIOS: ScenarioDefinition[] = CHAPTERS.flatMap((chapter, chapte
   title,
   summary,
   story: '',
+  titleEn: '',
+  storyEn: '',
   deck: chapter.deck,
   reward: REWARD(chapterIndex, entryIndex),
   chapterIndex,
   entryIndex,
   entryCount: chapter.entries.length,
-}))).map((scenario, index) => ({ ...scenario, story: STORIES[index] ?? scenario.summary }))
+}))).map((scenario, index) => ({ ...scenario, story: STORIES[index] ?? scenario.summary, titleEn: STORIES_EN[index]?.[0] ?? scenario.title, storyEn: STORIES_EN[index]?.[1] ?? '' }))
 
 export function scenarioById(id: string): ScenarioDefinition | undefined {
   return SCENARIOS.find(scenario => scenario.id === id)

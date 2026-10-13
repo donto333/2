@@ -1113,3 +1113,7 @@ body .page-section--account .device-settings, body .page-section--account .setti
 
 /* 시나리오 내용(100자 이내) */
 body .scenario-detail .scenario-story { margin: 10px 0 16px; padding: 12px 14px; border-left: 3px solid var(--gold); background: rgba(24, 12, 6, .45); font: 400 15px/1.75 'Gowun Batang', serif; color: var(--cream); }
+body .scenario-story-box { position: relative; }
+body .scenario-story-box .scenario-lang { position: absolute; top: -8px; right: 0; z-index: 1; padding: 2px 8px; font-size: 12px; color: var(--gold); border: 1px solid var(--line-bright); background: rgba(24, 12, 6, .8); }
+body .scenario-story-title { display: block; margin: 10px 0 -6px; padding: 0 14px; font: 700 14px Pretendard, sans-serif; color: var(--gold-hi, #f0c26a); }
+body .scenario-story[lang="en"] { font: 400 14px/1.65 Georgia, 'Times New Roman', serif; }
