@@ -127,6 +127,8 @@ export interface CoreConfig {
   autoPilot?: AutoPilot | null
   /** 기술 연구(강병·지략)의 아군 보정 */
   research?: BattleResearch | null
+  /** 튜토리얼 전투: 적 사기 절반, 예고를 받을 시간 넉넉히, 실수의 대가(위협도·병력 피해) 크게 줄임 */
+  easy?: boolean
 }
 
 interface OpenPattern { def: PatternDef; at: number; deadline: number; judged: boolean; inputs: Set<number>; reactAt: number }
@@ -192,6 +194,8 @@ export class BattleCore {
   private autoBreakNext = false
   private enemyMaxTotal: number
   private readonly moraleScale: number
+  /** 튜토리얼 전투 */
+  readonly easy: boolean
   /** 적 평균 레벨 − 아군 평균 레벨 */
   readonly levelGap: number
   private timeWarned = false
@@ -204,6 +208,7 @@ export class BattleCore {
 
   constructor(players: General[], enemies: General[], config: CoreConfig = {}) {
     this.mode = config.mode ?? 'normal'
+    this.easy = Boolean(config.easy)
     this.rng = config.rng ?? Math.random
     this.autoPilot = config.autoPilot ?? null
     this.moraleBonus = clamp(Math.round(config.moraleBonus ?? 0), 0, 50)
@@ -217,7 +222,7 @@ export class BattleCore {
     this.enemies.forEach(unit => { unit.cdMax = skillCooldownFor(this.growth(unit), unit.base) * (this.mode === 'duel' ? 1 : BATTLE_RULES.enemySkillCooldownMult); unit.cd = unit.cdMax * 0.6 })
     this.enemyMaxTotal = Math.max(1, this.enemies.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const enemyLevel = this.enemies.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.enemies.length)
-    this.moraleScale = Math.min(2, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1))
+    this.moraleScale = Math.min(2, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1)) * (this.easy ? 0.35 : 1)
     const playerLevel = this.players.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.players.length)
     this.levelGap = clamp(enemyLevel - playerLevel, -40, 60)
     this.moraleMax = Math.round(BATTLE_RULES.moraleByPhase[0] * this.moraleScale) + this.moraleBonus
@@ -397,6 +402,7 @@ export class BattleCore {
   /** 병력 피해 적용. 호위·불굴·반격·사기 감소까지 처리한다. */
   dealDamage(target: CoreUnit, raw: number, source: string, attacker: CoreUnit | null, opts: { ignoreDr?: boolean } = {}): number {
     if (target.troops <= 0 || raw <= 0) return 0
+    if (this.easy && target.side === 'player') raw *= 0.4
     let victim = target
     if (target.side === 'player') {
       const guardian = this.players.find(unit => unit !== target && unit.troops > 0 && unit.guarding && unit.guarding.ward === target.lane && unit.guarding.until > this.t)
@@ -468,7 +474,7 @@ export class BattleCore {
 
   // ── 위협도 ───────────────────────────────────────
   private raiseThreat(amount: number, cause: 'wrong' | 'none' | 'skill' | 'raw'): void {
-    let value = amount
+    let value = amount * (this.easy ? 0.35 : 1)
     if (cause !== 'raw') {
       if (this.guardTimer > 0) value *= 0.3
       if (hasBattleEffect(this.buffs, 'phoenix-guard')) value *= 0.75
@@ -528,8 +534,8 @@ export class BattleCore {
     this.lastPatternId = def.id
     this.patternsSeen += 1
     const early = this.players.some(unit => this.passive(unit) === 'earlyWarning') ? 0.5 : 0
-    const interval = BATTLE_RULES.patternInterval[this.phase] + (hasBattleEffect(this.debuffs, 'slow') || hasBattleEffect(this.debuffs, 'flood') ? 0.6 : 0)
-    const window = Math.min(interval - 0.2, BATTLE_RULES.responseWindow[this.phase] + early + (this.research.window ?? 0))
+    const interval = BATTLE_RULES.patternInterval[this.phase] + (hasBattleEffect(this.debuffs, 'slow') || hasBattleEffect(this.debuffs, 'flood') ? 0.6 : 0) + (this.easy ? 1.5 : 0)
+    const window = Math.min(interval - 0.2, BATTLE_RULES.responseWindow[this.phase] + early + (this.research.window ?? 0) + (this.easy ? 1.5 : 0))
     const [low, high] = this.autoPilot?.reaction ?? [0.6, 1.2]
     this.pattern = { def, at: this.t, deadline: this.t + window, judged: false, inputs: new Set(), reactAt: this.t + low + this.rng() * (high - low) }
     this.nextPatternAt = this.t + interval

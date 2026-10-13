@@ -872,6 +872,8 @@ const ui = new StrategyUI(root, {
       return { ...scaleGeneral({ ...base, level: 1, stars: 1 }, enemyLevel + index - 1, Math.min(5, 1 + Math.floor(enemyLevel / 12))), skillUnlocked: enemyLevel >= 6 }
     })
     arena.setOpponentDeck(deck, 'scenario')
+    // 튜토리얼의 첫 시나리오는 쉬운 전투로
+    arena.setEasyBattle(onboarding.at('scenario'))
     arena.setGenerals(battleGenerals())
     arena.startBattle()
     ui.setBattleAutoAvailable(scenarioStars(state.scenarioCleared, scenario.id) >= 3)

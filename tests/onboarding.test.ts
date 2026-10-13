@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialState, recruit, HONOR_SHOP_PACKAGES } from '../src/game/strategy'
+import { allGenerals, createInitialState, recruit, scaleGeneral, HONOR_SHOP_PACKAGES } from '../src/game/strategy'
+import { simulateBattle } from '../src/game/battle-core'
+import { SCENARIOS, scenarioEnemyIds, scenarioEnemyLevel } from '../src/game/scenarios'
 import { ensureMissions, onboardingPending } from '../src/game/missions'
 import { ONBOARD_GEAR_COST, ONBOARD_HONOR_PACKAGE, ONBOARD_STEPS } from '../src/ui/onboarding'
 
@@ -32,5 +34,22 @@ describe('첫 입장 튜토리얼', () => {
     const pack = HONOR_SHOP_PACKAGES.find(item => item.id === ONBOARD_HONOR_PACKAGE)!
     expect(pack.goldCost).toBeLessThanOrEqual(100)
     expect(state.honor + pack.honor).toBeGreaterThanOrEqual(ONBOARD_GEAR_COST)
+  })
+  it('튜토리얼 첫 시나리오는 쉬운 전투: 5등급 1명이 있는 편성이면 경고를 못 막아도 이긴다', () => {
+    const lib = new Map(allGenerals().map(general => [general.id, general]))
+    const scenario = SCENARIOS[0]
+    const level = scenarioEnemyLevel(scenario)
+    const make = (id: string, lv: number) => ({ ...scaleGeneral({ ...lib.get(id)!, level: 1, stars: 1 }, lv, 1), skillUnlocked: false })
+    let seed = 11
+    const rng = () => (seed = (seed * 16807) % 2147483647) / 2147483647
+    let easyWins = 0, normalWins = 0
+    for (let run = 0; run < 40; run += 1) {
+      const enemies = () => scenarioEnemyIds(scenario, '촉한').map((id, index) => make(id, Math.max(1, level + index - 1)))
+      const team = () => [make('guo-jia', 2), make('taishi-ci', 1), make('xu-shu', 1)]
+      if (simulateBattle(team(), enemies(), { mode: 'scenario', rng, easy: true }).won) easyWins += 1
+      if (simulateBattle(team(), enemies(), { mode: 'scenario', rng }).won) normalWins += 1
+    }
+    expect(easyWins).toBe(40)
+    expect(normalWins).toBeLessThan(easyWins)
   })
 })

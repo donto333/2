@@ -32,7 +32,7 @@ export const ONBOARD_STEPS: OnboardStep[] = [
   { id: 'formation', section: 'formation', target: '[data-action="auto-formation"]:not([data-with-equipment])', title: '4. 자동 편성', body: '새 무장이 들어왔으니 출전 무장을 다시 고릅니다. 자동 편성을 누르면 전투력·인연·병종을 따져 세 명을 세웁니다.', event: 'auto-formation' },
   { id: 'upgrade', section: 'roster', target: '.roster-grid .gcard .gcard-up:not([disabled])', title: '5. 무장 강화', body: '은전과 병서로 출전 무장의 레벨을 올립니다. 레벨이 오르면 능력치와 병력이 늘어납니다.', event: 'upgrade' },
   { id: 'enhance', section: 'equipment', target: '.equipment-card [data-action="equipment-enhance"]:not([disabled])', title: '6. 장비 강화', body: '은전과 철로 장비를 강화합니다. 강화할수록 장착한 무장의 능력이 오릅니다.', event: 'enhance' },
-  { id: 'scenario', section: 'battle', target: '.scenario-start-button', title: '7. 시나리오 클리어', body: '이제 첫 전투입니다. 출정을 누르고 184년 황건적의 난을 이기십시오. 전투 방법은 싸우는 동안 하나씩 알려 드립니다.', event: 'scenario-win' },
+  { id: 'scenario', section: 'battle', target: '.scenario-start-button', title: '7. 시나리오 클리어', body: '이제 첫 전투입니다. 출정을 누르고 184년 황건적의 난을 이기십시오. 튜토리얼 전투는 쉽게 맞춰 두었고, 싸우는 동안 방법을 하나씩 알려 드립니다.', event: 'scenario-win' },
   { id: 'finale', title: '천하 제패를 향해', body: '무장을 성장시켜 천하를 제패하세요.', next: '시작하기' },
 ]
 
