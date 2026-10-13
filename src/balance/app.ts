@@ -105,7 +105,7 @@ export function mountBalance(root: HTMLElement, access: AccessState): void {
   const render = () => {
     const s = config.settings
     root.innerHTML = `<div class="bl-app">
-      <header class="bl-top"><div><span class="bl-eyebrow">CHEONHA · BALANCE LAB</span><h1>밸런스 조정 테스트</h1><p>아군·적군 편성과 장비를 정하고 실제 게임과 같은 전투 규칙으로 시뮬레이션합니다.</p></div><div class="bl-access ${access.launched ? 'is-operator' : ''}">${access.launched ? '운영자 전용' : '정식 출시 전 · 누구나 사용'}<small>${access.source === 'server' ? '서버 확인' : '출시 스위치 기준'}</small></div><a class="bl-link" href="./">게임으로 ↗</a></header>
+      <header class="bl-top"><div><span class="bl-eyebrow">천하 · 밸런스 실험실</span><h1>밸런스 조정 테스트</h1><p>아군·적군 편성과 장비를 정하고 실제 게임과 같은 전투 규칙으로 시뮬레이션합니다.</p></div><div class="bl-access ${access.launched ? 'is-operator' : ''}">${access.launched ? '운영자 전용' : '정식 출시 전 · 누구나 사용'}<small>${access.source === 'server' ? '서버 확인' : '출시 스위치 기준'}</small></div><a class="bl-link" href="./">게임으로 ↗</a></header>
       <section class="bl-card bl-settings">
         <label>전투 종류 <select data-set="mode">${(Object.keys(MODE_LABEL) as Array<keyof typeof MODE_LABEL>).map(mode => `<option value="${mode}" ${mode === s.mode ? 'selected' : ''}>${MODE_LABEL[mode]}</option>`).join('')}</select></label>
         <label>공성 성벽 보너스 <input type="number" min="0" max="50" value="${s.moraleBonus}" data-set="moraleBonus" ${s.mode === 'siege' ? '' : 'disabled'}></label>

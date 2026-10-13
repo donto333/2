@@ -8,7 +8,7 @@ const LOCK_TEXT: Record<string, string> = {
 }
 
 function lockScreen(root: HTMLElement, access: AccessState): void {
-  root.innerHTML = `<div class="bl-lock"><div class="bl-lock-card"><span class="bl-eyebrow">CHEONHA · BALANCE LAB</span><h1>운영자 전용 페이지</h1><p>${LOCK_TEXT[access.reason] ?? LOCK_TEXT.not_operator}</p><div class="bl-actions"><a class="bl-primary" href="./">게임으로 가서 로그인</a><button type="button" data-retry>다시 확인</button></div></div></div>`
+  root.innerHTML = `<div class="bl-lock"><div class="bl-lock-card"><span class="bl-eyebrow">천하 · 밸런스 실험실</span><h1>운영자 전용 페이지</h1><p>${LOCK_TEXT[access.reason] ?? LOCK_TEXT.not_operator}</p><div class="bl-actions"><a class="bl-primary" href="./">게임으로 가서 로그인</a><button type="button" data-retry>다시 확인</button></div></div></div>`
   root.querySelector('[data-retry]')?.addEventListener('click', () => location.reload())
 }
 

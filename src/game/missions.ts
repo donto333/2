@@ -29,12 +29,12 @@ export interface MissionState {
 
 /** 처음 시작 안내 6단계 */
 export const TUTORIAL_STEPS: Array<{ id: string; label: string; hint: string; section: string; event: MissionEvent }> = [
-  { id: 't-formation', label: '출전 편성 확인', hint: '세 레인에 출전할 무장을 확인합니다.', section: 'formation', event: 'visitFormation' },
-  { id: 't-battle', label: '첫 전투 승리', hint: '시나리오에서 첫 전투를 이겨 보십시오.', section: 'battle', event: 'battleWin' },
-  { id: 't-income', label: '내정 수확', hint: '영토에서 아군 도시의 재화를 거둡니다.', section: 'territory', event: 'income' },
-  { id: 't-research', label: '기술 연구 시작', hint: '강병 1단계 「오부 훈련」을 추천합니다(5분).', section: 'research', event: 'researchStart' },
-  { id: 't-recruit', label: '무장 모집', hint: '명망으로 새 무장을 모집합니다.', section: 'recruit', event: 'recruit' },
-  { id: 't-mission', label: '임무 보상 받기', hint: '본영의 오늘의 임무에서 보상을 받습니다.', section: 'overview', event: 'missionClaim' },
+  { id: 't-formation', label: '출전 편성 확인', hint: '출전 무장 3명과 좌·중·우 자리를 확인하세요.', section: 'formation', event: 'visitFormation' },
+  { id: 't-battle', label: '첫 전투 승리', hint: '시나리오에서 첫 전투를 이기세요.', section: 'battle', event: 'battleWin' },
+  { id: 't-income', label: '내정 수확', hint: '영토에서 아군 도시의 재화를 거두세요.', section: 'territory', event: 'income' },
+  { id: 't-research', label: '기술 연구 시작', hint: '강병 1단계 「오부 훈련」부터 시작하세요(5분).', section: 'research', event: 'researchStart' },
+  { id: 't-recruit', label: '무장 모집', hint: '명망으로 새 무장을 모집하세요.', section: 'recruit', event: 'recruit' },
+  { id: 't-mission', label: '임무 보상 받기', hint: '본영의 일일 임무에서 보상을 받으세요.', section: 'overview', event: 'missionClaim' },
 ]
 export const TUTORIAL_REWARD: Reward = { honor: 1000, silver: 10000, manuals: 200 }
 

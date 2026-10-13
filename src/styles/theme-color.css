@@ -912,3 +912,17 @@ body .auth-button .auth-out { flex: none; padding-left: 8px; border-left: 1px so
 
 /* ── 전투 밖 화면 배경: 3D 전장 대신 황혼의 관문 그림 ── */
 body.has-photo-backdrop::before { content: ''; position: fixed; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(180deg, rgba(18, 9, 4, .30), rgba(18, 9, 4, .52) 55%, rgba(18, 9, 4, .72)), url('/assets/battlefield/huanghun-gate.webp') center 35% / cover no-repeat; }
+
+/* 본영: 오늘의 작전 적장 줄, 전투력 변화 */
+body .hero-copy .hero-enemy { margin-top: 8px; color: #e0c48a; font-size: 12.5px; }
+body .stat-delta--down { color: #ff9a7a; }
+body .stat-delta--none small { color: var(--muted); }
+@media (max-width: 760px) {
+  /* 휴대폰: 전투력을 버튼과 겹치지 않게 제목 아래 한 줄로 */
+  body .command-hero { flex-direction: column; gap: 14px; }
+  body .hero-stat { order: -1; min-width: 0; padding: 0; text-align: left; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+  body .hero-stat > strong { margin: 0; font-size: 24px; }
+  body .hero-stat .stat-delta { margin: 0; }
+  body .hero-stat .hero-sigil { display: none; }
+}
+body .section-heading .ghost-button { white-space: nowrap; flex-shrink: 0; }
