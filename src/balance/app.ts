@@ -2,6 +2,9 @@
 import { EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, GRADE_META, allGenerals, type EquipmentGrade, type EquipmentSet, type EquipmentType } from '../game/strategy'
 import { GEAR_TYPES, defaultConfig, previewSlot, runBatch, runLevelSweep, runSingle, sanitizeConfig, teamBond, type BalanceConfig, type BatchSummary, type SlotConfig, type SweepPoint, type TimelineLine } from './sim'
 import type { AccessState } from './access'
+import { dailyFreeIncome, runProgression, summarizeWalls, type ProgressionRun, type WallSummary } from './progression'
+import { SCENARIOS, scenarioEnemyLevel } from '../game/scenarios'
+import { REPEAT_BATTLE_DAILY_LIMIT } from '../../server/economy.mjs'
 
 const STORE_KEY = 'cheonharo.balance.config.v1'
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch))
@@ -40,6 +43,7 @@ export function mountBalance(root: HTMLElement, access: AccessState): void {
   let timelineResult = ''
   let busy = ''
   let progress = 0
+  let growth: { gold: WallSummary[]; daily: WallSummary[]; territory: WallSummary[]; sample: ProgressionRun; users: number } | null = null
 
   const generalOptions = (selected: string) => [5, 4, 3, 2, 1].map(grade => `<optgroup label="${grade}등급 · ${GRADE_META[grade as 1].label}">${catalog.filter(general => general.grade === grade).map(general => `<option value="${general.id}" ${general.id === selected ? 'selected' : ''}>${esc(general.name)} · ${general.role}</option>`).join('')}</optgroup>`).join('')
   const setOptions = (selected: string) => `<option value="none" ${selected === 'none' ? 'selected' : ''}>없음</option>${(Object.keys(EQUIPMENT_SET_META) as EquipmentSet[]).map(set => `<option value="${set}" ${set === selected ? 'selected' : ''}>${EQUIPMENT_SET_META[set].label}</option>`).join('')}`
@@ -102,6 +106,29 @@ export function mountBalance(root: HTMLElement, access: AccessState): void {
 
   const timelineView = () => timeline ? `<section class="bl-card"><h3>한 판 상세 · ${esc(timelineResult)}</h3><ol class="bl-timeline">${timeline.map(line => `<li class="${line.tone ? `is-${line.tone}` : ''}"><time>${line.t.toFixed(1)}초</time><span>${esc(line.text)}</span></li>`).join('')}</ol></section>` : ''
 
+  const growthView = () => {
+    const chapters = [1, 2, 3, 4, 5, 6, 7, 8].map(chapter => {
+      const list = SCENARIOS.filter(scenario => scenario.chapterIndex === chapter - 1)
+      return { chapter, era: list[0]?.era ?? '', count: list.length, from: scenarioEnemyLevel(list[0]), to: scenarioEnemyLevel(list[list.length - 1]), gold: list[0]?.reward.gold ?? 0, total: list.reduce((sum, scenario) => sum + scenario.reward.gold, 0) }
+    })
+    const daily = dailyFreeIncome()
+    const cell = (walls: WallSummary[] | undefined, chapter: number, unit: string) => {
+      const wall = walls?.find(item => item.chapter === chapter)
+      if (!wall) return '<td>—</td>'
+      if (!wall.median && !wall.high) return '<td class="bl-ok">막힘 없음</td>'
+      return `<td class="${wall.median ? 'bl-wall' : ''}"><b>${wall.median}${unit}</b><small> (${wall.low}~${wall.high})</small></td>`
+    }
+    const head = `<tr><th>장</th><th>시대</th><th>시나리오</th><th>적 레벨</th><th>1회 금화</th><th>장 합계</th><th>정체 돌파: 구매 금화</th><th>무료 플레이</th><th>+ 영토전 금화</th></tr>`
+    const body = chapters.map(c => `<tr><td>${c.chapter}장</td><td>${esc(c.era)}</td><td>${c.count}개</td><td>Lv.${c.from}~${c.to}</td><td>${c.gold}</td><td>${c.total}</td>${cell(growth?.gold, c.chapter, '개')}${cell(growth?.daily, c.chapter, '일')}${cell(growth?.territory, c.chapter, '일')}</tr>`).join('')
+    const sample = growth ? `<details class="bl-growth-sample"><summary>대표 유저 한 명의 진행(구매 금화로 돌파) · 시나리오별</summary><table class="bl-table"><thead><tr><th>#</th><th>사건</th><th>적</th><th>출전 무장</th><th>승률</th><th>받은 금화</th><th>더한 금화</th></tr></thead><tbody>${growth.sample.rows.map(row => `<tr class="${row.added ? 'is-wall' : ''}"><td>${row.n}</td><td>${esc(row.title)}</td><td>Lv.${row.enemyLevel}</td><td>${esc(row.team)}</td><td>${pct(row.winRate)}</td><td>+${row.goldEarned}</td><td>${row.added ? `+${row.added}` : ''}</td></tr>`).join('')}</tbody></table></details>` : ''
+    return `<section class="bl-card bl-growth"><h3>성장 곡선 · 시나리오 금화로 어디까지 크는가</h3>
+      <p class="bl-note">시나리오를 처음부터 순서대로 깨며 받은 금화를 병서·은전으로 바꿔 출전 무장 레벨을 올리고, 명망으로는 무장을 모집합니다(게임과 같은 보상표·비용·모집 확률·전투 규칙). 승률 50% 미만이면 「정체」로 보고, 넘을 때까지 금화(5개씩) 또는 하루치 플레이를 더합니다. 시작은 3등급 무장 3명, 조작은 예고 60% 대응 기준입니다.</p>
+      <table class="bl-table bl-growth-table"><thead>${head}</thead><tbody>${body}</tbody></table>
+      <p class="bl-note">무료 플레이 하루 = 일일·주간 임무(주간은 ÷7) + 일반 전투 보상 ${REPEAT_BATTLE_DAILY_LIMIT}회 + 수도 내정 수확 → 은전 ${daily.silver.toLocaleString('ko-KR')} · 병서 ${daily.manuals} · 명망 ${daily.honor.toLocaleString('ko-KR')}. 영토전은 하루 최종 세력전 1승(금화 40)을 더한 경우입니다. 칸의 숫자는 ${growth ? `유저 ${growth.users}명` : '여러 유저'}의 중앙값, 괄호는 25~75% 범위입니다(모집 운에 따라 차이가 큽니다).</p>
+      ${growth ? sample : '<p class="bl-note">「성장 곡선 계산」을 누르면 정체 구간과 돌파에 필요한 금화·일수를 계산합니다(1~2분).</p>'}
+    </section>`
+  }
+
   const render = () => {
     const s = config.settings
     root.innerHTML = `<div class="bl-app">
@@ -111,12 +138,12 @@ export function mountBalance(root: HTMLElement, access: AccessState): void {
         <label>공성 성벽 보너스 <input type="number" min="0" max="50" value="${s.moraleBonus}" data-set="moraleBonus" ${s.mode === 'siege' ? '' : 'disabled'}></label>
         <label>아군 조작 <select data-set="accuracy">${ACCURACY.map(([value, label]) => `<option value="${value}" ${value === s.accuracy ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
         <label>반복 횟수 <select data-set="runs">${[50, 200, 500, 1000].map(runs => `<option value="${runs}" ${runs === s.runs ? 'selected' : ''}>${runs}판</option>`).join('')}</select></label>
-        <div class="bl-actions"><button class="bl-primary" data-act="run" ${busy ? 'disabled' : ''}>시뮬레이션 실행</button><button data-act="single" ${busy ? 'disabled' : ''}>한 판 상세</button><button data-act="sweep" ${busy ? 'disabled' : ''}>레벨 차이 분석</button><button data-act="share">설정 링크 복사</button><button data-act="reset">처음 설정</button></div>
+        <div class="bl-actions"><button class="bl-primary" data-act="run" ${busy ? 'disabled' : ''}>시뮬레이션 실행</button><button data-act="single" ${busy ? 'disabled' : ''}>한 판 상세</button><button data-act="growth" ${busy ? 'disabled' : ''}>성장 곡선 계산</button><button data-act="sweep" ${busy ? 'disabled' : ''}>레벨 차이 분석</button><button data-act="share">설정 링크 복사</button><button data-act="reset">처음 설정</button></div>
         ${busy ? `<div class="bl-progress"><span>${esc(busy)} ${Math.round(progress * 100)}%</span><i style="width:${progress * 100}%"></i></div>` : ''}
       </section>
       <div class="bl-teams">${team('ally')}${team('enemy')}</div>
       <section class="bl-card bl-results"><h3>시뮬레이션 결과 · ${MODE_LABEL[s.mode]} · ${ACCURACY.find(([value]) => value === s.accuracy)?.[1] ?? ''}</h3>${resultsView()}</section>
-      ${sweepView()}${timelineView()}
+      ${sweepView()}${timelineView()}${growthView()}
       <footer class="bl-foot">전투 규칙: 제한 90초 · 막별 적 사기 80/100/120(적 레벨에 따라 증가) · 스킬 1회 사기 피해 상한 40. 적은 스킬을 쓰고 예고에는 대응하지 않습니다. 결과는 무작위 요소가 있어 판수가 많을수록 정확합니다.</footer>
     </div>`
   }
@@ -186,6 +213,36 @@ export function mountBalance(root: HTMLElement, access: AccessState): void {
       timelineResult = `${result.won ? `승리 · 별 ${result.stars}개` : '패배'} · ${(result.durationMs / 1000).toFixed(1)}초 · ${REASON_LABEL[result.reason] ?? result.reason}`
       render()
       root.querySelector('.bl-timeline')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    if (act === 'growth') {
+      busy = '성장 곡선 계산 중'
+      progress = 0
+      render()
+      const users = 8
+      const seeds = [3, 11, 29, 47, 71, 89, 101, 131].slice(0, users)
+      const modes = ['gold', 'daily', 'territory'] as const
+      const total = seeds.length * modes.length
+      const results: Record<(typeof modes)[number], ProgressionRun[]> = { gold: [], daily: [], territory: [] }
+      try {
+        let done = 0
+        for (const mode of modes) for (const seed of seeds) {
+          results[mode].push(await runProgression({ mode, seed, accuracy: 0.6, territoryGoldPerDay: 40, runs: 12 }, (step, steps) => {
+            progress = (done + step / steps) / total
+            const bar = root.querySelector<HTMLElement>('.bl-progress i')
+            const label = root.querySelector<HTMLElement>('.bl-progress span')
+            if (bar) bar.style.width = `${progress * 100}%`
+            if (label) label.textContent = `${busy} ${Math.round(progress * 100)}%`
+          }))
+          done += 1
+        }
+        const sorted = [...results.gold].sort((a, b) => a.added - b.added)
+        growth = { gold: summarizeWalls(results.gold, 15), daily: summarizeWalls(results.daily, 2), territory: summarizeWalls(results.territory, 2), sample: sorted[Math.floor(sorted.length / 2)], users }
+      } finally {
+        busy = ''
+        render()
+        root.querySelector('.bl-growth')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
       return
     }
     if (act === 'run' || act === 'sweep') {

@@ -32,6 +32,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 
 // starters/web-db-user-v1/drizzle/schema.ts
 import { bigint, int, mediumtext, mysqlEnum, mysqlTable, primaryKey, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { scenarioGold } from './economy.mjs';
 var users = mysqlTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
@@ -722,7 +723,7 @@ async function grantCurrency(userId, input) {
       const claimed = Array.isArray(ledger.scenarios) ? ledger.scenarios : [];
       if (!match) reason = "알 수 없는 시나리오입니다.";
       else if (claimed.includes(input.key)) reason = "이미 받은 시나리오 보상입니다.";
-      else { gold = 10 + Number(match[2]) * 5 + Number(match[3]) * 2; ledger.scenarios = [...claimed, input.key].slice(-500); }
+      else { gold = scenarioGold(Number(match[2])); ledger.scenarios = [...claimed, input.key].slice(-500); }
     } else if (input.kind === "faction") {
       const pending = Number(ledger.factionPending) || 0;
       if (pending <= 0) reason = "받을 세력전 보상이 없습니다.";

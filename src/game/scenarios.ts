@@ -1,3 +1,4 @@
+import { SCENARIO_HONOR_BY_CHAPTER, SCENARIO_MANUALS_BY_CHAPTER, SCENARIO_SILVER_BY_CHAPTER, scenarioGold } from '../../server/economy.mjs'
 export interface ScenarioReward {
   gold: number
   honor: number
@@ -43,10 +44,11 @@ const CHAPTERS: ChapterSeed[] = [
 ]
 
 const REWARD = (chapterIndex: number, entryIndex: number): ScenarioReward => ({
-  gold: 10 + chapterIndex * 5 + entryIndex * 2,
-  honor: (80 + chapterIndex * 30) * 10,
-  silver: (500 + chapterIndex * 180 + entryIndex * 40) * 10,
-  manuals: (20 + chapterIndex * 5) * 10,
+  // 금화·명망·은전·병서는 server/economy.mjs(서버와 같은 표). 금화가 성장의 중심이다.
+  gold: scenarioGold(chapterIndex),
+  honor: SCENARIO_HONOR_BY_CHAPTER[chapterIndex] ?? 200,
+  silver: (SCENARIO_SILVER_BY_CHAPTER[chapterIndex] ?? 2000) + entryIndex * 100,
+  manuals: SCENARIO_MANUALS_BY_CHAPTER[chapterIndex] ?? 20,
   grain: (800 + chapterIndex * 250) * 10,
   wood: (500 + chapterIndex * 160) * 10,
   iron: (300 + chapterIndex * 100) * 10,
@@ -95,8 +97,8 @@ const ENEMY_PLANS: EnemyPlan[] = [
   { levels: [20, 26], deck: { 촉한: ['cao-cao', 'cao-ren', 'zhang-liao'], 위나라: ['zhou-yu', 'huang-gai', 'zhuge-liang'], 오나라: ['cao-cao', 'cao-ren', 'zhang-liao'] }, byYear: { 211: same(['ma-chao', 'ma-teng', 'han-sui']) } },
   { levels: [26, 32], deck: { 촉한: ['zhang-he', 'xu-huang', 'cao-hong'], 위나라: ['huang-zhong', 'fa-zheng', 'zhao-yun'], 오나라: ['zhang-liao', 'yue-jin', 'li-dian'] }, byYear: { 215: { 촉한: ['zhang-liao', 'yue-jin', 'li-dian'], 위나라: ['sun-quan', 'gan-ning', 'ling-tong'] } } },
   { levels: [32, 38], deck: { 촉한: ['lu-xun', 'lu-meng', 'gan-ning'], 위나라: ['guan-yu', 'guan-ping', 'zhang-bao'], 오나라: ['liu-bei', 'guan-xing', 'zhang-bao'] }, byYear: { 225: same(['meng-huo', 'zhu-rong', 'guan-hai']) } },
-  { levels: [38, 44], deck: { 촉한: ['simayi', 'zhang-he', 'xu-huang'], 위나라: ['zhuge-liang', 'zhao-yun', 'wei-yan'], 오나라: ['simayi', 'zhang-he', 'xu-huang'] } },
-  { levels: [44, 50], deck: { 촉한: ['simayi', 'zhang-he', 'yu-jin'], 위나라: ['wei-yan', 'wang-ping', 'guan-xing'], 오나라: ['simayi', 'zhang-he', 'yu-jin'] } },
+  { levels: [39, 46], deck: { 촉한: ['simayi', 'zhang-he', 'xu-huang'], 위나라: ['zhuge-liang', 'zhao-yun', 'wei-yan'], 오나라: ['simayi', 'zhang-he', 'xu-huang'] } },
+  { levels: [47, 55], deck: { 촉한: ['simayi', 'zhang-he', 'yu-jin'], 위나라: ['wei-yan', 'wang-ping', 'guan-xing'], 오나라: ['simayi', 'zhang-he', 'yu-jin'] } },
 ]
 
 export function scenarioEnemyIds(scenario: ScenarioDefinition, faction: string): string[] {

@@ -135,3 +135,13 @@ button:disabled { opacity: .5; cursor: wait; }
   .bl-gear { grid-template-columns: 40px 1fr 1fr 48px; }
   .bl-table th:nth-child(5), .bl-table td:nth-child(5) { display: none; }
 }
+
+/* 성장 곡선 */
+.bl-growth .bl-note { color: #b9ab92; font-size: 13px; line-height: 1.6; margin: 6px 0 10px; }
+.bl-growth-table td, .bl-growth-table th { text-align: center; white-space: nowrap; }
+.bl-growth-table td.bl-wall b { color: #ff9a7a; }
+.bl-growth-table td.bl-ok { color: #8fd6a8; }
+.bl-growth-table small { color: #8f816c; }
+.bl-growth-sample summary { cursor: pointer; color: #f0c26a; margin: 8px 0; }
+.bl-growth-sample tr.is-wall td { background: rgba(255, 128, 102, .12); }
+.bl-growth { overflow-x: auto; }

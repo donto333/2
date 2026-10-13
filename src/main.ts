@@ -8,6 +8,7 @@ import { createLeaderboardClient, type Result, type RunTicket } from '../leaderb
 import { Arena } from './game/arena'
 import { preloadStrikeModels } from './game/battle-models'
 import { claimMission, closeTutorial, ensureMissions, recordMission, type MissionEvent } from './game/missions'
+import { REPEAT_BATTLE_DAILY_LIMIT, REPEAT_BATTLE_HONOR, REPEAT_BATTLE_SILVER } from '../server/economy.mjs'
 import { isSteamDesktop, syncSteamAchievements } from './platform/steam'
 import {
   createInitialState,
@@ -369,8 +370,9 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
 }
 
 /** 바뀐 규칙 안내: 이 기기에서 이 판을 아직 안 봤으면 접속 때 한 번 보여 준다 */
-const NOTICE_ID = '2026-10-13b'
+const NOTICE_ID = '2026-10-13c'
 const NOTICE_ITEMS: Array<[string, string]> = [
+  ['재화 밸런스', '시나리오 보상이 금화 중심으로 바뀌었습니다. 상점에서 금화로 병서(레벨업 재료)를 살 수 있습니다. 일반 전투 보상은 하루 5회까지입니다.'],
   ['보유 무장 · 도감', '초상이 잘리지 않는 카드, 병과·등급 필터, 연속 강화, 출전 자리 교체 창이 생겼습니다. 도감에서 이름으로 무장을 찾을 수 있습니다.'],
   ['출전 편성', '좌·중·우 자리마다 다음 시나리오 적장과의 병종 상성(유리·불리)을 보여 줍니다.'],
   ['기술 연구 · 영토', '연구소가 비면 추천 연구를 바로 시작할 수 있고, PC 영토 화면은 지도와 도시 정보를 나란히 보여 줍니다.'],
@@ -1085,9 +1087,13 @@ arena = new Arena(canvas, {
       // 반복 전투 보상은 별 수에 비례(3개 100% · 2개 80% · 1개 60%). 시나리오는 최초 클리어 보상만.
       const rate = [0, 0.6, 0.8, 1][result.stars] ?? 0.6
       const honorBoost = 1 + researchMods(state).battleHonor
-      const honor = Math.round((wasDuel ? 120 : 180) * rate * honorBoost)
-      const silver = Math.round((wasDuel ? 600 : 1200) * rate)
+      // 일반 전투 보상은 하루 REPEAT_BATTLE_DAILY_LIMIT회까지(무한 반복으로 정체 구간을 넘지 않게)
+      const missionState = ensureMissions(state)
+      const repeatLeft = wasDuel ? 1 : REPEAT_BATTLE_DAILY_LIMIT - (missionState.repeatWins ?? 0)
+      const honor = repeatLeft > 0 ? Math.round((wasDuel ? 120 : REPEAT_BATTLE_HONOR) * rate * honorBoost) : 0
+      const silver = repeatLeft > 0 ? Math.round((wasDuel ? 600 : REPEAT_BATTLE_SILVER) * rate) : 0
       if (!wasScenario) {
+        if (!wasDuel && repeatLeft > 0) missionState.repeatWins = (missionState.repeatWins ?? 0) + 1
         state.honor += honor
         state.silver += silver
         state.resources.silver = state.silver
@@ -1108,7 +1114,7 @@ arena = new Arena(canvas, {
           state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
           state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 클리어 · ${starText} · 금화 +${reward.gold} · 모든 재화 보상 획득`
         } else state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · ${starText}`
-      } else state.lastNotice = wasDuel ? `유저 대련 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver} · 신화장비 조각 +1` : `전투 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver.toLocaleString('ko-KR')}`
+      } else state.lastNotice = wasDuel ? `유저 대련 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver} · 신화장비 조각 +1` : (repeatLeft > 0 ? `전투 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver.toLocaleString('ko-KR')} · 오늘 보상 ${REPEAT_BATTLE_DAILY_LIMIT - (missionState.repeatWins ?? 0)}회 남음` : `전투 승리 · 별 ${result.stars}개 · 오늘 일반 전투 보상(${REPEAT_BATTLE_DAILY_LIMIT}회)을 모두 받았습니다`)
     } else {
       state.lastNotice = '전투 패배 · 보상 없음 · 무장 배치와 성장 상태를 다시 점검하십시오.'
     }

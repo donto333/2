@@ -13,8 +13,8 @@ describe('scenario replay rewards', () => {
     expect(firstClearReward(scenario, [scenario.id])).toBeNull()
   })
 
-  it('multiplies every scenario reward except gold by ten', () => {
+  it('첫 시나리오 보상: 금화 중심(명망·은전·병서는 작게), 내정 자원은 그대로', () => {
     const reward = SCENARIOS[0].reward
-    expect(reward).toEqual({ gold: 10, honor: 800, silver: 5000, manuals: 200, grain: 8000, wood: 5000, iron: 3000, influence: 1200 })
+    expect(reward).toEqual({ gold: 11, honor: 200, silver: 2000, manuals: 20, grain: 8000, wood: 5000, iron: 3000, influence: 1200 })
   })
 })

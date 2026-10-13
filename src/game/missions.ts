@@ -8,21 +8,23 @@ export interface MissionDef { id: string; scope: 'daily' | 'weekly'; event: Miss
 
 export const MISSIONS: MissionDef[] = [
   { id: 'd-income', scope: 'daily', event: 'income', goal: 1, label: '내정 수확 1회', reward: { silver: 3000 } },
-  { id: 'd-win', scope: 'daily', event: 'battleWin', goal: 3, label: '전투 승리 3회', reward: { honor: 300 } },
+  { id: 'd-win', scope: 'daily', event: 'battleWin', goal: 3, label: '전투 승리 3회', reward: { honor: 150 } },
   { id: 'd-research', scope: 'daily', event: 'researchStart', goal: 1, label: '기술 연구 시작 1회', reward: { influence: 1500 } },
-  { id: 'd-recruit', scope: 'daily', event: 'recruit', goal: 1, label: '무장 모집 1회', reward: { manuals: 100 } },
+  { id: 'd-recruit', scope: 'daily', event: 'recruit', goal: 1, label: '무장 모집 1회', reward: { manuals: 40 } },
   { id: 'd-enhance', scope: 'daily', event: 'enhance', goal: 1, label: '장비 강화 1회', reward: { iron: 2000 } },
-  { id: 'w-win', scope: 'weekly', event: 'battleWin', goal: 20, label: '전투 승리 20회', reward: { honor: 2000 } },
+  { id: 'w-win', scope: 'weekly', event: 'battleWin', goal: 20, label: '전투 승리 20회', reward: { honor: 800 } },
   { id: 'w-siege', scope: 'weekly', event: 'siege', goal: 5, label: '공성 출정 5회', reward: { wood: 10000, grain: 10000 } },
-  { id: 'w-duel', scope: 'weekly', event: 'duel', goal: 3, label: '유저 대련 3회', reward: { manuals: 500 } },
+  { id: 'w-duel', scope: 'weekly', event: 'duel', goal: 3, label: '유저 대련 3회', reward: { manuals: 200 } },
   { id: 'w-research', scope: 'weekly', event: 'researchDone', goal: 3, label: '기술 연구 3개 완료', reward: { influence: 8000 } },
 ]
 /** 하루 임무를 모두 받으면 주는 추가 보상 */
-export const DAILY_BONUS: Reward = { honor: 500, silver: 5000 }
+export const DAILY_BONUS: Reward = { honor: 200, silver: 5000 }
 export const DAILY_BONUS_ID = 'd-all'
 
 export interface MissionState {
   dayKey: string; weekKey: string; progress: Record<string, number>; claimed: string[]
+  /** 오늘 보상을 받은 일반 전투 승리 횟수(하루 제한) */
+  repeatWins?: number
   /** 처음 시작 안내: 마친 단계, 끝(보상 받음·건너뜀) 여부 */
   tutorial?: string[]; tutorialDone?: boolean
 }
@@ -60,6 +62,7 @@ export function ensureMissions(state: StrategyState, now = Date.now()): MissionS
   if (missions.dayKey !== day) {
     for (const mission of MISSIONS) if (mission.scope === 'daily') delete missions.progress[mission.id]
     missions.claimed = missions.claimed.filter(id => !id.startsWith('d-'))
+    missions.repeatWins = 0
     missions.dayKey = day
   }
   if (missions.weekKey !== week) {

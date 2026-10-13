@@ -1566,9 +1566,9 @@ export class StrategyUI {
 
   private shopSection(state: StrategyState): string {
     const statLabels: Record<string, string> = { leadership: '통솔', martial: '무력', stratagem: '모략', speed: '속도' }
-    const nameOf = (resource: ShopResource) => resource === 'honor' ? '명망' : RESOURCE_META[resource].label
-    const iconOf = (resource: ShopResource) => icon(resource === 'honor' ? 'honor' : resource)
-    const holdingOf = (resource: ShopResource) => resource === 'honor' ? state.honor : resource === 'silver' ? state.silver : state.resources[resource]
+    const nameOf = (resource: ShopResource) => resource === 'honor' ? '명망' : resource === 'manuals' ? '병서' : RESOURCE_META[resource].label
+    const iconOf = (resource: ShopResource) => icon(resource)
+    const holdingOf = (resource: ShopResource) => resource === 'honor' ? state.honor : resource === 'manuals' ? state.manuals : resource === 'silver' ? state.silver : state.resources[resource]
     const all = shopPackages()
     const buyButton = (item: ShopPackage, label = `${item.goldCost}금화`) => {
       const short = item.goldCost - state.gold
@@ -1588,10 +1588,10 @@ export class StrategyUI {
       }
     } else if (this.shopTab === 'resources') {
       const needs = shopNeeds(state)
-      const needCard = needs.length ? `<div class="glass-card shop-needs"><div class="card-header"><div><span class="eyebrow">지금 필요한 것</span><h3>모자란 자원 추천</h3></div></div><ul>${needs.map(need => `<li><div><strong>${escapeHtml(need.reason)}</strong><small>${nameOf(need.resource)} ${formatNumber(need.short)} 부족 · 보유 ${formatNumber(holdingOf(need.resource))}</small></div>${need.item ? buyButton(need.item) : '<small class="shop-needs__none">묶음 하나로는 부족합니다</small>'}</li>`).join('')}</ul></div>` : '<div class="glass-card shop-needs shop-needs--ok"><span class="eyebrow">지금 필요한 것</span><p>다음 연구·건물 강화·10회 모집에 필요한 자원이 모두 충분합니다.</p></div>'
-      const resources: ShopResource[] = ['grain', 'silver', 'wood', 'iron', 'influence', 'honor']
+      const needCard = needs.length ? `<div class="glass-card shop-needs"><div class="card-header"><div><span class="eyebrow">지금 필요한 것</span><h3>모자란 자원 추천</h3></div></div><ul>${needs.map(need => `<li><div><strong>${escapeHtml(need.reason)}</strong><small>${nameOf(need.resource)} ${formatNumber(need.short)} 부족 · 보유 ${formatNumber(holdingOf(need.resource))}</small></div>${need.item ? buyButton(need.item) : '<small class="shop-needs__none">묶음 하나로는 부족합니다</small>'}</li>`).join('')}</ul></div>` : '<div class="glass-card shop-needs shop-needs--ok"><span class="eyebrow">지금 필요한 것</span><p>다음 무장 레벨업·연구·건물 강화·10회 모집에 필요한 재화가 모두 충분합니다.</p></div>'
+      const resources: ShopResource[] = ['manuals', 'honor', 'silver', 'iron', 'grain', 'wood', 'influence']
       const rows = resources.map(resource => `<div class="shop-row"><div class="shop-row__head">${iconOf(resource)}<div><strong>${nameOf(resource)}</strong><small>보유 ${formatNumber(holdingOf(resource))}</small></div></div><div class="shop-row__buys">${all.filter(item => item.resource === resource).map(item => buyButton(item)).join('')}</div></div>`).join('')
-      body = `${needCard}<div class="shop-notice glass-card"><strong>교환 안내</strong><span>금화로 자원과 명망을 바꿉니다. 큰 묶음일수록 금화 1개당 더 많이 받습니다 · 금화 1개 = 명망 100 기준. 금화 20개 이상은 한 번 더 확인합니다.</span></div><div class="glass-card shop-table">${rows}</div>${this.purchaseLogCard()}`
+      body = `${needCard}<div class="shop-notice glass-card"><strong>교환 안내</strong><span>금화로 병서·명망·자원을 바꿉니다. 병서는 무장 레벨업, 명망은 무장 모집에 씁니다. 큰 묶음일수록 금화 1개당 더 많이 받고, 금화 20개 이상은 한 번 더 확인합니다.</span></div><div class="glass-card shop-table">${rows}</div>${this.purchaseLogCard()}`
     } else {
       const fragments = state.mythicFragments
       const progress = Math.min(1, fragments / MYTHIC_FRAGMENT_COST)
@@ -1636,6 +1636,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.13', '재화 획득 밸런스', '시나리오 최초 클리어 보상을 금화 중심으로 바꿨습니다(1~4장 11~13개, 5~8장 54~80개). 금화로 병서(무장 레벨업 재료)를 살 수 있어 금화가 곧 성장입니다. 시나리오 금화만으로 키우면 4장(적벽)·6장(남정)·8장(최종장)에서 성장이 멈추고, 구매 금화·영토전 금화·며칠의 일일 플레이로 넘을 수 있습니다. 일반 전투 보상은 하루 5회까지, 일일·주간 임무의 명망·병서 보상은 줄였습니다. 7·8장 적 레벨은 Lv.39~55로 올렸습니다. 밸런스 페이지에 「성장 곡선」을 추가했습니다.', '완료', 'jade'],
       ['2026.10.13', '메뉴 전반 정리', '무장 도감에 등급·병과·영입 필터와 이름 찾기가 생기고 스킬 상세는 접어 두었습니다. 출전 편성은 좌·중·우 자리 이름과 다음 시나리오 적장과의 병종 상성을 보여 주고, 빈 장비 칸에서 바로 장착하러 갈 수 있습니다. 장비 관리는 위쪽에 출전 무장 3명의 장비 현황을, 보유 장비는 한 줄형 목록으로 바꿨습니다. 기술 연구는 연구소가 비면 추천 연구를 바로 시작할 수 있고 끝난 단계는 한 줄로 접힙니다. 영토는 PC에서 지도와 도시 정보를 나란히 보여 줍니다. 시나리오는 다음에 깰 사건이 자동으로 골라지고, 추천 무장의 보유 여부와 대신 쓸 무장을 알려 줍니다. 대련 훈련 상대는 내 무장 레벨에 맞춰지고, 랭킹은 예시 순위 대신 실제 기록만 보여 줍니다. 남아 있던 영어·개발용 문구도 정리했습니다.', '완료', 'jade'],
       ['2026.10.13', '보유 무장 개편', '초상이 잘리지 않는 가로형 카드로 바꿨습니다. 능력치 막대가 실제 차이를 보여 주고, 천명·명장·병과 필터가 동작합니다. 3명이 출전 중일 때 편성하면 바꿀 자리를 고르는 창이 뜹니다. 강화 버튼에 다음 레벨과 비용이 보이고, 재료가 되는 만큼 연속 강화(최대 10회)할 수 있습니다. 스킬 해금까지 남은 레벨, 장착 장비와 세트 효과도 카드에 표시됩니다.', '완료', 'jade'],
       ['2026.10.13', '글꼴 · 본영 · 배경', '모든 기기에서 같은 모양으로 보이도록 한글 글꼴(본문 프리텐다드, 제목 고운바탕)을 넣었습니다. 본영 제목이 상황(첫 시작·연구 대기·낙양전)에 맞게 바뀌고, 오늘의 작전 카드가 다음 시나리오를 보여 주며, 전투력 변화는 실제 기록으로 계산합니다. 전투 밖 화면 배경을 황혼의 관문 그림으로 바꾸고 그동안 3D 전장은 쉬게 해 기기 부담을 줄였습니다. PC 전투 화면은 위·아래 판을 줄여 전장이 넓게 보입니다.', '완료', 'jade'],

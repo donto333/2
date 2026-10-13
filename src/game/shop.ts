@@ -1,14 +1,15 @@
 // 상점 도우미: 묶음별 이득(금화당 효율), 지금 모자란 자원과 그것을 채울 가장 작은 묶음 추천.
 import { researchStatus } from './research'
-import { HONOR_SHOP_PACKAGES, RESOURCE_SHOP_PACKAGES, buildingCost, conquestCost, recruitCost, type ResourceKey, type StrategyState } from './strategy'
+import { HONOR_SHOP_PACKAGES, MANUAL_SHOP_PACKAGES, RESOURCE_SHOP_PACKAGES, buildingCost, conquestCost, recruitCost, upgradeCost, type ResourceKey, type StrategyState } from './strategy'
 
-export type ShopResource = ResourceKey | 'honor'
-export interface ShopPackage { id: string; resource: ShopResource; amount: number; goldCost: number; kind: 'resource' | 'honor' }
+export type ShopResource = ResourceKey | 'honor' | 'manuals'
+export interface ShopPackage { id: string; resource: ShopResource; amount: number; goldCost: number; kind: 'resource' | 'honor' | 'manuals' }
 
 export function shopPackages(): ShopPackage[] {
   return [
     ...RESOURCE_SHOP_PACKAGES.map(item => ({ id: item.id, resource: item.resource as ShopResource, amount: item.amount, goldCost: item.goldCost, kind: 'resource' as const })),
     ...HONOR_SHOP_PACKAGES.map(item => ({ id: item.id, resource: 'honor' as const, amount: item.honor, goldCost: item.goldCost, kind: 'honor' as const })),
+    ...MANUAL_SHOP_PACKAGES.map(item => ({ id: item.id, resource: 'manuals' as const, amount: item.manuals, goldCost: item.goldCost, kind: 'manuals' as const })),
   ]
 }
 
@@ -21,6 +22,7 @@ export function packageBonus(item: ShopPackage, all = shopPackages()): number {
 
 function holding(state: StrategyState, resource: ShopResource): number {
   if (resource === 'honor') return state.honor
+  if (resource === 'manuals') return state.manuals
   if (resource === 'silver') return state.silver
   return state.resources[resource]
 }
@@ -46,6 +48,9 @@ export function shopNeeds(state: StrategyState): ShopNeed[] {
       needs.push({ reason, resource: key, short, item })
     }
   }
+  // 출전 무장 중 가장 낮은 레벨 무장의 다음 레벨업(병서·은전)
+  const lowest = state.formation.map(id => state.generals.find(general => general.id === id)).filter((general): general is NonNullable<typeof general> => Boolean(general)).sort((a, b) => a.level - b.level)[0]
+  if (lowest) add(`${lowest.name} Lv.${lowest.level + 1} 강화`, upgradeCost(state, lowest))
   // 다음에 시작할 수 있는 연구 중 가장 싼 것
   const research = state.research
     .filter(node => { const status = researchStatus(state, node); return status === 'available' || status === 'busy' })
@@ -59,5 +64,5 @@ export function shopNeeds(state: StrategyState): ShopNeed[] {
   const target = state.cities.find(city => city.id === state.selectedCityId)
   if (target && target.owner !== state.faction) add(`${target.name} 공성 출정`, conquestCost(target, state))
   add('무장 10회 모집', { honor: recruitCost(state, 10) })
-  return needs.slice(0, 4)
+  return needs.slice(0, 5)
 }

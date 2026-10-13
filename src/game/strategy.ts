@@ -3,6 +3,7 @@ import { createResearch, normalizeResearch, researchMods, researchCostText, star
 import cityRoutes from '../../server/city-routes.json'
 import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
+import { MANUAL_PACKAGE_AMOUNTS } from '../../server/economy.mjs'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
@@ -288,6 +289,16 @@ export const RESOURCE_SHOP_PACKAGES: ResourceShopPackage[] = (Object.entries(RES
   goldCost,
   description: '금화로 교환하는 자원 보급 패키지',
 })))
+
+/** 병서 묶음(금화 → 병서): 무장 레벨업의 핵심 재료 */
+export interface ManualShopPackage { id: string; name: string; manuals: number; goldCost: number; description: string }
+export const MANUAL_SHOP_PACKAGES: ManualShopPackage[] = MANUAL_PACKAGE_AMOUNTS.map(([goldCost, manuals]) => ({
+  id: `manuals-${goldCost}`,
+  name: `병서 ${goldCost}금화 묶음`,
+  manuals,
+  goldCost,
+  description: '무장 레벨업에 쓰는 병서',
+}))
 
 export const HONOR_SHOP_PACKAGES: HonorShopPackage[] = [3, 5, 10, 20, 50, 100].map(goldCost => ({
   id: `honor-${goldCost}`,
@@ -1203,6 +1214,14 @@ export function purchaseGoldPackage(state: StrategyState, packageId: string): Go
 }
 
 export function purchaseResourcePackage(state: StrategyState, packageId: string): ResourceShopResult {
+  const manualPackage = MANUAL_SHOP_PACKAGES.find(item => item.id === packageId)
+  if (manualPackage) {
+    if (state.gold < manualPackage.goldCost) return { ok: false, message: `금화가 부족합니다. ${manualPackage.goldCost}개가 필요합니다.` }
+    state.gold -= manualPackage.goldCost
+    state.manuals += manualPackage.manuals
+    state.lastNotice = `병서 ${manualPackage.manuals.toLocaleString('ko-KR')} 지급 완료 · 금화 -${manualPackage.goldCost}`
+    return { ok: true, message: state.lastNotice }
+  }
   const resourcePackage = RESOURCE_SHOP_PACKAGES.find(item => item.id === packageId)
   if (!resourcePackage) return { ok: false, message: '해당 자원 패키지를 찾을 수 없습니다.' }
   if (state.gold < resourcePackage.goldCost) return { ok: false, message: `금화가 부족합니다. ${resourcePackage.goldCost}개가 필요합니다.` }

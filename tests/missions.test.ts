@@ -18,7 +18,7 @@ describe('daily and weekly missions', () => {
     expect(recordMission(state, 'battleWin', 2, day1)).toContain('전투 승리 3회')
     const honor = state.honor
     expect(claimMission(state, 'd-win', day1).ok).toBe(true)
-    expect(state.honor).toBe(honor + 300)
+    expect(state.honor).toBe(honor + 150)
     expect(claimMission(state, 'd-win', day1).ok).toBe(false)
     expect(claimMission(state, 'd-income', day1).ok).toBe(false)
     expect(ensureMissions(state, day1 + 86_400_000).progress['d-win']).toBeUndefined()
