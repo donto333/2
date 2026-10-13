@@ -81,6 +81,8 @@ function syncSteam(): void {
 }
 if (isSteamDesktop()) window.setInterval(syncSteam, 5000)
 let localSaveDirty = false
+/** 게스트 기록을 지우는 중이면 더는 저장하지 않는다 */
+let guestResetting = false
 let pendingResearchRefund: string | null = null
 /** 연구 체계를 맞추고, 예전 연구를 환급했다면 알림을 예약한다 */
 function syncResearchRoster(): void {
@@ -115,6 +117,7 @@ function enqueueTerritoryBattle(battle: PendingTerritoryBattle): void {
 }
 
 function persistLocalGame(): void {
+  if (guestResetting) return
   try {
     const saveKey = gameAccess === 'guest' ? GUEST_GAME_SAVE_KEY : LOCAL_GAME_SAVE_KEY
     window.localStorage.setItem(saveKey, JSON.stringify({
@@ -917,6 +920,18 @@ const ui = new StrategyUI(root, {
     if (resume) { arena.setPaused(true); ui.updateBattle(arena.getSnapshot()) }
     openBattleGuide(() => { if (resume) { arena.setPaused(false); ui.updateBattle(arena.getSnapshot()) } })
   },
+  onGuestReset: () => {
+    // 게스트 진행·안내 기록만 지운다(회원 저장, 언어·화면 설정은 남김). 지운 뒤 저장이 다시 쓰지 않게 막고 새로 불러온다.
+    guestResetting = true
+    localSaveDirty = false
+    if (saveTimer !== null) { window.clearTimeout(saveTimer); saveTimer = null }
+    window.removeEventListener('pagehide', flushPendingSaveOnHide)
+    const keep = new Set([LOCAL_GAME_SAVE_KEY, PENDING_TERRITORY_BATTLES_KEY, 'cheonharo.lang', 'cheonharo.quality', 'cheonharo.effects', 'cheonharo.balance.config.v1'])
+    try {
+      Object.keys(window.localStorage).filter(key => key.startsWith('cheonharo.') && !keep.has(key)).forEach(key => window.localStorage.removeItem(key))
+    } catch { /* 저장소를 못 쓰면 지울 것도 없다 */ }
+    window.location.reload()
+  },
   onCoachReset: () => {
     resetCoaching()
     battleCoach.reload()
@@ -1516,7 +1531,7 @@ async function flushAccountSave(): Promise<void> {
 }
 
 function flushPendingSaveOnHide(): void {
-  if (!localSaveDirty) return
+  if (guestResetting || !localSaveDirty) return
   persistLocalGame()
   if (saveTimer !== null) {
     window.clearTimeout(saveTimer)

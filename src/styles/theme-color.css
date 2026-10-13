@@ -1212,3 +1212,8 @@ body.coach-open .bt-unit-skill:disabled { opacity: 1; }
 /* 따라하기 안내로 멈춘 동안에는 흐리게 하지 않고, 비춘 버튼을 누를 수 있게 둔다 */
 body.coach-open .page-section--battle.is-paused .bt-callout, body.coach-open .page-section--battle.is-paused .bt-controls { opacity: 1; pointer-events: auto; }
 .game-intro__panel h1, .game-intro__panel p, .coach-bubble, .battle-guide__card { word-break: keep-all; overflow-wrap: anywhere; text-wrap: balance; }
+
+/* 게스트 기록 초기화 */
+.setting-row--danger strong { color: #f0a58f; }
+body .setting-row .mini-action--danger { flex: 0 0 auto; width: auto; min-width: 96px; white-space: nowrap; padding: 8px 16px; border: 1px solid rgba(214, 96, 70, .7); background: rgba(120, 30, 18, .45); color: #ffd9cf; font-weight: 700; }
+body .setting-row .mini-action--danger:hover { background: rgba(160, 40, 24, .7); }

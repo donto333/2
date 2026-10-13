@@ -201,6 +201,8 @@ export interface StrategyUiCallbacks {
   onBattleGuide: () => void
   /** 따라하기 안내를 처음부터 다시 */
   onCoachReset: () => void
+  /** 이 기기의 게스트 기록을 지우고 처음부터 */
+  onGuestReset: () => void
   onBattleStop: () => void
   onBattleTactic: (tactic: 'guard' | 'feint' | 'charge') => void
   onDuelRefresh: () => void
@@ -1523,7 +1525,7 @@ export class StrategyUI {
   private deviceSettingsCard(): string {
     const quality = qualitySetting(), effects = effectsSetting()
     const seg = (action: string, current: string, items: Array<[string, string]>) => `<div class="setting-seg">${items.map(([value, label]) => `<button class="setting-seg__btn ${current === value ? 'is-active' : ''}" data-action="${action}" data-value="${value}">${label}</button>`).join('')}</div>`
-    return `<div class="glass-card device-settings"><div class="card-header"><div><span class="eyebrow">이 기기 설정</span><h3>화면 · 전투 효과</h3></div></div><div class="setting-row"><div><strong>언어 / Language</strong><small>게임 전체 글자를 한국어 또는 영어로 보여 줍니다. 바꾸면 화면을 다시 불러옵니다.</small></div><div class="setting-seg" data-no-tr><button class="setting-seg__btn ${isEnglish() ? '' : 'is-active'}" data-action="set-lang" data-value="ko">한국어</button><button class="setting-seg__btn ${isEnglish() ? 'is-active' : ''}" data-action="set-lang" data-value="en">English</button></div></div><div class="setting-row"><div><strong>따라하기 안내</strong><small>게임 소개, 메뉴 짚어 주기, 첫 전투 따라하기를 처음부터 다시 봅니다.</small></div><button class="mini-action" data-action="coach-reset">안내 다시 보기</button></div><div class="setting-row"><div><strong>그래픽 품질</strong><small>낮음은 빛 번짐·그림자를 끄고 병사 수를 줄입니다. 새로고침하면 적용됩니다.</small></div>${seg('setting-quality', quality, [['auto', '자동'], ['high', '높음'], ['low', '낮음']])}</div><div class="setting-row"><div><strong>전투 효과</strong><small>줄임은 불꽃·화살 수와 화면 흔들림을 줄입니다. 바로 적용됩니다. 자동은 화면이 버벅이면 스스로 줄입니다.</small></div>${seg('setting-effects', effects, [['auto', '자동'], ['full', '전체'], ['reduced', '줄임']])}</div></div>`
+    return `<div class="glass-card device-settings"><div class="card-header"><div><span class="eyebrow">이 기기 설정</span><h3>화면 · 전투 효과</h3></div></div><div class="setting-row"><div><strong>언어 / Language</strong><small>게임 전체 글자를 한국어 또는 영어로 보여 줍니다. 바꾸면 화면을 다시 불러옵니다.</small></div><div class="setting-seg" data-no-tr><button class="setting-seg__btn ${isEnglish() ? '' : 'is-active'}" data-action="set-lang" data-value="ko">한국어</button><button class="setting-seg__btn ${isEnglish() ? 'is-active' : ''}" data-action="set-lang" data-value="en">English</button></div></div><div class="setting-row"><div><strong>따라하기 안내</strong><small>게임 소개, 메뉴 짚어 주기, 첫 전투 따라하기를 처음부터 다시 봅니다.</small></div><button class="mini-action" data-action="coach-reset">안내 다시 보기</button></div><div class="setting-row"><div><strong>그래픽 품질</strong><small>낮음은 빛 번짐·그림자를 끄고 병사 수를 줄입니다. 새로고침하면 적용됩니다.</small></div>${seg('setting-quality', quality, [['auto', '자동'], ['high', '높음'], ['low', '낮음']])}</div><div class="setting-row"><div><strong>전투 효과</strong><small>줄임은 불꽃·화살 수와 화면 흔들림을 줄입니다. 바로 적용됩니다. 자동은 화면이 버벅이면 스스로 줄입니다.</small></div>${seg('setting-effects', effects, [['auto', '자동'], ['full', '전체'], ['reduced', '줄임']])}</div><div class="setting-row setting-row--danger"><div><strong>게스트 기록 초기화</strong><small>이 기기에 저장된 게스트 진행(무장·재화·튜토리얼·안내 기록)을 모두 지우고 접속 화면부터 다시 시작합니다. 회원 계정 기록은 지워지지 않습니다.</small></div><button class="mini-action mini-action--danger" data-action="guest-reset">초기화</button></div></div>`
   }
 
   private accountSection(): string {
@@ -1656,6 +1658,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.13', '게스트 기록 초기화', '계정 관리 › 이 기기 설정에 게스트 기록 초기화 버튼을 추가했습니다. 이 기기의 게스트 진행과 튜토리얼·안내 기록을 지우고 접속 화면부터 다시 시작합니다(회원 계정 기록과 언어·화면 설정은 그대로).', '완료', 'jade'],
       ['2026.10.13', '첫 입장 튜토리얼', '처음 들어오면 건너뛸 수 없는 튜토리얼이 시작됩니다. 금화 100개로 상점에서 명망 사기 → 무료 10회 모집(5등급 무장 1명 확정) → 장비 10회 뽑기 → 자동 편성 → 무장 강화 → 장비 강화 → 첫 시나리오 클리어 순서로, 빛나는 버튼만 눌러 따라 하면 됩니다. 이미 전투를 이긴 기존 계정에는 나오지 않습니다.', '완료', 'gold'],
       ['2026.10.13', '영문판 · 언어 선택', '게임 전체를 한국어 또는 영어로 볼 수 있습니다. 계정 관리의 이 기기 설정, 상단 바의 언어 버튼, 접속 화면에서 바꿀 수 있고 기기마다 저장됩니다. 메뉴·무장·스킬·시나리오·전투 기록과 전장 이름표까지 영어로 바뀝니다. 게시판 글과 사용자 이름은 쓴 그대로 보입니다.', '완료', 'jade'],
       ['2026.10.13', '재화 획득 밸런스', '시나리오 최초 클리어 보상을 금화 중심으로 바꿨습니다(1~4장 11~13개, 5~8장 54~80개). 금화로 병서(무장 레벨업 재료)를 살 수 있어 금화가 곧 성장입니다. 시나리오 금화만으로 키우면 4장(적벽)·6장(남정)·8장(최종장)에서 성장이 멈추고, 구매 금화·영토전 금화·며칠의 일일 플레이로 넘을 수 있습니다. 일반 전투 보상은 하루 5회까지, 일일·주간 임무의 명망·병서 보상은 줄였습니다. 7·8장 적 레벨은 Lv.39~55로 올렸습니다. 밸런스 페이지에 「성장 곡선」을 추가했습니다.', '완료', 'jade'],
@@ -1826,6 +1829,7 @@ export class StrategyUI {
     else if (action === 'research') this.callbacks.onResearch(button.dataset.research ?? '')
     else if (action === 'battle-guide') this.callbacks.onBattleGuide()
     else if (action === 'coach-reset') this.callbacks.onCoachReset()
+    else if (action === 'guest-reset') { if (window.confirm(tr('이 기기의 게스트 진행 기록을 모두 지우고 처음부터 시작합니다. 되돌릴 수 없습니다. 계속하시겠습니까?'))) this.callbacks.onGuestReset() }
     else if (action === 'set-lang') setLang(button.dataset.value === 'en' ? 'en' : 'ko')
     else if (action === 'setting-quality') { setQualitySetting((button.dataset.value ?? 'auto') as QualitySetting); this.notify('그래픽 품질을 바꿨습니다. 새로고침하면 적용됩니다.', 'jade'); if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'setting-effects') { setEffectsSetting((button.dataset.value ?? 'auto') as EffectsSetting); this.callbacks.onEffectsSetting?.(); if (this.renderedState) this.render(this.renderedState) }
