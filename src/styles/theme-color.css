@@ -1440,3 +1440,6 @@ body .nav-icon, body .lobby-shortcut__icon { color: #e3b25c; }
 body .nav-button.is-active .nav-icon { color: #fff1cf; }
 body .nav-button:not(.is-active) .nav-icon .gi { opacity: 1; }
 body .lobby-shortcut__icon .gi { width: 26px; height: 26px; }
+/* 재화 그림(사실적, webp) */
+body img.gi--img { object-fit: contain; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5)); }
+body .topbar-resource img.gi { width: 22px; height: 22px; }

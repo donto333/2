@@ -86,7 +86,11 @@ export function ensureIconSprite(doc: Document = document): void {
   doc.body.insertAdjacentHTML('afterbegin', iconSprite())
 }
 
+/** 재화는 사실적인 그림(미리 그려 둔 webp), 메뉴는 선 그림 */
+const CURRENCY: ReadonlySet<IconName> = new Set(['gold', 'silver', 'honor', 'influence', 'grain', 'wood', 'iron', 'manuals', 'mythic'])
+
 /** 아이콘 하나. 크기는 CSS(.gi)로 정한다. */
 export function icon(name: IconName, className = ''): string {
+  if (CURRENCY.has(name)) return `<img class="gi gi--img gi--${name}${className ? ` ${className}` : ''}" src="/assets/currency/${name}.webp" alt="" aria-hidden="true" draggable="false" decoding="async">`
   return `<svg class="gi gi--${name}${className ? ` ${className}` : ''}" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><use href="#gi-${name}"/></svg>`
 }
