@@ -62,6 +62,8 @@ export function ensureMissions(state: StrategyState, now = Date.now()): MissionS
   const missions = state.missions
   if (!missions.progress || typeof missions.progress !== 'object') missions.progress = {}
   if (!Array.isArray(missions.claimed)) missions.claimed = []
+  // 이미 임무 보상을 받은 적이 있으면(오늘·이번 주) 처음 시작 안내의 「임무 보상 받기」는 끝난 것으로 본다
+  if (!missions.tutorialDone && missions.claimed.length && !(missions.tutorial ?? []).includes('t-mission')) missions.tutorial = [...(missions.tutorial ?? []), 't-mission']
   // 이미 시나리오를 깨거나 전투를 이긴 기존 유저는 첫 입장 튜토리얼을 건너뛴다
   if (missions.onboardDone === undefined && ((state.scenarioCleared?.length ?? 0) > 0 || (state.wins ?? 0) > 0)) missions.onboardDone = true
   if (missions.dayKey !== day) {
@@ -84,6 +86,8 @@ export function recordMission(state: StrategyState, event: MissionEvent, amount 
   const completed: string[] = []
   if (!missions.tutorialDone) {
     const done = new Set(missions.tutorial ?? [])
+    // 이미 임무 보상을 받은 적이 있으면(오늘·이번 주) 「임무 보상 받기」 단계는 끝난 것으로 본다
+    if (missions.claimed.length) done.add('t-mission')
     for (const step of TUTORIAL_STEPS) if (step.event === event && !done.has(step.id)) { done.add(step.id); completed.push(`안내: ${step.label}`) }
     missions.tutorial = [...done]
   }

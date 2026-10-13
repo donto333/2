@@ -967,7 +967,7 @@ export class StrategyUI {
     if (missions.tutorialDone) return ''
     const done = new Set(missions.tutorial ?? [])
     const next = nextTutorialStep(state)
-    const steps = TUTORIAL_STEPS.map((step, index) => `<li class="${done.has(step.id) ? 'is-done' : next?.id === step.id ? 'is-next' : ''}"><span class="tut-num">${done.has(step.id) ? '✓' : index + 1}</span><div><strong>${step.label}</strong><small>${step.hint}</small></div>${!done.has(step.id) ? `<button class="mini-action" data-action="section" data-section="${step.section}">바로 가기</button>` : ''}</li>`).join('')
+    const steps = TUTORIAL_STEPS.map((step, index) => `<li class="${done.has(step.id) ? 'is-done' : next?.id === step.id ? 'is-next' : ''}"><span class="tut-num">${done.has(step.id) ? '✓' : index + 1}</span><div><strong>${step.label}</strong><small>${step.hint}</small></div>${!done.has(step.id) ? `<button class="mini-action" ${step.section === 'overview' ? 'data-action="scroll-missions"' : `data-action="section" data-section="${step.section}"`}>바로 가기</button>` : ''}</li>`).join('')
     const finished = tutorialFinished(state)
     return `<div class="glass-card tutorial-card"><div class="card-header"><div><span class="eyebrow">처음 시작 안내 · ${done.size}/${TUTORIAL_STEPS.length}</span><h3>${finished ? '모든 안내를 마쳤습니다!' : `다음: ${next?.label ?? ''}`}</h3></div><button class="text-button" data-action="tutorial-skip">안내 닫기</button></div><ol class="tutorial-steps">${steps}</ol><div class="tutorial-reward"><span>모두 마치면 · ${rewardText(TUTORIAL_REWARD)}</span><button class="mini-action mini-action--research" data-action="tutorial-claim" ${finished ? '' : 'disabled'}>보상 받기</button></div></div>`
   }
@@ -1760,6 +1760,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '처음 시작 안내 마지막 단계 수정', '「임무 보상 받기」의 바로 가기를 누르면 본영의 임무 칸으로 내려가 받을 수 있는 보상이 깜빡입니다. 이미 오늘·이번 주 임무 보상을 받은 계정은 이 단계가 바로 완료 처리됩니다.', '완료', 'jade'],
       ['2026.10.14', '버튼을 눌러도 화면 고정', '강화·장착·구매처럼 같은 메뉴 안에서 버튼을 누르면 화면이 맨 위로 튀어 오르던 문제를 고쳤습니다. 보던 위치와 펼쳐 둔 칸(스킬 자세히 등)이 그대로 유지됩니다.', '완료', 'jade'],
       ['2026.10.13', '재화 그림', '금화(놋쇠 엽전)·은전(말굽은)·옥패(비취 패와 붉은 끈)·영향력(인장)·식량(이삭 다발)·목재(통나무)·철(덩이쇠)·병서(죽간)·신화 조각(자수정)을 질감과 빛이 있는 사실적인 그림으로 바꿨습니다.', '완료', 'jade'],
       ['2026.10.13', '화면 개편 · 모바일 정리', '본영을 대표 무장 그림과 큰 출전 버튼, 아이콘 바로가기로 바꿨습니다. 제목 위 머리글과 설명 문장은 ⓘ 안으로 접고, 버튼의 꾸밈 기호를 걷어 냈습니다. 패널은 옻칠 나무판과 금장 모서리, 버튼은 눌리는 입체 모양이 되었고, 비용은 아이콘과 숫자로(모자라면 붉게) 보여 줍니다. 휴대폰은 하단 메뉴를 한 줄(본영·무장·편성·모집·전투 + 더보기)로 줄이고, 글자 크기를 키운 기기에서 글자가 겹치거나 넘치던 곳을 고쳤습니다.', '완료', 'gold'],
@@ -1868,6 +1869,13 @@ export class StrategyUI {
     const action = button.dataset.action
     if (button.dataset.opponentId) {
       this.callbacks.onDuelStart(button.dataset.opponentId)
+      return
+    }
+    if (action === 'scroll-missions') {
+      // 같은 화면(본영)의 임무 칸으로 내려가 받을 수 있는 보상을 깜빡여 보여 준다
+      const card = this.root.querySelector<HTMLElement>('.mission-card')
+      card?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      card?.querySelectorAll<HTMLElement>('[data-action="mission-claim"]:not([disabled])').forEach(item => { item.classList.remove('is-flash'); void item.offsetWidth; item.classList.add('is-flash') })
       return
     }
     if (action === 'nav-more') { this.root.querySelector('.sidebar')?.classList.toggle('is-more-open'); return }

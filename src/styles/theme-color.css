@@ -1443,3 +1443,14 @@ body .lobby-shortcut__icon .gi { width: 26px; height: 26px; }
 /* 재화 그림(사실적, webp) */
 body img.gi--img { object-fit: contain; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5)); }
 body .topbar-resource img.gi { width: 22px; height: 22px; }
+
+/* 처음 시작 안내 「바로 가기」로 임무 칸에 오면 받을 수 있는 보상을 깜빡여 알려 준다 */
+@keyframes claim-flash { 0%, 100% { box-shadow: 0 0 0 0 rgba(240, 194, 106, 0); } 30%, 70% { box-shadow: 0 0 0 4px rgba(240, 194, 106, .85), 0 0 18px rgba(240, 194, 106, .7); } }
+body .is-flash { animation: claim-flash .9s ease-in-out 3; }
+/* 임무 칸 머리: 휴대폰에서 제목과 안내가 비좁게 겹치지 않게 줄을 나눈다 */
+@media (max-width: 760px) {
+  body .mission-card .card-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+  body .mission-card .card-header .rate-note { text-align: left; }
+}
+body .mission-card { scroll-margin-top: 96px; }
+@media (max-width: 760px) { body .mission-card { scroll-margin-top: calc(var(--mobile-top, 92px) + 12px); } }

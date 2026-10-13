@@ -35,4 +35,10 @@ describe('daily and weekly missions', () => {
     expect(claimMission(state, DAILY_BONUS_ID, now).ok).toBe(true)
     expect(claimMission(state, DAILY_BONUS_ID, now).ok).toBe(false)
   })
+  it('임무 보상을 이미 받았으면 처음 시작 안내의 「임무 보상 받기」 단계가 끝난 것으로 처리된다', () => {
+    const state = createInitialState()
+    const missions = ensureMissions(state)
+    missions.claimed.push('d-income')
+    expect(ensureMissions(state).tutorial).toContain('t-mission')
+  })
 })
