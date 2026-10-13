@@ -1110,3 +1110,6 @@ body .page-section--account .device-settings, body .page-section--account .setti
   body .codex-toolbar .filter-tab { flex: 0 0 auto; white-space: nowrap; }
   body .codex-toolbar .codex-progress { margin-left: 0; width: 100%; }
 }
+
+/* 시나리오 내용(100자 이내) */
+body .scenario-detail .scenario-story { margin: 10px 0 16px; padding: 12px 14px; border-left: 3px solid var(--gold); background: rgba(24, 12, 6, .45); font: 400 15px/1.75 'Gowun Batang', serif; color: var(--cream); }

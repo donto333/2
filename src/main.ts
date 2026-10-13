@@ -852,7 +852,7 @@ const ui = new StrategyUI(root, {
     ui.updateBattle(arena.getSnapshot())
     ui.render(state)
     ui.updateBattle(arena.getSnapshot())
-    ui.notify(`${scenario.year}년 ${scenario.title} · 대화형 시나리오 전투를 시작합니다.`, 'jade')
+    ui.notify(`${scenario.year}년 ${scenario.title} · 시나리오 전투를 시작합니다.`, 'jade')
   },
   onBattleStart: () => {
     ui.setBattleAutoAvailable(false)
