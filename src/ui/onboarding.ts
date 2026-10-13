@@ -19,16 +19,16 @@ export interface OnboardStep {
   next?: string
 }
 
-/** 튜토리얼 상점에서 사는 명망 묶음(10금화 → 명망 1,000) */
+/** 튜토리얼 상점에서 사는 옥패 묶음(10금화 → 옥패 1,000) */
 export const ONBOARD_HONOR_PACKAGE = 'honor-10'
-/** 장비 10회 뽑기 비용(명망) */
+/** 장비 10회 뽑기 비용(옥패) */
 export const ONBOARD_GEAR_COST = 2200
 
 export const ONBOARD_STEPS: OnboardStep[] = [
-  { id: 'welcome', title: '금화 100개를 드립니다', body: '천하에 오신 것을 환영합니다. 금화 100개가 지급되었습니다. 먼저 상점에서 금화로 명망을 사 보겠습니다. 명망은 무장 모집과 장비 뽑기에 씁니다.', next: '상점으로' },
-  { id: 'shop', section: 'shop', target: `[data-action="honor-shop-purchase"][data-package-id="${ONBOARD_HONOR_PACKAGE}"]`, title: '1. 명망 사기', body: '빛나는 "10금화 · 명망 +1,000"을 누르십시오. 큰 묶음일수록 금화 하나당 더 많이 받습니다.', event: 'honor-buy' },
+  { id: 'welcome', title: '금화 100개를 드립니다', body: '천하에 오신 것을 환영합니다. 금화 100개가 지급되었습니다. 먼저 상점에서 금화로 옥패를 사 보겠습니다. 옥패는 무장 모집과 장비 뽑기에 씁니다.', next: '상점으로' },
+  { id: 'shop', section: 'shop', target: `[data-action="honor-shop-purchase"][data-package-id="${ONBOARD_HONOR_PACKAGE}"]`, title: '1. 옥패 사기', body: '빛나는 "10금화 · 옥패 +1,000"을 누르십시오. 큰 묶음일수록 금화 하나당 더 많이 받습니다.', event: 'honor-buy' },
   { id: 'recruit', section: 'recruit', target: '[data-action="recruit"][data-count="10"]', title: '2. 무료 10회 모집', body: '첫 10회 모집은 무료이고, 5등급 무장 한 명이 반드시 나옵니다. 빛나는 버튼을 누르십시오.', event: 'recruit10' },
-  { id: 'gear', section: 'recruit', target: '[data-action="equipment-draw"][data-count="10"]', title: '3. 장비 10회 뽑기', body: '이번에는 방금 산 명망으로 무기·갑옷·장신구를 10개 뽑습니다.', event: 'gear10' },
+  { id: 'gear', section: 'recruit', target: '[data-action="equipment-draw"][data-count="10"]', title: '3. 장비 10회 뽑기', body: '이번에는 방금 산 옥패로 무기·갑옷·장신구를 10개 뽑습니다.', event: 'gear10' },
   { id: 'formation', section: 'formation', target: '[data-action="auto-formation"]:not([data-with-equipment])', title: '4. 자동 편성', body: '새 무장이 들어왔으니 출전 무장을 다시 고릅니다. 자동 편성을 누르면 전투력·인연·병종을 따져 세 명을 세웁니다.', event: 'auto-formation' },
   { id: 'upgrade', section: 'roster', target: '.roster-grid .gcard .gcard-up:not([disabled])', title: '5. 무장 강화', body: '은전과 병서로 출전 무장의 레벨을 올립니다. 레벨이 오르면 능력치와 병력이 늘어납니다.', event: 'upgrade' },
   { id: 'enhance', section: 'equipment', target: '.equipment-card [data-action="equipment-enhance"]:not([disabled])', title: '6. 장비 강화', body: '은전과 철로 장비를 강화합니다. 강화할수록 장착한 무장의 능력이 오릅니다.', event: 'enhance' },

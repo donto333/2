@@ -688,7 +688,7 @@ const ui = new StrategyUI(root, {
     queueAccountSave()
   },
   onEquipmentDraw: count => {
-    // 튜토리얼: 명망이 모자라면 10회 뽑기만큼 채워 준다
+    // 튜토리얼: 옥패가 모자라면 10회 뽑기만큼 채워 준다
     if (count === 10 && onboarding.at('gear') && state.honor < ONBOARD_GEAR_COST) state.honor = ONBOARD_GEAR_COST
     const result = drawEquipment(state, count)
     if (result.ok) queueAccountSave(true)
@@ -1170,7 +1170,7 @@ arena = new Arena(canvas, {
           state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
           state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 클리어 · ${starText} · 금화 +${reward.gold} · 모든 재화 보상 획득`
         } else state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · ${starText}`
-      } else state.lastNotice = wasDuel ? `유저 대련 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver} · 신화장비 조각 +1` : (repeatLeft > 0 ? `전투 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver.toLocaleString(locale())} · 오늘 보상 ${REPEAT_BATTLE_DAILY_LIMIT - (missionState.repeatWins ?? 0)}회 남음` : `전투 승리 · 별 ${result.stars}개 · 오늘 일반 전투 보상(${REPEAT_BATTLE_DAILY_LIMIT}회)을 모두 받았습니다`)
+      } else state.lastNotice = wasDuel ? `유저 대련 승리 · 별 ${result.stars}개 · 옥패 +${honor} · 은전 +${silver} · 신화장비 조각 +1` : (repeatLeft > 0 ? `전투 승리 · 별 ${result.stars}개 · 옥패 +${honor} · 은전 +${silver.toLocaleString(locale())} · 오늘 보상 ${REPEAT_BATTLE_DAILY_LIMIT - (missionState.repeatWins ?? 0)}회 남음` : `전투 승리 · 별 ${result.stars}개 · 오늘 일반 전투 보상(${REPEAT_BATTLE_DAILY_LIMIT}회)을 모두 받았습니다`)
     } else {
       state.lastNotice = '전투 패배 · 보상 없음 · 무장 배치와 성장 상태를 다시 점검하십시오.'
     }
@@ -1253,8 +1253,8 @@ const onboarding = new Onboarding({
     if (step.id === 'enhance') { state.silver = Math.max(state.silver, 2000); state.resources.silver = state.silver; state.resources.iron = Math.max(state.resources.iron, 600) }
     if (step.id === 'shop' && state.gold < 10 && !onboardingGoldWait) {
       onboardingGoldWait = window.setTimeout(() => {
-        // 금화 지급이 늦거나 오지 않으면 명망을 직접 지급하고 넘어간다
-        if (onboarding.at('shop') && state.gold < 10) { state.honor += 1000; ui.render(state); ui.notify('튜토리얼 지원 · 명망 +1,000', 'jade'); onboarding.event('honor-buy') }
+        // 금화 지급이 늦거나 오지 않으면 옥패를 직접 지급하고 넘어간다
+        if (onboarding.at('shop') && state.gold < 10) { state.honor += 1000; ui.render(state); ui.notify('튜토리얼 지원 · 옥패 +1,000', 'jade'); onboarding.event('honor-buy') }
       }, 8000)
     }
     ui.render(state)

@@ -1,5 +1,5 @@
 // 일일·주간 임무. 날짜는 한국 시간 기준(일일은 0시, 주간은 월요일 0시에 새로 시작).
-// 보상은 명망·은전·자원·병서처럼 이 게임이 직접 관리하는 재화만 준다(금화는 서버 원장 대상이라 제외).
+// 보상은 옥패·은전·자원·병서처럼 이 게임이 직접 관리하는 재화만 준다(금화는 서버 원장 대상이라 제외).
 import type { ResourceKey, StrategyState } from './strategy'
 import { locale } from '../i18n/lang'
 
@@ -38,7 +38,7 @@ export const TUTORIAL_STEPS: Array<{ id: string; label: string; hint: string; se
   { id: 't-battle', label: '첫 전투 승리', hint: '시나리오에서 첫 전투를 이기세요.', section: 'battle', event: 'battleWin' },
   { id: 't-income', label: '내정 수확', hint: '영토에서 아군 도시의 재화를 거두세요.', section: 'territory', event: 'income' },
   { id: 't-research', label: '기술 연구 시작', hint: '강병 1단계 「오부 훈련」부터 시작하세요(5분).', section: 'research', event: 'researchStart' },
-  { id: 't-recruit', label: '무장 모집', hint: '명망으로 새 무장을 모집하세요.', section: 'recruit', event: 'recruit' },
+  { id: 't-recruit', label: '무장 모집', hint: '옥패로 새 무장을 모집하세요.', section: 'recruit', event: 'recruit' },
   { id: 't-mission', label: '임무 보상 받기', hint: '본영의 일일 임무에서 보상을 받으세요.', section: 'overview', event: 'missionClaim' },
 ]
 export const TUTORIAL_REWARD: Reward = { honor: 1000, silver: 10000, manuals: 200 }
@@ -108,7 +108,7 @@ export function dailyBonusReady(state: StrategyState, now = Date.now()): boolean
   return !missions.claimed.includes(DAILY_BONUS_ID) && MISSIONS.filter(mission => mission.scope === 'daily').every(mission => missions.claimed.includes(mission.id))
 }
 
-const REWARD_LABELS: Record<string, string> = { honor: '명망', silver: '은전', grain: '식량', wood: '목재', iron: '철', influence: '영향력', manuals: '병서' }
+const REWARD_LABELS: Record<string, string> = { honor: '옥패', silver: '은전', grain: '식량', wood: '목재', iron: '철', influence: '영향력', manuals: '병서' }
 export function rewardText(reward: Reward): string {
   return Object.entries(reward).map(([key, value]) => `${REWARD_LABELS[key] ?? key} +${new Intl.NumberFormat(locale()).format(value ?? 0)}`).join(' · ')
 }

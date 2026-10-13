@@ -43,7 +43,7 @@ const CHAPTERS: ChapterSeed[] = [
 ]
 
 const REWARD = (chapterIndex: number, entryIndex: number): ScenarioReward => ({
-  // 금화·명망·은전·병서는 server/economy.mjs(서버와 같은 표). 금화가 성장의 중심이다.
+  // 금화·옥패·은전·병서는 server/economy.mjs(서버와 같은 표). 금화가 성장의 중심이다.
   gold: scenarioGold(chapterIndex),
   honor: SCENARIO_HONOR_BY_CHAPTER[chapterIndex] ?? 200,
   silver: (SCENARIO_SILVER_BY_CHAPTER[chapterIndex] ?? 2000) + entryIndex * 100,

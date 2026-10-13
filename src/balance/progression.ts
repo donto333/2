@@ -67,7 +67,7 @@ export async function runProgression(options: ProgressionOptions, onProgress?: (
     const avg = formation.reduce((sum, general) => sum + general.level, 0) / 3
     formation = [...st.roster].sort((a, b) => power(b, Math.max(b.level, avg - 4)) - power(a, Math.max(a.level, avg - 4))).slice(0, 3)
   }
-  // 명망은 모집에, 은전·병서는 가장 낮은 출전 무장의 레벨업에. 금화는 모자란 재료(병서 우선)를 산다.
+  // 옥패는 모집에, 은전·병서는 가장 낮은 출전 무장의 레벨업에. 금화는 모자란 재료(병서 우선)를 산다.
   const spend = () => {
     while (st.honor >= 900) { st.honor -= 900; for (let i = 0; i < 10; i += 1) recruitOne() }
     while (st.honor >= 100) { st.honor -= 100; recruitOne() }

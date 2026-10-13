@@ -11,7 +11,7 @@ describe('첫 입장 튜토리얼', () => {
     expect(ONBOARD_STEPS.at(-1)?.body).toBe('무장을 성장시켜 천하를 제패하세요.')
     expect(HONOR_SHOP_PACKAGES.some(item => item.id === ONBOARD_HONOR_PACKAGE)).toBe(true)
   })
-  it('무료 10회 모집은 명망을 쓰지 않고 5등급 무장이 반드시 한 명 이상 나온다', () => {
+  it('무료 10회 모집은 옥패를 쓰지 않고 5등급 무장이 반드시 한 명 이상 나온다', () => {
     for (let run = 0; run < 200; run += 1) {
       const state = createInitialState()
       const honor = state.honor
@@ -29,7 +29,7 @@ describe('첫 입장 튜토리얼', () => {
     delete (veteran as { missions?: unknown }).missions
     expect(ensureMissions(veteran).onboardDone).toBe(true)
   })
-  it('튜토리얼 자원 흐름: 금화 100 → 명망 1,000을 사면 장비 10회 뽑기 비용을 낼 수 있다', () => {
+  it('튜토리얼 자원 흐름: 금화 100 → 옥패 1,000을 사면 장비 10회 뽑기 비용을 낼 수 있다', () => {
     const state = createInitialState()
     const pack = HONOR_SHOP_PACKAGES.find(item => item.id === ONBOARD_HONOR_PACKAGE)!
     expect(pack.goldCost).toBeLessThanOrEqual(100)

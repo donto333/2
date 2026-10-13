@@ -303,10 +303,10 @@ export const MANUAL_SHOP_PACKAGES: ManualShopPackage[] = MANUAL_PACKAGE_AMOUNTS.
 
 export const HONOR_SHOP_PACKAGES: HonorShopPackage[] = [3, 5, 10, 20, 50, 100].map(goldCost => ({
   id: `honor-${goldCost}`,
-  name: `명망 ${goldCost}금화 패키지`,
+  name: `옥패 ${goldCost}금화 패키지`,
   honor: goldCost * 100,
   goldCost,
-  description: '금화 1개당 명망 100개로 교환하는 패키지',
+  description: '금화 1개당 옥패 100개로 교환하는 패키지',
 }))
 
 export function dayKey(now = Date.now()): string {
@@ -1236,11 +1236,11 @@ export function purchaseResourcePackage(state: StrategyState, packageId: string)
 
 export function purchaseHonorPackage(state: StrategyState, packageId: string): HonorShopResult {
   const honorPackage = HONOR_SHOP_PACKAGES.find(item => item.id === packageId)
-  if (!honorPackage) return { ok: false, message: '해당 명망 패키지를 찾을 수 없습니다.' }
+  if (!honorPackage) return { ok: false, message: '해당 옥패 패키지를 찾을 수 없습니다.' }
   if (state.gold < honorPackage.goldCost) return { ok: false, message: `금화가 부족합니다. ${honorPackage.goldCost}개가 필요합니다.` }
   state.gold -= honorPackage.goldCost
   state.honor += honorPackage.honor
-  state.lastNotice = `명망 ${honorPackage.honor.toLocaleString(locale())} 지급 완료 · 금화 -${honorPackage.goldCost}`
+  state.lastNotice = `옥패 ${honorPackage.honor.toLocaleString(locale())} 지급 완료 · 금화 -${honorPackage.goldCost}`
   return { ok: true, message: state.lastNotice, package: honorPackage }
 }
 
@@ -1261,7 +1261,7 @@ export function purchaseMythicEquipment(state: StrategyState, equipmentId: strin
 export function drawEquipment(state: StrategyState, count = 1): EquipmentDrawResult {
   ensureEquipmentState(state)
   const cost = count === 10 ? 2200 : 240
-  if (state.honor < cost) return { ok: false, message: `명망이 부족합니다. 장비 뽑기에는 ${formatNumber(cost)} 명망이 필요합니다.`, rewards: [] }
+  if (state.honor < cost) return { ok: false, message: `옥패가 부족합니다. 장비 뽑기에는 ${formatNumber(cost)} 옥패가 필요합니다.`, rewards: [] }
   state.honor -= cost
   const legendaryBonus = researchMods(state).legendaryRate
   const rewards = Array.from({ length: count }, (_, index) => createDrawnEquipment(index, legendaryBonus))
@@ -1297,13 +1297,13 @@ export interface RecruitResult {
   rewards: General[]
 }
 
-/** 무장 모집 명망 비용(구현령 −10%) */
+/** 무장 모집 옥패 비용(구현령 −10%) */
 export function recruitCost(state: StrategyState, count = 1): number {
   return Math.round((count === 10 ? 900 : 100) * (1 - researchMods(state).recruitCost))
 }
 
 export interface RecruitOptions {
-  /** 명망을 쓰지 않는다(튜토리얼 무료 모집) */
+  /** 옥패를 쓰지 않는다(튜토리얼 무료 모집) */
   free?: boolean
   /** 이번 모집에 이 등급 이상이 하나도 없으면 한 장을 이 등급으로 바꾼다 */
   guaranteeGrade?: Grade
@@ -1312,7 +1312,7 @@ export interface RecruitOptions {
 export function recruit(state: StrategyState, count = 1, options: RecruitOptions = {}): RecruitResult {
   const cost = options.free ? 0 : recruitCost(state, count)
   const boosted = researchMods(state).recruitRate
-  if (state.honor < cost) return { ok: false, message: '명망이 부족합니다. 전투에서 명망을 모아 다시 시도하십시오.', general: null, rewards: [] }
+  if (state.honor < cost) return { ok: false, message: '옥패가 부족합니다. 전투에서 옥패를 모아 다시 시도하십시오.', general: null, rewards: [] }
   state.honor -= cost
   const floor = options.guaranteeGrade
   const rewards: General[] = []
@@ -1618,14 +1618,14 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   if (wait > 0) return { ok: false, won: false, message: `세력전 부대가 재편성 중입니다. ${Math.ceil(wait / 1000)}초 후 다시 공격할 수 있습니다.`, damage: 0 }
   const honorCost = FACTION_WAR_HONOR_COST[city.level] ?? FACTION_WAR_HONOR_COST[5]
   const goldReward = Math.round((FACTION_WAR_GOLD_REWARD[city.level] ?? FACTION_WAR_GOLD_REWARD[5]) * (1 + researchMods(state).factionGold))
-  if (state.honor < honorCost) return { ok: false, won: false, message: `최종 세력전에 필요한 명망이 부족합니다. 명망 ${honorCost} 필요`, damage: 0 }
+  if (state.honor < honorCost) return { ok: false, won: false, message: `최종 세력전에 필요한 옥패가 부족합니다. 옥패 ${honorCost} 필요`, damage: 0 }
   state.honor -= honorCost
   state.lastFactionBattleAt = now
   let goldGranted = 0
   const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70
   const factionPower = 300 + city.level * 250 + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
   const won = attackPower >= factionPower * 0.75
-  addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: 0, note: won ? `최종 세력전 승리 · 명망 -${honorCost} · 금화 +${goldReward}` : `최종 세력전 패배 · 명망 -${honorCost}` })
+  addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: 0, note: won ? `최종 세력전 승리 · 옥패 -${honorCost} · 금화 +${goldReward}` : `최종 세력전 패배 · 옥패 -${honorCost}` })
   if (won) {
     city.owner = state.faction
     city.garrisons = []
@@ -1638,7 +1638,7 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
     else state.lastNotice = `${city.name} 최종 세력전 승리 · 금화 +${goldReward} · 적 세력을 몰아내고 영토를 확보했습니다.`
   } else {
     state.factionWarScore = Math.max(0, state.factionWarScore - 40)
-    state.lastNotice = `${city.name} 최종 세력전 패배 · 명망 ${honorCost}를 소모했지만 적 세력이 성을 지켰습니다.`
+    state.lastNotice = `${city.name} 최종 세력전 패배 · 옥패 ${honorCost}를 소모했지만 적 세력이 성을 지켰습니다.`
   }
   return { ok: true, won, message: state.lastNotice, damage: 0, gold: goldGranted }
 }

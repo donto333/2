@@ -35,7 +35,7 @@ const SYMBOLS: Record<IconName, string> = {
   gold: `<circle cx="16" cy="16" r="12.5" fill="url(#gg-gold)" ${S}/><circle cx="16" cy="16" r="9.2" fill="none" stroke="#a8701a" stroke-width="1.2"/><rect x="12.4" y="12.4" width="7.2" height="7.2" rx=".8" fill="${INK}"/><path d="M8.5 10.5a9 9 0 0 1 5-4" fill="none" stroke="#fffbe0" stroke-width="1.6" stroke-linecap="round" opacity=".9"/>`,
   // 은전: 말굽은(원보)
   silver: `<path d="M3.5 17.5c2-4 5.5-4.5 8-3 1.5-5.5 7.5-5.5 9 0 2.5-1.5 6-1 8 3-2.5 6.5-7.5 9-12.5 9s-10-2.5-12.5-9z" fill="url(#gg-silver)" ${S}/><path d="M11.5 14.5c1.5 2 7.5 2 9 0" fill="none" stroke="#71828d" stroke-width="1.2"/><path d="M13.5 9.8c1-1.3 3-1.6 4.4-.6" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>`,
-  // 명망: 붉은 끈 메달
+  // 옥패: 붉은 끈 메달
   honor: `<path d="M10 3h4.5l2.5 9-4 2.5zM22 3h-4.5l-2.5 9 4 2.5z" fill="url(#gg-red)" ${S}/><circle cx="16" cy="20" r="8.5" fill="url(#gg-gold)" ${S}/><path d="M16 14.6l1.6 3.4 3.7.4-2.8 2.5.8 3.7-3.3-1.9-3.3 1.9.8-3.7-2.8-2.5 3.7-.4z" fill="#fff4c4" stroke="#a8701a" stroke-width=".9" stroke-linejoin="round"/>`,
   // 영향력: 옥새(도장)
   influence: `<path d="M11 12c0-4 2.2-7 5-7s5 3 5 7z" fill="url(#gg-gold)" ${S}/><circle cx="16" cy="8.6" r="1.3" fill="${INK}"/><rect x="6.5" y="12" width="19" height="9" rx="1.6" fill="url(#gg-red)" ${S}/><rect x="5" y="21" width="22" height="5.5" rx="1.2" fill="url(#gg-red)" ${S}/><path d="M11 23.8h10" stroke="#ffd59a" stroke-width="1.4" stroke-linecap="round"/><path d="M9 14.3h7" stroke="#ffb093" stroke-width="1.2" stroke-linecap="round" opacity=".8"/>`,

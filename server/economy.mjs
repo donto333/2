@@ -4,7 +4,7 @@
 
 /** 장별 시나리오 최초 클리어 금화(1회당) */
 export const SCENARIO_GOLD_BY_CHAPTER = [11, 12, 12, 13, 54, 68, 72, 80]
-/** 장별 시나리오 최초 클리어 명망·은전·병서(금화보다 작게: 성장의 중심은 금화) */
+/** 장별 시나리오 최초 클리어 옥패·은전·병서(금화보다 작게: 성장의 중심은 금화) */
 export const SCENARIO_HONOR_BY_CHAPTER = [200, 250, 300, 350, 400, 450, 500, 550]
 export const SCENARIO_SILVER_BY_CHAPTER = [2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]
 export const SCENARIO_MANUALS_BY_CHAPTER = [20, 30, 40, 50, 60, 70, 80, 90]

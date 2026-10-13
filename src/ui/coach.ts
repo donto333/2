@@ -153,8 +153,8 @@ export function runSteps(coach: Coach, steps: CoachStep[], onFinish: (skipped: b
 export const MENU_TOURS: Record<string, CoachStep[]> = {
   overview: [
     { target: '.command-hero', title: '본진', body: '지금 할 일과 다음 시나리오가 여기 나옵니다. 출정 준비를 누르면 바로 전투 화면으로 갑니다.' },
-    { target: '.tutorial-card', title: '처음 시작 안내', body: '6단계를 차례로 따라 하면 명망·은전·병서 보상을 받습니다. 다음에 갈 메뉴는 메뉴에서 반짝입니다.' },
-    { target: '.topbar-resources', title: '재화', body: '은전과 병서로 무장을 강화하고, 명망으로 무장을 모집합니다. 금화는 상점에서 이 재화들로 바꿀 수 있습니다.' },
+    { target: '.tutorial-card', title: '처음 시작 안내', body: '6단계를 차례로 따라 하면 옥패·은전·병서 보상을 받습니다. 다음에 갈 메뉴는 메뉴에서 반짝입니다.' },
+    { target: '.topbar-resources', title: '재화', body: '은전과 병서로 무장을 강화하고, 옥패로 무장을 모집합니다. 금화는 상점에서 이 재화들로 바꿀 수 있습니다.' },
     { target: '.mission-card', title: '임무', body: '매일·매주 임무를 마치면 보상을 받습니다. 하루 임무를 모두 끝내면 추가 보상이 있습니다.' },
   ],
   roster: [
@@ -168,7 +168,7 @@ export const MENU_TOURS: Record<string, CoachStep[]> = {
     { target: '.formation-bench', title: '대기 무장', body: '대기 무장을 눌러 빈자리에 넣거나 바꿉니다.' },
   ],
   recruit: [
-    { target: '.recruit-pedestal', title: '무장 모집', body: '명망으로 새 무장을 부릅니다. 10회 모집이 더 싸고, 이미 있는 무장이 나오면 성급이 오릅니다.' },
+    { target: '.recruit-pedestal', title: '무장 모집', body: '옥패로 새 무장을 부릅니다. 10회 모집이 더 싸고, 이미 있는 무장이 나오면 성급이 오릅니다.' },
     { target: '.summon-tabs', title: '모집 · 장비 뽑기', body: '위 탭에서 장비 뽑기로 바꿀 수 있습니다.' },
   ],
   equipment: [
