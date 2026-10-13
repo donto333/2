@@ -1324,12 +1324,42 @@ export function recruit(state: StrategyState, count = 1): RecruitResult {
 
 export interface UpgradeResult { ok: boolean; message: string }
 
+/** 무장 1레벨 강화 비용(연구 할인 반영) */
+export function upgradeCost(state: StrategyState, general: Pick<General, 'level'>): { silver: number; manuals: number } {
+  const levelCut = 1 - researchMods(state).levelCost
+  return { silver: Math.round((650 + general.level * 350) * levelCut), manuals: Math.round((12 + general.level * 2) * levelCut) }
+}
+
+/** 지금 재료로 연달아 올릴 수 있는 레벨 수(최대 limit) */
+export function affordableUpgrades(state: StrategyState, id: string, limit = 10): number {
+  const general = findGeneral(state, id)
+  if (!general) return 0
+  let silver = state.silver, manuals = state.manuals, level = general.level, count = 0
+  while (count < limit) {
+    const cost = upgradeCost(state, { level })
+    if (silver < cost.silver || manuals < cost.manuals) break
+    silver -= cost.silver; manuals -= cost.manuals; level += 1; count += 1
+  }
+  return count
+}
+
+/** 가능한 만큼(최대 limit) 연달아 강화 */
+export function upgradeMany(state: StrategyState, id: string, limit = 10): UpgradeResult {
+  const general = findGeneral(state, id)
+  if (!general) return { ok: false, message: '무장을 찾을 수 없습니다.' }
+  const from = general.level
+  let count = 0
+  while (count < limit && upgrade(state, id).ok) count += 1
+  if (!count) return upgrade(state, id)
+  const unlockable = !general.skillUnlocked && general.level >= skillUnlockLevel(general)
+  state.lastNotice = `${general.name} ${count}회 강화 · Lv.${from} → Lv.${general.level}${unlockable ? ` · 스킬 해금 가능` : ''}`
+  return { ok: true, message: state.lastNotice }
+}
+
 export function upgrade(state: StrategyState, id: string): UpgradeResult {
   const general = findGeneral(state, id)
   if (!general) return { ok: false, message: '무장을 찾을 수 없습니다.' }
-  const levelCut = 1 - researchMods(state).levelCost
-  const silverCost = Math.round((650 + general.level * 350) * levelCut)
-  const manualCost = Math.round((12 + general.level * 2) * levelCut)
+  const { silver: silverCost, manuals: manualCost } = upgradeCost(state, general)
   if (state.silver < silverCost || state.manuals < manualCost) return { ok: false, message: `강화 재료가 부족합니다. 은전 ${formatNumber(silverCost)} · 병서 ${manualCost} 필요` }
   state.silver -= silverCost
   state.resources.silver = state.silver
@@ -1361,6 +1391,20 @@ export function unlockSkill(state: StrategyState, id: string): UpgradeResult {
   general.skillPower = general.skillPower ?? 100
   state.lastNotice = `${general.name}의 「${general.skillName}」이(가) 해금되었습니다.`
   return { ok: true, message: state.lastNotice }
+}
+
+/** 출전 자리(0 좌 · 1 중 · 2 우)에 무장을 넣는다. 이미 출전 중이면 두 자리를 맞바꾼다 */
+export function setFormationSlot(state: StrategyState, id: string, slot: number): void {
+  if (!state.generals.some(general => general.id === id) || slot < 0 || slot > 2) return
+  const next = [...state.formation]
+  const from = next.indexOf(id)
+  if (from === slot) return
+  if (from >= 0) { next[from] = next[slot]; next[slot] = id }
+  else if (slot < next.length) next[slot] = id
+  else next.push(id)
+  state.formation = next.filter(Boolean)
+  const general = findGeneral(state, id)
+  state.lastNotice = `${general?.name ?? '무장'}을(를) ${['좌측', '중앙', '우측'][slot]}에 배치했습니다.`
 }
 
 export function toggleFormation(state: StrategyState, id: string): void {

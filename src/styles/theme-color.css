@@ -935,3 +935,86 @@ body .hero-copy h2, body .faction-selection h1, body .result-card h2 { font-weig
 body .brand-title { font-weight: 700; letter-spacing: .04em; }
 body .eyebrow, body .sidebar-label, body .stat-label, body .section-footnote, body .pill, body .hud-label, body .bt-enemies-label, body .section-counter span, body .my-record span, body .resource-chip small, body .brand-subtitle { letter-spacing: .03em; }
 body .card-header h3, body .general-line h3 { letter-spacing: -.01em; }
+
+/* ── 보유 무장: 초상이 잘리지 않는 가로형 카드 ── */
+body .page-section--roster .roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 14px; }
+body .roster-group { margin: 18px 0 10px; font: 700 15px Pretendard, sans-serif; color: var(--gold-hi, #f0c26a); letter-spacing: .02em; }
+body .roster-empty { padding: 40px 0; text-align: center; color: var(--muted); }
+body .gcard { position: relative; display: grid; grid-template-columns: 136px minmax(0, 1fr); border: 1px solid var(--line); background: linear-gradient(155deg, rgba(48, 32, 22, .9), rgba(32, 20, 12, .86)); box-shadow: 0 14px 34px rgba(16, 9, 5, .22); overflow: hidden; }
+body .gcard.is-deployed { border-color: color-mix(in srgb, var(--accent), white 18%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent), transparent 65%), 0 14px 34px rgba(10, 6, 3, .3); }
+body .gcard.is-unlockable { border-color: rgba(246, 197, 109, .55); }
+body .gcard-portrait { position: relative; align-self: start; aspect-ratio: 256 / 382; background: var(--portrait) center top / cover no-repeat, rgba(30, 18, 10, .8); border-right: 1px solid var(--line); }
+body .gcard-portrait::after { content: ''; position: absolute; inset: auto 0 0 0; height: 34%; background: linear-gradient(180deg, transparent, rgba(16, 9, 5, .78)); pointer-events: none; }
+body .gcard-grade { position: absolute; z-index: 1; left: 6px; top: 6px; padding: 2px 7px; font-size: 12px; font-weight: 700; color: var(--grade); background: rgba(16, 9, 5, .72); border: 1px solid color-mix(in srgb, var(--grade), transparent 50%); }
+body .gcard-lane { position: absolute; z-index: 1; left: 6px; right: 6px; bottom: 6px; padding: 3px 0; text-align: center; font-size: 12px; font-weight: 700; color: #1f1408; background: color-mix(in srgb, var(--accent), white 25%); }
+body .gcard-body { display: grid; gap: 8px; align-content: start; padding: 11px 13px 12px; min-width: 0; }
+body .gcard-head { display: flex; justify-content: space-between; gap: 8px; }
+body .gcard-head h3 { margin: 0; font: 700 17px 'Gowun Batang', serif; color: #f3eee4; }
+body .gcard-head p { margin: 3px 0 0; font-size: 12px; color: #a89c8c; }
+body .gcard .level-line { margin: 0; }
+body .gcard .level-line small { color: var(--muted); font-size: 12px; }
+body .gcard .stat-bars { margin: 0; gap: 4px; }
+body .gcard .stat-bars > div { grid-template-columns: 30px 1fr 30px; font-size: 12px; }
+body .gcard .stat-bars i b { opacity: .7; }
+body .gcard .stat-bars > div.is-top i b { opacity: 1; box-shadow: 0 0 8px var(--accent); }
+body .gcard .stat-bars > div.is-top span, body .gcard .stat-bars > div.is-top em { color: #f6dca0; }
+body .gcard-skill { border: 1px solid rgba(232, 209, 162, .14); background: rgba(24, 14, 8, .45); }
+body .gcard-skill summary { display: flex; align-items: center; gap: 6px; padding: 6px 9px; cursor: pointer; list-style: none; font-size: 12.5px; color: #e9dcc0; }
+body .gcard-skill summary::-webkit-details-marker { display: none; }
+body .gcard-skill summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gold); font-weight: 700; }
+body .gcard-skill summary em { font-style: normal; font-size: 12px; padding: 0 6px; border: 1px solid rgba(232, 209, 162, .25); color: #cdbb97; }
+body .gcard-skill summary::after { content: '자세히 ▾'; margin-left: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+body .gcard-skill[open] summary::after { content: '접기 ▴'; }
+body .gcard-skill > p { margin: 0; padding: 0 9px 8px; font-size: 12px; color: #c7bba4; }
+body .gcard-skill .skill-detail { margin: 0 9px 9px; }
+body .gcard-skill-state { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+body .gcard-skill-state.is-on { color: var(--jade); }
+body .gcard-unlock { margin-left: auto; flex: 0 0 auto; padding: 3px 8px; }
+body .gcard-gear { display: flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px dashed rgba(232, 209, 162, .18); background: transparent; color: #cdbb97; font-size: 12px; text-align: left; }
+body .gcard-gear:hover { border-color: rgba(232, 209, 162, .45); }
+body .gcard-gear__slot { display: inline-grid; place-items: center; width: 26px; height: 26px; border: 1px solid rgba(232, 209, 162, .16); color: rgba(232, 209, 162, .35); font-size: 13px; line-height: 1; position: relative; }
+body .gcard-gear__slot.is-on { color: var(--grade); border-color: color-mix(in srgb, var(--grade), transparent 40%); background: color-mix(in srgb, var(--grade), transparent 88%); }
+body .gcard-gear__slot small { position: absolute; right: -2px; bottom: -6px; font-size: 10px; color: #f3e6c8; }
+body .gcard-gear > span:not(.gcard-gear__slot) { margin-left: 4px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body .gcard-gear b { font-weight: 600; color: var(--gold); white-space: nowrap; }
+body .gcard-actions { display: flex; gap: 6px; }
+body .gcard-actions .mini-action { flex: 1; display: grid; place-items: center; gap: 1px; padding: 6px 4px; }
+body .gcard-actions .gcard-up small { font-size: 11px; color: var(--muted); }
+body .gcard-actions .mini-action:disabled { opacity: .45; cursor: default; }
+body .gcard-actions .gcard-up-many { flex: 0 0 auto; padding: 6px 10px; color: var(--gold); }
+@media (max-width: 760px) {
+  body .page-section--roster .roster-grid { grid-template-columns: 1fr; gap: 10px; }
+  body .gcard { grid-template-columns: 92px minmax(0, 1fr); }
+  body .gcard-body { padding: 9px 10px; gap: 6px; }
+  body .gcard-head h3 { font-size: 16px; }
+  body .gcard .stat-bars { grid-template-columns: 1fr 1fr; column-gap: 10px; display: grid; }
+  body .gcard .stat-bars > div { grid-template-columns: 26px 1fr 26px; }
+  body .gcard-lane { font-size: 11px; }
+}
+
+/* 출전 교체 창 */
+body .slot-picker { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: rgba(12, 6, 3, .62); backdrop-filter: blur(6px); }
+body .slot-picker__card { width: min(560px, 100%); padding: 18px 20px; text-align: center; }
+body .slot-picker__card h3 { margin: 6px 0 4px; font: 700 19px 'Gowun Batang', serif; color: var(--cream); }
+body .slot-picker__card p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+body .slot-picker__slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+body .slot-picker__slot { display: grid; justify-items: center; gap: 4px; padding: 10px 6px; border: 1px solid var(--line); background: rgba(28, 14, 7, .6); color: var(--cream); }
+body .slot-picker__slot:hover { border-color: var(--gold); background: rgba(60, 30, 12, .7); }
+body .slot-picker__slot > span { font-size: 12px; color: var(--gold); font-weight: 700; }
+body .slot-picker__slot small { font-size: 12px; color: var(--muted); }
+body .slot-picker__slot em { font-style: normal; font-size: 12px; color: var(--jade); }
+body .slot-picker__portrait { width: 52px; height: 72px; }
+body .gcard { min-width: 0; }
+@media (max-width: 760px) {
+  body .page-section--roster .roster-grid { grid-template-columns: minmax(0, 1fr); }
+  body .gcard-skill summary { flex-wrap: wrap; row-gap: 3px; }
+  body .gcard-skill-state, body .gcard-unlock { margin-left: 0; }
+  body .gcard-actions { flex-wrap: wrap; }
+  body .gcard-actions .gcard-up { flex-basis: 100%; order: -1; }
+}
+
+/* 초상 그림(세로 2:3)이 잘리지 않게: 도감·편성 초상도 같은 비율로 */
+body .general-portrait.codex-portrait { width: 84px; height: 125px; }
+body .general-portrait.formation-portrait { width: 72px; height: 107px; }
+body .general-portrait.has-portrait.codex-portrait, body .general-portrait.has-portrait.formation-portrait, body .general-portrait.has-portrait.formation-bench-portrait, body .general-portrait.has-portrait.slot-picker__portrait { background-position: center top; background-size: cover; }
+body .general-portrait.formation-bench-portrait { width: 40px; height: 60px; }

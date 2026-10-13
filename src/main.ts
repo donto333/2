@@ -42,6 +42,8 @@ import {
   recruit,
   selectCity,
   toggleFormation,
+  setFormationSlot,
+  upgradeMany,
   unlockResearch,
   unlockSkill,
   upgrade,
@@ -650,6 +652,19 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
+  },
+  onUpgradeMany: id => {
+    const result = upgradeMany(state, id)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
+  onFormationSlot: (id, slot) => {
+    setFormationSlot(state, id, slot)
+    arena.setGenerals(battleGenerals())
+    ui.render(state)
+    ui.notify(state.lastNotice)
+    queueAccountSave()
   },
   onFormation: id => {
     toggleFormation(state, id)
