@@ -10,6 +10,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { AnimatedHero, heroModelFor, heroStrikeModel, strikeModelFor, troopModelFor } from './battle-models'
 import { STRIKE_FRAMES } from './battle-rig'
+import { tr } from '../i18n/translate'
 import { effectsSetting } from './settings'
 import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
 import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
@@ -506,7 +507,8 @@ export class Arena {
     })
   }
 
-  private makeTextSprite(text: string, color: string, scale = 2.2): THREE.Sprite {
+  private makeTextSprite(rawText: string, color: string, scale = 2.2): THREE.Sprite {
+    const text = tr(rawText)
     const canvas = document.createElement('canvas')
     canvas.width = 512
     canvas.height = 160
@@ -514,6 +516,9 @@ export class Arena {
     if (!context) throw new Error('Canvas 2D context is unavailable')
     context.clearRect(0, 0, canvas.width, canvas.height)
     context.font = '700 76px Pretendard, sans-serif'
+    // 영어처럼 긴 글은 폭에 맞게 글자를 줄인다
+    const width = context.measureText(text).width
+    if (width > 480) context.font = `700 ${Math.max(36, Math.floor(76 * 480 / width))}px Pretendard, sans-serif`
     context.textAlign = 'center'
     context.textBaseline = 'middle'
     context.strokeStyle = 'rgba(4, 12, 14, .86)'

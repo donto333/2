@@ -2,6 +2,7 @@
 // 연구에는 단계별 시간이 걸리고 한 번에 하나만 진행한다. 금화로 즉시 완료하거나 취소(전액 환급)할 수 있다.
 // 이 파일은 strategy.ts의 타입만 가져다 쓴다(실행 시 순환 참조 없음).
 import type { ResearchNode, ResourceKey, StrategyState } from './strategy'
+import { locale } from '../i18n/lang'
 
 export type ResearchBranch = '부국' | '강병' | '지략' | '제패' | '인재'
 
@@ -144,7 +145,7 @@ export function researchStatus(state: StrategyState, node: ResearchNode): Resear
 }
 
 export function researchCostText(cost: Partial<Record<ResourceKey, number>>, labels: Record<ResourceKey, string>): string {
-  return Object.entries(cost).map(([key, value]) => `${labels[key as ResourceKey]} ${new Intl.NumberFormat('ko-KR').format(value ?? 0)}`).join(' · ')
+  return Object.entries(cost).map(([key, value]) => `${labels[key as ResourceKey]} ${new Intl.NumberFormat(locale()).format(value ?? 0)}`).join(' · ')
 }
 
 export function canPay(state: StrategyState, cost: Partial<Record<ResourceKey, number>>): boolean {

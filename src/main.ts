@@ -57,11 +57,14 @@ import {
 import { StrategyUI, recordPurchase, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
+import { locale } from './i18n/lang'
+import { startDomTranslation, tr } from './i18n/translate'
 
 const root = document.querySelector<HTMLElement>('#ui')
 const canvas = document.querySelector<HTMLCanvasElement>('#game')
 
 if (!root || !canvas) throw new Error('Strategy game shell is incomplete')
+startDomTranslation()
 
 const LOCAL_GAME_SAVE_KEY = 'cheonharo.strategy.save.member.v2'
 const GUEST_GAME_SAVE_KEY = 'cheonharo.strategy.save.guest.v2'
@@ -81,7 +84,7 @@ function syncResearchRoster(): void {
   const refund = ensureResearchRoster(state)
   if (!refund) return
   const labels: Record<string, string> = { grain: '식량', silver: '은전', wood: '목재', iron: '철', influence: '영향력' }
-  pendingResearchRefund = `기술 연구가 5분야 6단계 체계로 바뀌어 예전 연구 자원을 돌려드렸습니다 · ${Object.entries(refund).map(([key, value]) => `${labels[key] ?? key} ${new Intl.NumberFormat('ko-KR').format(value ?? 0)}`).join(' · ')}`
+  pendingResearchRefund = `기술 연구가 5분야 6단계 체계로 바뀌어 예전 연구 자원을 돌려드렸습니다 · ${Object.entries(refund).map(([key, value]) => `${labels[key] ?? key} ${new Intl.NumberFormat(locale()).format(value ?? 0)}`).join(' · ')}`
   localSaveDirty = true
 }
 
@@ -360,7 +363,7 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
     // 재기록된 세력전 점령이 있으면 서버가 적립한 금화를 받아 온다
     if (retried) await serverGrant('faction', undefined, researchMods(state).factionGold)
     persistLocalGame()
-    ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
+    ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat(locale(), { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
     ui.render(state)
     if (notify) ui.notify(`전역 영토 원장 동기화 완료 · ${merged}개 도시 반영${retried ? ` · 대기 전투 ${retried}건 재기록` : ''}`, 'jade')
   } catch {
@@ -395,7 +398,7 @@ function notifyResearchDone(names: string[]): void {
   if (typeof document === 'undefined' || !document.hidden) return
   const text = `연구 완료 · ${names.join(' · ')}`
   try {
-    if ('Notification' in window && Notification.permission === 'granted') new Notification('천하: 기술 연구 완료', { body: text, icon: '/assets/ui/brand-seal.svg' })
+    if ('Notification' in window && Notification.permission === 'granted') new Notification(tr('천하: 기술 연구 완료'), { body: tr(text), icon: '/assets/ui/brand-seal.svg' })
   } catch { /* 알림을 못 쓰는 환경 */ }
   const original = document.title.replace(/^\(완료\) /, '')
   document.title = `(완료) ${original}`
@@ -518,7 +521,7 @@ async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: n
     const snapshots = await ManusAuth.mutate('territory.recordBattle', payload) as FactionTerritorySnapshot[]
     mergeFactionTerritories(state, snapshots)
     persistLocalGame()
-    ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
+    ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat(locale(), { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
     ui.render(state)
   } catch {
     enqueueTerritoryBattle(payload)
@@ -1114,7 +1117,7 @@ arena = new Arena(canvas, {
           state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
           state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 클리어 · ${starText} · 금화 +${reward.gold} · 모든 재화 보상 획득`
         } else state.lastNotice = `시나리오 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · ${starText}`
-      } else state.lastNotice = wasDuel ? `유저 대련 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver} · 신화장비 조각 +1` : (repeatLeft > 0 ? `전투 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver.toLocaleString('ko-KR')} · 오늘 보상 ${REPEAT_BATTLE_DAILY_LIMIT - (missionState.repeatWins ?? 0)}회 남음` : `전투 승리 · 별 ${result.stars}개 · 오늘 일반 전투 보상(${REPEAT_BATTLE_DAILY_LIMIT}회)을 모두 받았습니다`)
+      } else state.lastNotice = wasDuel ? `유저 대련 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver} · 신화장비 조각 +1` : (repeatLeft > 0 ? `전투 승리 · 별 ${result.stars}개 · 명망 +${honor} · 은전 +${silver.toLocaleString(locale())} · 오늘 보상 ${REPEAT_BATTLE_DAILY_LIMIT - (missionState.repeatWins ?? 0)}회 남음` : `전투 승리 · 별 ${result.stars}개 · 오늘 일반 전투 보상(${REPEAT_BATTLE_DAILY_LIMIT}회)을 모두 받았습니다`)
     } else {
       state.lastNotice = '전투 패배 · 보상 없음 · 무장 배치와 성장 상태를 다시 점검하십시오.'
     }

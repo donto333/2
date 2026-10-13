@@ -4,6 +4,7 @@ import cityRoutes from '../../server/city-routes.json'
 import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 import { MANUAL_PACKAGE_AMOUNTS } from '../../server/economy.mjs'
+import { locale } from '../i18n/lang'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
@@ -1219,7 +1220,7 @@ export function purchaseResourcePackage(state: StrategyState, packageId: string)
     if (state.gold < manualPackage.goldCost) return { ok: false, message: `금화가 부족합니다. ${manualPackage.goldCost}개가 필요합니다.` }
     state.gold -= manualPackage.goldCost
     state.manuals += manualPackage.manuals
-    state.lastNotice = `병서 ${manualPackage.manuals.toLocaleString('ko-KR')} 지급 완료 · 금화 -${manualPackage.goldCost}`
+    state.lastNotice = `병서 ${manualPackage.manuals.toLocaleString(locale())} 지급 완료 · 금화 -${manualPackage.goldCost}`
     return { ok: true, message: state.lastNotice }
   }
   const resourcePackage = RESOURCE_SHOP_PACKAGES.find(item => item.id === packageId)
@@ -1229,7 +1230,7 @@ export function purchaseResourcePackage(state: StrategyState, packageId: string)
   if (resourcePackage.resource === 'silver') state.silver += resourcePackage.amount
   else state.resources[resourcePackage.resource] += resourcePackage.amount
   state.resources.silver = state.silver
-  state.lastNotice = `${RESOURCE_META[resourcePackage.resource].label} ${resourcePackage.amount.toLocaleString('ko-KR')} 지급 완료 · 금화 -${resourcePackage.goldCost}`
+  state.lastNotice = `${RESOURCE_META[resourcePackage.resource].label} ${resourcePackage.amount.toLocaleString(locale())} 지급 완료 · 금화 -${resourcePackage.goldCost}`
   return { ok: true, message: state.lastNotice, package: resourcePackage }
 }
 
@@ -1239,7 +1240,7 @@ export function purchaseHonorPackage(state: StrategyState, packageId: string): H
   if (state.gold < honorPackage.goldCost) return { ok: false, message: `금화가 부족합니다. ${honorPackage.goldCost}개가 필요합니다.` }
   state.gold -= honorPackage.goldCost
   state.honor += honorPackage.honor
-  state.lastNotice = `명망 ${honorPackage.honor.toLocaleString('ko-KR')} 지급 완료 · 금화 -${honorPackage.goldCost}`
+  state.lastNotice = `명망 ${honorPackage.honor.toLocaleString(locale())} 지급 완료 · 금화 -${honorPackage.goldCost}`
   return { ok: true, message: state.lastNotice, package: honorPackage }
 }
 
@@ -1792,7 +1793,7 @@ export function unlockResearch(state: StrategyState, id: string, now = Date.now(
 }
 
 export function formatNumber(value: number): string {
-  return new Intl.NumberFormat('ko-KR').format(value)
+  return new Intl.NumberFormat(locale()).format(value)
 }
 
 // ── 자동 편성 · 자동 장착 ──────────────────────────────────────────

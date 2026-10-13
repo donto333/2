@@ -1,6 +1,7 @@
 // 일일·주간 임무. 날짜는 한국 시간 기준(일일은 0시, 주간은 월요일 0시에 새로 시작).
 // 보상은 명망·은전·자원·병서처럼 이 게임이 직접 관리하는 재화만 준다(금화는 서버 원장 대상이라 제외).
 import type { ResourceKey, StrategyState } from './strategy'
+import { locale } from '../i18n/lang'
 
 export type MissionEvent = 'income' | 'battleWin' | 'researchStart' | 'researchDone' | 'recruit' | 'enhance' | 'siege' | 'duel' | 'visitFormation' | 'missionClaim'
 type Reward = Partial<Record<ResourceKey | 'honor' | 'manuals', number>>
@@ -105,7 +106,7 @@ export function dailyBonusReady(state: StrategyState, now = Date.now()): boolean
 
 const REWARD_LABELS: Record<string, string> = { honor: '명망', silver: '은전', grain: '식량', wood: '목재', iron: '철', influence: '영향력', manuals: '병서' }
 export function rewardText(reward: Reward): string {
-  return Object.entries(reward).map(([key, value]) => `${REWARD_LABELS[key] ?? key} +${new Intl.NumberFormat('ko-KR').format(value ?? 0)}`).join(' · ')
+  return Object.entries(reward).map(([key, value]) => `${REWARD_LABELS[key] ?? key} +${new Intl.NumberFormat(locale()).format(value ?? 0)}`).join(' · ')
 }
 
 function grant(state: StrategyState, reward: Reward): void {
