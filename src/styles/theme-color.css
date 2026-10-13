@@ -1255,7 +1255,7 @@ body .nav-short, body .nav-button--more, body .nav-more-rule { display: none; }
   html body .brand-lockup { grid-area: brand; min-width: 0; gap: 8px; }
   html body .brand-seal, html body .brand-seal img { width: 30px; height: 30px; }
   html body .brand-title { font-size: 19px; line-height: 1.1; }
-  html body .topbar-actions { grid-area: actions; position: static; display: flex; align-items: center; gap: 6px; margin: 0; }
+  html body .topbar-actions { grid-area: actions; position: static; display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; border: 0; width: auto; }
   html body .topbar-actions .lang-toggle { min-width: 0; padding: 6px 8px; font-size: 11px; }
   html body .topbar-actions .auth-button { position: static; padding: 6px 10px; font-size: 12px; line-height: 1.2; white-space: nowrap; max-width: 46vw; }
   html body .topbar-center { grid-area: res; position: static; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; margin: 0; padding: 0; transform: none; }
@@ -1310,3 +1310,126 @@ body .nav-short, body .nav-button--more, body .nav-more-rule { display: none; }
 @media (max-width: 760px) {
   html body .gcard span, html body .gcard em, html body .gcard small { word-break: keep-all; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+ * 게임다운 화면(「AI 느낌」 줄이기): 글은 줄이고, 판·버튼에 질감, 숫자·아이콘 중심
+ * ══════════════════════════════════════════════════════════════════ */
+
+/* 1. 머리글: 분류 머리글을 없애고 설명은 ⓘ 안으로 */
+body .section-heading .eyebrow { display: none; }
+body .section-heading .heading-copy { display: none; }
+body .section-heading.is-info-open .heading-copy { display: block; max-width: 560px; margin-top: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.6; color: #e9dcc0; background: rgba(14, 8, 4, .78); border: 1px solid rgba(227, 178, 92, .4); border-radius: 4px; }
+body .heading-info { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: 10px; vertical-align: middle; border-radius: 50%; border: 1px solid rgba(227, 178, 92, .7); background: rgba(14, 8, 4, .6); color: #e3b25c; font: italic 700 13px/1 Georgia, serif; cursor: pointer; text-shadow: none; flex: none; }
+body .section-heading.is-info-open .heading-info { background: #e3b25c; color: #2a1208; }
+body .card-header .eyebrow { letter-spacing: 0; text-transform: none; font-size: 12px; font-weight: 600; color: #c9a76a; }
+body .hero-sigil, body .intel-icon { display: none; }
+
+/* 6. 글꼴: 큰 명조 제목 → 굵은 고딕 + 붉은 띠 */
+body .section-heading h1, body .page-section h1 {
+  display: inline-flex; align-items: center; margin: 0; padding: 6px 22px 6px 14px;
+  font: 800 26px/1.2 Pretendard, sans-serif; letter-spacing: -.02em; color: #fbefd4;
+  background: linear-gradient(90deg, rgba(150, 34, 22, .92), rgba(150, 34, 22, .55) 70%, transparent);
+  border-left: 4px solid #e3b25c; text-shadow: 0 2px 0 rgba(40, 8, 4, .7);
+}
+body .section-heading h1 em { font-style: normal; }
+body .card-header h3, body .glass-card h2, body .glass-card h3, body .command-hero h2 { font-family: Pretendard, sans-serif; font-weight: 800; letter-spacing: -.01em; }
+body .section-heading h1 .heading-info { margin-left: 12px; }
+
+/* 3. 판: 유리 상자 → 옻칠 나무판 + 금장 모서리 */
+body .glass-card {
+  background:
+    linear-gradient(#e3b25c, #e3b25c) left 4px top 4px / 14px 2px no-repeat,
+    linear-gradient(#e3b25c, #e3b25c) left 4px top 4px / 2px 14px no-repeat,
+    linear-gradient(#e3b25c, #e3b25c) right 4px top 4px / 14px 2px no-repeat,
+    linear-gradient(#e3b25c, #e3b25c) right 4px top 4px / 2px 14px no-repeat,
+    linear-gradient(#e3b25c, #e3b25c) left 4px bottom 4px / 14px 2px no-repeat,
+    linear-gradient(#e3b25c, #e3b25c) left 4px bottom 4px / 2px 14px no-repeat,
+    linear-gradient(#e3b25c, #e3b25c) right 4px bottom 4px / 14px 2px no-repeat,
+    linear-gradient(#e3b25c, #e3b25c) right 4px bottom 4px / 2px 14px no-repeat,
+    repeating-linear-gradient(92deg, rgba(255, 255, 255, .018) 0 2px, transparent 2px 7px),
+    linear-gradient(180deg, #3b2213, #2a170c 60%, #22130a);
+  border: 1px solid #6b4520;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .55), inset 0 0 0 3px rgba(227, 178, 92, .14), 0 6px 16px rgba(0, 0, 0, .45);
+  backdrop-filter: none;
+}
+body .glass-card:hover { border-color: #8a5c2a; }
+
+/* 3. 버튼: 눌리는 입체 버튼 */
+body .action-button, body .ghost-button, body .mini-action, body .shop-buy, body .text-button {
+  transition: transform .06s, box-shadow .06s, filter .12s;
+}
+body .action-button--primary {
+  background: linear-gradient(180deg, #e2523f, #b02a1d 55%, #861a11);
+  border: 1px solid #f0c26a; border-radius: 4px; color: #fff4dd; font-weight: 800; letter-spacing: .02em;
+  text-shadow: 0 1px 0 rgba(60, 8, 4, .8);
+  box-shadow: inset 0 1px 0 rgba(255, 214, 170, .55), inset 0 -3px 0 rgba(60, 8, 4, .35), 0 3px 0 #4d0f09, 0 7px 14px rgba(0, 0, 0, .45);
+}
+body .action-button--primary:hover { filter: brightness(1.08); background: linear-gradient(180deg, #e2523f, #b02a1d 55%, #861a11); }
+body .action-button--primary:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255, 214, 170, .4), inset 0 -1px 0 rgba(60, 8, 4, .35), 0 1px 0 #4d0f09, 0 3px 8px rgba(0, 0, 0, .4); }
+body .action-button--outline, body .action-button--quiet, body .ghost-button, body .mini-action {
+  background: linear-gradient(180deg, #5b3a1f, #3d2512 60%, #301c0d);
+  border: 1px solid #a8793a; border-radius: 4px; color: #f6e6c4;
+  box-shadow: inset 0 1px 0 rgba(255, 220, 160, .25), 0 2px 0 #1a0e06, 0 4px 8px rgba(0, 0, 0, .35);
+}
+body .action-button--outline:hover, body .action-button--quiet:hover, body .ghost-button:hover, body .mini-action:hover:not(:disabled) { filter: brightness(1.12); }
+body .action-button--outline:active, body .action-button--quiet:active, body .ghost-button:active, body .mini-action:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255, 220, 160, .2), 0 0 0 #1a0e06; }
+body .mini-action:disabled { filter: grayscale(.6) brightness(.7); box-shadow: none; }
+
+/* 4. 비용: 아이콘 + 숫자, 모자라면 붉게 */
+body .cost { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; font-weight: 800; white-space: nowrap; }
+body .cost + .cost { margin-left: 8px; }
+body .gi--cost { width: 16px; height: 16px; flex: none; }
+body .cost.is-short { color: #ff8a73; }
+body .cost-row { display: flex; justify-content: center; gap: 2px; }
+
+/* 5. 본영 로비 */
+body .page-section--lobby { display: flex; flex-direction: column; gap: 14px; }
+body .lobby-stage {
+  position: relative; overflow: hidden; min-height: 360px; display: flex; align-items: flex-end;
+  border: 1px solid #8a5c2a; border-radius: 3px;
+  background: linear-gradient(90deg, rgba(18, 9, 4, .92) 0%, rgba(18, 9, 4, .6) 45%, rgba(18, 9, 4, .1) 75%), url('/assets/battlefield/huanghun-gate.webp') center 40% / cover;
+  box-shadow: inset 0 0 0 3px rgba(227, 178, 92, .2), 0 10px 26px rgba(0, 0, 0, .5);
+}
+body .lobby-leader {
+  position: absolute; right: 0; bottom: 0; width: 46%; height: 100%;
+  background: var(--portrait) center 18% / cover no-repeat;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 35%); mask-image: linear-gradient(90deg, transparent, #000 35%);
+  filter: brightness(1.15) contrast(1.05);
+}
+body .lobby-info { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 60%; padding: 26px 28px; }
+body .lobby-chapter { padding: 3px 12px; font: 800 13px/1.4 Pretendard, sans-serif; color: #2a1208; background: linear-gradient(180deg, #f3d29b, #c9933f); box-shadow: 0 1px 0 #6b3f17; }
+body .lobby-info h2 { margin: 0; font: 800 clamp(24px, 3vw, 34px)/1.15 Pretendard, sans-serif; color: #fff4dd; text-shadow: 0 2px 0 rgba(0, 0, 0, .6); word-break: keep-all; }
+body .lobby-enemy { display: flex; gap: 10px; font-weight: 700; color: #f0c9a0; }
+body .lobby-stars { color: #f0c26a; letter-spacing: 2px; }
+body .lobby-power { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+body .lobby-power small { color: #c9a76a; font-weight: 700; }
+body .lobby-power strong { font: 800 32px/1 Pretendard, sans-serif; color: #ffd98a; text-shadow: 0 2px 0 rgba(0, 0, 0, .6); font-variant-numeric: tabular-nums; }
+body .lobby-power .stat-delta { margin: 0; font-size: 12px; }
+body .lobby-march { margin-top: 10px; min-width: 200px; height: 56px; justify-content: center; font-size: 21px; }
+body .lobby-shortcuts { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+body .lobby-shortcut {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 9px;
+  background: linear-gradient(180deg, #4a2d17, #2d1a0c); border: 1px solid #8a5c2a; border-radius: 4px; color: #f6e6c4; font-weight: 800; font-size: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 220, 160, .2), 0 2px 0 #1a0e06;
+}
+body .lobby-shortcut:active { transform: translateY(2px); }
+body .lobby-shortcut__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #6b3a1c, #2a150a); box-shadow: inset 0 0 0 2px #c9933f, inset 0 0 0 4px rgba(0, 0, 0, .4); }
+body .lobby-shortcut__icon .gi { width: 24px; height: 24px; }
+body .lobby-shortcut b { position: absolute; top: 5px; right: 6px; min-width: 18px; padding: 2px 5px; border-radius: 9px; background: #b02a1d; color: #fff; font-size: 10.5px; line-height: 1.2; }
+body .notice-card h3 { margin: 0 0 6px; font-size: 15px; }
+@media (max-width: 760px) {
+  body .lobby-stage { min-height: 300px; }
+  body .lobby-leader { width: 62%; opacity: .9; }
+  body .lobby-info { max-width: 78%; padding: 18px 16px; }
+  body .lobby-march { min-width: 150px; height: 50px; font-size: 19px; }
+  body .lobby-shortcuts { gap: 6px; }
+  body .lobby-shortcut { font-size: 12px; padding: 8px 2px; }
+  body .lobby-shortcut__icon { width: 38px; height: 38px; }
+  body .section-heading h1, body .page-section h1 { font-size: 22px; padding: 5px 16px 5px 12px; }
+}
+body .summon-menu-head .eyebrow, body .summon-menu-head .heading-copy { display: none; }
+body .summon-menu-head.is-info-open .heading-copy { display: block; max-width: 560px; margin-top: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.6; color: #e9dcc0; background: rgba(14, 8, 4, .78); border: 1px solid rgba(227, 178, 92, .4); border-radius: 4px; }
+body .summon-menu-head.is-info-open .heading-info { background: #e3b25c; color: #2a1208; }
+/* 전투 화면 위 판은 가볍게(모서리 장식 없이) */
+body .app-shell--battle .glass-card { background: linear-gradient(180deg, rgba(40, 22, 12, .86), rgba(26, 14, 8, .84)); }
