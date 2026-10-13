@@ -48,7 +48,8 @@ export class Coach {
     this.layer = layer
     this.target = step.target ?? ''
     const element = this.target ? document.querySelector<HTMLElement>(this.target) : null
-    if (element && visible(element)) { const r = element.getBoundingClientRect(); if (r.top < 90 || r.bottom > window.innerHeight - 20) element.scrollIntoView({ block: r.height > window.innerHeight * 0.6 ? 'start' : 'center', behavior: 'smooth' }) }
+    this.lastScroll = 0
+    if (element && visible(element)) this.keepInView(element, true)
     this.place()
     requestAnimationFrame(() => layer.classList.add('is-visible'))
   }
@@ -58,6 +59,32 @@ export class Coach {
     this.layer?.remove()
     this.layer = null
     document.body.classList.remove('coach-open')
+  }
+
+  private lastScroll = 0
+
+  /** 화면 아래에 붙은 메뉴(모바일)의 높이: 그 위까지만 보이는 곳으로 친다 */
+  private bottomCover(): number {
+    const sidebar = document.querySelector<HTMLElement>('.sidebar')
+    if (!sidebar) return 0
+    const rect = sidebar.getBoundingClientRect()
+    // 화면 아래쪽에 가로로 붙어 있을 때만(모바일 하단 메뉴)
+    return rect.top > window.innerHeight * 0.4 && rect.width > window.innerWidth * 0.6 ? Math.max(0, window.innerHeight - rect.top) : 0
+  }
+
+  /** 비춘 버튼이 상단 바·하단 메뉴에 가리거나 화면 밖이면 보이는 곳으로 굴린다(다시 그려져 위치가 바뀌어도 계속) */
+  private keepInView(element: HTMLElement, first = false): void {
+    const now = performance.now()
+    if (!first && now - this.lastScroll < 700) return
+    const rect = element.getBoundingClientRect()
+    const top = 84, bottom = window.innerHeight - this.bottomCover() - 16
+    if (rect.top >= top && rect.bottom <= bottom) return
+    this.lastScroll = now
+    const room = bottom - top
+    element.scrollIntoView({ block: rect.height > room * 0.8 ? 'start' : 'center', behavior: first ? 'smooth' : 'auto' })
+    // 가운데로 굴려도 하단 메뉴에 가리면 그만큼 더 올린다
+    const after = element.getBoundingClientRect()
+    if (after.bottom > bottom) scrollerOf(element).scrollBy(0, after.bottom - bottom + 12)
   }
 
   /** 대상이 다시 그려지거나 화면이 움직여도 따라간다 */
@@ -78,14 +105,16 @@ export class Coach {
       bubble.style.top = `${Math.max(12, (vh - bh) / 2)}px`
     } else {
       layer.classList.remove('coach-layer--center')
+      if (layer.classList.contains('coach-layer--click')) this.keepInView(element)
       const rect = element.getBoundingClientRect()
       const pad = 6
       const top = Math.max(4, rect.top - pad), left = Math.max(4, rect.left - pad)
       const width = Math.min(vw - 8, rect.right + pad) - left, height = Math.min(vh - 8, rect.bottom + pad) - top
       Object.assign(spot.style, { display: 'block', top: `${top}px`, left: `${left}px`, width: `${Math.max(0, width)}px`, height: `${Math.max(0, height)}px` })
       // 말풍선: 아래 → 위 → 안쪽 아래 순으로 자리를 찾는다
+      const floor = vh - this.bottomCover() - 8
       let by = top + height + 12
-      if (by + bh > vh - 8) by = top - bh - 12
+      if (by + bh > floor) by = top - bh - 12
       if (by < 8) by = Math.min(vh - bh - 12, Math.max(8, top + height - bh - 12))
       const bx = Math.min(vw - bw - 12, Math.max(12, left + width / 2 - bw / 2))
       bubble.style.left = `${bx}px`
@@ -93,6 +122,15 @@ export class Coach {
     }
     this.frame = requestAnimationFrame(this.place)
   }
+}
+
+/** 이 요소를 굴리는 상자(없으면 창) */
+function scrollerOf(element: HTMLElement): HTMLElement | Window {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const style = getComputedStyle(node)
+    if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 2) return node
+  }
+  return window
 }
 
 function visible(element: HTMLElement): boolean {
