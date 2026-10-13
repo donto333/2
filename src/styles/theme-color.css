@@ -1240,3 +1240,73 @@ body .access-choice--guest b { color: #f2c46d; }
 body .access-gate__note { color: #b9a988; }
 body .access-gate__lang .setting-seg__btn { color: #cfc3a9; }
 body .access-gate__lang .setting-seg__btn.is-active { background: rgba(224, 177, 82, .28); color: #fbf3df; }
+
+/* 모바일 본영: 작전 전투력이 버튼 위에 겹치지 않게(글자 크기를 키운 기기 포함) 흐름 안에 둔다 */
+@media (max-width: 760px) {
+  body .command-hero .hero-stat { position: static; right: auto; bottom: auto; }
+}
+
+/* ══ 휴대폰 화면 틀(상단 바 2줄 · 하단 탭 1줄 + 더보기) ══════════════════════════
+ * 글자 크기를 키운 기기에서도 겹치지 않게 고정 높이 대신 흐름·스크롤로 배치한다. */
+body .nav-short, body .nav-button--more, body .nav-more-rule { display: none; }
+@media (max-width: 760px) {
+  /* 상단 바: 1줄 = 인장·이름 + 언어·로그인 / 2줄 = 재화(옆으로 밀어 보기) */
+  html body .topbar { height: auto; min-height: 0; padding: 6px 12px 6px; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand actions" "res res"; align-items: center; gap: 4px 8px; }
+  html body .brand-lockup { grid-area: brand; min-width: 0; gap: 8px; }
+  html body .brand-seal, html body .brand-seal img { width: 30px; height: 30px; }
+  html body .brand-title { font-size: 19px; line-height: 1.1; }
+  html body .topbar-actions { grid-area: actions; position: static; display: flex; align-items: center; gap: 6px; margin: 0; }
+  html body .topbar-actions .lang-toggle { min-width: 0; padding: 6px 8px; font-size: 11px; }
+  html body .topbar-actions .auth-button { position: static; padding: 6px 10px; font-size: 12px; line-height: 1.2; white-space: nowrap; max-width: 46vw; }
+  html body .topbar-center { grid-area: res; position: static; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; margin: 0; padding: 0; transform: none; }
+  html body .topbar-center > span:not(.topbar-resources) { display: none; }
+  html body .topbar-resources { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; min-width: 0; width: 100%; }
+  html body .topbar-resources::-webkit-scrollbar { display: none; }
+  html body .topbar-resource { flex: 0 0 auto; padding: 4px 8px; font-size: 12px; }
+  html body .topbar-resource small { display: none; }
+  html body .main-content { padding-top: calc(var(--mobile-top, 92px) + 12px); padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px) + 16px); }
+
+  /* 하단 탭: 주요 5개 + 더보기, 한 줄 */
+  html body .sidebar { top: auto; bottom: 0; left: 0; right: 0; width: 100%; height: auto; min-height: 0; max-height: 72vh; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: 58px; align-content: end; gap: 0; padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; overflow-x: hidden; z-index: 30; }
+  html body .sidebar .nav-group, html body .sidebar .sidebar-spacer, html body .sidebar .sidebar-profile { display: none; }
+  html body .sidebar .nav-ops { display: contents; }
+  html body .sidebar .nav-button { order: 1; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: auto; min-width: 0; height: 58px; margin: 0; padding: 6px 2px 4px; border: 0; border-radius: 0; background: transparent; font-size: 11.5px; }
+  html body .sidebar .nav-button--primary { order: 3; display: flex; }
+  html body .sidebar .nav-button .nav-label { display: none; }
+  html body .sidebar .nav-button .nav-short { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; letter-spacing: -.01em; }
+  html body .sidebar .nav-button .nav-icon, html body .sidebar .nav-button .nav-icon .gi { width: 24px; height: 24px; }
+  html body .sidebar .nav-button b, html body .sidebar .nav-button.is-active::after { display: none; }
+  html body .sidebar .nav-button.is-active { background: linear-gradient(180deg, rgba(240, 194, 106, .22), rgba(240, 194, 106, .04)); color: #fff3dc; box-shadow: inset 0 2px 0 #f0c26a; }
+  /* 더보기 펼침: 나머지 메뉴가 탭 위로 올라온다 */
+  html body .sidebar.is-more-open { box-shadow: 0 -18px 50px rgba(0, 0, 0, .55); }
+  html body .sidebar.is-more-open .nav-button { display: flex; }
+  html body .sidebar.is-more-open .nav-more-rule { display: block; order: 2; grid-column: 1 / -1; height: 1px; align-self: center; background: rgba(240, 194, 106, .35); }
+  html body .sidebar.is-more-open { grid-auto-rows: auto; }
+  html body .sidebar.is-more-open .nav-button:not(.nav-button--primary) { height: 64px; }
+  html body .sidebar .nav-more-rule { height: 1px; }
+
+  /* 본영 머리글: 글자 크기를 키워도 단어가 한 글자씩 끊기지 않게 */
+  html body .page-section--overview .section-heading h1 { font-size: clamp(24px, 7.4vw, 30px); word-break: keep-all; overflow-wrap: anywhere; }
+  html body .section-heading h1 { word-break: keep-all; }
+}
+@media (max-width: 760px) {
+  html body .heading-copy, html body .command-hero h2, html body .hero-copy p { word-break: keep-all; overflow-wrap: anywhere; }
+}
+
+/* 휴대폰(글자 크기 키움 포함): 가로로 넘치거나 한 글자씩 세로로 끊기던 곳 */
+@media (max-width: 760px) {
+  html body .overview-grid { grid-template-columns: minmax(0, 1fr); }
+  html body .overview-grid > *, html body .formation-card, html body .recruit-layout > *, html body .recruit-pedestal { min-width: 0; max-width: 100%; }
+  html body .formation-card .card-header { flex-wrap: wrap; gap: 6px; }
+  html body .recruit-layout { grid-template-columns: minmax(0, 1fr); }
+  html body .recruit-actions { flex-wrap: wrap; justify-content: center; }
+  html body .recruit-actions .action-button { flex: 1 1 150px; min-width: 0; white-space: nowrap; }
+  html body .recruit-copy, html body .recruit-copy p { word-break: keep-all; }
+  html body .filter-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
+  html body .filter-tabs::-webkit-scrollbar { display: none; }
+  html body .filter-tabs .filter-tab { flex: 0 0 auto; white-space: nowrap; }
+  html body .stat-bars--attributes span { white-space: nowrap; }
+}
+@media (max-width: 760px) {
+  html body .gcard span, html body .gcard em, html body .gcard small { word-break: keep-all; }
+}

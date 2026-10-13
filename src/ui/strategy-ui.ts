@@ -60,6 +60,15 @@ const MAP_REGION_LABELS: ReadonlyArray<{ id: string; name: string; hanja: string
   { id: 'jiaozhou', name: '교주', hanja: '交州', x: 48.1, y: 81.0 },
 ]
 
+/** 휴대폰 하단 탭에 늘 보이는 메뉴(나머지는 「더보기」) */
+const MOBILE_TABS: Section[] = ['overview', 'roster', 'formation', 'recruit', 'battle']
+/** 휴대폰에서 쓰는 짧은 메뉴 이름(한·영을 직접 고른다: 「장비」 같은 말이 사전에서 인물 이름으로 바뀌지 않게) */
+const SHORT_NAV: Record<string, [string, string]> = {
+  overview: ['본영', 'Base'], roster: ['무장', 'Generals'], codex: ['도감', 'Codex'], formation: ['편성', 'Lineup'], recruit: ['모집', 'Recruit'], equipment: ['장비', 'Gear'], research: ['연구', 'Research'], territory: ['영토', 'Territory'],
+  battle: ['전투', 'Battle'], duel: ['대련', 'Duel'], rank: ['랭킹', 'Ranks'], board: ['게시판', 'Board'], shop: ['상점', 'Shop'], updates: ['소식', 'News'], account: ['계정', 'Account'], admin: ['관리', 'Admin'], balance: ['밸런스', 'Balance'],
+}
+const shortNavLabel = (key: string) => { const pair = SHORT_NAV[key]; return pair ? `<span class="nav-short" data-no-tr>${isEnglish() ? pair[1] : pair[0]}</span>` : '' }
+
 /** 사용자가 쓴 글·이름: 번역하지 않는다 */
 const ugc = (text: string) => `<span data-no-tr>${escapeHtml(text)}</span>`
 
@@ -373,6 +382,19 @@ export class StrategyUI {
       window.requestAnimationFrame(() => shell.classList.remove('is-entering'))
     }
     if (this.latestBattle) this.updateBattle(this.latestBattle)
+    this.watchTopbar()
+  }
+
+  private topbarObserver: ResizeObserver | null = null
+  /** 휴대폰 상단 바 높이(글자 크기·줄바꿈에 따라 달라짐)를 본문 위 여백에 반영한다 */
+  private watchTopbar(): void {
+    const topbar = this.root.querySelector<HTMLElement>('.topbar')
+    if (!topbar || typeof ResizeObserver === 'undefined') return
+    const apply = () => document.documentElement.style.setProperty('--mobile-top', `${Math.ceil(topbar.getBoundingClientRect().height)}px`)
+    this.topbarObserver?.disconnect()
+    this.topbarObserver = new ResizeObserver(apply)
+    this.topbarObserver.observe(topbar)
+    apply()
   }
 
   setAuth(auth: AuthView): void {
@@ -763,7 +785,8 @@ export class StrategyUI {
           ${this.navButton('shop', icon('shop'), '상점', state.section)}
           ${this.navButton('updates', icon('updates'), '업데이트 기록', state.section, 'NEW')}
           ${this.navButton('account', icon('account'), '계정 관리', state.section)}
-          ${this.canOpenBalance() || this.isAdmin() ? `<div class="nav-ops">${this.canOpenBalance() ? `<a class="nav-button nav-button--link nav-button--ops" href="./balance.html" data-nav><span class="nav-icon">${icon('balance')}</span><span>밸런스 테스트</span></a>` : ''}${this.isAdmin() ? this.navButton('admin', icon('admin'), '관리자 센터', state.section).replace('class="nav-button ', 'class="nav-button nav-button--ops ') : ''}</div>` : ''}
+          ${this.canOpenBalance() || this.isAdmin() ? `<div class="nav-ops">${this.canOpenBalance() ? `<a class="nav-button nav-button--link nav-button--ops" href="./balance.html" data-nav><span class="nav-icon">${icon('balance')}</span><span class="nav-label">밸런스 테스트</span>${shortNavLabel('balance')}</a>` : ''}${this.isAdmin() ? this.navButton('admin', icon('admin'), '관리자 센터', state.section).replace('class="nav-button ', 'class="nav-button nav-button--ops ') : ''}</div>` : ''}
+          ${this.navMoreButton(state)}
           <div class="sidebar-spacer"></div>
           <div class="sidebar-profile"><div class="profile-orb">${state.faction.slice(0, 1)}</div><div><strong>${state.faction} 진영</strong><small>옥패 07 · Lv.12</small></div></div>
         </aside>
@@ -779,7 +802,15 @@ export class StrategyUI {
     // 배지: 숫자는 금테 작은 상자, 새 소식(NEW)은 붉은 「새」 표시
     const mark = !badge ? '' : badge === 'NEW' ? '<b class="nav-badge nav-badge--new">새</b>' : `<b class="nav-badge">${badge}</b>`
     const coach = this.coachSection === section && current !== section ? 'nav-coach' : ''
-    return `<button class="nav-button ${current === section ? 'is-active' : ''} ${coach}" data-action="section" data-section="${section}" data-nav><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>${mark}</button>`
+    const primary = MOBILE_TABS.includes(section) ? 'nav-button--primary' : ''
+    return `<button class="nav-button ${primary} ${current === section ? 'is-active' : ''} ${coach}" data-action="section" data-section="${section}" data-nav><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>${shortNavLabel(section)}${mark}</button>`
+  }
+
+  /** 휴대폰 하단 탭의 「더보기」: 주요 5개 밖의 메뉴를 펼친다 */
+  private navMoreButton(state: StrategyState): string {
+    const outside = !MOBILE_TABS.includes(state.section)
+    const coach = this.coachSection && !MOBILE_TABS.includes(this.coachSection as Section) && this.coachSection !== state.section ? 'nav-coach' : ''
+    return `<div class="nav-more-rule" aria-hidden="true"></div><button class="nav-button nav-button--primary nav-button--more ${outside ? 'is-active' : ''} ${coach}" data-action="nav-more" aria-label="더보기"><span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span class="nav-short">${isEnglish() ? 'More' : '더보기'}</span></button>`
   }
 
   /** 메뉴 분류 패(칠기 목패 위 금박 패) */
@@ -1756,12 +1787,17 @@ export class StrategyUI {
   private handleClick = (event: MouseEvent): void => {
     const target = event.target as HTMLElement
     const button = target.closest<HTMLElement>('[data-action]')
+    // 「더보기」를 펼친 채 다른 곳을 누르면 닫는다
+    const openMore = this.root.querySelector('.sidebar.is-more-open')
+    if (openMore && !target.closest('.sidebar')) openMore.classList.remove('is-more-open')
     if (!button) return
     const action = button.dataset.action
     if (button.dataset.opponentId) {
       this.callbacks.onDuelStart(button.dataset.opponentId)
       return
     }
+    if (action === 'nav-more') { this.root.querySelector('.sidebar')?.classList.toggle('is-more-open'); return }
+    if (action === 'section') { this.root.querySelector('.sidebar')?.classList.remove('is-more-open') }
     if (action === 'section') { if (button.dataset.scenarioId) { this.scenarioSelectedId = button.dataset.scenarioId; this.scenarioPicked = true } this.callbacks.onSection((button.dataset.section ?? 'overview') as Section) }
     else if (action === 'summon-tab') {
       this.summonTab = button.dataset.summonTab === 'equipment' ? 'equipment' : 'generals'
