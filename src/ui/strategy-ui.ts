@@ -371,13 +371,17 @@ export class StrategyUI {
     const enteringScenario = state.section === 'battle' && this.lastSection !== 'battle'
     this.lastSection = state.section
     if (enteringScenario && !this.scenarioPicked) this.scenarioSelectedId = this.nextScenario(state)?.id ?? this.scenarioSelectedId
+    // 같은 메뉴 안에서 버튼을 눌러 다시 그릴 때는 보던 자리(스크롤)와 펼친 칸을 그대로 둔다
+    const sameSection = previousSection === state.section
+    const kept = sameSection ? this.captureView() : null
     this.root.innerHTML = this.shell(state)
+    if (kept) this.restoreView(kept)
     ensureIconSprite()
     // 시나리오 목록에 들어오면 고른(다음에 깰) 시나리오가 보이게 스크롤
     if (enteringScenario) window.requestAnimationFrame(() => this.root.querySelector('.scenario-card.is-selected')?.scrollIntoView({ block: 'center' }))
     this.attachTerritoryMap(state)
     const shell = this.root.querySelector<HTMLElement>('.app-shell')
-    if (shell) {
+    if (shell && !sameSection) {
       shell.classList.add('is-entering')
       window.requestAnimationFrame(() => shell.classList.remove('is-entering'))
     }
@@ -411,6 +415,46 @@ export class StrategyUI {
       info.addEventListener('click', event => { event.stopPropagation(); heading.classList.toggle('is-info-open') })
       title.appendChild(info)
     })
+  }
+
+
+  /** 화면 상태 기록: 스크롤 위치(세로·가로)와 펼친 칸 */
+  private captureView(): { scroll: Array<[string, number, number]>; open: string[]; windowY: number } {
+    const scroll: Array<[string, number, number]> = []
+    const keyOf = (element: Element) => {
+      const parts: string[] = []
+      for (let node: Element | null = element; node && node !== this.root; node = node.parentElement) {
+        const parent: Element | null = node.parentElement
+        const index = parent ? Array.prototype.indexOf.call(parent.children, node) : 0
+        parts.unshift(`${node.tagName}.${(node.getAttribute('class') ?? '').split(' ')[0]}:${index}`)
+      }
+      return parts.join('>')
+    }
+    this.root.querySelectorAll<HTMLElement>('*').forEach(element => {
+      if (element.scrollTop > 0 || element.scrollLeft > 0) scroll.push([keyOf(element), element.scrollTop, element.scrollLeft])
+    })
+    const open = [...this.root.querySelectorAll('details[open]')].map(keyOf)
+    return { scroll, open, windowY: window.scrollY }
+  }
+
+  private restoreView(view: { scroll: Array<[string, number, number]>; open: string[]; windowY: number }): void {
+    const find = (key: string): HTMLElement | null => {
+      let node: Element | null = this.root
+      for (const part of key.split('>')) {
+        const index = Number(part.slice(part.lastIndexOf(':') + 1))
+        node = node?.children[index] ?? null
+        if (!node) return null
+      }
+      return node as HTMLElement
+    }
+    view.open.forEach(key => { const element = find(key); if (element instanceof HTMLDetailsElement) element.open = true })
+    const apply = () => {
+      view.scroll.forEach(([key, top, left]) => { const element = find(key); if (element) { element.scrollTop = top; element.scrollLeft = left } })
+      if (view.windowY) window.scrollTo(0, view.windowY)
+    }
+    apply()
+    // 그림·글꼴이 늦게 자리를 잡아도 한 번 더 맞춘다
+    window.requestAnimationFrame(apply)
   }
 
   private topbarObserver: ResizeObserver | null = null
@@ -1716,6 +1760,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '버튼을 눌러도 화면 고정', '강화·장착·구매처럼 같은 메뉴 안에서 버튼을 누르면 화면이 맨 위로 튀어 오르던 문제를 고쳤습니다. 보던 위치와 펼쳐 둔 칸(스킬 자세히 등)이 그대로 유지됩니다.', '완료', 'jade'],
       ['2026.10.13', '재화 그림', '금화(놋쇠 엽전)·은전(말굽은)·옥패(비취 패와 붉은 끈)·영향력(인장)·식량(이삭 다발)·목재(통나무)·철(덩이쇠)·병서(죽간)·신화 조각(자수정)을 질감과 빛이 있는 사실적인 그림으로 바꿨습니다.', '완료', 'jade'],
       ['2026.10.13', '화면 개편 · 모바일 정리', '본영을 대표 무장 그림과 큰 출전 버튼, 아이콘 바로가기로 바꿨습니다. 제목 위 머리글과 설명 문장은 ⓘ 안으로 접고, 버튼의 꾸밈 기호를 걷어 냈습니다. 패널은 옻칠 나무판과 금장 모서리, 버튼은 눌리는 입체 모양이 되었고, 비용은 아이콘과 숫자로(모자라면 붉게) 보여 줍니다. 휴대폰은 하단 메뉴를 한 줄(본영·무장·편성·모집·전투 + 더보기)로 줄이고, 글자 크기를 키운 기기에서 글자가 겹치거나 넘치던 곳을 고쳤습니다.', '완료', 'gold'],
       ['2026.10.13', '명망 → 옥패', '무장 모집·장비 뽑기에 쓰는 재화 이름을 명망에서 옥패로 바꿨습니다. 보유량과 쓰임새는 그대로입니다.', '완료', 'jade'],
