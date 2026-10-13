@@ -1222,3 +1222,21 @@ body .setting-row .mini-action--danger:hover { background: rgba(160, 40, 24, .7)
 body .luoyang-rules { display: block; width: auto; max-width: 560px; margin: 8px 0 0; }
 body .luoyang-rules summary { width: fit-content; }
 body .luoyang-rules-body { position: static; z-index: auto; width: auto; margin-top: 8px; background: #1d110a; box-shadow: none; }
+
+/* 접속 화면: 예전 밝은 테마 잔재를 덮어 어두운 옻칠 패널 + 또렷한 글자로 */
+body .access-gate__backdrop { background-image: linear-gradient(180deg, rgba(20, 11, 6, .55), rgba(20, 11, 6, .82)), url('/assets/login/three-kingdoms-thumbnail.webp'); }
+body .access-gate__panel { background: linear-gradient(150deg, rgba(52, 30, 17, .96), rgba(30, 17, 10, .95)); border-color: rgba(231, 207, 158, .38); box-shadow: 0 28px 90px rgba(0, 0, 0, .6); }
+body .access-gate__panel .eyebrow { color: #e7c47a; text-shadow: none; }
+body .access-gate__panel h1 { color: #fbf3df; }
+body .access-gate__lead { color: #d8cbb0; }
+body .access-gate__divider { color: #c9b994; }
+body .access-gate__divider i { background: rgba(231, 207, 158, .3); }
+body .access-choice { background: rgba(14, 8, 4, .55); border-color: rgba(231, 207, 158, .4); }
+body .access-choice--member { background: linear-gradient(145deg, rgba(224, 177, 82, .2), rgba(14, 8, 4, .6)); }
+body .access-choice strong { color: #fbf3df; }
+body .access-choice span { color: #cdbf9f; }
+body .access-choice--member b { color: #7fe0b0; }
+body .access-choice--guest b { color: #f2c46d; }
+body .access-gate__note { color: #b9a988; }
+body .access-gate__lang .setting-seg__btn { color: #cfc3a9; }
+body .access-gate__lang .setting-seg__btn.is-active { background: rgba(224, 177, 82, .28); color: #fbf3df; }
