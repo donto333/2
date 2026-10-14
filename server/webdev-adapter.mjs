@@ -1,4 +1,5 @@
 import { createRequire as createCityRoutesRequire } from 'node:module';
+import { DUEL_MATCH_COUNT, DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from "./duel-match.mjs";
 import { neutralRaidPower, resolveNeutralRaid } from './neutral-raid.mjs';
 const cityRoutes = createCityRoutesRequire(import.meta.url)('./city-routes.json');
 // starters/web-db-user-v1/shared/const.ts
@@ -652,9 +653,14 @@ async function listGameStates() {
   const byUser = new Map(states.map(state => [state.userId, state]));
   return accounts.map(user => ({ ...user, ...(byUser.get(user.id) ?? { userId: user.id, ...defaultGameState, updatedAt: new Date() }) }));
 }
-async function listDuelOpponents(viewerId, limit = 12) {
+/**
+ * 유저 대련 상대: 덱을 저장한 지휘관(나 포함)이 DUEL_USER_THRESHOLD명 이상이면 내 덱 전력과 비슷한 실제 유저 덱,
+ * 그보다 적으면 mode 'dummy'(게임이 내 전력에 맞춘 훈련 상대를 만든다).
+ * power를 보내지 않은 옛 게임은 전적 점수 순 목록(배열)을 받는다.
+ */
+async function listDuelOpponents(viewerId, limit = 12, power) {
   const accounts = await listGameStates();
-  return accounts.filter(account => account.id !== viewerId).map(account => {
+  const decks = accounts.map(account => {
     const generals = parseStateJson(account.generalData);
     const formation = parseStateJson(account.formationData);
     if (!Array.isArray(generals) || !Array.isArray(formation)) return null;
@@ -663,12 +669,19 @@ async function listDuelOpponents(viewerId, limit = 12) {
     if (!deck.length) return null;
     return {
       id: `user-${account.id}`,
+      userId: account.id,
       displayName: account.name || `지휘관 ${account.id}`,
       score: Number.isFinite(Number(account.battleScore)) ? Number(account.battleScore) : 0,
+      power: duelDeckPower(deck),
       isDummy: false,
       deck,
     };
-  }).filter(Boolean).sort((left, right) => right.score - left.score).slice(0, Math.max(1, Math.min(50, limit)));
+  }).filter(Boolean);
+  const others = decks.filter(entry => entry.userId !== viewerId).map(({ userId: _userId, ...entry }) => entry);
+  if (power === undefined) return others.sort((left, right) => right.score - left.score).slice(0, Math.max(1, Math.min(50, limit)));
+  const registered = decks.length;
+  if (registered < DUEL_USER_THRESHOLD) return { mode: "dummy", registered, threshold: DUEL_USER_THRESHOLD, opponents: [] };
+  return { mode: "users", registered, threshold: DUEL_USER_THRESHOLD, opponents: pickDuelMatches(others, power, Math.max(1, Math.min(DUEL_MATCH_COUNT, limit))) };
 }
 // 금화·신화 조각·낙양 강화석은 서버 원장이 기준이다.
 // 클라이언트 저장은 이 값을 "줄이는" 것(사용)만 할 수 있고, 늘리는 것은 grantCurrency·낙양 보상만 한다.

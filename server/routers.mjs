@@ -43,7 +43,8 @@ export const gameRouter = router({
   }),
   leaderboard: createLeaderboardRouter({ router, publicProcedure, protectedProcedure }, leaderboard),
   duel: router({
-    listOpponents: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(12) }).strict()).query(({ ctx, input }) => listDuelOpponents(ctx.user.id, input.limit)),
+    // power(내 덱 전력)를 보내면 비슷한 실력의 유저를 고르고, 덱을 저장한 지휘관이 20명 미만이면 훈련 상대 모드를 알려 준다
+    listOpponents: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(12), power: z.number().min(0).max(10_000_000).optional() }).strict()).query(({ ctx, input }) => listDuelOpponents(ctx.user.id, input.limit, input.power)),
   }),
   territory: router({
     list: protectedProcedure.query(({ ctx }) => getFactionTerritories(ctx.user.id)),

@@ -166,6 +166,8 @@ export interface DuelOpponent {
   displayName: string
   score: number
   isDummy: boolean
+  /** 덱 전력(server/duel-match.mjs) */
+  power?: number
   deck?: General[]
   /** 훈련 상대 설명(난이도 · 평균 레벨) */
   note?: string
@@ -256,6 +258,7 @@ export class StrategyUI {
   private boardPosts: BoardPost[] = []
   private boardTab: BoardPost['board'] = '전체'
   private duelOpponents: DuelOpponent[] = []
+  private duelMyPower = 0
   private latestBattle: BattleSnapshot | null = null
   private cutInBusyUntil = 0
   private cutInTimer = 0
@@ -589,8 +592,9 @@ export class StrategyUI {
     if (this.renderedState?.section === 'board') this.render(this.renderedState)
   }
 
-  setDuelOpponents(opponents: DuelOpponent[]): void {
+  setDuelOpponents(opponents: DuelOpponent[], myPower = 0): void {
     this.duelOpponents = opponents
+    this.duelMyPower = myPower
     if (this.renderedState?.section === 'duel') this.render(this.renderedState)
   }
 
@@ -1832,6 +1836,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '유저 대련 매칭', '덱을 저장한 지휘관이 20명 이상이면 내 덱 전력과 가장 비슷한 실제 유저 덱 6개가 상대로 나옵니다(상대 카드에 전력과 내 덱 대비 차이 표시). 20명 미만이면 내 덱 전력(장비 포함)에 맞춘 훈련 상대 3팀이 나옵니다: 쉬움 90% · 보통 100% · 어려움 110%. 훈련 상대는 가운데에 수호형을 세운 균형 잡힌 덱이고 내 덱 등급·성급에 맞추며, 날마다 무장 구성이 바뀝니다.', '완료', 'jade'],
       ['2026.10.14', '속도·장비 세트 개편', '속도가 실제로 전장을 바꿉니다. 전장의 평균보다 빠른 무장일수록 첫 스킬을 먼저 써서(장비 속도 포함), 가장 빠른 무장이 먼저 버프·디버프를 겁니다. 스킬 쿨다운도 레벨업·장비로 올린 지금 속도만큼 줄고(속도 66 −4%, 200 −13%, 400 −18%), 일반 공격 간격은 속도 141에서 갑자기 멈추던 상한 대신 서서히 짧아집니다. 장비 세트 3부위 효과도 설명대로 실제로 켜집니다: 질풍 첫 스킬 2초 빨리·쿨다운 −8%, 패왕 착용 무장 피해 +10%, 천군 착용 무장 받는 피해 −8%, 천책 전술 게이지 +12%·착용 무장 디버프 지속 +30%. 책사(계략) 스킬 쿨다운은 12초에서 11초로 줄였습니다.', '완료', 'jade'],
       ['2026.10.14', '추천 덱 갱신 · 명장 수호형 조정', '유형별 성장에 맞춰 무장 추천 덱을 다시 짰습니다. 강한 적을 상대로는 가운데(전열) 수호형과 회복이 승패를 크게 가르기 때문에 디버프·유틸·연계 덱에도 전열 수호형을 우선 세우고, 일반 공격만 키우는 패시브(요래·선등)와 자기 병력을 깎는 스킬은 낮게 칩니다. 이제 다섯 유형 모두 무작위 조합보다 승률이 높고(+9~44%p) 더 빨리 이깁니다. 명장 수호형이 지나치게 강해 전위·허저 호위 6→4초(전위 자신 피해 감소 30→20%, 허저 반격 15→12%), 조인 철벽 −25% 7초 → −20% 6초, 법정 반격 30% 5초 → 24% 4초로 낮췄고, 시나리오 4~6장 난이도를 예전 수준으로 맞췄습니다.', '완료', 'jade'],
       ['2026.10.14', '유형별 능력치 성장', '레벨업·성급 상승 때 무장 유형에 맞는 능력치가 크게 오릅니다. 무력형(돌격·사격)은 무력·공격, 책사형(계략)은 모략, 방어형(수호)은 통솔·방어, 지휘형(통솔)은 통솔, 치유형은 통솔·모략 중심이며, 무장 본래 능력치 비율도 섞여 같은 유형 안에서도 개성이 남습니다. 오르는 총량은 모두 같습니다. 스킬 위력은 주 능력치가 얼마나 올랐는지에 따라 커지고(장비로 올려도 반영), 회복량도 등급과 통솔 성장에 따라 달라집니다. 책사·치유형은 모략으로, 지휘형은 통솔로 일반 공격을 합니다. 전투력도 유형마다 중요한 능력치를 더 크게 칩니다. 보유 무장 능력치는 새 공식으로 다시 계산했습니다(레벨·성급·장비 그대로). 함께 계략 스킬 위력 8→11, 노숙 스킬에 병력 6% 회복 추가, 유비 회복 12→10%, 시나리오 난이도는 예전과 비슷하게 맞췄습니다. 무장 카드의 ▲성장 표시가 가장 많이 오르는 능력치입니다.', '완료', 'jade'],
@@ -1937,7 +1942,7 @@ export class StrategyUI {
   private duelSection(state: StrategyState): string {
     const formationReady = state.formation.length >= 3
     const opponents = this.duelOpponents
-    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>${opponents.some(opponent => !opponent.isDummy) ? '다른 지휘관이 저장한 출전 덱과 겨룹니다.' : '아직 겨룰 지휘관 덱이 없어, 내 무장 레벨에 맞춘 훈련 상대를 준비했습니다.'}</p><div class="duel-daily-limit"><strong>오늘 남은 대련 ${duelAttemptsRemaining(state)}회</strong><span>매일 5회 · 승리 시 신화장비 조각 +1</span></div></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.length ? '' : '<div class="rank-empty">상대를 찾는 중입니다…</div>'}${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${ugc(opponent.displayName)}</strong><span>${opponent.isDummy ? `훈련 상대 · ${escapeHtml(opponent.note ?? '')}` : `지휘관 · 전적 점수 ${formatNumber(opponent.score)}`}</span></div><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
+    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>${opponents.some(opponent => !opponent.isDummy) ? '내 덱 전력과 비슷한 지휘관이 저장한 출전 덱과 겨룹니다.' : '덱을 저장한 지휘관이 20명이 될 때까지는 내 덱 전력에 맞춘 훈련 상대와 겨룹니다.'}${this.duelMyPower ? ` <b>내 덱 전력 ${formatNumber(this.duelMyPower)}</b>` : ''}</p><div class="duel-daily-limit"><strong>오늘 남은 대련 ${duelAttemptsRemaining(state)}회</strong><span>매일 5회 · 승리 시 신화장비 조각 +1</span></div></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.length ? '' : '<div class="rank-empty">상대를 찾는 중입니다…</div>'}${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${ugc(opponent.displayName)}</strong><span>${opponent.isDummy ? `훈련 상대 · ${escapeHtml(opponent.note ?? '')}` : `지휘관 · 전력 ${formatNumber(opponent.power ?? 0)}${this.duelMyPower && opponent.power ? ` (내 덱 대비 ${opponent.power >= this.duelMyPower ? '+' : '−'}${Math.round(Math.abs(opponent.power / this.duelMyPower - 1) * 100)}%)` : ''} · 전적 점수 ${formatNumber(opponent.score)}`}</span></div><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
   }
 
   private rankRows(): string {

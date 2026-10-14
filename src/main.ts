@@ -58,6 +58,8 @@ import {
 import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
+import { dummyDuelDecks } from './game/duel'
+import { DUEL_MATCH_COUNT, DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from '../server/duel-match.mjs'
 import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 import { locale } from './i18n/lang'
 import { startDomTranslation, tr } from './i18n/translate'
@@ -310,44 +312,54 @@ function siegeMoraleBonus(cityId: string): number {
   return Math.round(50 * Math.max(0, Math.min(1, city.defense / Math.max(1, cityDefenseForLevel(city.level)))))
 }
 
-/** 겨룰 유저 덱이 없을 때: 내 출전 무장 평균 레벨에 맞춘 훈련 상대 3명(쉬움·보통·어려움) */
+/** 덱을 저장한 지휘관이 적을 때: 내 덱 전력(장비 포함)에 맞춘 훈련 상대 3팀(쉬움 90% · 보통 100% · 어려움 110%) */
 function dummyDuelOpponents(): DuelOpponent[] {
-  const deployed = state.formation.map(id => state.generals.find(general => general.id === id)).filter(Boolean) as Array<{ level: number }>
-  const avg = Math.max(1, Math.round(deployed.reduce((sum, general) => sum + general.level, 0) / Math.max(1, deployed.length)))
-  const tiers: Array<[string, string, string, number]> = [['dummy-iron-gate', '철벽 관문 수비대', '쉬움', -3], ['dummy-jade-banner', '청람 진형 부대', '보통', 0], ['dummy-wind-tactician', '질풍 책사단', '어려움', 3]]
-  return tiers.map(([id, displayName, label, offset]) => {
-    const level = Math.max(1, avg + offset)
-    return { id, displayName, score: level * 1800, isDummy: true, note: `${label} · 평균 Lv.${level}` }
-  })
+  return dummyDuelDecks(battleGenerals(), dayKey()).map(dummy => ({ id: dummy.id, displayName: dummy.displayName, score: 0, power: dummy.power, isDummy: true, note: dummy.note, deck: dummy.deck }))
 }
 
 function installDummyDuelOpponents(): void {
-  const opponents = dummyDuelOpponents()
-  duelDecks.clear()
-  opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
-  ui.setDuelOpponents(opponents)
+  installDuelOpponents(dummyDuelOpponents())
 }
 
+function installDuelOpponents(opponents: DuelOpponent[]): void {
+  duelDecks.clear()
+  opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
+  ui.setDuelOpponents(opponents, duelDeckPower(battleGenerals()))
+}
+
+/**
+ * 대련 상대: 덱을 저장한 지휘관이 20명 이상이면 내 덱 전력과 비슷한 실제 유저 덱, 적으면 내 전력에 맞춘 훈련 상대.
+ * (옛 서버는 배열을 돌려준다: 그때도 전력이 가까운 순으로 고른다)
+ */
 async function refreshDuelOpponents(): Promise<void> {
   if (authView.status === 'authenticated') {
+    const myPower = duelDeckPower(battleGenerals())
     try {
-      const opponents = await ManusAuth.query('duel.listOpponents', { limit: 12 }) as DuelOpponent[]
-      if (opponents.length) {
-        duelDecks.clear()
-        opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
-        ui.setDuelOpponents(opponents)
-        ui.notify('저장된 실제 유저 덱을 불러왔습니다.')
+      const response = await ManusAuth.query('duel.listOpponents', { limit: DUEL_MATCH_COUNT, power: myPower }) as DuelOpponent[] | { mode: 'users' | 'dummy'; registered: number; threshold: number; opponents: DuelOpponent[] }
+      if (Array.isArray(response)) {
+        if (response.length >= DUEL_USER_THRESHOLD - 1) {
+          installDuelOpponents(pickDuelMatches(response.map(opponent => ({ ...opponent, power: opponent.power ?? duelDeckPower(opponent.deck ?? []) })), myPower))
+          ui.notify('전력이 비슷한 지휘관 덱을 불러왔습니다.')
+          return
+        }
+      } else if (response.mode === 'users' && response.opponents.length) {
+        installDuelOpponents(response.opponents)
+        ui.notify(`전력이 비슷한 지휘관 덱을 불러왔습니다 · 등록 지휘관 ${response.registered}명`)
+        return
+      } else {
+        installDummyDuelOpponents()
+        ui.notify(`등록 지휘관이 ${response.registered}명이라 내 전력에 맞춘 훈련 상대를 준비했습니다(${response.threshold}명부터 실제 유저 덱).`)
         return
       }
     } catch {
       // An unavailable authenticated endpoint falls through to the safe training roster.
     }
     installDummyDuelOpponents()
-    ui.notify('겨룰 지휘관 덱이 없어 훈련 상대를 준비했습니다.')
+    ui.notify('내 전력에 맞춘 훈련 상대를 준비했습니다.')
     return
   }
   installDummyDuelOpponents()
-  ui.notify('게스트는 훈련 상대와 겨룹니다.')
+  ui.notify('게스트는 내 전력에 맞춘 훈련 상대와 겨룹니다.')
 }
 
 async function refreshFactionTerritories(notify = false): Promise<void> {
@@ -999,7 +1011,7 @@ const ui = new StrategyUI(root, {
     }
     let deck = duelDecks.get(opponentId)
     if (!deck) {
-      const fallback: DuelOpponent = { id: opponentId || 'dummy-fallback', displayName: '훈련 상대', score: 18000, isDummy: true }
+      const fallback = dummyDuelOpponents()[1]
       deck = duelDeckFor(fallback)
       duelDecks.set(opponentId || fallback.id, deck)
     }
