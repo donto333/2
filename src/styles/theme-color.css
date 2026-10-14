@@ -1904,3 +1904,10 @@ body .duel-opponent { grid-template-columns: 42px 42px 1fr auto auto; }
 @media (max-width: 900px) { .raid-layout { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .raid-start { flex-direction: column; } .raid-start__cta { justify-items: stretch; text-align: left; } .raid-me { grid-template-columns: repeat(2, minmax(0, 1fr)); } .raid-boss__portrait { width: 64px; height: 64px; } .raid-boss__head { flex-direction: column; } .raid-boss__reset { text-align: left; } }
 .raid-side > .glass-card { padding: 16px 18px; }
+.raid-step__next { display: grid; gap: 2px; margin: 10px 0 14px; padding: 10px 12px; border: 1px solid rgba(255, 128, 102, .4); border-radius: 8px; background: rgba(60, 20, 12, .4); }
+.raid-step__next small { color: var(--muted, #b9a58a); font-size: 12px; }
+.raid-step__next strong { color: #ffd9b8; font-size: 17px; }
+.raid-step__next span { color: #e6d8bf; font-size: 13px; }
+.raid-step [data-raid-go] { width: 100%; justify-content: center; }
+.raid-step [data-raid-go] b { margin-left: 6px; opacity: .7; }
+.raid-ask { flex-wrap: wrap; }

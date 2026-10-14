@@ -41,3 +41,38 @@ describe('주간 레이드', () => {
     expect(raidBossDeck(45).every(general => general.level === 45)).toBe(true)
   })
 })
+
+import { RaidRunner } from '../src/game/raid-run'
+import { packLoadouts, unpackLoadouts } from '../src/game/equipment-manage'
+import { createInitialState } from '../src/game/strategy'
+
+describe('레이드 진행(1군 → 2군 → 3군)', () => {
+  it('세 군을 차례로 싸우고 피해를 합친다(빈 군은 건너뛰고 이름은 원래 번호)', () => {
+    const runner = new RaidRunner([{ index: 0, ids: ['a'] }, { index: 1, ids: [] }, { index: 2, ids: ['c', 'd'] }])
+    expect(runner.count).toBe(2)
+    expect(runner.currentLabel).toBe('1군')
+    const first = runner.record(1200)
+    expect(first.done).toBe(false)
+    expect(first.next).toEqual({ index: 1, label: '3군', ids: ['c', 'd'] })
+    expect(runner.currentIds).toEqual(['c', 'd'])
+    const last = runner.record(800.4)
+    expect(last.done).toBe(true)
+    expect(runner.total).toBe(2000)
+    expect(runner.summary()).toBe('1군 1,200 · 3군 800')
+  })
+  it('세 군 모두 있으면 3번 싸운다', () => {
+    const runner = new RaidRunner([0, 1, 2].map(index => ({ index, ids: [`g${index}`] })))
+    const labels: string[] = []
+    while (!runner.finished) { labels.push(runner.currentLabel); runner.record(100) }
+    expect(labels).toEqual(['1군', '2군', '3군'])
+    expect(runner.damages).toEqual([100, 100, 100])
+  })
+  it('2·3군은 장착 정보 JSON에도 함께 저장돼 옛 서버에서도 남는다', () => {
+    const state = createInitialState()
+    state.reserveSquads = [['x', 'y'], ['z']]
+    const unpacked = unpackLoadouts(JSON.parse(JSON.stringify(packLoadouts(state))))
+    expect(unpacked.squads).toEqual([['x', 'y'], ['z']])
+    expect(Object.keys(unpacked.loadouts)).not.toContain('__squads')
+    expect(createInitialState().reserveSquads).toEqual([[], []])
+  })
+})

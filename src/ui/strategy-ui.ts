@@ -1788,7 +1788,7 @@ export class StrategyUI {
       const detail = skillDetail(general)
       return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${gradeColor(general)}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span><span class="bt-unit-edge" data-bt-unit-edge hidden></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
     }).join('')
-    const modeLabel = battle?.mode === 'scenario' ? '시나리오 전투' : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : battle?.mode === 'raid' ? '주간 레이드' : '일반 전투'
+    const modeLabel = battle?.mode === 'scenario' ? '시나리오 전투' : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : battle?.mode === 'raid' ? `주간 레이드${this.raidSquadLabel ? ` · ${this.raidSquadLabel}` : ''}` : '일반 전투'
     const tactic = (id: 'guard' | 'feint' | 'charge', icon: string, label: string, note: string) => `<button class="bt-tactic bt-tactic--${id}" title="${label} · ${note}" data-action="battle-tactic" data-tactic="${id}" ${id === 'guard' ? 'data-bt-guard' : ''} disabled><span>${icon}</span><strong>${label}</strong><small>${note}</small><em>${battle?.tacticCosts[id] ?? { guard: 35, feint: 50, charge: 65 }[id]}</em></button>`
     return `<section class="page-section page-section--battle">
 <div class="bt-top">
@@ -1937,6 +1937,50 @@ export class StrategyUI {
   }
 
   /** 구매 확인 창(금화 20개 이상 · 신화 조각 교환) */
+  private raidStepTimer: number | null = null
+  /** 지금 싸우는 레이드 군(예: 2군 2/3) */
+  raidSquadLabel = ''
+
+  /** 레이드 군 사이: 방금 군의 피해와 다음 출전 군(5초 뒤 자동 출전) */
+  showRaidStep(info: { finishedLabel: string; damage: number; total: number; nextLabel: string; nextNames: string[]; step: number; count: number }, onGo: () => void): void {
+    this.closeRaidStep()
+    const modal = document.createElement('div')
+    modal.className = 'shop-confirm raid-step'
+    let left = 5
+    let done = false
+    const go = () => { if (done) return; done = true; this.closeRaidStep(); onGo() }
+    modal.innerHTML = `<div class="shop-confirm__card"><span class="eyebrow">주간 레이드 · ${info.step - 1}/${info.count} 완료</span><h2>${escapeHtml(info.finishedLabel)} 피해 ${formatNumber(info.damage)}</h2><p>지금까지 합계 ${formatNumber(info.total)}</p><div class="raid-step__next"><small>다음 출전</small><strong>${escapeHtml(info.nextLabel)} (${info.step}/${info.count})</strong><span>${info.nextNames.map(escapeHtml).join(' · ')}</span></div><div class="shop-confirm__actions"><button class="action-button action-button--primary" data-raid-go>${escapeHtml(info.nextLabel)} 출전 <b data-raid-count>${left}</b></button></div></div>`
+    modal.querySelector('[data-raid-go]')?.addEventListener('click', go)
+    document.body.appendChild(modal)
+    this.raidStepTimer = window.setInterval(() => {
+      left -= 1
+      const count = modal.querySelector('[data-raid-count]')
+      if (count) count.textContent = String(Math.max(0, left))
+      if (left <= 0) go()
+    }, 1000)
+  }
+
+  closeRaidStep(): void {
+    if (this.raidStepTimer !== null) { window.clearInterval(this.raidStepTimer); this.raidStepTimer = null }
+    document.querySelector('.raid-step')?.remove()
+  }
+
+  /** 2·3군이 비어 있을 때: 남은 무장으로 채울지, 그대로 출전할지, 편성으로 갈지 */
+  askRaidSquads(emptyLabels: string[], spare: number, onChoose: (choice: 'fill' | 'go' | 'edit') => void): void {
+    document.querySelector('.shop-confirm')?.remove()
+    const modal = document.createElement('div')
+    modal.className = 'shop-confirm'
+    modal.innerHTML = `<div class="shop-confirm__card"><span class="eyebrow">주간 레이드</span><h2>${escapeHtml(emptyLabels.join('·'))}이 비어 있습니다</h2><p>레이드는 1군 → 2군 → 3군의 피해 합계로 순위를 겨룹니다. 대기 무장 ${spare}명으로 빈 군을 자동 편성·장착하고 출전할까요?</p><div class="shop-confirm__actions raid-ask"><button class="action-button action-button--primary" data-raid-choice="fill">자동 편성 후 출전</button><button class="action-button action-button--outline" data-raid-choice="go">이대로 출전</button><button class="action-button action-button--outline" data-raid-choice="edit">편성하러 가기</button></div></div>`
+    const close = () => modal.remove()
+    modal.addEventListener('click', event => {
+      const target = event.target as HTMLElement
+      const choice = target.closest<HTMLElement>('[data-raid-choice]')?.dataset.raidChoice as 'fill' | 'go' | 'edit' | undefined
+      if (choice) { close(); onChoose(choice) }
+      else if (target === modal) close()
+    })
+    document.body.appendChild(modal)
+  }
+
   private confirmPurchase(title: string, detail: string, onOk: () => void, labels: { eyebrow?: string; ok?: string } = {}): void {
     document.querySelector('.shop-confirm')?.remove()
     const modal = document.createElement('div')
@@ -1951,6 +1995,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '레이드 2·3군 출전 수정', '로그인한 계정은 다시 접속하면 2·3군 편성이 사라져 레이드에 1군만 나가던 문제를 고쳤습니다(서버 새 칸이 없어도 장착 정보와 함께 저장). 군 사이에는 방금 군의 피해·합계와 다음 출전 군을 보여 주고 5초 뒤 자동으로 이어 출전합니다. 전투 화면 위에 「주간 레이드 · 2군 2/3」처럼 지금 싸우는 군이 보이고, 레이드 중 전투 시작 버튼은 다음 군 출전으로 이어집니다. 2·3군이 비어 있으면 출전 전에 남은 무장으로 자동 편성할지 묻습니다.', '완료', 'jade'],
       ['2026.10.14', '1·2·3군 편성 · 주간 레이드', '출전 편성에 1군·2군·3군 탭이 생겼습니다. 한 무장은 한 군에만 설 수 있고, 2·3군도 자동 편성·자동 장착(다른 군 장비는 건드리지 않음)·1군과 바꾸기를 할 수 있습니다. 새 콘텐츠 「주간 레이드」: 병력이 줄지 않는 보스 군단에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화, 하루 3회. 보스 레벨은 덱을 저장한 지휘관이 20명 이하면 Lv30, 그보다 많으면 전력 상위 300명의 평균 레벨입니다. 3막 사기를 무너뜨릴 때마다 큰 피해 보너스가 붙습니다. 순위 보상(다음 주에 받기): 1위 금화 200·낙양 강화석 2 · 2위 금화 200·강화석 1 · 3위 금화 100·강화석 1 · 4~10위 금화 100 · 11~50위 80 · 51~100위 60 · 101~200위 40 · 201~300위 20 · 301위부터 10. 군 전력으로 낼 수 없는 피해 기록은 서버가 잘라 냅니다. 게스트는 연습 모드(기록·보상 없음)입니다.', '완료', 'jade'],
       ['2026.10.14', '장비 보관·관리', '장비 관리에 보관함 필터(부위·세트·등급·장착 중/미장착/잠금)와 장착 무장 표시(예: 관우 장착)를 넣었습니다. 장비마다 잠금을 걸 수 있고 신화장비는 처음부터 잠겨 있습니다. 남는 장비는 분해해 옥패·철을 돌려받습니다(노멀 6·30 · 레어 15·60 · 유니크 40·120 · 전설 100·250, 강화한 장비는 강화 비용의 50%도 환급). 노멀·레어 이하 일괄 분해는 잠금·장착·강화한 장비와 신화장비를 남깁니다. 무장마다 장비 프리셋 3개를 저장해 시나리오·대련·공성용 조합을 한 번에 바꿀 수 있습니다. 보관 장비가 300줄을 넘으면 정리를 안내합니다.', '완료', 'jade'],
       ['2026.10.14', '신화장비 조각 개편', '신화장비 1개에 필요한 조각이 20개에서 100개로 늘었습니다. 대신 대련 승리 보상이 난이도에 따라 달라집니다: 쉬움 1개 · 보통 2개 · 어려움 3개(하루 5회). 실제 유저 상대는 내 덱보다 전력이 8% 이상 세면 어려움, 8% 이상 약하면 쉬움, 그 사이는 보통입니다. 상대 카드마다 난이도와 보상 조각이 표시됩니다. 난이도(승률)는 그대로입니다.', '완료', 'jade'],

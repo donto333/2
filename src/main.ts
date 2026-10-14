@@ -60,6 +60,7 @@ import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type Luoy
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
 import { raidBossDeck } from './game/raid'
+import { RaidRunner } from './game/raid-run'
 import { RAID_DAILY_LIMIT, RAID_DEFAULT_LEVEL, raidDayKey, raidResetIn, raidWeekKey } from '../server/raid.mjs'
 import { autoEquipSquad, autoSquad, ensureSquads, packSquads, swapWithFirstSquad, toggleSquadMember } from './game/squads'
 import { applyEquipmentPreset, bulkDismantle, dismantleEquipment, packLoadouts, saveEquipmentPreset, toggleEquipmentLock, unpackLoadouts } from './game/equipment-manage'
@@ -230,7 +231,7 @@ let saveRevision = 0
 let authGeneration = 0
 let duelActive = false
 /** 진행 중인 레이드 도전: 1군 → 2군 → 3군 순서로 싸우고 피해를 모은다 */
-let raidRun: { token: string | null; weekKey: string; bossLevel: number; squads: string[][]; index: number; damages: number[] } | null = null
+let raidRun: { token: string | null; weekKey: string; bossLevel: number; runner: RaidRunner } | null = null
 let raidView: RaidView = { loading: false, info: null, ranking: [], message: '' }
 /** 대련 상대별 난이도와 지금 겨루는 상대의 난이도(승리 보상 조각 수) */
 const duelTiers = new Map<string, DuelTier>()
@@ -312,9 +313,9 @@ function duelDeckFor(opponent: DuelOpponent): ReturnType<typeof allGenerals> {
 
 // ── 주간 레이드 ─────────────────────────────────────────────
 /** 레이드에 나갈 군(비어 있지 않은 1·2·3군) */
-function raidSquads(): string[][] {
+function raidSquads(): Array<{ index: number; ids: string[] }> {
   ensureSquads(state)
-  return [state.formation, ...(state.reserveSquads ?? [])].map(list => list.filter(id => state.generals.some(general => general.id === id))).filter(list => list.length)
+  return [state.formation, ...(state.reserveSquads ?? [])].map((list, index) => ({ index, ids: list.filter(id => state.generals.some(general => general.id === id)) })).filter(squad => squad.ids.length)
 }
 
 function localRaidInfo(): RaidInfoView {
@@ -345,8 +346,12 @@ async function refreshRaid(): Promise<void> {
 }
 
 function startRaidBattle(): void {
-  if (!raidRun) return
-  const ids = raidRun.squads[raidRun.index]
+  if (!raidRun || raidRun.runner.finished) return
+  // 이미 다음 군이 싸우는 중이면(버튼과 자동 출전이 겹친 경우) 다시 시작하지 않는다
+  if (arena.getSnapshot().active) return
+  ui.closeRaidStep()
+  ui.raidSquadLabel = `${raidRun.runner.currentLabel} ${raidRun.runner.index + 1}/${raidRun.runner.count}`
+  const ids = raidRun.runner.currentIds
   duelActive = false
   scenarioActive = false
   activeScenario = null
@@ -359,10 +364,26 @@ function startRaidBattle(): void {
   ui.updateBattle(arena.getSnapshot())
   ui.render(state)
   ui.updateBattle(arena.getSnapshot())
-  ui.notify(`레이드 · ${['1군', '2군', '3군'][raidRun.index]} 출전 (${raidRun.index + 1}/${raidRun.squads.length}) · 90초 동안 최대한 피해를 주십시오.`)
+  ui.notify(`레이드 · ${raidRun.runner.currentLabel} 출전 (${raidRun.runner.index + 1}/${raidRun.runner.count}) · 90초 동안 최대한 피해를 주십시오.`)
 }
 
-async function beginRaid(): Promise<void> {
+async function beginRaid(fillEmpty = false): Promise<void> {
+  if (raidRun) return
+  // 2·3군이 비어 있으면 먼저 물어본다(남은 무장으로 자동 편성하거나 그대로 출전)
+  ensureSquads(state)
+  const empty = (state.reserveSquads ?? []).map((list, index) => list.length ? -1 : index + 1).filter(index => index > 0)
+  const spare = state.generals.length - state.formation.length - (state.reserveSquads ?? []).reduce((sum, list) => sum + list.length, 0)
+  if (fillEmpty) {
+    empty.forEach(index => { autoSquad(state, index); autoEquipSquad(state, index) })
+    queueAccountSave(true)
+  } else if (empty.length && spare > 0) {
+    ui.askRaidSquads(empty.map(index => ['1군', '2군', '3군'][index]), spare, choice => { if (choice === 'fill') void beginRaid(true); else if (choice === 'go') void beginRaidAsIs(); else { state.section = 'formation'; ui.render(state) } })
+    return
+  }
+  await beginRaidAsIs()
+}
+
+async function beginRaidAsIs(): Promise<void> {
   if (raidRun) return
   const squads = raidSquads()
   if (!squads.length) { ui.notify('출전 편성이 없습니다.', 'ember'); return }
@@ -374,7 +395,7 @@ async function beginRaid(): Promise<void> {
       await ManusAuth.mutate('account.saveGameState', accountStatePayload())
       const started = await ManusAuth.mutate('raid.start') as { ok: boolean; reason?: string; token?: string; weekKey?: string; bossLevel?: number }
       if (!started.ok || !started.token) { ui.notify(started.reason ?? '레이드를 시작하지 못했습니다.', 'ember'); void refreshRaid(); return }
-      raidRun = { token: started.token, weekKey: started.weekKey ?? weekKey, bossLevel: started.bossLevel ?? RAID_DEFAULT_LEVEL, squads, index: 0, damages: [] }
+      raidRun = { token: started.token, weekKey: started.weekKey ?? weekKey, bossLevel: started.bossLevel ?? RAID_DEFAULT_LEVEL, runner: new RaidRunner(squads) }
     } catch {
       ui.notify('레이드 서버에 연결하지 못했습니다. 잠시 뒤 다시 시도하십시오.', 'ember')
       return
@@ -386,7 +407,7 @@ async function beginRaid(): Promise<void> {
     const local = state.raidLocal && state.raidLocal.weekKey === weekKey ? state.raidLocal : { dayKey: today, attempts: 0, weekKey, total: 0, best: 0 }
     state.raidLocal = { ...local, dayKey: today, attempts: (local.dayKey === today ? local.attempts : 0) + 1 }
     persistLocalGame()
-    raidRun = { token: null, weekKey, bossLevel: RAID_DEFAULT_LEVEL, squads, index: 0, damages: [] }
+    raidRun = { token: null, weekKey, bossLevel: RAID_DEFAULT_LEVEL, runner: new RaidRunner(squads) }
   }
   startRaidBattle()
 }
@@ -394,14 +415,13 @@ async function beginRaid(): Promise<void> {
 /** 한 군의 전투가 끝났을 때: 다음 군이 있으면 이어서, 없으면 합계를 기록 */
 function onRaidSquadEnd(result: { raidDamage?: number }): void {
   if (!raidRun) return
-  const damage = Math.max(0, Math.round(result.raidDamage ?? 0))
-  raidRun.damages.push(damage)
-  const label = ['1군', '2군', '3군'][raidRun.index]
-  raidRun.index += 1
+  const step = raidRun.runner.record(result.raidDamage ?? 0)
   ui.updateBattle(arena.getSnapshot())
-  if (raidRun.index < raidRun.squads.length) {
-    ui.notify(`${label} 피해 ${damage.toLocaleString('ko-KR')} · 곧 ${['1군', '2군', '3군'][raidRun.index]}이 출전합니다`, 'jade')
-    window.setTimeout(() => startRaidBattle(), 1800)
+  if (step.next) {
+    // 군 사이: 방금 군의 피해와 다음 군을 보여 주고 이어서 출전(버튼 또는 5초 뒤 자동)
+    const next = step.next
+    const names = next.ids.map(id => state.generals.find(general => general.id === id)?.name ?? '').filter(Boolean)
+    ui.showRaidStep({ finishedLabel: step.finished.label, damage: step.finished.damage, total: step.total, nextLabel: next.label, nextNames: names, step: next.index + 1, count: raidRun.runner.count }, () => startRaidBattle())
     return
   }
   void finishRaidRun()
@@ -410,13 +430,14 @@ function onRaidSquadEnd(result: { raidDamage?: number }): void {
 async function finishRaidRun(): Promise<void> {
   const run = raidRun
   raidRun = null
+  ui.raidSquadLabel = ''
   if (!run) return
-  const total = run.damages.reduce((sum, value) => sum + value, 0)
-  const parts = run.damages.map((value, index) => `${['1군', '2군', '3군'][index]} ${value.toLocaleString('ko-KR')}`).join(' · ')
+  const total = run.runner.total
+  const parts = run.runner.summary()
   let message = `레이드 종료 · 합계 피해 ${total.toLocaleString('ko-KR')} (${parts})`
   if (run.token) {
     try {
-      const submitted = await ManusAuth.mutate('raid.submit', { token: run.token, damages: run.damages }) as { ok: boolean; reason?: string; added?: number; capped?: boolean; totalDamage?: number; rank?: number }
+      const submitted = await ManusAuth.mutate('raid.submit', { token: run.token, damages: run.runner.damages }) as { ok: boolean; reason?: string; added?: number; capped?: boolean; totalDamage?: number; rank?: number }
       message = submitted.ok
         ? `${message} · 이번 주 누적 ${(submitted.totalDamage ?? 0).toLocaleString('ko-KR')} · ${submitted.rank ?? '-'}위${submitted.capped ? ` · 상한 적용(${(submitted.added ?? 0).toLocaleString('ko-KR')})` : ''}`
         : `${message} · 기록 실패: ${submitted.reason ?? ''}`
@@ -1128,6 +1149,8 @@ const ui = new StrategyUI(root, {
     ui.notify(`${scenario.year}년 ${scenario.title} · 시나리오 전투를 시작합니다.`, 'jade')
   },
   onBattleStart: () => {
+    // 레이드 진행 중이면 다음 군 출전으로 이어 간다(일반 전투를 열지 않는다)
+    if (raidRun) { startRaidBattle(); return }
     ui.setBattleAutoAvailable(false)
     scenarioActive = false
     activeScenario = null
@@ -1643,6 +1666,8 @@ async function refreshAccount(): Promise<void> {
         const unpacked = unpackLoadouts(game.equipmentLoadouts)
         state.equipmentLoadouts = unpacked.loadouts
         if (unpacked.presets) state.equipmentPresets = unpacked.presets
+        // 2·3군: 서버 squadData 칸이 없으면(옛 서버) 장착 정보 JSON에 함께 저장된 것을 쓴다
+        if (!Array.isArray(game.reserveSquads) && unpacked.squads) state.reserveSquads = unpacked.squads
       }
       if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
       state.mythicFragments = Math.max(0, Math.trunc(game.mythicFragments ?? 0))
@@ -1655,6 +1680,7 @@ async function refreshAccount(): Promise<void> {
       if (Array.isArray(game.scenarioCleared)) state.scenarioCleared = game.scenarioCleared.filter((id: string): id is string => typeof id === 'string')
       ensureDuelDailyState(state)
       ensureEquipmentState(state)
+      ensureSquads(state)
       void serverGrant('daily')
       const migratedStarter = migrateLegacyStarterRoster(state)
       const regraded = migrateGeneralGrades(state).changed > 0

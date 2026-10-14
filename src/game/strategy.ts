@@ -939,7 +939,7 @@ export function createInitialState(): StrategyState {
     formation: starterIds, lastRecruit: null, lastNotice: '전장에 오신 것을 환영합니다. 첫 진형을 준비하십시오.', wins: 0, battleScore: 0,
     resources: { grain: 18200, silver: 12500, wood: 8200, iron: 3900, influence: 2480 },
     cities: createCities(), selectedCityId: 'chengdu', research: createResearch(), lastConquest: null, luoyangBoxes: 0, lastLuoyangReward: undefined, luoyangRewardWeekKey: undefined, lastIncomeCollectedAt: undefined, lastConquestAt: undefined, lastDefenseAt: undefined, lastFactionBattleAt: undefined, factionWarScore: 0,
-    equipmentInventory, equipmentLoadouts, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, mythicStones: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '', scenarioCleared: [],
+    equipmentInventory, equipmentLoadouts, equipmentPresets: {}, reserveSquads: [[], []], raidLocal: undefined, selectedEquipmentGeneralId: starterIds[0], lastEquipmentDraw: [], mythicFragments: 0, mythicStones: 0, duelAttemptsToday: 0, duelDayKey: dayKey(), prelaunchGoldDayKey: '', scenarioCleared: [],
   }
   ensurePrelaunchDailyGold(state)
   ensureCityGarrisons(state)
