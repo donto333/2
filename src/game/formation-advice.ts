@@ -1,8 +1,10 @@
 // 무장별 추천 덱: 고른 무장이 들어간 3인 조합을 다섯 유형(스킬 연계·버티기·초반 끝내기·디버프·유틸)마다 하나씩 추천한다.
 // 지금 키운 정도(레벨·성급·장비)는 따지지 않는다: 모든 무장을 같은 기준(Lv30·3성)으로 놓고 스킬 설계만 본다.
+// 유형별 성장 이후 시뮬레이션: 승패는 스킬 사기 피해·예고 대응과 생존(전열 수호·회복)이 가르고, 아군 일반 공격·속도는 거의 영향이 없다.
 // 진형 규칙(가운데=전열: 적 공격 30%가 먼저 오고 받는 피해 −20%, 수호형이면 도발·피해 −40%)을 반영해
 // 가운데에는 수호형(없으면 가장 단단한 무장)을 세운다. 가중치는 전투 시뮬레이션으로 맞췄다(tests/formation-advice.test.ts).
-import { GENERAL_SKILLS, bondFor, type BondDef, type GeneralSkillDef } from './skills'
+import { GENERAL_SKILLS, SKILL_TYPE_META, bondFor, skillCooldownFor, type BondDef, type GeneralSkillDef } from './skills'
+import { BATTLE_RULES } from './battle-core'
 import { allGenerals, combatPower, frontLineOrder, scaleGeneral, type General } from './strategy'
 
 export type Archetype = 'chain' | 'sustain' | 'early' | 'debuff' | 'utility'
@@ -34,7 +36,8 @@ const DEBUFF_WEIGHT: Record<string, number> = { fear: 0.5, confusion: 0.6, silen
 const UTIL_BUFF: Record<string, number> = { 'atk-up': 0.3, 'tactic-discount': 0.5, 'jade-command': 0.4, insight: 0.3, 'swift-step': 0.3, 'phoenix-guard': 0.3, 'archer-focus': 0.2, 'cavalry-surge': 0.2, 'east-wind': 0.3, 'iron-wall': 0.2 }
 const PASSIVE_TANK = new Set(['lowTroopDr', 'highTroopDr', 'undyingOnce', 'undyingMorale', 'factionDr', 'defenseBattle', 'cdOnHit', 'deathRally'])
 const PASSIVE_UTIL: Record<string, number> = { earlyWarning: 0.6, failThreatCut: 0.4, cdForStrategists: 0.3, gaugeOnBreak: 0.4, threatSave: 0.4, crossfireGuard: 0.3, cdPerCombo: 0.2, alliance: 0.2, cdOnBreak: 0.3 }
-const PASSIVE_EARLY: Record<string, number> = { earlyAtk: 0.8, firstStrike: 0.6, fastOpener: 0.6, vsHighMorale: 0.6, peerless: 0.5, resetOnKill: 0.3, startFear: 0.4, flankMorale: 0.2 }
+// 일반 공격만 키우는 패시브(요래·선등)는 전투 결과에 거의 영향이 없어(시뮬레이션) 작게 친다
+const PASSIVE_EARLY: Record<string, number> = { earlyAtk: 0.15, firstStrike: 0.1, fastOpener: 0.7, vsHighMorale: 0.6, peerless: 0.5, resetOnKill: 0.4, startFear: 0.4, flankMorale: 0.2 }
 
 let cache: Map<string, Profile> | null = null
 
@@ -46,13 +49,18 @@ function profiles(): Map<string, Profile> {
   const maxPower = Math.max(...powers.values())
   cache = new Map(list.map(general => {
     const def = GENERAL_SKILLS[general.id]
+    const healGrade = (BATTLE_RULES.healGrade[general.grade] ?? 1) / 0.7
     const parts = [def.active, def.awaken].filter((part): part is NonNullable<typeof part> => Boolean(part))
     const fx = parts.flatMap(part => part.fx)
-    let dmg = def.type === '돌격' ? 1 * def.mult : def.type === '사격' ? 0.8 * def.mult : def.type === '계략' ? 0.3 : def.type === '통솔' ? 0.2 : 0
+    // 사기 피해: 유형 기본 위력에 비례(돌격 14 = 1). 계략·통솔은 디버프·버프가 주라 절반만 친다
+    const morale = SKILL_TYPE_META[def.type].base * def.mult / SKILL_TYPE_META['돌격'].base
+    let dmg = def.type === '돌격' || def.type === '사격' ? morale : def.type === '계략' || def.type === '통솔' ? morale * 0.5 : 0
     let tank = def.type === '수호' ? 1 : 0, heal = 0, debuff = 0, util = 0, early = 0
     let burning = false, chainer = false, marker = false
     for (const f of fx) {
       if (f.k === 'hits' || f.k === 'aoe' || f.k === 'power') dmg += 0.2
+      // 자기 병력을 깎는 스킬(고육지계)은 강한 적에게 버티지 못한다
+      if (f.k === 'selfCost') dmg *= 0.7
       if (f.k === 'debuff') {
         debuff += DEBUFF_WEIGHT[f.id] ?? 0.3
         if (f.id === 'burning') { burning = true; dmg += 0.25 }
@@ -63,8 +71,9 @@ function profiles(): Map<string, Profile> {
       if (f.k === 'selfDr' || f.k === 'undying') tank += 0.4
       if (f.k === 'bodyguard') tank += 0.3
       if (f.k === 'buff' && (f.id === 'dr-up' || f.id === 'counter')) tank += f.id === 'dr-up' ? 0.4 : 0.2
-      if (f.k === 'heal') heal += f.pct / 10
-      if (f.k === 'hot') heal += f.pctPerSec * f.sec / 10
+      // 회복량은 등급에 따라 달라진다(천명 ×0.7 ~ 신병 ×0.4)
+      if (f.k === 'heal') heal += f.pct / 10 * healGrade
+      if (f.k === 'hot') heal += f.pctPerSec * f.sec / 10 * healGrade
       if (f.k === 'cleanse') heal += 0.3
       if (f.k === 'gauge') util += f.n / 20
       if (f.k === 'allyCd') util += 0.5
@@ -80,7 +89,8 @@ function profiles(): Map<string, Profile> {
     if (passive === 'healBoost') heal += 0.2
     if (passive === 'startFear') debuff += 0.5
     util += PASSIVE_UTIL[passive] ?? 0
-    early += (PASSIVE_EARLY[passive] ?? 0) + general.speed / 400
+    // 속도는 전투 결과에 거의 영향이 없어(시뮬레이션) 빼고, 스킬을 얼마나 자주 쓰는지로 초반 화력을 본다
+    early += (PASSIVE_EARLY[passive] ?? 0) + Math.max(0, 12 - skillCooldownFor({ ...general, stars: 3 })) * 0.05 * dmg
     return [general.id, { general, def, power: (powers.get(general.id) ?? 0) / maxPower, dmg, tank, heal, debuff, util, early, burning, chainer, marker }]
   }))
   return cache
@@ -138,18 +148,22 @@ function trioScore(trio: Profile[], archetype: Archetype, anchor: Profile = trio
   const dmg = sum('dmg')
   // 공격수가 없으면 적 사기를 깎지 못해 진다(시뮬레이션: 지원형만 모은 덱 승률 4~31%)
   const carry = dmg < 0.9 ? -1.6 : dmg < 1.4 ? -0.4 : 0
-  const base = power * 0.9 + carry + bond * 0.5 + anchorTie * 0.9
+  // 생존: 유형별 성장 이후 전열 수호형·회복이 승률을 크게 가른다(시뮬레이션: 전열이 약한 덱은 강한 적에게 진다)
+  const survive = (front.def.type === '수호' ? 1.3 : 0) + Math.min(1, sum('heal')) * 0.5
+  const base = power * 0.9 + carry + bond * 0.5 + anchorTie * 0.9 + survive
   switch (archetype) {
     // 연계는 고른 무장이 낀 연계·인연이 핵심(다른 둘끼리의 연계는 조금만)
     case 'chain': return base + anchorTie * 1.6 + (synergy - anchorTie) * 0.35 + anchorBond * 1.4 + dmg * 0.3 + frontTank * 0.3
     case 'sustain': return base + (front.def.type === '수호' ? 1.5 : -1) + sum('tank') * 0.6 + sum('heal') * 0.8 + dmg * 0.35
     case 'early': return base + sum('early') * 1.2 + dmg * 0.8 - sum('heal') * 0.3 + frontTank * 0.2
-    case 'debuff': return base + sum('debuff') * 1.0 + dmg * 0.4 + frontTank * 0.3 + synergy * 0.4
+    // 디버프·유틸 덱은 적을 묶는 동안 버텨야 한다: 전열 수호형을 더 크게 친다
+    case 'debuff': return base + Math.min(2.4, sum('debuff')) * 1.0 + dmg * 0.4 + frontTank * 0.3 + (front.def.type === '수호' ? 1 : 0) + synergy * 0.4
     // 유틸만 모으면 사기를 못 깎아 진다: 확실한 공격수(돌격·사격)가 있어야 한다
     case 'utility': {
       const strikers = trio.filter(item => item.def.type === '돌격' || item.def.type === '사격').length
       const util = sum('util')
-      return base + Math.min(2, util) * 0.9 + (util < 1 ? -1.2 : 0) + Math.min(2.2, dmg) * 0.8 + (strikers === 0 ? -1.2 : 0) + frontTank * 0.3 + synergy * 0.4
+      // 유틸 무장은 등급이 낮으면 버티지 못한다: 등급(전투력)을 조금 더 본다
+      return base + power * 2 + Math.min(2, util) * 0.9 + (util < 1 ? -1.2 : 0) + Math.min(1.6, dmg) * 0.6 + (strikers === 0 ? -1.2 : 0) + frontTank * 0.3 + (front.def.type === '수호' ? 1 : 0) + synergy * 0.4
     }
   }
 }

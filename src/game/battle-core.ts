@@ -28,11 +28,11 @@ export const BATTLE_RULES = {
   responseWindow: [2.5, 2.5, 2.0] as const,
   firstPatternAt: 2.0,
   troopScale: 2,
-  pressureStart: 1.05,
+  pressureStart: 1.0,
   pressureEnd: 1.5,
   pressureRamp: 75,
-  /** 적 평균 레벨 1당 막별 사기 최대치 +2.2% (최대 2배). 스킬이 해금된 덱이 너무 빨리 끝나지 않게 한다. */
-  moralePerEnemyLevel: 0.022,
+  /** 적 평균 레벨 1당 막별 사기 최대치 +2.1% (최대 2배). 스킬이 해금된 덱이 너무 빨리 끝나지 않게 한다. */
+  moralePerEnemyLevel: 0.021,
   /** 사기 최대치 배율 상한 */
   moraleScaleCap: 2,
   moraleDrain: 0.4,
