@@ -1,0 +1,682 @@
+// 배경음악·효과음: 소리 파일 없이 Web Audio로 직접 만든다.
+// - 뜯는 현(가야금·비파 느낌)은 Karplus-Strong으로 미리 그려 두고, 북·징·방울·쇳소리도 처음 한 번 그려 둔다
+// - 피리(적)·호궁(얼후)·뿔나팔·바람 소리는 그때그때 합성한다
+// - 배경음악은 화면마다 다른 곡(본영 · 전투 · 대련 · 레이드)을 16분음표 단위로 앞서 예약해 끊김 없이 흐른다
+// - 브라우저는 사용자가 한 번 누르기 전에는 소리를 막으므로, 첫 터치/클릭에서 unlock()한다
+import { muteSetting, musicSetting, sfxSetting, SOUND_LEVEL_VALUE } from '../game/settings'
+
+export type MusicTheme = 'home' | 'battle' | 'duel' | 'raid' | 'none'
+export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | '치유'
+export type Sfx =
+  | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
+  | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
+  | 'enemySkill' | 'enemyWarn' | 'pattern' | 'answerGood' | 'answerBad' | 'counter' | 'phase' | 'collapse' | 'timeWarn' | 'heal'
+  | 'tactic' | 'move' | 'raidSquad' | 'victory' | 'defeat'
+
+const mtof = (midi: number) => 440 * 2 ** ((midi - 69) / 12)
+
+/** 같은 효과음을 너무 촘촘히 겹치지 않게(밀리초) */
+const MIN_GAP: Partial<Record<Sfx, number>> = { click: 35, tab: 35, attack: 110, hit: 80, hitBig: 140, heal: 450, unitDown: 120, error: 120 }
+/** 동시 소리가 많을 때 먼저 버리는 가벼운 효과음 */
+const LIGHT: Partial<Record<Sfx, true>> = { attack: true, hit: true, heal: true, click: true }
+
+// ── 작은 난수(곡조를 만들 때 같은 씨앗이면 같은 가락) ──
+function rng(seed: number): () => number {
+  let s = seed >>> 0 || 1
+  return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296 }
+}
+
+interface Note { pos: number; deg: number; dur: number }
+/** 2마디(16분음표 32칸) 가락: 음계 위를 걷고, 끝은 으뜸음·딸림음 근처에서 쉰다 */
+function makeMotif(random: () => number, length = 32, cells = [4, 2, 2, 4, 6, 2, 8, 4, 3, 1], start = 5): Note[] {
+  const notes: Note[] = []
+  let pos = 0, deg = start
+  while (pos < length - 4) {
+    const dur = Math.min(cells[Math.floor(random() * cells.length)], length - 4 - pos)
+    if (random() < 0.12 && notes.length) { pos += dur; continue }
+    deg = Math.max(2, Math.min(12, deg + Math.round((random() - 0.5) * 4.2)))
+    notes.push({ pos, deg, dur })
+    pos += dur
+  }
+  const last = notes[notes.length - 1]
+  if (last) { last.deg = random() < 0.6 ? 5 : 7; last.dur = Math.max(last.dur, length - last.pos - 2) }
+  return notes
+}
+/** 가락 변주: 끝 두 음만 바꾼다 */
+function vary(motif: Note[], random: () => number): Note[] {
+  return motif.map((note, index) => index >= motif.length - 2 ? { ...note, deg: Math.max(2, Math.min(12, note.deg + (random() < 0.5 ? -1 : 1) * (1 + Math.floor(random() * 2)))) } : note)
+}
+
+type Inst = SoundEngine
+interface ThemeDef {
+  bpm: number
+  /** 음계(낮은 음부터 15음) */
+  scale: number[]
+  /** 16분음표 한 칸마다 부른다 */
+  step(p: ThemePlayer, s: number, t: number): void
+}
+
+class ThemePlayer {
+  readonly out: GainNode
+  next = 0
+  s = 0
+  random: () => number
+  motifs: Note[][] = []
+  stopped = false
+  constructor(readonly e: Inst, readonly def: ThemeDef, readonly name: MusicTheme, seed: number) {
+    this.out = e.ctx!.createGain()
+    this.out.gain.value = 0
+    this.out.connect(e.musicIn)
+    this.out.connect(e.musicSend)
+    this.random = rng(seed)
+    this.refreshMotifs()
+    this.next = e.ctx!.currentTime + 0.12
+    this.out.gain.setValueAtTime(0, this.next)
+    this.out.gain.linearRampToValueAtTime(1, this.next + 1.4)
+  }
+  refreshMotifs(): void {
+    const a = makeMotif(this.random)
+    this.motifs = [a, vary(a, this.random), makeMotif(this.random), vary(a, this.random)]
+  }
+  get stepDur(): number { return 60 / this.def.bpm / 4 }
+  /** 지금 곡 강도(전투 막에 따라 0~2) */
+  get intensity(): number { return this.e.intensity }
+  /** 마디 안에서 이 칸에 시작하는 가락 음 */
+  melodyAt(s: number): Note | null {
+    const bar = Math.floor(s / 16)
+    const phrase = this.motifs[Math.floor(bar / 2) % 4]
+    const pos = s % 32
+    return phrase.find(note => note.pos === pos) ?? null
+  }
+  schedule(ahead: number): void {
+    if (this.stopped) return
+    const ctx = this.e.ctx!
+    while (this.next < ctx.currentTime + ahead) {
+      if (this.s > 0 && this.s % (16 * 16) === 0) this.refreshMotifs()
+      try { this.def.step(this, this.s, this.next) } catch { /* 한 음이 실패해도 곡은 이어진다 */ }
+      this.next += this.stepDur
+      this.s += 1
+    }
+  }
+  stop(fade = 1.4): void {
+    if (this.stopped) return
+    this.stopped = true
+    const t = this.e.ctx!.currentTime
+    this.out.gain.cancelScheduledValues(t)
+    this.out.gain.setValueAtTime(this.out.gain.value, t)
+    this.out.gain.linearRampToValueAtTime(0, t + fade)
+    window.setTimeout(() => { try { this.out.disconnect() } catch { /* 이미 끊김 */ } }, (fade + 4) * 1000)
+  }
+}
+
+// ── 곡 ─────────────────────────────────────────────────
+const pent = (root: number, steps: number[]) => Array.from({ length: 15 }, (_, i) => root + Math.floor(i / 5) * 12 + steps[i % 5])
+const MAJOR_P = [0, 2, 4, 7, 9]
+const MINOR_P = [0, 3, 5, 7, 10]
+
+/** 본영: 평화로운 궁조(G) 가야금 아르페지오 + 가끔 피리 가락, 8마디마다 현을 쓸어 올린다 */
+const HOME: ThemeDef = {
+  bpm: 74,
+  scale: pent(55, MAJOR_P),
+  step(p, s, t) {
+    const e = p.e, bar = Math.floor(s / 16), pos = s % 16
+    const roots = [43, 40, 45, 38, 43, 40, 38, 43]
+    const root = roots[bar % 8]
+    const hum = () => (p.random() - 0.5) * 0.016
+    if (pos === 0) {
+      e.pluck(p.out, root, t, 0.42, { bright: 0.25, dur: 3.2 })
+      if (bar % 2 === 0) e.pad(p.out, [root + 12, root + 19], t, p.stepDur * 32, 0.05)
+      if (bar % 8 === 0) this.scale.slice(3, 10).forEach((midi, i) => e.pluck(p.out, midi, t + 0.02 + i * 0.028, 0.13 + i * 0.012, { bright: 0.7, dur: 2, pan: -0.4 + i * 0.12 }))
+      if (bar % 16 === 0) e.bell(p.out, t + 0.05, 0.05, 0.5)
+    }
+    if (pos === 8) e.pluck(p.out, root + 7, t, 0.22, { bright: 0.25, dur: 2 })
+    if (pos % 2 === 0 && !(bar % 8 === 0 && pos < 4)) {
+      const chord = this.scale.filter(n => n >= root + 12).slice(0, 6)
+      const pattern = [0, 2, 4, 2, 1, 3, 5, 3]
+      if (p.random() > 0.12) e.pluck(p.out, chord[pattern[pos / 2]] ?? chord[0], t + hum(), 0.12 + p.random() * 0.07, { bright: 0.55, dur: 1.8, pan: (pos / 16 - 0.5) * 0.7 })
+    }
+    // 가락: 8마디는 피리, 다음 4마디는 높은 가야금, 4마디는 쉼
+    const section = bar % 16
+    const note = p.melodyAt(s)
+    if (note && section < 8) e.flute(p.out, this.scale[note.deg], t, note.dur * p.stepDur * 0.95, 0.12)
+    else if (note && section >= 8 && section < 12) e.pluck(p.out, this.scale[note.deg] + 12, t, 0.15, { bright: 0.8, dur: 1.6, pan: 0.25 })
+  },
+}
+
+/** 전투: 우조(E) 단조 오음계, 큰북과 비파 16분음표 반복, 호궁 가락. 막이 오를수록 북이 거세진다 */
+const BATTLE: ThemeDef = {
+  bpm: 132,
+  scale: pent(52, MINOR_P),
+  step(p, s, t) {
+    const e = p.e, bar = Math.floor(s / 16), pos = s % 16, lv = p.intensity
+    const roots = bar % 8 < 4 ? [40, 40, 36, 38] : [40, 38, 36, 35]
+    const root = roots[bar % 4]
+    // 북
+    if (pos === 0) e.drum(p.out, 'taiko', t, 0.62)
+    if (pos === 8) e.drum(p.out, 'taiko', t, 0.46)
+    if (pos === 6 || pos === 10 || pos === 14) e.drum(p.out, 'tom', t, 0.26 + (pos === 14 ? 0.06 : 0), (pos - 10) / 20)
+    if (pos === 4 || pos === 12) e.drum(p.out, 'rim', t, 0.16)
+    if (lv >= 1 && (pos === 3 || pos === 11)) e.drum(p.out, 'taiko', t, 0.32)
+    if (lv >= 1 && bar % 4 === 3 && pos >= 12) e.drum(p.out, 'tom', t, 0.2 + (pos - 12) * 0.06, 0.3 - (pos - 12) * 0.2)
+    if (lv >= 2 && (pos === 6 || pos === 14)) e.drum(p.out, 'taiko', t, 0.4)
+    if (lv >= 2 && bar % 2 === 1 && pos >= 8 && pos % 2 === 1) e.drum(p.out, 'tom', t, 0.18)
+    if (pos === 0 && bar % 8 === 0) e.drum(p.out, 'cymbal', t, 0.16 + lv * 0.05)
+    if (pos === 0 && bar % 16 === 0) e.gong(p.out, t, 0.2, 0.9)
+    // 비파 반복음
+    const ost = [0, 0, 12, 0, 7, 0, 12, 0, 0, 0, 12, 0, 10, 0, 7, 0]
+    if (lv >= 1 || pos % 2 === 0) e.pluck(p.out, root + 12 + ost[pos], t, 0.15 + (pos % 4 === 0 ? 0.06 : 0), { bright: 0.45, dur: 0.6, pan: -0.25 })
+    if (pos === 0) e.pluck(p.out, root, t, 0.36, { bright: 0.2, dur: 1.6 })
+    // 호궁 가락: 막이 낮으면 8마디 중 뒤 4마디만
+    const note = p.melodyAt(s)
+    if (note && (lv >= 1 || bar % 8 >= 4)) {
+      e.erhu(p.out, this.scale[note.deg], t, note.dur * p.stepDur * 0.97, 0.11, note.pos === 0 ? -2 : 0)
+      if (lv >= 2) e.flute(p.out, this.scale[note.deg] + 12, t, note.dur * p.stepDur * 0.9, 0.05)
+    }
+  },
+}
+
+/** 유저 대련: 상조(A) 단조, 가벼운 북과 피리 */
+const DUEL: ThemeDef = {
+  bpm: 118,
+  scale: pent(57, MINOR_P),
+  step(p, s, t) {
+    const e = p.e, bar = Math.floor(s / 16), pos = s % 16, lv = p.intensity
+    const root = [45, 43, 41, 43][bar % 4]
+    if (pos === 0) e.drum(p.out, 'taiko', t, 0.45)
+    if (pos === 6 || pos === 10) e.drum(p.out, 'tom', t, 0.24)
+    if (pos === 4 || pos === 12 || pos === 14) e.drum(p.out, 'rim', t, 0.14)
+    if (lv >= 1 && (pos === 3 || pos === 8)) e.drum(p.out, 'taiko', t, 0.3)
+    if (lv >= 2 && pos % 4 === 2) e.drum(p.out, 'tom', t, 0.16)
+    if (pos === 0 && bar % 8 === 0) e.drum(p.out, 'cymbal', t, 0.12)
+    if (pos % 2 === 0) e.pluck(p.out, root + 12 + [0, 7, 12, 7, 0, 7, 15, 7][pos / 2], t, 0.15, { bright: 0.5, dur: 0.9, pan: 0.2 })
+    if (pos === 0) e.pluck(p.out, root, t, 0.3, { bright: 0.2, dur: 1.4 })
+    const note = p.melodyAt(s)
+    if (note) e.flute(p.out, this.scale[note.deg], t, note.dur * p.stepDur * 0.92, 0.12)
+  },
+}
+
+/** 레이드: 어두운 라(D) 단조, 낮은 지속음과 무거운 북, 4마디마다 징 */
+const RAID: ThemeDef = {
+  bpm: 88,
+  scale: pent(50, MINOR_P),
+  step(p, s, t) {
+    const e = p.e, bar = Math.floor(s / 16), pos = s % 16, lv = p.intensity
+    const root = [38, 38, 34, 36][bar % 4]
+    if (pos === 0 && bar % 2 === 0) e.pad(p.out, [26, 33, 38], t, p.stepDur * 32, 0.07)
+    if (pos === 0) e.drum(p.out, 'taiko', t, 0.75, 0, 0.82)
+    if (pos === 10) e.drum(p.out, 'taiko', t, 0.42, 0, 0.9)
+    if (pos === 6 || pos === 14) e.drum(p.out, 'tom', t, 0.22, -0.2)
+    if (lv >= 1 && (pos === 3 || pos === 8)) e.drum(p.out, 'taiko', t, 0.38, 0, 0.88)
+    if (lv >= 1 && bar % 2 === 1 && pos >= 12) e.drum(p.out, 'tom', t, 0.18 + (pos - 12) * 0.05)
+    if (lv >= 2 && pos % 2 === 1) e.drum(p.out, 'tom', t, 0.1)
+    if (pos === 0 && bar % 4 === 0) e.gong(p.out, t, 0.28, 0.78)
+    if (lv >= 1 && pos % 2 === 0) e.pluck(p.out, root + 12, t, 0.1, { bright: 0.3, dur: 0.5, pan: -0.3 })
+    const note = p.melodyAt(s)
+    if (note && note.pos % 2 === 0) e.erhu(p.out, this.scale[note.deg], t, Math.max(4, note.dur) * p.stepDur * 1.2, 0.12, -2)
+  },
+}
+
+const THEMES: Record<Exclude<MusicTheme, 'none'>, ThemeDef> = { home: HOME, battle: BATTLE, duel: DUEL, raid: RAID }
+
+// ── 소리 엔진 ───────────────────────────────────────────
+export class SoundEngine {
+  ctx: AudioContext | null = null
+  musicIn!: GainNode
+  musicSend!: GainNode
+  private master!: GainNode
+  private musicVol!: GainNode
+  private duckNode!: GainNode
+  private sfxVol!: GainNode
+  private sfxSend!: GainNode
+  private noise!: AudioBuffer
+  private buffers = new Map<string, AudioBuffer>()
+  private last = new Map<string, number>()
+  private voices = 0
+  private unlocked = false
+  private player: ThemePlayer | null = null
+  private wanted: MusicTheme = 'home'
+  private returnTimer = 0
+  private duckTimer = 0
+  private pausedDuck = false
+  intensity = 0
+
+  /** 첫 터치/클릭에서 부른다(브라우저 자동재생 규칙) */
+  unlock(): void {
+    if (!this.ensure()) return
+    if (this.ctx!.state === 'suspended') void this.ctx!.resume()
+    if (this.unlocked) return
+    this.unlocked = true
+    this.applyVolumes()
+    this.setTheme(this.wanted)
+    window.setInterval(() => this.tick(), 50)
+    document.addEventListener('visibilitychange', () => {
+      if (!this.ctx) return
+      if (document.hidden) void this.ctx.suspend()
+      else void this.ctx.resume()
+    })
+  }
+
+  private ensure(): boolean {
+    if (this.ctx) return true
+    try {
+      const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!Ctor) return false
+      const ctx = new Ctor({ latencyHint: 'interactive' })
+      this.ctx = ctx
+      const comp = ctx.createDynamicsCompressor()
+      comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2
+      // 마지막 단: 갑자기 여러 소리가 겹쳐도 깨지지 않게 막는 리미터
+      const limiter = ctx.createDynamicsCompressor()
+      limiter.threshold.value = -3; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.001; limiter.release.value = 0.08
+      this.master = ctx.createGain(); this.master.gain.value = 0.85
+      this.master.connect(comp).connect(limiter).connect(ctx.destination)
+      const reverb = ctx.createConvolver()
+      reverb.buffer = this.impulse(2.6)
+      const wet = ctx.createGain(); wet.gain.value = 0.32
+      reverb.connect(wet).connect(this.master)
+      this.musicVol = ctx.createGain()
+      this.duckNode = ctx.createGain()
+      this.musicIn = ctx.createGain()
+      this.musicSend = ctx.createGain(); this.musicSend.gain.value = 0.5
+      this.musicIn.connect(this.duckNode)
+      this.musicSend.connect(reverb)
+      this.duckNode.connect(this.musicVol).connect(this.master)
+      this.sfxVol = ctx.createGain()
+      this.sfxSend = ctx.createGain(); this.sfxSend.gain.value = 0.2
+      this.sfxVol.connect(this.master)
+      this.sfxSend.connect(reverb)
+      this.noise = this.makeBuffer(2, () => Math.random() * 2 - 1)
+      return true
+    } catch { this.ctx = null; return false }
+  }
+
+  /** 설정(음악·효과음 크기, 음소거)을 다시 읽어 적용한다 */
+  applyVolumes(): void {
+    if (!this.ctx) return
+    const muted = muteSetting()
+    const t = this.ctx.currentTime
+    this.musicVol.gain.setTargetAtTime(muted ? 0 : SOUND_LEVEL_VALUE[musicSetting()] * 0.62, t, 0.08)
+    this.sfxVol.gain.setTargetAtTime(muted ? 0 : SOUND_LEVEL_VALUE[sfxSetting()] * 0.95, t, 0.08)
+    this.sfxSend.gain.setTargetAtTime(muted ? 0 : SOUND_LEVEL_VALUE[sfxSetting()] * 0.2, t, 0.08)
+    this.musicSend.gain.setTargetAtTime(muted ? 0 : SOUND_LEVEL_VALUE[musicSetting()] * 0.32, t, 0.08)
+  }
+
+  /** 화면에 맞는 곡으로 바꾼다(같은 곡이면 그대로) */
+  setTheme(theme: MusicTheme): void {
+    window.clearTimeout(this.returnTimer)
+    this.wanted = theme
+    if (!this.ctx || !this.unlocked) return
+    if (this.player && this.player.name === theme && !this.player.stopped) return
+    this.player?.stop()
+    this.player = null
+    if (theme !== 'none') {
+      if (theme === 'home') this.intensity = 0
+      this.player = new ThemePlayer(this, THEMES[theme], theme, Math.floor(Math.random() * 1e9))
+    }
+  }
+
+  /** 잠시 뒤 다른 곡으로(그 사이 setTheme을 부르면 취소) */
+  setThemeAfter(theme: MusicTheme, ms: number): void {
+    window.clearTimeout(this.returnTimer)
+    this.returnTimer = window.setTimeout(() => this.setTheme(theme), ms)
+  }
+
+  get currentTheme(): MusicTheme { return this.wanted }
+
+  setIntensity(level: number): void { this.intensity = Math.max(0, Math.min(2, Math.round(level))) }
+
+  /** 일시 정지 중에는 음악을 줄인다 */
+  setPausedDuck(on: boolean): void { this.pausedDuck = on; this.updateDuck() }
+  /** 뽑기 연출 같은 큰 효과음 동안 음악을 잠시 낮춘다 */
+  duckFor(ms: number): void {
+    window.clearTimeout(this.duckTimer)
+    this.updateDuck(0.22)
+    this.duckTimer = window.setTimeout(() => { this.duckTimer = 0; this.updateDuck() }, ms)
+  }
+  private updateDuck(force?: number): void {
+    if (!this.ctx) return
+    const level = force ?? (this.duckTimer ? 0.22 : this.pausedDuck ? 0.4 : 1)
+    this.duckNode.gain.setTargetAtTime(level, this.ctx.currentTime, 0.15)
+  }
+
+  /** 뽑기 연출이 직접 합성하는 소리를 효과음 크기에 맞춰 내보낼 곳 */
+  sfxOutput(): { ctx: AudioContext; out: AudioNode } | null {
+    if (!this.ensure()) return null
+    if (this.ctx!.state === 'suspended') void this.ctx!.resume()
+    this.applyVolumes()
+    return { ctx: this.ctx!, out: this.sfxVol }
+  }
+
+  private tick(): void {
+    if (!this.ctx || this.ctx.state !== 'running') return
+    this.player?.schedule(0.3)
+  }
+
+  // ── 그려 두는 소리 ──
+  private makeBuffer(seconds: number, fn: (t: number, i: number) => number, channels = 1): AudioBuffer {
+    const ctx = this.ctx!
+    const n = Math.max(1, Math.floor(ctx.sampleRate * seconds))
+    const buffer = ctx.createBuffer(channels, n, ctx.sampleRate)
+    for (let c = 0; c < channels; c += 1) {
+      const data = buffer.getChannelData(c)
+      for (let i = 0; i < n; i += 1) data[i] = fn(i / ctx.sampleRate, i)
+    }
+    return buffer
+  }
+  private normalize(buffer: AudioBuffer, peak = 0.9): AudioBuffer {
+    let max = 0
+    for (let c = 0; c < buffer.numberOfChannels; c += 1) for (const v of buffer.getChannelData(c)) max = Math.max(max, Math.abs(v))
+    if (max > 0) for (let c = 0; c < buffer.numberOfChannels; c += 1) { const d = buffer.getChannelData(c); for (let i = 0; i < d.length; i += 1) d[i] *= peak / max }
+    return buffer
+  }
+  private impulse(seconds: number): AudioBuffer {
+    const ctx = this.ctx!
+    const n = Math.floor(ctx.sampleRate * seconds)
+    const buffer = ctx.createBuffer(2, n, ctx.sampleRate)
+    for (let c = 0; c < 2; c += 1) {
+      const d = buffer.getChannelData(c)
+      let lp = 0
+      for (let i = 0; i < n; i += 1) {
+        const t = i / ctx.sampleRate
+        const a = 0.9 - 0.75 * (t / seconds) // 뒤로 갈수록 어두워진다
+        lp += a * ((Math.random() * 2 - 1) - lp)
+        d[i] = lp * Math.exp(-t * 2.6) * (t < 0.012 ? t / 0.012 : 1)
+      }
+    }
+    return buffer
+  }
+  /** 뜯는 현: Karplus-Strong. 높은 음 정확도를 위해 재생 속도로 음높이를 맞춘다 */
+  private pluckBuffer(midi: number, bright: number, dur: number): { buffer: AudioBuffer; rate: number } {
+    const ctx = this.ctx!
+    const sr = ctx.sampleRate
+    const freq = mtof(midi)
+    const N = Math.max(4, Math.round(sr / freq - 0.5))
+    const key = `pk:${N}:${Math.round(bright * 10)}:${Math.round(dur * 10)}`
+    let buffer = this.buffers.get(key)
+    if (!buffer) {
+      const total = Math.floor(sr * dur)
+      const ring = new Float32Array(N)
+      let prev = 0
+      const a = 0.18 + bright * 0.75
+      for (let i = 0; i < N; i += 1) { prev += a * ((Math.random() * 2 - 1) - prev); ring[i] = prev }
+      const mean = ring.reduce((sum, v) => sum + v, 0) / N
+      for (let i = 0; i < N; i += 1) ring[i] -= mean
+      // 한 주기마다 줄어드는 비율: 소리 길이의 70% 지점에서 −40dB가 되게(낮은 음도 끝에서 잘리지 않고 사라진다)
+      const rho = Math.min(0.9995, 10 ** (-2 / (dur * 0.7 * freq)))
+      const out = new Float32Array(total)
+      let idx = 0
+      for (let i = 0; i < total; i += 1) {
+        const next = (idx + 1) % N
+        const v = ring[idx]
+        ring[idx] = rho * 0.5 * (v + ring[next])
+        const fade = total * 0.25
+        out[i] = v * (i > total - fade ? (total - i) / fade : 1)
+        idx = next
+      }
+      buffer = ctx.createBuffer(1, total, sr)
+      buffer.getChannelData(0).set(out)
+      this.normalize(buffer, 0.8)
+      this.buffers.set(key, buffer)
+    }
+    return { buffer, rate: freq * (N + 0.5) / sr }
+  }
+  private sample(kind: string): AudioBuffer {
+    const hit = this.buffers.get(kind)
+    if (hit) return hit
+    let buffer: AudioBuffer
+    let lp = 0
+    const smooth = (a: number) => { lp += a * ((Math.random() * 2 - 1) - lp); return lp }
+    switch (kind) {
+      case 'taiko': { let ph = 0; buffer = this.makeBuffer(1.1, t => { ph += 2 * Math.PI * 58 * (1 + 2.2 * Math.exp(-t * 26)) / this.ctx!.sampleRate; return Math.sin(ph) * Math.exp(-t * 5.2) + smooth(0.1) * Math.exp(-t * 32) * 0.9 + (t < 0.004 ? (Math.random() - 0.5) : 0) }); break }
+      case 'tom': { let ph = 0; buffer = this.makeBuffer(0.6, t => { ph += 2 * Math.PI * 118 * (1 + 1.2 * Math.exp(-t * 30)) / this.ctx!.sampleRate; return Math.sin(ph) * Math.exp(-t * 9) + smooth(0.2) * Math.exp(-t * 45) * 0.6 }); break }
+      case 'rim': buffer = this.makeBuffer(0.18, t => Math.sin(2 * Math.PI * 820 * t) * Math.exp(-t * 55) + Math.sin(2 * Math.PI * 1310 * t) * Math.exp(-t * 80) * 0.5 + (Math.random() * 2 - 1) * Math.exp(-t * 160) * 0.35); break
+      case 'cymbal': { let prev = 0; buffer = this.makeBuffer(1.8, t => { const w = Math.random() * 2 - 1; const hp = w - prev; prev = w; return hp * Math.exp(-t * 2.8) * (1 - Math.exp(-t * 300)) }); break }
+      case 'gong': {
+        const ratios = [1, 1.52, 2.03, 2.71, 3.33, 4.17], amps = [1, 0.6, 0.45, 0.32, 0.24, 0.16], decay = [0.7, 0.9, 1.3, 1.7, 2.2, 2.8]
+        buffer = this.makeBuffer(4.6, t => ratios.reduce((sum, r, i) => sum + amps[i] * (Math.sin(2 * Math.PI * 98 * r * t) + 0.5 * Math.sin(2 * Math.PI * 98 * r * 1.003 * t)) * Math.exp(-t * decay[i]) * (1 - Math.exp(-t * (18 - i * 2))), 0) + (Math.random() * 2 - 1) * Math.exp(-t * 60) * 0.4)
+        break
+      }
+      case 'bell': {
+        const ratios = [1, 2.76, 5.4, 8.93], amps = [1, 0.5, 0.25, 0.12], decay = [2.6, 4.5, 8, 12]
+        buffer = this.makeBuffer(1.8, t => ratios.reduce((sum, r, i) => sum + amps[i] * Math.sin(2 * Math.PI * 1046.5 * r * t) * Math.exp(-t * decay[i]), 0) * (1 - Math.exp(-t * 900)))
+        break
+      }
+      case 'metal': {
+        const ratios = [1, 1.83, 2.67, 3.9, 5.1], amps = [1, 0.7, 0.5, 0.35, 0.25]
+        buffer = this.makeBuffer(0.5, t => ratios.reduce((sum, r, i) => sum + amps[i] * Math.sin(2 * Math.PI * 620 * r * t) * Math.exp(-t * (12 + i * 6)), 0) + (Math.random() * 2 - 1) * Math.exp(-t * 70) * 0.5)
+        break
+      }
+      default: buffer = this.makeBuffer(0.05, () => 0)
+    }
+    this.normalize(buffer)
+    this.buffers.set(kind, buffer)
+    return buffer
+  }
+
+  // ── 악기 ──
+  /** 소리를 내보낼 곳: 팬 → (출력 + 잔향) */
+  private route(out: AudioNode, gain: GainNode, pan = 0, send?: AudioNode): void {
+    const ctx = this.ctx!
+    let node: AudioNode = gain
+    if (pan && typeof ctx.createStereoPanner === 'function') { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); gain.connect(p); node = p }
+    node.connect(out)
+    if (send) node.connect(send)
+  }
+  private play_(buffer: AudioBuffer, out: AudioNode, t: number, vol: number, opts: { rate?: number; pan?: number; send?: AudioNode; filter?: number } = {}): void {
+    const ctx = this.ctx!
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+    src.playbackRate.value = opts.rate ?? 1
+    const g = ctx.createGain()
+    g.gain.value = vol
+    if (opts.filter) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = opts.filter; src.connect(f).connect(g) } else src.connect(g)
+    this.route(out, g, opts.pan, opts.send)
+    this.voices += 1
+    src.onended = () => { this.voices -= 1; try { g.disconnect() } catch { /* 끝 */ } }
+    src.start(Math.max(t, ctx.currentTime))
+  }
+  pluck(out: AudioNode, midi: number, t: number, vol: number, opts: { bright?: number; dur?: number; pan?: number; send?: AudioNode } = {}): void {
+    const { buffer, rate } = this.pluckBuffer(midi, opts.bright ?? 0.5, opts.dur ?? 1.6)
+    this.play_(buffer, out, t, vol, { rate, pan: opts.pan, send: opts.send })
+  }
+  drum(out: AudioNode, kind: 'taiko' | 'tom' | 'rim' | 'cymbal', t: number, vol: number, pan = 0, rate = 1, send?: AudioNode): void {
+    this.play_(this.sample(kind), out, t, vol, { rate: rate * (0.98 + Math.random() * 0.04), pan, send })
+  }
+  gong(out: AudioNode, t: number, vol: number, rate = 1, send?: AudioNode): void { this.play_(this.sample('gong'), out, t, vol, { rate, send }) }
+  bell(out: AudioNode, t: number, vol: number, rate = 1, pan = 0, send?: AudioNode): void { this.play_(this.sample('bell'), out, t, vol, { rate, pan, send }) }
+  metal(out: AudioNode, t: number, vol: number, rate = 1, pan = 0, send?: AudioNode): void { this.play_(this.sample('metal'), out, t, vol, { rate, pan, send }) }
+
+  /** 피리(적): 사인 + 숨소리, 늦게 들어오는 떨림 */
+  flute(out: AudioNode, midi: number, t: number, dur: number, vol: number, slide = 0): void {
+    const ctx = this.ctx!
+    const f = mtof(midi)
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), g2 = ctx.createGain(), lp = ctx.createBiquadFilter()
+    o.type = 'sine'; o2.type = 'triangle'
+    o.frequency.setValueAtTime(slide ? mtof(midi + slide) : f, t); o.frequency.setTargetAtTime(f, t, 0.035)
+    o2.frequency.setValueAtTime(f * 2, t)
+    const lfo = ctx.createOscillator(), depth = ctx.createGain()
+    lfo.frequency.value = 5.3
+    depth.gain.setValueAtTime(0, t); depth.gain.linearRampToValueAtTime(f * 0.007, t + Math.min(0.5, dur * 0.6))
+    lfo.connect(depth); depth.connect(o.frequency)
+    g2.gain.value = 0.12
+    lp.type = 'lowpass'; lp.frequency.value = 3200
+    const end = t + Math.max(0.12, dur)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.linearRampToValueAtTime(vol, t + 0.06)
+    g.gain.linearRampToValueAtTime(vol * 0.82, t + Math.min(dur, 0.4))
+    g.gain.setValueAtTime(vol * 0.82, end - 0.06)
+    g.gain.linearRampToValueAtTime(0.0001, end + 0.05)
+    // 숨소리
+    const n = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain()
+    n.buffer = this.noise; bp.type = 'bandpass'; bp.frequency.value = Math.min(8000, f * 2); bp.Q.value = 1.5
+    ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(vol * 0.3, t + 0.04); ng.gain.linearRampToValueAtTime(vol * 0.08, t + 0.2); ng.gain.linearRampToValueAtTime(0.0001, end + 0.05)
+    o.connect(lp); o2.connect(g2).connect(lp); lp.connect(g); n.connect(bp).connect(ng).connect(g)
+    this.route(out, g, 0.15)
+    ;[o, o2, lfo, n].forEach(node => { node.start(t); node.stop(end + 0.1) })
+    n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 호궁(얼후): 톱니파를 몸통 공명처럼 걸러, 활로 켜듯 천천히 들어오고 미끄러져 올라간다 */
+  erhu(out: AudioNode, midi: number, t: number, dur: number, vol: number, slide = 0): void {
+    const ctx = this.ctx!
+    const f = mtof(midi)
+    const o = ctx.createOscillator(), bp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
+    o.type = 'sawtooth'
+    o.frequency.setValueAtTime(slide ? mtof(midi + slide) : f, t); o.frequency.setTargetAtTime(f, t, 0.06)
+    const lfo = ctx.createOscillator(), depth = ctx.createGain()
+    lfo.frequency.value = 6
+    depth.gain.setValueAtTime(0, t); depth.gain.linearRampToValueAtTime(f * 0.012, t + Math.min(0.45, dur * 0.7))
+    lfo.connect(depth).connect(o.frequency)
+    bp.type = 'peaking'; bp.frequency.value = 1100; bp.Q.value = 1.2; bp.gain.value = 6
+    lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.6
+    const end = t + Math.max(0.15, dur)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.linearRampToValueAtTime(vol, t + 0.1)
+    g.gain.setValueAtTime(vol, end - 0.08)
+    g.gain.linearRampToValueAtTime(0.0001, end + 0.06)
+    o.connect(bp).connect(lp).connect(g)
+    this.route(out, g, -0.1)
+    ;[o, lfo].forEach(node => { node.start(t); node.stop(end + 0.1) })
+    o.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 낮게 깔리는 화음 */
+  pad(out: AudioNode, midis: number[], t: number, dur: number, vol: number): void {
+    const ctx = this.ctx!
+    const g = ctx.createGain(), lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'; lp.frequency.value = 760
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + Math.min(1.2, dur / 3)); g.gain.setValueAtTime(vol, t + dur - Math.min(1.2, dur / 3)); g.gain.linearRampToValueAtTime(0.0001, t + dur)
+    lp.connect(g); this.route(out, g)
+    const oscs = midis.flatMap(midi => [-7, 7].map(cents => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(midi); o.detune.value = cents; o.connect(lp); return o }))
+    oscs.forEach(o => { o.start(t); o.stop(t + dur + 0.05) })
+    oscs[0].onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 뿔나팔: 낮은 음에서 미끄러져 올라가며 필터가 열린다 */
+  horn(out: AudioNode, midi: number, t: number, dur: number, vol: number, send?: AudioNode): void {
+    const ctx = this.ctx!
+    const f = mtof(midi)
+    const o = ctx.createOscillator(), o2 = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
+    o.type = 'sawtooth'; o2.type = 'square'
+    o.frequency.setValueAtTime(f * 0.84, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.18)
+    o2.frequency.setValueAtTime(f * 0.5 * 0.84, t); o2.frequency.exponentialRampToValueAtTime(f * 0.5, t + 0.18)
+    lp.type = 'lowpass'; lp.Q.value = 2
+    lp.frequency.setValueAtTime(300, t); lp.frequency.exponentialRampToValueAtTime(1500, t + 0.25); lp.frequency.exponentialRampToValueAtTime(700, t + dur)
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.12); g.gain.setValueAtTime(vol, t + dur - 0.15); g.gain.linearRampToValueAtTime(0.0001, t + dur)
+    o.connect(lp); o2.connect(lp); lp.connect(g)
+    this.route(out, g, 0, send)
+    ;[o, o2].forEach(node => { node.start(t); node.stop(t + dur + 0.05) })
+    o.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 바람 가르는 소리(화살·칼·휘두름) */
+  whoosh(out: AudioNode, t: number, dur: number, vol: number, from: number, to: number, pan = 0, send?: AudioNode): void {
+    const ctx = this.ctx!
+    const n = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain()
+    n.buffer = this.noise
+    bp.type = 'bandpass'; bp.Q.value = 2.2
+    bp.frequency.setValueAtTime(from, t); bp.frequency.exponentialRampToValueAtTime(to, t + dur)
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + dur * 0.4); g.gain.linearRampToValueAtTime(0.0001, t + dur)
+    n.connect(bp).connect(g)
+    this.route(out, g, pan, send)
+    n.start(t, Math.random() * 1.5); n.stop(t + dur + 0.02)
+    n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+
+  // ── 효과음 ──
+  private allow(name: string, gap?: number, light = false): boolean {
+    if (!this.ctx || !this.unlocked || this.ctx.state !== 'running') return false
+    if (light && this.voices > 36) return false
+    const now = performance.now()
+    if (gap && now - (this.last.get(name) ?? -1e9) < gap) return false
+    this.last.set(name, now)
+    return true
+  }
+
+  play(name: Sfx, opts: { pan?: number } = {}): void {
+    if (!this.allow(name, MIN_GAP[name], LIGHT[name])) return
+    const out = this.sfxVol, send = this.sfxSend
+    const t = this.ctx!.currentTime + 0.005
+    const pan = opts.pan ?? 0
+    const run = (notes: number[], gap: number, vol: number, bright = 0.7, at = t) => notes.forEach((midi, i) => this.pluck(out, midi, at + i * gap, vol, { bright, dur: 1.4, pan: -0.3 + i * 0.6 / Math.max(1, notes.length - 1), send }))
+    switch (name) {
+      case 'click': this.drum(out, 'rim', t, 0.22, 0, 1.3); break
+      case 'tab': this.pluck(out, 79, t, 0.2, { bright: 0.6, dur: 0.8, send }); this.drum(out, 'rim', t, 0.1, 0, 1.5); break
+      case 'open': run([74, 79], 0.05, 0.2); break
+      case 'close': run([79, 74], 0.05, 0.18); break
+      case 'error': this.drum(out, 'tom', t, 0.38, 0, 0.75); this.drum(out, 'tom', t + 0.09, 0.32, 0, 0.7); this.metal(out, t, 0.06, 0.5); break
+      case 'success': run([79, 83, 86], 0.05, 0.22); this.bell(out, t + 0.1, 0.08, 1, 0, send); break
+      case 'coin': this.bell(out, t, 0.2, 1.9, -0.2, send); this.bell(out, t + 0.065, 0.18, 2.4, 0.2, send); this.metal(out, t, 0.05, 2.2); break
+      case 'levelUp': run([67, 69, 71, 74, 76, 79], 0.035, 0.24); this.bell(out, t + 0.22, 0.14, 1, 0, send); this.bell(out, t + 0.22, 0.08, 1.5, 0, send); break
+      case 'unlock': this.gong(out, t, 0.25, 1.6, send); run([74, 76, 79, 81, 86], 0.04, 0.2, 0.8, t + 0.05); break
+      case 'forge': this.metal(out, t, 0.4, 1, -0.2, send); this.metal(out, t + 0.14, 0.32, 1.12, 0.2, send); this.bell(out, t + 0.3, 0.12, 1.25, 0, send); break
+      case 'equip': this.metal(out, t, 0.34, 1.1, 0, send); this.drum(out, 'rim', t + 0.03, 0.12); break
+      case 'unequip': this.metal(out, t, 0.24, 0.8); break
+      case 'dismantle': this.metal(out, t, 0.32, 0.7, -0.2, send); this.metal(out, t + 0.08, 0.24, 0.62, 0.2); this.whoosh(out, t + 0.05, 0.25, 0.12, 900, 300); break
+      case 'lock': this.drum(out, 'rim', t, 0.2, 0, 1.6); this.metal(out, t + 0.04, 0.16, 1.5); break
+      case 'reward': this.bell(out, t, 0.15, 1, 0, send); this.bell(out, t + 0.07, 0.13, 1.26, 0, send); this.bell(out, t + 0.14, 0.13, 1.5, 0, send); run([79, 81, 83, 86, 88, 91], 0.03, 0.14, 0.8, t + 0.05); break
+      case 'build': [0, 0.13, 0.26].forEach((d, i) => { this.drum(out, i === 2 ? 'tom' : 'rim', t + d, i === 2 ? 0.3 : 0.24, 0, i === 2 ? 1 : 0.85); this.metal(out, t + d, 0.06, 0.9) }); break
+      case 'research': this.whoosh(out, t, 0.2, 0.12, 2000, 5200); this.bell(out, t + 0.12, 0.1, 1.5, 0, send); break
+      case 'formation': this.drum(out, 'taiko', t, 0.3); this.drum(out, 'rim', t + 0.1, 0.12); break
+      case 'battleStart': this.horn(out, 45, t, 1.1, 0.16, send); [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.gong(out, t + 0.84, 0.32, 1, send); break
+      case 'attack': this.whoosh(out, t, 0.13, 0.08, 1200, 3200, pan); break
+      case 'hit': this.drum(out, 'tom', t, 0.15, pan, 0.85 + Math.random() * 0.3); this.whoosh(out, t, 0.06, 0.05, 600, 300, pan); break
+      case 'hitBig': this.drum(out, 'taiko', t, 0.3, pan); this.metal(out, t, 0.12, 0.85 + Math.random() * 0.25, pan); break
+      case 'unitDown': this.drum(out, 'taiko', t, 0.45, pan, 0.78); this.whoosh(out, t, 0.5, 0.14, 500, 120, pan, send); break
+      case 'enemySkill': this.gong(out, t, 0.24, 0.7, send); this.whoosh(out, t, 0.35, 0.12, 600, 2400, pan); break
+      case 'enemyWarn': [0, 0.13, 0.26].forEach(d => this.bell(out, t + d, 0.14, 2.2, 0, send)); break
+      case 'pattern': this.horn(out, 50, t, 0.7, 0.13, send); this.drum(out, 'tom', t + 0.05, 0.2); this.drum(out, 'tom', t + 0.15, 0.24); break
+      case 'answerGood': this.bell(out, t, 0.16, 1.5, 0, send); run([81, 86, 88, 93], 0.03, 0.15, 0.85); break
+      case 'answerBad': this.drum(out, 'tom', t, 0.3, 0, 0.7); this.metal(out, t, 0.1, 0.55); break
+      case 'counter': this.metal(out, t, 0.42, 1.3, pan, send); this.bell(out, t + 0.02, 0.12, 1.8, pan, send); break
+      case 'phase': [0, 0.12, 0.22, 0.3, 0.37, 0.43].forEach((d, i) => this.drum(out, i % 2 ? 'tom' : 'taiko', t + d, 0.22 + i * 0.05)); this.gong(out, t + 0.5, 0.3, 1, send); break
+      case 'collapse': this.gong(out, t, 0.42, 0.85, send); this.drum(out, 'taiko', t, 0.55, 0, 0.8); this.drum(out, 'cymbal', t, 0.2); break
+      case 'timeWarn': this.bell(out, t, 0.14, 0.8, 0, send); this.bell(out, t + 0.25, 0.14, 0.8, 0, send); break
+      case 'heal': this.bell(out, t, 0.07, 1.26, pan, send); this.bell(out, t + 0.08, 0.06, 1.5, pan, send); break
+      case 'tactic': this.horn(out, 52, t, 0.55, 0.12, send); this.drum(out, 'taiko', t, 0.32); break
+      case 'move': this.whoosh(out, t, 0.18, 0.07, 500, 1400, pan); this.drum(out, 'rim', t, 0.08); break
+      case 'raidSquad': this.gong(out, t, 0.36, 0.9, send); this.drum(out, 'taiko', t, 0.45); break
+      case 'victory': this.stinger(true); break
+      case 'defeat': this.stinger(false); break
+    }
+  }
+
+  /** 장수 계열별 스킬 소리 */
+  skill(type: SkillSound | string, side: 'player' | 'enemy', pan = 0): void {
+    if (side === 'enemy') { this.play('enemySkill', { pan }); return }
+    if (!this.allow('skill', 120)) return
+    const out = this.sfxVol, send = this.sfxSend
+    const t = this.ctx!.currentTime + 0.005
+    this.whoosh(out, t, 0.32, 0.12, 400, 2600, pan, send)
+    switch (type) {
+      case '돌격': this.drum(out, 'taiko', t + 0.05, 0.5, pan); this.drum(out, 'taiko', t + 0.16, 0.45, pan); this.metal(out, t + 0.16, 0.25, 0.9, pan, send); break
+      case '사격': [0, 0.04, 0.08, 0.13, 0.17, 0.22].forEach(d => this.whoosh(out, t + 0.05 + d, 0.16, 0.08, 1800, 4800, pan + (Math.random() - 0.5) * 0.6)); this.drum(out, 'tom', t + 0.35, 0.25, pan); break
+      case '계략': [1, 1.19, 1.5, 1.78].forEach((r, i) => this.bell(out, t + i * 0.05, 0.1, r * 0.75, -0.4 + i * 0.25, send)); this.gong(out, t + 0.05, 0.2, 0.75, send); break
+      case '통솔': this.horn(out, 52, t, 0.75, 0.14, send); this.drum(out, 'taiko', t + 0.1, 0.4); break
+      case '수호': this.gong(out, t, 0.4, 0.8, send); this.metal(out, t, 0.18, 0.7, pan); break
+      case '치유': [76, 79, 83, 86].forEach((midi, i) => this.pluck(out, midi, t + i * 0.06, 0.18, { bright: 0.75, dur: 1.6, send })); this.bell(out, t + 0.2, 0.1, 1.26, 0, send); break
+      default: this.gong(out, t, 0.25, 1, send)
+    }
+  }
+
+  /** 승리·패배 짧은 곡(음악 볼륨). 끝나면 본영 곡으로 돌아간다 */
+  private stinger(won: boolean): void {
+    if (!this.ctx) return
+    this.setTheme('none')
+    const out = this.musicIn, send = this.musicSend
+    const t = this.ctx.currentTime + 0.05
+    if (won) {
+      ;[0, 0.09, 0.17, 0.24, 0.3, 0.35, 0.4, 0.44].forEach((d, i) => this.drum(out, i % 2 ? 'tom' : 'taiko', t + d, 0.25 + i * 0.06))
+      this.gong(out, t + 0.55, 0.45, 1, send)
+      this.drum(out, 'taiko', t + 0.55, 0.8)
+      pent(55, MAJOR_P).slice(0, 11).forEach((midi, i) => this.pluck(out, midi, t + 0.58 + i * 0.032, 0.18 + i * 0.01, { bright: 0.75, dur: 2.4, pan: -0.5 + i * 0.1, send }))
+      ;[[79, 0.4], [81, 0.2], [83, 0.2], [86, 1.5]].reduce((at, [midi, dur]) => { this.flute(out, midi, at, dur, 0.16); return at + dur }, t + 1)
+      this.pad(out, [55, 59, 62, 67], t + 0.6, 3.2, 0.06)
+      this.drum(out, 'cymbal', t + 0.55, 0.22)
+    } else {
+      this.gong(out, t, 0.45, 0.7, send)
+      this.drum(out, 'taiko', t, 0.45, 0, 0.75)
+      ;[[64, 0.6], [62, 0.5], [59, 0.5], [57, 1.6]].reduce((at, [midi, dur]) => { this.erhu(out, midi, at, dur, 0.13, -1); return at + dur }, t + 0.35)
+      this.pad(out, [40, 47, 52], t + 0.2, 3.4, 0.06)
+    }
+    this.setThemeAfter('home', won ? 4800 : 5200)
+  }
+}
+
+export const sound = new SoundEngine()

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
+import { sound } from '../engine/sound'
 import { BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import type { SkillType } from './skills'
@@ -430,6 +431,7 @@ export class Arena {
   /** 일시 정지: 전투 시간·적 행동·스킬 쿨다운이 모두 멈춘다. 정지 중에는 명령을 받지 않는다. */
   setPaused(on: boolean): void {
     this.paused = Boolean(on) && this.battleActive
+    sound.setPausedDuck(this.paused)
   }
 
   setAutoPlay(on: boolean): void {
@@ -438,6 +440,9 @@ export class Arena {
 
   stopBattle(): void {
     this.battleActive = false
+    sound.setPausedDuck(false)
+    // 승리·패배 곡이 울리는 중이면(곡 없음) 끝나고 본영 곡으로 돌아가게 둔다
+    if (sound.currentTheme !== 'none') sound.setTheme('home')
     this.paused = false
     this.core = null
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
@@ -716,6 +721,11 @@ export class Arena {
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()
+    // 배경음악: 대련·레이드·그 밖의 전투. 레이드 2·3군은 같은 곡을 이어 간다
+    sound.setIntensity(0)
+    sound.setPausedDuck(false)
+    sound.setTheme(this.mode === 'duel' ? 'duel' : this.mode === 'raid' ? 'raid' : 'battle')
+    sound.play('battleStart')
     this.lastCombatLog = 0
     this.enemyWarning = null
     this.logLines.splice(0)
@@ -762,6 +772,7 @@ export class Arena {
   commandMove(index: number): void {
     if (!this.battleActive || !this.core || this.paused) return
     this.selectUnit(index)
+    sound.play('move', { pan: this.lanePan(index) })
     const unit = this.playerUnits[index]
     if (unit && unit.troops > 0) {
       const target = new THREE.Vector3(-5 + index * 5, 0, -1 - index * 1.2)
@@ -782,6 +793,7 @@ export class Arena {
   useTactic(tactic: BattleTactic): void {
     if (!this.battleActive || !this.core || this.paused) return
     this.core.useTactic(tactic)
+    sound.play('tactic')
     this.drainCore()
   }
 
@@ -810,6 +822,9 @@ export class Arena {
     this.syncTroops()
   }
 
+  /** 자리(0·1·2)에 따라 소리를 좌우로 */
+  private lanePan(lane: number): number { return Math.max(-0.6, Math.min(0.6, (lane - 1) * 0.45)) }
+
   private handleCoreEvent(event: CoreEvent, core: BattleCore): void {
     switch (event.kind) {
       case 'log':
@@ -819,6 +834,7 @@ export class Arena {
       case 'hit': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
+        sound.play(event.amount >= 150 ? 'hitBig' : 'hit', { pan: this.lanePan(event.lane) })
         const strike = this.pendingStrike
         if (strike && strike.source === event.source && strike.side !== event.side) {
           this.pendingStrike = null
@@ -830,30 +846,38 @@ export class Arena {
         }
         break
       }
-      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) this.playAttack(unit, event.side, event.target); break }
-      case 'heal': { const unit = this.unitAt(event.side, event.lane); if (unit && event.amount >= 60) this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 2.6, 0)), `+${Math.round(event.amount)}`, '#8fe3b0', 0.8); break }
+      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) { this.playAttack(unit, event.side, event.target); sound.play('attack', { pan: this.lanePan(event.lane) }) } break }
+      case 'heal': { const unit = this.unitAt(event.side, event.lane); if (unit && event.amount >= 60) sound.play('heal', { pan: this.lanePan(event.lane) }); if (unit && event.amount >= 60) this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 2.6, 0)), `+${Math.round(event.amount)}`, '#8fe3b0', 0.8); break }
       case 'skill': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
+        sound.skill(event.type, event.side, this.lanePan(event.lane))
         this.callbacks.onSkillCast?.({ side: event.side, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
         this.playSkill(unit, event.side, event.type, event.name, event.morale, event.target)
         if (event.side === 'enemy') this.enemyWarning = null
         break
       }
       case 'enemySkillWarn': {
+        sound.play('enemyWarn')
         const unit = this.unitAt('enemy', event.lane)
         // 예고된 적장 발밑에 붉은 경고 원(예고 시간 동안)
         if (unit) this.fx(groundCircle(unit.group.position, 0xff3b2a, 3.2, BATTLE_RULES.enemySkillWarning + (core.research.enemyWarn ?? 0) + 0.3, -2.2))
         this.enemyWarning = { name: event.name, general: unit?.general.name ?? '적장', until: core.t + BATTLE_RULES.enemySkillWarning + (core.research.enemyWarn ?? 0) + 0.2 }
         break
       }
+      case 'pattern':
+        sound.play('pattern')
+        break
       case 'answer':
+        sound.play(event.success ? 'answerGood' : 'answerBad')
         if (event.success) {
           const enemy = this.unitAt('enemy', Math.max(0, event.lane))
           this.spawnImpact((enemy?.group.position ?? new THREE.Vector3(0, 0, -6)).clone(), 12, jade)
         }
         break
       case 'phase': {
+        sound.setIntensity(event.phase)
+        sound.play('phase')
         const closing = event.phase === 1 ? 0.8 : 1.35
         this.playerUnits.forEach((unit, index) => { unit.target.z -= closing + index * 0.08 })
         this.enemyUnits.forEach((unit, index) => { unit.target.z += closing + index * 0.08 })
@@ -863,6 +887,7 @@ export class Arena {
         break
       }
       case 'counter': {
+        sound.play('counter', { pan: this.lanePan(event.lane) })
         const foe = this.unitAt('enemy', event.lane)
         if (foe) {
           const at = foe.group.position.clone()
@@ -875,13 +900,16 @@ export class Arena {
         break
       }
       case 'timeWarn':
+        sound.play('timeWarn')
         this.floatText(new THREE.Vector3(0, 5.2, -4), `남은 ${event.left}초!`, '#ff8a6a', 1.5)
         this.cameraShake = Math.min(0.4, this.cameraShake + 0.1)
         break
       case 'collapse':
+        sound.play('collapse')
         this.cameraShake = Math.min(0.7, this.cameraShake + 0.35)
         break
       case 'unitDown': {
+        sound.play('unitDown', { pan: this.lanePan(event.lane) })
         const unit = this.unitAt(event.side, event.lane)
         if (unit) { unit.dying = 1; unit.fallDust = false; unit.motion = null; this.addEffect(shockwave(unit.group.position.clone(), 0xb9a17c, 2.2, 0.7)) }
         if (unit) this.laneSupport(event.side, event.lane)
@@ -893,6 +921,7 @@ export class Arena {
         this.cameraVictory = event.result.won ? 1.5 : 0
         this.cameraShake = event.result.won ? 0.22 : 0.1
         this.playOutcome(event.result.won)
+        if (this.mode === 'raid') { sound.play('raidSquad'); sound.setThemeAfter('home', 9000) } else sound.play(event.result.won ? 'victory' : 'defeat')
         if (this.mode === 'normal') this.winStreak = event.result.won ? this.winStreak + 1 : Math.max(-2, Math.min(0, this.winStreak) - 2)
         // 랭킹 서버는 실제 경과 시간보다 긴 기록을 거절한다: 배속과 무관하게 실제 시간을 보낸다.
         this.callbacks.onBattleEnd({ ...event.result, durationMs: Math.round(performance.now() - this.startedAt), mode: this.mode })

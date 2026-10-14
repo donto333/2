@@ -4,25 +4,23 @@
 import type { Equipment, EquipmentGrade, General } from '../game/strategy'
 import { EQUIPMENT_GRADE_META, GRADE_META } from '../game/strategy'
 import { effectsSetting } from '../game/settings'
+import { sound } from '../engine/sound'
 
 const esc = (value: string) => value.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch))
 const NEUTRAL = '#e9dcb8'
 const wait = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms))
 
 // ── 소리 ─────────────────────────────────────────────────
-let audio: AudioContext | null = null
-function ctx(): AudioContext | null {
-  try {
-    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (!Ctor) return null
-    audio ??= new Ctor()
-    if (audio.state === 'suspended') void audio.resume()
-    return audio
-  } catch { return null }
+/** 효과음 크기 설정을 따르는 공용 출력. 연출 동안 배경음악은 낮춘다 */
+function output(): { ctx: AudioContext; out: AudioNode } | null {
+  const target = sound.sfxOutput()
+  if (target) sound.duckFor(4500)
+  return target
 }
 function tone(freq: number, start: number, duration: number, volume: number, type: OscillatorType = 'sine', glideTo?: number): void {
-  const ac = ctx()
-  if (!ac) return
+  const target = output()
+  if (!target) return
+  const ac = target.ctx
   const t = ac.currentTime + start
   const osc = ac.createOscillator(), gain = ac.createGain()
   osc.type = type
@@ -31,7 +29,7 @@ function tone(freq: number, start: number, duration: number, volume: number, typ
   gain.gain.setValueAtTime(0.0001, t)
   gain.gain.exponentialRampToValueAtTime(volume, t + 0.02)
   gain.gain.exponentialRampToValueAtTime(0.0001, t + duration)
-  osc.connect(gain).connect(ac.destination)
+  osc.connect(gain).connect(target.out)
   osc.start(t)
   osc.stop(t + duration + 0.05)
 }

@@ -67,6 +67,7 @@ import { applyEquipmentPreset, bulkDismantle, dismantleEquipment, packLoadouts, 
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, duelTierFor, pickDuelMatches, type DuelTier } from '../server/duel-match.mjs'
 import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 import { locale } from './i18n/lang'
+import { sound, type Sfx } from './engine/sound'
 import { startDomTranslation, tr } from './i18n/translate'
 import { BattleCoach, Coach, markMenusSeen, maybeMenuTour, openBattleGuide, resetCoaching } from './ui/coach'
 import { ONBOARD_GEAR_COST, Onboarding } from './ui/onboarding'
@@ -82,10 +83,19 @@ const GUEST_GAME_SAVE_KEY = 'cheonharo.strategy.save.guest.v2'
 const GUEST_ACCESS_KEY = 'cheonharo.access.guest.v1'
 const PENDING_TERRITORY_BATTLES_KEY = 'cheonharo.territory.pending-battles.v1'
 // 모바일 브라우저·앱 안 웹뷰는 100vh가 주소창·상단 바까지 포함해 화면 아래가 잘린다: 실제 보이는 높이를 CSS 변수로 넘긴다
+/** 결과가 성공일 때만 내는 효과음(실패는 알림이 붉은색일 때 따로 난다) */
+function playSfx(name: Sfx): void { sound.play(name) }
+
 function syncAppHeight(): void {
   document.documentElement.style.setProperty('--app-h', `${Math.round(window.innerHeight)}px`)
 }
 syncAppHeight()
+// 소리: 브라우저는 첫 터치/클릭 뒤에만 소리를 허락한다. 그때 본영 곡을 시작한다
+{
+  const unlockSound = () => { sound.unlock(); window.removeEventListener('pointerdown', unlockSound, true); window.removeEventListener('keydown', unlockSound, true) }
+  window.addEventListener('pointerdown', unlockSound, true)
+  window.addEventListener('keydown', unlockSound, true)
+}
 window.addEventListener('resize', syncAppHeight)
 window.addEventListener('orientationchange', () => window.setTimeout(syncAppHeight, 250))
 window.visualViewport?.addEventListener('resize', syncAppHeight)
@@ -475,6 +485,7 @@ async function claimRaidReward(): Promise<void> {
     queueAccountSave(true)
     ui.render(state)
     ui.notify(`지난주 레이드 ${result.rank}위 보상 · 금화 +${result.gold}${result.stones ? ` · 낙양 강화석 +${result.stones}` : ''} (서버 지급)`, 'jade')
+    playSfx('reward')
     void refreshRaid()
   } catch {
     ui.notify('보상을 받지 못했습니다. 잠시 뒤 다시 시도하십시오.', 'ember')
@@ -873,6 +884,7 @@ const ui = new StrategyUI(root, {
     const result = upgrade(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('levelUp')
     if (result.ok) queueAccountSave()
     if (result.ok) onboarding.event('upgrade')
   },
@@ -880,12 +892,14 @@ const ui = new StrategyUI(root, {
     const result = unlockSkill(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('unlock')
     if (result.ok) queueAccountSave()
   },
   onUpgradeMany: id => {
     const result = upgradeMany(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('levelUp')
     if (result.ok) queueAccountSave()
     if (result.ok) onboarding.event('upgrade')
   },
@@ -894,6 +908,7 @@ const ui = new StrategyUI(root, {
     arena.setGenerals(battleGenerals())
     ui.render(state)
     ui.notify(state.lastNotice)
+    playSfx('formation')
     queueAccountSave()
   },
   onFormation: id => {
@@ -901,6 +916,7 @@ const ui = new StrategyUI(root, {
     arena.setGenerals(battleGenerals())
     ui.render(state)
     ui.notify(state.lastNotice)
+    playSfx('formation')
     queueAccountSave()
   },
   onEquipmentDraw: count => {
@@ -922,6 +938,7 @@ const ui = new StrategyUI(root, {
     if (result.ok && enhanced?.grade === 'mythic') ui.showMythicEnhance(enhanced)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('forge')
     if (result.ok) onboarding.event('enhance')
   },
   onAutoFormation: withEquipment => {
@@ -930,6 +947,7 @@ const ui = new StrategyUI(root, {
     arena.setGenerals(battleGenerals())
     ui.render(state)
     ui.notify(equipped?.ok ? `${formed.message} · ${equipped.message}` : formed.message, formed.ok ? 'jade' : 'ember')
+    if (formed.ok) playSfx('formation')
     if (formed.ok) queueAccountSave()
     onboarding.event('auto-formation')
   },
@@ -938,6 +956,7 @@ const ui = new StrategyUI(root, {
     arena.setGenerals(battleGenerals())
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('formation')
     if (result.ok) queueAccountSave()
   },
   onAutoEquip: () => {
@@ -945,6 +964,7 @@ const ui = new StrategyUI(root, {
     arena.setGenerals(battleGenerals())
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok && result.changed) playSfx('equip')
     if (result.ok && result.changed) queueAccountSave()
   },
   onEquipmentEquip: (generalId, itemId) => {
@@ -952,6 +972,7 @@ const ui = new StrategyUI(root, {
     if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('equip')
   },
   onRaidStart: () => { void beginRaid() },
   onRaidRefresh: () => { void refreshRaid() },
@@ -961,6 +982,7 @@ const ui = new StrategyUI(root, {
     if (result.ok) { arena.setGenerals(battleGenerals()); queueAccountSave() }
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('formation')
   },
   onSquadAuto: (squad, withEquipment) => {
     const result = autoSquad(state, squad)
@@ -968,48 +990,56 @@ const ui = new StrategyUI(root, {
     if (result.ok) queueAccountSave()
     ui.render(state)
     ui.notify(equipped?.ok ? `${result.message} · ${equipped.message}` : result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('formation')
   },
   onSquadEquip: squad => {
     const result = autoEquipSquad(state, squad)
     if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('equip')
   },
   onSquadSwap: squad => {
     const result = swapWithFirstSquad(state, squad)
     if (result.ok) { arena.setGenerals(battleGenerals()); queueAccountSave() }
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('formation')
   },
   onEquipmentLock: id => {
     const result = toggleEquipmentLock(state, id)
     if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('lock')
   },
   onEquipmentDismantle: (id, count) => {
     const result = dismantleEquipment(state, id, count)
     if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('dismantle')
   },
   onEquipmentBulkDismantle: grade => {
     const result = bulkDismantle(state, grade)
     if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('dismantle')
   },
   onEquipmentPreset: (generalId, slot, mode) => {
     const result = mode === 'save' ? saveEquipmentPreset(state, generalId, slot) : applyEquipmentPreset(state, generalId, slot)
     if (result.ok) { queueAccountSave(true); arena.setGenerals(battleGenerals()) }
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('equip')
   },
   onEquipmentUnequip: (generalId, type) => {
     const result = unequipEquipment(state, generalId, type)
     if (result.ok) queueAccountSave(true)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('unequip')
   },
   onEquipmentSelectGeneral: id => {
     state.selectedEquipmentGeneralId = id
@@ -1062,6 +1092,7 @@ const ui = new StrategyUI(root, {
     const result = deployCityGarrison(state, id)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('formation')
     if (result.ok) {
       queueAccountSave()
       const city = state.cities.find(entry => entry.id === id)
@@ -1088,12 +1119,14 @@ const ui = new StrategyUI(root, {
     if (result.ok) mission('income')
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('coin')
     if (result.ok) queueAccountSave()
   },
   onBuildingUpgrade: (cityId, buildingId) => {
     const result = upgradeBuilding(state, cityId, buildingId)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('build')
     if (result.ok) queueAccountSave()
   },
   onResearch: id => {
@@ -1101,6 +1134,7 @@ const ui = new StrategyUI(root, {
     if (result.ok) { mission('researchStart'); askNotificationOnce() }
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('research')
     if (result.ok) queueAccountSave()
   },
   onMissionClaim: id => {
@@ -1108,12 +1142,14 @@ const ui = new StrategyUI(root, {
     if (result.ok) mission('missionClaim')
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('reward')
     if (result.ok) queueAccountSave()
   },
   onTutorial: skip => {
     const result = closeTutorial(state, skip)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok && !skip) playSfx('reward')
     if (result.ok) queueAccountSave()
   },
   onEffectsSetting: () => {
@@ -1124,6 +1160,7 @@ const ui = new StrategyUI(root, {
     const result = cancelResearch(state)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('close')
     if (result.ok) queueAccountSave()
   },
   onResearchRush: () => {
@@ -1131,6 +1168,7 @@ const ui = new StrategyUI(root, {
     if (result.ok) mission('researchDone')
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('research')
     if (result.ok) queueAccountSave(true)
   },
   onScenarioStart: id => {
@@ -1341,12 +1379,14 @@ const ui = new StrategyUI(root, {
     if (result.ok) { queueAccountSave(true); recordPurchase(result.message) }
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('coin')
   },
   onCashShopPurchase: productId => {
     const result = purchaseResourcePackage(state, productId)
     if (result.ok) recordPurchase(result.message)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('coin')
     if (result.ok) queueAccountSave()
   },
   onHonorShopPurchase: packageId => {
@@ -1354,6 +1394,7 @@ const ui = new StrategyUI(root, {
     if (result.ok) recordPurchase(result.message)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('coin')
     if (result.ok) queueAccountSave()
     if (result.ok) onboarding.event('honor-buy')
   },
@@ -1361,6 +1402,7 @@ const ui = new StrategyUI(root, {
     const result = purchaseGoldPackage(state, packageId)
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('coin')
     if (result.ok) queueAccountSave()
   },
   onAdminAction: message => {

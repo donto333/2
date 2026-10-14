@@ -5,7 +5,8 @@ import { RAID_REWARDS, raidWeekKey } from '../../server/raid.mjs'
 import { EQUIPMENT_PRESET_SLOTS, EQUIPMENT_STORAGE_WARN, bulkDismantlePreview, dismantlableCount, dismantleYield, equipmentOwners } from '../game/equipment-manage'
 import { TUTORIAL_REWARD, TUTORIAL_STEPS, nextTutorialStep, tutorialFinished, DAILY_BONUS, DAILY_BONUS_ID, MISSIONS, dailyBonusReady, ensureMissions, missionStatus, rewardText, type MissionDef } from '../game/missions'
 import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResource } from '../game/shop'
-import { effectsSetting, qualitySetting, setEffectsSetting, setQualitySetting, type EffectsSetting, type QualitySetting } from '../game/settings'
+import { effectsSetting, muteSetting, musicSetting, qualitySetting, setEffectsSetting, setMusicSetting, setMuteSetting, setQualitySetting, setSfxSetting, sfxSetting, type EffectsSetting, type QualitySetting, type SoundLevel } from '../game/settings'
+import { sound } from '../engine/sound'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
 import { growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
@@ -656,6 +657,7 @@ export class StrategyUI {
     if (!toast) return
     toast.textContent = message
     toast.dataset.tone = tone
+    if (tone === 'ember') sound.play('error')
     toast.classList.remove('is-visible')
     void toast.offsetWidth
     toast.classList.add('is-visible')
@@ -917,7 +919,7 @@ export class StrategyUI {
           <div class="brand-lockup"><div class="brand-seal brand-seal--img"><img src="/assets/ui/brand-seal.svg" alt="천하 인장" width="40" height="40" draggable="false"></div><div><div class="brand-title">천하</div><div class="brand-subtitle">패왕의 시대</div></div></div>
           <div class="topbar-center"><button type="button" class="topbar-chapter" data-action="section" data-section="battle" title="시나리오로 이동"><span class="season-dot"></span><span>${this.chapterLabel(state)}</span></button><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold" title="금화">${icon('gold')}<small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver" title="은전">${icon('silver')}<small>은전</small><strong title="${formatNumber(state.silver)}">${compactNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor" title="옥패">${icon('honor')}<small>옥패</small><strong title="${formatNumber(state.honor)}">${compactNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence" title="영향력">${icon('influence')}<small>영향력</small><strong title="${formatNumber(state.resources.influence)}">${compactNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain" title="식량">${icon('grain')}<small>식량</small><strong title="${formatNumber(state.resources.grain)}">${compactNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood" title="목재">${icon('wood')}<small>목재</small><strong title="${formatNumber(state.resources.wood)}">${compactNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron" title="철">${icon('iron')}<small>철</small><strong title="${formatNumber(state.resources.iron)}">${compactNumber(state.resources.iron)}</strong></span></div></div>
           ${state.section === 'battle' && this.battleViewActive ? this.battleTopControls() : ''}
-          <div class="topbar-actions"><button class="lang-toggle" data-action="set-lang" data-value="${isEnglish() ? 'ko' : 'en'}" data-no-tr title="언어 / Language">${isEnglish() ? '한국어' : 'EN'}</button><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}" title="${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : ''}">${authButtonInner(this.auth)}</button></div>
+          <div class="topbar-actions"><button class="lang-toggle sound-toggle ${muteSetting() ? 'is-muted' : ''}" data-action="sound-toggle" data-no-tr title="${muteSetting() ? '소리 켜기' : '소리 끄기'}" aria-label="${muteSetting() ? '소리 켜기' : '소리 끄기'}">${muteSetting() ? '🔇' : '🔊'}</button><button class="lang-toggle" data-action="set-lang" data-value="${isEnglish() ? 'ko' : 'en'}" data-no-tr title="언어 / Language">${isEnglish() ? '한국어' : 'EN'}</button><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}" title="${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : ''}">${authButtonInner(this.auth)}</button></div>
         </header>
         <aside class="sidebar">
           ${this.navGroup('본진')}
@@ -1850,7 +1852,7 @@ export class StrategyUI {
   private deviceSettingsCard(): string {
     const quality = qualitySetting(), effects = effectsSetting()
     const seg = (action: string, current: string, items: Array<[string, string]>) => `<div class="setting-seg">${items.map(([value, label]) => `<button class="setting-seg__btn ${current === value ? 'is-active' : ''}" data-action="${action}" data-value="${value}">${label}</button>`).join('')}</div>`
-    return `<div class="glass-card device-settings"><div class="card-header"><div><span class="eyebrow">이 기기 설정</span><h3>화면 · 전투 효과</h3></div></div><div class="setting-row"><div><strong>언어 / Language</strong><small>게임 전체 글자를 한국어 또는 영어로 보여 줍니다. 바꾸면 화면을 다시 불러옵니다.</small></div><div class="setting-seg" data-no-tr><button class="setting-seg__btn ${isEnglish() ? '' : 'is-active'}" data-action="set-lang" data-value="ko">한국어</button><button class="setting-seg__btn ${isEnglish() ? 'is-active' : ''}" data-action="set-lang" data-value="en">English</button></div></div><div class="setting-row"><div><strong>따라하기 안내</strong><small>게임 소개, 메뉴 짚어 주기, 첫 전투 따라하기를 처음부터 다시 봅니다.</small></div><button class="mini-action" data-action="coach-reset">안내 다시 보기</button></div><div class="setting-row"><div><strong>그래픽 품질</strong><small>낮음은 빛 번짐·그림자를 끄고 병사 수를 줄입니다. 새로고침하면 적용됩니다.</small></div>${seg('setting-quality', quality, [['auto', '자동'], ['high', '높음'], ['low', '낮음']])}</div><div class="setting-row"><div><strong>전투 효과</strong><small>줄임은 불꽃·화살 수와 화면 흔들림을 줄입니다. 바로 적용됩니다. 자동은 화면이 버벅이면 스스로 줄입니다.</small></div>${seg('setting-effects', effects, [['auto', '자동'], ['full', '전체'], ['reduced', '줄임']])}</div><div class="setting-row setting-row--danger"><div><strong>게스트 기록 초기화</strong><small>이 기기에 저장된 게스트 진행(무장·재화·튜토리얼·안내 기록)을 모두 지우고 접속 화면부터 다시 시작합니다. 회원 계정 기록은 지워지지 않습니다.</small></div><button class="mini-action mini-action--danger" data-action="guest-reset">초기화</button></div></div>`
+    return `<div class="glass-card device-settings"><div class="card-header"><div><span class="eyebrow">이 기기 설정</span><h3>화면 · 소리 · 전투 효과</h3></div></div><div class="setting-row"><div><strong>언어 / Language</strong><small>게임 전체 글자를 한국어 또는 영어로 보여 줍니다. 바꾸면 화면을 다시 불러옵니다.</small></div><div class="setting-seg" data-no-tr><button class="setting-seg__btn ${isEnglish() ? '' : 'is-active'}" data-action="set-lang" data-value="ko">한국어</button><button class="setting-seg__btn ${isEnglish() ? 'is-active' : ''}" data-action="set-lang" data-value="en">English</button></div></div><div class="setting-row"><div><strong>따라하기 안내</strong><small>게임 소개, 메뉴 짚어 주기, 첫 전투 따라하기를 처음부터 다시 봅니다.</small></div><button class="mini-action" data-action="coach-reset">안내 다시 보기</button></div><div class="setting-row"><div><strong>배경음악</strong><small>본영 · 전투 · 대련 · 레이드마다 다른 곡이 흐릅니다. 위쪽 🔊 버튼으로 모든 소리를 한 번에 끌 수 있습니다.</small></div>${seg('setting-music', muteSetting() ? 'off' : musicSetting(), [['off', '끔'], ['low', '작게'], ['mid', '보통'], ['high', '크게']])}</div><div class="setting-row"><div><strong>효과음</strong><small>버튼 · 강화 · 장비 · 전투(공격 · 스킬 · 승패) 소리입니다.</small></div>${seg('setting-sfx', muteSetting() ? 'off' : sfxSetting(), [['off', '끔'], ['low', '작게'], ['mid', '보통'], ['high', '크게']])}</div><div class="setting-row"><div><strong>그래픽 품질</strong><small>낮음은 빛 번짐·그림자를 끄고 병사 수를 줄입니다. 새로고침하면 적용됩니다.</small></div>${seg('setting-quality', quality, [['auto', '자동'], ['high', '높음'], ['low', '낮음']])}</div><div class="setting-row"><div><strong>전투 효과</strong><small>줄임은 불꽃·화살 수와 화면 흔들림을 줄입니다. 바로 적용됩니다. 자동은 화면이 버벅이면 스스로 줄입니다.</small></div>${seg('setting-effects', effects, [['auto', '자동'], ['full', '전체'], ['reduced', '줄임']])}</div><div class="setting-row setting-row--danger"><div><strong>게스트 기록 초기화</strong><small>이 기기에 저장된 게스트 진행(무장·재화·튜토리얼·안내 기록)을 모두 지우고 접속 화면부터 다시 시작합니다. 회원 계정 기록은 지워지지 않습니다.</small></div><button class="mini-action mini-action--danger" data-action="guest-reset">초기화</button></div></div>`
   }
 
   private accountSection(): string {
@@ -2027,6 +2029,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '배경음악 · 효과음', '화면마다 배경음악이 흐릅니다: 본영(잔잔한 가야금과 피리), 전투(큰북과 호궁 · 막이 오를수록 북이 거세짐), 유저 대련, 주간 레이드(무거운 북과 징). 승리 · 패배 때는 짧은 곡이 울립니다. 버튼 · 강화 · 장비 · 보상 · 연구 · 건물 소리와 전투의 공격 · 피격 · 스킬(돌격 · 사격 · 계략 · 통솔 · 수호 · 치유마다 다름) · 적 스킬 예고 · 막 전환 소리도 넣었습니다. 위쪽 🔊 버튼으로 모든 소리를 끄고 켜고, 계정 → 이 기기 설정에서 배경음악과 효과음 크기를 따로 고를 수 있습니다.', '완료', 'jade'],
       ['2026.10.14', '더보기 메뉴 레이드 이름 표시', '휴대폰 하단 「더보기」 메뉴에서 주간 레이드 아이콘 밑에 이름이 빠져 있던 것을 고쳤습니다. 이제 「레이드」로 표시됩니다.', '완료', 'jade'],
       ['2026.10.14', '시나리오 단계별 진행', '시나리오 화면이 지금 도전할 단계 하나를 크게 보여 줍니다. ← 이전 / 다음 → 버튼으로 단계를 넘기고, 아직 깨지 않은 단계 너머는 잠겨 있습니다. 단계를 깨면 다음 단계로 자동으로 넘어가고, 58개 전체 목록은 「전체 시나리오 목록」을 눌러 펼칠 때만 보입니다.', '완료', 'jade'],
       ['2026.10.14', '보유 무장 1·2·3군 보기', '보유 무장 화면에서 1군 · 2군 · 3군을 나눠 보여 줍니다. 위쪽 1군·2군·3군 버튼(인원·전투력 표시)을 누르면 그 군으로 바로 이동하고, 2·3군 무장 그림에는 「2군 · 좌측」처럼 소속과 자리가 표시됩니다. 대기 목록에는 어느 군에도 없는 무장만 남고, 2·3군 무장의 버튼은 「1군으로」입니다.', '완료', 'jade'],
@@ -2185,6 +2188,14 @@ export class StrategyUI {
     return `<div class="mini-general">${this.portrait(general)}<div><strong>${general.name}</strong><small>Lv.${general.level} · ${general.role}</small></div><b>${general.stars}★</b></div>`
   }
 
+  /** 누를 때 소리: 메뉴·탭은 현 한 번, 그 밖은 나무 딱. 뽑기는 연출이 따로 소리를 낸다 */
+  private clickSound(action: string | undefined, button: HTMLElement): void {
+    if (!action || button.hasAttribute('disabled')) return
+    if (['recruit', 'equipment-draw', 'extra-equipment-draw', 'reroll-recruit', 'sound-toggle'].includes(action)) return
+    const tab = action === 'section' || action === 'nav-more' || action === 'roster-jump' || action === 'scenario-select' || /-(tab|filter)$/.test(action)
+    sound.play(tab ? 'tab' : 'click')
+  }
+
   private handleClick = (event: MouseEvent): void => {
     const target = event.target as HTMLElement
     const button = target.closest<HTMLElement>('[data-action]')
@@ -2193,6 +2204,7 @@ export class StrategyUI {
     if (openMore && !target.closest('.sidebar')) openMore.classList.remove('is-more-open')
     if (!button) return
     const action = button.dataset.action
+    this.clickSound(action, button)
     if (button.dataset.opponentId) {
       this.callbacks.onDuelStart(button.dataset.opponentId)
       return
@@ -2312,6 +2324,9 @@ export class StrategyUI {
     else if (action === 'guest-reset') { if (window.confirm(tr('이 기기의 게스트 진행 기록을 모두 지우고 처음부터 시작합니다. 되돌릴 수 없습니다. 계속하시겠습니까?'))) this.callbacks.onGuestReset() }
     else if (action === 'set-lang') setLang(button.dataset.value === 'en' ? 'en' : 'ko')
     else if (action === 'setting-quality') { setQualitySetting((button.dataset.value ?? 'auto') as QualitySetting); this.notify('그래픽 품질을 바꿨습니다. 새로고침하면 적용됩니다.', 'jade'); if (this.renderedState) this.render(this.renderedState) }
+    else if (action === 'setting-music') { setMusicSetting((button.dataset.value ?? 'mid') as SoundLevel); if (muteSetting()) setMuteSetting(false); sound.unlock(); sound.applyVolumes(); if (this.renderedState) this.render(this.renderedState) }
+    else if (action === 'setting-sfx') { setSfxSetting((button.dataset.value ?? 'mid') as SoundLevel); if (muteSetting()) setMuteSetting(false); sound.unlock(); sound.applyVolumes(); sound.play('success'); if (this.renderedState) this.render(this.renderedState) }
+    else if (action === 'sound-toggle') { setMuteSetting(!muteSetting()); sound.unlock(); sound.applyVolumes(); if (!muteSetting()) sound.play('tab'); if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'setting-effects') { setEffectsSetting((button.dataset.value ?? 'auto') as EffectsSetting); this.callbacks.onEffectsSetting?.(); if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'mission-claim') this.callbacks.onMissionClaim(button.dataset.mission ?? '')
     else if (action === 'tutorial-claim') this.callbacks.onTutorial(false)
