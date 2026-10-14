@@ -1941,8 +1941,8 @@ export function autoEquip(state: StrategyState, generalIds: string[] = state.for
 
 /**
  * 자동 편성: 전투력 상위 10명 안에서 3명 조합을 모두 따져
- * 전투력 합 × (인연 +8%) × (병종이 다양할수록 +3%씩)이 가장 높은 조합을 고른다.
- * 레인은 가운데에 방어·통솔이 높은 무장, 좌우에 나머지를 둔다(적은 같은 레인의 아군을 먼저 친다).
+ * 전투력 합 × (인연 +8%) × (병종이 다양할수록 +3%씩) × (수호형이 있으면 +6%)이 가장 높은 조합을 고른다.
+ * 가운데(전열)에는 수호형, 없으면 방어·통솔이 높은 무장을 둔다(적은 같은 레인을 치되 30%는 전열부터 노린다).
  */
 export function autoFormation(state: StrategyState): AutoResult {
   if (state.generals.length === 0) return { ok: false, message: '보유한 무장이 없습니다.', changed: 0 }
@@ -1954,12 +1954,16 @@ export function autoFormation(state: StrategyState): AutoResult {
   const consider = (combo: General[]) => {
     const ids = combo.map(general => general.id)
     const roles = new Set(combo.map(general => general.role)).size
-    const score = combo.reduce((sum, general) => sum + power(general), 0) * (bondFor(ids) ? 1.08 : 1) * (1 + 0.03 * Math.max(0, roles - 1))
+    // 전열에 세울 수호형 무장이 있으면 가산(전열 도발·피해 감소로 공격수가 오래 산다)
+    const tank = combo.some(general => GENERAL_SKILLS[general.id]?.type === '수호') ? 1.06 : 1
+    const score = combo.reduce((sum, general) => sum + power(general), 0) * (bondFor(ids) ? 1.08 : 1) * (1 + 0.03 * Math.max(0, roles - 1)) * tank
     if (score > bestScore) { bestScore = score; best = combo }
   }
   if (size < 3) consider(pool.slice(0, size))
   else for (let a = 0; a < pool.length; a += 1) for (let b = a + 1; b < pool.length; b += 1) for (let c = b + 1; c < pool.length; c += 1) consider([pool[a], pool[b], pool[c]])
-  const tank = [...best].sort((left, right) => (right.defense + right.leadership) - (left.defense + left.leadership))[0]
+  // 가운데(전열)에는 수호형 무장을, 없으면 방어·통솔이 가장 높은 무장을 세운다
+  const sturdy = (general: General) => general.defense + general.leadership + (GENERAL_SKILLS[general.id]?.type === '수호' ? 1000 : 0)
+  const tank = [...best].sort((left, right) => sturdy(right) - sturdy(left))[0]
   const flanks = best.filter(general => general !== tank).sort((left, right) => power(right) - power(left))
   const ordered = best.length === 3 ? [flanks[0], tank, flanks[1]] : best
   const next = ordered.map(general => general.id)

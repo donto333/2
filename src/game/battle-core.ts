@@ -11,6 +11,13 @@ export type Side = 'player' | 'enemy'
 
 export const BATTLE_RULES = {
   timeLimit: 90,
+  /** 전열(가운데 자리): 상대의 일반 공격·단일 스킬이 이 확률로 전열부터 노리고, 전열은 받는 피해가 줄어든다 */
+  frontLane: 1,
+  frontPull: 0.3,
+  frontDr: 0.2,
+  /** 수호형 무장이 전열에 서면: 적을 더 끌어당기고(도발) 더 단단해진다 */
+  frontTankPull: 0.25,
+  frontTankDr: 0.2,
   moraleByPhase: [80, 100, 120] as const,
   patternInterval: [3.5, 3.2, 3.0] as const,
   responseWindow: [2.5, 2.5, 2.0] as const,
@@ -205,6 +212,8 @@ export class BattleCore {
   private collapseSaved = false
   /** 자동 전투(3성 시나리오). 전투 중에 켜고 끌 수 있다. */
   autoPilot: AutoPilot | null
+  /** 방금 스킬이 맞힌 상대 자리(연출용) */
+  private lastSkillTarget: number | null = null
 
   constructor(players: General[], enemies: General[], config: CoreConfig = {}) {
     this.mode = config.mode ?? 'normal'
@@ -389,14 +398,34 @@ export class BattleCore {
 
   /** 화면 연출용: 스킬이 겨누는 상대 레인(사격은 병력이 가장 적은 상대) */
   private skillFocus(defenders: CoreUnit[], unit: CoreUnit): number {
+    // 실제로 맞힌 상대가 있으면 그쪽을 보여 준다(전열 규칙에 무작위가 섞여 다시 고르면 엇갈릴 수 있다)
+    if (this.lastSkillTarget !== null) { const lane = this.lastSkillTarget; this.lastSkillTarget = null; return lane }
     const alive = this.alive(defenders)
     if (unit.def.type === '사격') return [...alive].sort((left, right) => left.troops - right.troops)[0]?.lane ?? unit.lane
     return this.targetFor(defenders, unit.lane)?.lane ?? unit.lane
   }
 
-  private targetFor(units: CoreUnit[], lane: number): CoreUnit | undefined {
+  /** 같은 자리의 상대, 쓰러졌으면 살아 있는 상대 중 무작위(예전에는 늘 왼쪽부터라 왼쪽 무장만 집중으로 맞았다) */
+  private laneTarget(units: CoreUnit[], lane: number): CoreUnit | undefined {
     const same = units[lane]
-    return same && same.troops > 0 ? same : units.find(unit => unit.troops > 0)
+    if (same && same.troops > 0) return same
+    const alive = this.alive(units)
+    return alive.length ? alive[Math.floor(this.rng() * alive.length)] : undefined
+  }
+
+  /** 수호형 무장이 전열에 섰는가 */
+  private isFrontTank(unit: CoreUnit | undefined): boolean {
+    return Boolean(unit && unit.lane === BATTLE_RULES.frontLane && unit.def.type === '수호')
+  }
+
+  /** 일반 공격·단일 스킬의 표적: 상대 전열이 살아 있으면 일정 확률로 전열부터(전열 규칙) */
+  private targetFor(units: CoreUnit[], lane: number): CoreUnit | undefined {
+    const front = units[BATTLE_RULES.frontLane]
+    if (front && front.troops > 0 && lane !== BATTLE_RULES.frontLane) {
+      const pull = BATTLE_RULES.frontPull + (this.isFrontTank(front) ? BATTLE_RULES.frontTankPull : 0)
+      if (this.rng() < pull) return front
+    }
+    return this.laneTarget(units, lane)
   }
 
   /** 병력 피해 적용. 호위·불굴·반격·사기 감소까지 처리한다. */
@@ -409,7 +438,9 @@ export class BattleCore {
       if (guardian) { victim = guardian; raw *= 0.7 }
     }
     const { dr, taken } = this.damageReduction(victim, attacker)
-    const amount = Math.max(1, Math.round(raw * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken)))
+    // 전열: 가운데 자리는 받는 피해가 줄어든다(수호형이면 더). 함진영 같은 피해 감소 무시 효과에는 적용되지 않는다
+    const front = victim.lane === BATTLE_RULES.frontLane && !opts.ignoreDr ? BATTLE_RULES.frontDr + (this.isFrontTank(victim) ? BATTLE_RULES.frontTankDr : 0) : 0
+    const amount = Math.max(1, Math.round(raw * (1 - front) * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken)))
     victim.troops = Math.max(0, victim.troops - amount)
     const edgeValue = attacker ? matchup(attacker.general.role, victim.general.role) : 1
     this.events.push({ kind: 'hit', side: victim.side, lane: victim.lane, amount, source, ...(edgeValue > 1 ? { edge: 'adv' as const } : edgeValue < 1 ? { edge: 'dis' as const } : {}) })
@@ -592,7 +623,7 @@ export class BattleCore {
     this.lastCommandFailed = true
     this.events.push({ kind: 'answer', lane: -1, success: false })
     const lanes = open.def.kind === 'guard' ? [1, 1] : open.def.lanes
-    lanes.forEach(lane => { const target = this.targetFor(this.players, lane); if (target) this.dealDamage(target, BATTLE_RULES.noAnswerTroopDamage * (1 + this.phase * 0.5), open.def.label, null) })
+    lanes.forEach(lane => { const target = this.laneTarget(this.players, lane); if (target) this.dealDamage(target, BATTLE_RULES.noAnswerTroopDamage * (1 + this.phase * 0.5), open.def.label, null) })
     this.raiseThreat(BATTLE_RULES.threatNoAnswer, 'none')
     this.log(`${open.def.label}에 대응하지 못했습니다 · 위협도 ${Math.round(this.threat)}`, 'ember')
   }
@@ -738,7 +769,7 @@ export class BattleCore {
         const target = unit.def.type === '사격'
           ? [...this.alive(this.enemies)].sort((left, right) => left.troops / left.maxTroops - right.troops / right.maxTroops)[0]
           : this.targetFor(this.enemies, unit.lane)
-        if (target) this.dealDamage(target, troopDamage, name, unit, { ignoreDr })
+        if (target) { this.lastSkillTarget = target.lane; this.dealDamage(target, troopDamage, name, unit, { ignoreDr }) }
       }
     }
     for (const effect of fx) notes.push(...this.applyFx(unit, effect))
@@ -869,10 +900,12 @@ export class BattleCore {
     const name = unit.def.active.name
     const power = Math.min(SKILL_MORALE_CAP, baseMoraleDamage(this.growth(unit), unit.base))
     const shortDebuff = this.players.some(other => this.passive(other) === 'shortDebuff') ? 1 : 0
-    this.events.push({ kind: 'skill', side: 'enemy', lane: unit.lane, name, morale: 0, type: unit.def.type, target: this.skillFocus(this.players, unit) })
     const type = unit.def.type
+    const strikeTarget = type === '돌격' || type === '사격' ? (type === '사격' ? [...this.alive(this.players)].sort((left, right) => left.troops - right.troops)[0] : this.targetFor(this.players, unit.lane)) : undefined
+    if (strikeTarget) this.lastSkillTarget = strikeTarget.lane
+    this.events.push({ kind: 'skill', side: 'enemy', lane: unit.lane, name, morale: 0, type: unit.def.type, target: this.skillFocus(this.players, unit) })
     if (type === '돌격' || type === '사격') {
-      const target = type === '사격' ? [...this.alive(this.players)].sort((left, right) => left.troops - right.troops)[0] : this.targetFor(this.players, unit.lane)
+      const target = strikeTarget
       if (target) this.dealDamage(target, Math.max(40, power * BATTLE_RULES.enemySkillTroopPerMorale) * (guarded ? 0.5 : 1), name, unit)
     } else if (type === '계략') {
       const id: PlayerDebuffId = FIRE_IDS.has(unit.general.id) ? 'p-burn' : unit.general.id === 'zhang-jiao' || unit.general.id === 'zhang-bo' || unit.def.active.fx.some(effect => effect.k === 'debuff' && (effect.id === 'confusion' || effect.id === 'blind')) ? 'p-confuse' : 'p-fear'

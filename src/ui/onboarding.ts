@@ -29,7 +29,7 @@ export const ONBOARD_STEPS: OnboardStep[] = [
   { id: 'shop', section: 'shop', target: `[data-action="honor-shop-purchase"][data-package-id="${ONBOARD_HONOR_PACKAGE}"]`, title: '1. 옥패 사기', body: '빛나는 "10금화 · 옥패 +1,000"을 누르십시오. 큰 묶음일수록 금화 하나당 더 많이 받습니다.', event: 'honor-buy' },
   { id: 'recruit', section: 'recruit', target: '[data-action="recruit"][data-count="10"]', title: '2. 무료 10회 모집', body: '첫 10회 모집은 무료이고, 5등급 무장 한 명이 반드시 나옵니다. 빛나는 버튼을 누르십시오.', event: 'recruit10' },
   { id: 'gear', section: 'recruit', target: '[data-action="equipment-draw"][data-count="10"]', title: '3. 장비 10회 뽑기', body: '이번에는 방금 산 옥패로 무기·갑옷·장신구를 10개 뽑습니다.', event: 'gear10' },
-  { id: 'formation', section: 'formation', target: '[data-action="auto-formation"]:not([data-with-equipment])', title: '4. 자동 편성', body: '새 무장이 들어왔으니 출전 무장을 다시 고릅니다. 자동 편성을 누르면 전투력·인연·병종을 따져 세 명을 세웁니다.', event: 'auto-formation' },
+  { id: 'formation', section: 'formation', target: '[data-action="auto-formation"]:not([data-with-equipment])', title: '4. 자동 편성', body: '새 무장이 들어왔으니 출전 무장을 다시 고릅니다. 자동 편성을 누르면 전투력·인연·병종을 따져 세 명을 세웁니다. 가운데는 적이 먼저 노리는 전열이라 단단한 무장이 섭니다.', event: 'auto-formation' },
   { id: 'upgrade', section: 'roster', target: '.roster-grid .gcard .gcard-up:not([disabled])', title: '5. 무장 강화', body: '은전과 병서로 출전 무장의 레벨을 올립니다. 레벨이 오르면 능력치와 병력이 늘어납니다.', event: 'upgrade' },
   { id: 'enhance', section: 'equipment', target: '.equipment-card [data-action="equipment-enhance"]:not([disabled])', title: '6. 장비 강화', body: '은전과 철로 장비를 강화합니다. 강화할수록 장착한 무장의 능력이 오릅니다.', event: 'enhance' },
   { id: 'scenario', section: 'battle', target: '.scenario-start-button', title: '7. 시나리오 클리어', body: '이제 첫 전투입니다. 출정을 누르고 184년 황건적의 난을 이기십시오. 튜토리얼 전투는 쉽게 맞춰 두었고, 싸우는 동안 방법을 하나씩 알려 드립니다.', event: 'scenario-win' },

@@ -187,6 +187,10 @@ interface BattleUnit {
   blend: PoseBlend
   /** 쓰러져 땅에 닿을 때 흙먼지를 이미 냈는가 */
   fallDust: boolean
+  /** 다른 자리(전열 등)를 칠 때 몸을 돌리는 각도와 그 유지 시간 */
+  aim: number
+  aimTo: number
+  aimHold: number
 }
 
 /** 관성 블렌딩: [z, y, tilt, twist, scale] 차이와 그 속도, 직전 화면 자세 */
@@ -896,10 +900,10 @@ export class Arena {
     }
   }
 
-  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'blend' | 'fallDust'> {
+  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'blend' | 'fallDust' | 'aim' | 'aimTo' | 'aimHold'> {
     return {
       actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0, strikeAge: -1,
-      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, fallDust: false,
+      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, fallDust: false, aim: 0, aimTo: 0, aimHold: 0,
       blend: { off: [0, 0, 0, 0, 0], vel: [0, 0, 0, 0, 0], prev: [0, 0, 0, 0, 1], prevVel: [0, 0, 0, 0, 0], motion: null },
     }
   }
@@ -947,6 +951,21 @@ export class Arena {
     return unit.group.position.clone().add(new THREE.Vector3(0, height, forward * distance))
   }
 
+  /** 상대 쪽으로 몸을 돌릴 각도(무장 자신의 앞 기준, 라디안) */
+  private aimToward(unit: BattleUnit, target: BattleUnit): number {
+    const d = target.group.position.clone().sub(unit.group.position)
+    const yaw = unit.group.rotation.y === 0 ? Math.atan2(-d.x, -d.z) : Math.atan2(d.x, d.z)
+    return THREE.MathUtils.clamp(yaw, -0.9, 0.9)
+  }
+
+  /** 내 앞에서 상대 쪽으로 distance만큼 나간 지점 */
+  private towardOf(unit: BattleUnit, target: BattleUnit | null | undefined, distance: number, height = 1.2): THREE.Vector3 {
+    if (!target) return this.frontOf(unit, distance, height)
+    const dir = target.group.position.clone().sub(unit.group.position).setY(0)
+    if (dir.lengthSq() < 1e-4) return this.frontOf(unit, distance, height)
+    return unit.group.position.clone().add(dir.normalize().multiplyScalar(distance)).setY(unit.group.position.y + height)
+  }
+
   private facing(unit: BattleUnit): number {
     return unit.group.rotation.y === 0 ? Math.PI : 0
   }
@@ -991,6 +1010,8 @@ export class Arena {
     const color = side === 'player' ? 0x9ff5e2 : 0xffa27a
     const ranged = this.isRanged(unit.general)
     unit.hero?.playOnce('Attack')
+    // 다른 자리(전열 등)를 칠 때는 그쪽으로 몸을 돌린다
+    if (target && target.group.position.x !== unit.group.position.x) { unit.aimTo = this.aimToward(unit, target); unit.aimHold = 0.75 }
     if (!ranged || !target) {
       const hit = unit.hero?.hitTime ?? MELEE_STRIKE
       unit.motion = { kind: 'melee', t: 0, dur: Math.max(MELEE_DURATION, hit + 0.32), hit }
@@ -999,7 +1020,7 @@ export class Arena {
       this.fx(this.later(hit - 0.03, () => {
         // 찌르기는 짧고 곧은 궤적, 베기는 크게 휘는 궤적
         const thrust = unit.hero?.kind === 'thrust'
-        this.fx(slashArc(this.frontOf(unit, thrust ? 2.0 : 1.7, thrust ? 1.45 : 1.3), this.facing(unit), color, thrust ? 1.1 : unit.mounted ? 1.8 : 1.5, flip, thrust ? 0.05 : 0.55))
+        this.fx(slashArc(this.towardOf(unit, target, thrust ? 2.0 : 1.7, thrust ? 1.45 : 1.3), this.facing(unit) + unit.aim, color, thrust ? 1.1 : unit.mounted ? 1.8 : 1.5, flip, thrust ? 0.05 : 0.55))
       }))
       return
     }
@@ -1241,8 +1262,11 @@ export class Arena {
     // 히트스톱 동안 맞은 쪽이 좌우로 떨린다(격투 게임의 히트랙 떨림)
     unit.shake = Math.max(0, unit.shake - this.frameDelta)
     const jitter = unit.shake > 0 && !this.reducedFx ? Math.sin(this.clock.getElapsed() * 95 + unit.motionPhase) * 0.05 * Math.min(1, unit.shake / 0.06) : 0
-    unit.actor.position.set(jitter, py, pz)
-    unit.actor.rotation.set(ptilt + unit.lean.x, ptwist, unit.lean.z)
+    unit.aimHold = Math.max(0, unit.aimHold - dt)
+    unit.aim = damp(unit.aim, unit.aimHold > 0 ? unit.aimTo : 0, 0.09, dt)
+    // 돌진도 돌린 방향으로
+    unit.actor.position.set(jitter + pz * Math.sin(unit.aim), py, pz * Math.cos(unit.aim))
+    unit.actor.rotation.set(ptilt + unit.lean.x, ptwist + unit.aim, unit.lean.z)
     unit.actor.scale.setScalar(pscale)
     unit.glow = Math.max(0, unit.glow - (unit.motion?.kind === 'skill' ? 0 : delta * 2.2))
     if (unit.dying > 0) {

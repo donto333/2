@@ -17,7 +17,8 @@ describe('자동 편성', () => {
     expect(new Set(state.formation).size).toBe(3)
     const top3 = [...state.generals].sort((left, right) => combatPower(right) - combatPower(left)).slice(0, 3)
     const top3Power = top3.reduce((sum, general) => sum + combatPower(general), 0)
-    expect(totalPower(state)).toBeGreaterThanOrEqual(top3Power * 0.95)
+    // 수호형(전열)을 넣으면 가산점이 있어 순수 전투력 상위 3명보다 조금 낮을 수 있다
+    expect(totalPower(state)).toBeGreaterThanOrEqual(top3Power * 0.9)
     expect(state.formation).not.toContain('song-xian')
   })
 
@@ -28,12 +29,16 @@ describe('자동 편성', () => {
     expect([...state.formation].sort()).toEqual(['guan-yu', 'liu-bei', 'zhang-fei'])
   })
 
-  it('places the sturdiest general in the center lane', () => {
+  it('places a guardian (or else the sturdiest general) in the center lane (front line)', () => {
     const state = createInitialState()
     own(state, ['cao-ren', 'guan-yu', 'zhao-yun'], 10)
     autoFormation(state)
-    const center = state.generals.find(general => general.id === state.formation[1])!
-    expect(state.generals.every(general => center.defense + center.leadership >= general.defense + general.leadership)).toBe(true)
+    expect(state.formation[1]).toBe('cao-ren')
+    const noTank = createInitialState()
+    own(noTank, ['lu-bu', 'guan-yu', 'zhao-yun'], 10)
+    autoFormation(noTank)
+    const center = noTank.generals.find(general => general.id === noTank.formation[1])!
+    expect(noTank.generals.every(general => center.defense + center.leadership >= general.defense + general.leadership)).toBe(true)
   })
 })
 

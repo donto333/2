@@ -369,6 +369,14 @@ const GUIDE_CARDS: Array<{ title: string; body: string; art: string }> = [
       ${['철벽', '유인', '돌격'].map((name, i) => `<g transform="translate(${170 + i * 48},90)"><rect width="42" height="42" rx="5" class="ga-box"/><text x="21" y="26" text-anchor="middle" class="ga-s">${name}</text></g>`).join('')}`),
   },
   {
+    title: '가운데는 전열',
+    body: '적은 같은 자리의 아군을 치지만, 30%는 가운데 무장부터 노립니다. 가운데(전열)는 받는 피해가 20% 줄고, 수호형 무장(조인·허저·전위 등)을 세우면 적을 더 끌어당기며 40%까지 덜 받습니다. 전열이 먼저 맞아 주는 동안 좌우 공격수가 오래 살아남아 딜을 합니다.',
+    art: svg(`${['좌', '전열', '우'].map((name, i) => `<g transform="translate(${28 + i * 96},92)"><rect width="76" height="44" rx="6" class="${i === 1 ? 'ga-gold' : 'ga-box'}"/><text x="38" y="28" text-anchor="middle" class="ga-n">${name}</text></g>`).join('')}
+      ${['적', '적', '적'].map((name, i) => `<g transform="translate(${40 + i * 96},10)"><rect width="52" height="30" rx="5" class="ga-red"/><text x="26" y="21" text-anchor="middle" class="ga-s">${name}</text></g>`).join('')}
+      <path d="M66 42 L66 88" class="ga-arrow"/><path d="M162 42 L162 88" class="ga-arrow"/><path d="M258 42 L258 88" class="ga-arrow"/>
+      <path d="M80 42 L140 88" class="ga-arrow"/><path d="M244 42 L184 88" class="ga-arrow"/>`),
+  },
+  {
     title: '병종 상성과 별 3개',
     body: '기병은 궁병을, 궁병은 보병을, 보병은 기병을 이깁니다(책사는 상성 없음). 별: 승리 1개 + 병력 60% 이상 1개 + 붕괴 없이 경고 60% 이상 막기 1개.',
     art: svg(`<g class="ga-tri"><circle cx="80" cy="34" r="24" class="ga-box"/><text x="80" y="39" text-anchor="middle" class="ga-s">기병</text>

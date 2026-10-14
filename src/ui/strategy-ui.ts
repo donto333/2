@@ -1039,7 +1039,7 @@ export class StrategyUI {
     layer.className = 'slot-picker'
     const slots = state.formation.map((current, index) => {
       const general = state.generals.find(item => item.id === current)
-      return `<button class="slot-picker__slot" data-slot="${index}"><span>${['↙ 좌측', '↑ 중앙', '↘ 우측'][index]}</span>${general ? this.portrait(general, 'slot-picker__portrait') : ''}<strong>${escapeHtml(general?.name ?? '빈 자리')}</strong><small>${general ? `${general.role} · Lv.${general.level}` : ''}</small><em>이 자리에 넣기</em></button>`
+      return `<button class="slot-picker__slot" data-slot="${index}"><span>${['↙ 좌측', '↑ 중앙 · 전열', '↘ 우측'][index]}</span>${general ? this.portrait(general, 'slot-picker__portrait') : ''}<strong>${escapeHtml(general?.name ?? '빈 자리')}</strong><small>${general ? `${general.role} · Lv.${general.level}` : ''}</small><em>이 자리에 넣기</em></button>`
     }).join('')
     layer.innerHTML = `<div class="slot-picker__card glass-card"><span class="eyebrow">출전 교체</span><h3>${escapeHtml(incoming.name)}을(를) 어느 자리에 넣을까요?</h3><p>고른 자리의 무장은 대기로 돌아갑니다.</p><div class="slot-picker__slots">${slots}</div><button class="text-button" data-slot-cancel>취소</button></div>`
     const close = () => layer.remove()
@@ -1098,7 +1098,7 @@ export class StrategyUI {
   private formationSection(state: StrategyState): string {
     const bench = this.sortedFormationBench(state)
     const sortOptions: Array<[FormationSort, string]> = [['power', '전투력'], ['grade', '등급']]
-    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리합니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리하고, 가운데(전열)에는 수호형이나 단단한 무장을 세우면 좌우 공격수가 오래 살아남습니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
   }
 
   private equipmentSection(state: StrategyState): string {
@@ -1568,12 +1568,15 @@ export class StrategyUI {
   }
 
   private formationSlot(state: StrategyState, index: number): string {
-    const lane = ['↙ 좌측', '↑ 중앙', '↘ 우측'][index]
+    const lane = ['↙ 좌측', '↑ 중앙 · 전열', '↘ 우측'][index]
     const enemy = this.formationEnemies(state)[index]
     const id = state.formation[index]
     const general = id ? state.generals.find(item => item.id === id) : undefined
+    // 가운데는 전열: 적의 30%가 먼저 노리고 받는 피해 −20%, 수호형이면 도발 + 피해 −40%
+    const tank = general ? skillDetail(general).type === '수호' : false
+    const frontNote = index === 1 ? `<div class="formation-front ${tank ? 'is-tank' : ''}"><b>전열</b><span>${tank ? '수호형 · 적을 더 끌어당기고 받는 피해 −40%' : '적이 먼저 노림 · 받는 피해 −20% · 수호형을 세우면 더 단단'}</span></div>` : ''
     const enemyLine = (edge: number) => enemy ? `<div class="formation-enemy ${edge > 1 ? 'is-adv' : edge < 1 ? 'is-dis' : ''}"><span>상대 ${escapeHtml(enemy.name)} · ${enemy.role}</span><b>${edge > 1 ? '상성 유리' : edge < 1 ? '상성 불리' : '상성 보통'}</b></div>` : ''
-    if (!general) return `<div class="formation-slot formation-slot--empty"><span class="formation-slot-index">${lane}</span><strong>빈 자리</strong><small>아래 대기 무장의 편성 버튼을 누르십시오.</small>${enemy ? `<div class="formation-enemy"><span>상대 ${escapeHtml(enemy.name)} · ${enemy.role}</span></div>` : ''}</div>`
+    if (!general) return `<div class="formation-slot formation-slot--empty ${index === 1 ? 'formation-slot--front' : ''}"><span class="formation-slot-index">${lane}</span><strong>빈 자리</strong><small>${index === 1 ? '전열 자리: 수호형이나 단단한 무장을 세우십시오.' : '아래 대기 무장의 편성 버튼을 누르십시오.'}</small>${enemy ? `<div class="formation-enemy"><span>상대 ${escapeHtml(enemy.name)} · ${enemy.role}</span></div>` : ''}</div>`
     const loadout = state.equipmentLoadouts[general.id] ?? {}
     const equipment = (['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => {
       const itemId = loadout[type]
@@ -1582,7 +1585,7 @@ export class StrategyUI {
         ? `<div class="formation-equipment-chip is-equipped"><span><img class="gear-glyph" src="${equipmentImage(type)}" alt="" width="18" height="18" draggable="false"></span><strong>${escapeHtml(item.name)}</strong><button class="formation-unequip" data-action="equipment-unequip" data-equipment-type="${type}" data-general-id="${general.id}">해제</button></div>`
         : `<div class="formation-equipment-chip"><span><img class="gear-glyph" src="${equipmentImage(type)}" alt="" width="18" height="18" draggable="false"></span><strong>${EQUIPMENT_TYPE_META[type].label} 없음</strong><button class="formation-unequip formation-equip" data-action="equip-general" data-id="${general.id}">장착하기</button></div>`
     }).join('')
-    return `<div class="formation-slot formation-slot--filled" style="--accent:${gradeColor(general)}"><div class="formation-slot-main"><span class="formation-slot-index">${lane}</span>${this.portrait(general, 'formation-portrait')}<strong>${general.name}</strong><small>${general.role} · Lv.${general.level}</small><b>${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</b><button class="text-button formation-release" data-action="formation" data-id="${general.id}">편성 해제</button></div>${enemyLine(enemy ? matchup(general.role, enemy.role) : 1)}<div class="formation-equipment"><span class="formation-equipment-label">장착 장비</span>${equipment}</div></div>`
+    return `<div class="formation-slot formation-slot--filled ${index === 1 ? 'formation-slot--front' : ''}" style="--accent:${gradeColor(general)}"><div class="formation-slot-main"><span class="formation-slot-index">${lane}</span>${this.portrait(general, 'formation-portrait')}<strong>${general.name}</strong><small>${general.role} · Lv.${general.level}</small><b>${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</b><button class="text-button formation-release" data-action="formation" data-id="${general.id}">편성 해제</button></div>${enemyLine(enemy ? matchup(general.role, enemy.role) : 1)}${frontNote}<div class="formation-equipment"><span class="formation-equipment-label">장착 장비</span>${equipment}</div></div>`
   }
 
   private formationBenchCard(general: General): string {
@@ -1616,7 +1619,7 @@ export class StrategyUI {
   private battleSection(state: StrategyState): string {
     const battle = this.latestBattle
     const active = Boolean(battle?.active)
-    const lanes = ['↙ 좌측', '↑ 중앙', '↘ 우측']
+    const lanes = ['↙ 좌측', '↑ 전열', '↘ 우측']
     const units = state.formation.map((id, index) => {
       const general = state.generals.find(item => item.id === id)
       if (!general) return ''
@@ -1788,6 +1791,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '진형 개편 · 가운데는 전열', '가운데 자리가 전열이 됩니다. 적은 같은 자리를 치되 30%는 전열부터 노리고, 전열은 받는 피해가 20% 줄어듭니다. 수호형 무장(조인·허저·전위·우금·정욱 등)을 전열에 세우면 적을 더 끌어당기고 받는 피해가 40%까지 줄어, 전열이 먼저 맞아 주는 동안 좌우 공격수가 오래 살아남아 딜을 합니다. 무장이 쓰러진 자리를 치던 적은 이제 늘 왼쪽이 아니라 남은 무장 중 무작위로 공격합니다. 자동 편성은 수호형을 전열에 세우고, 전투 규칙 안내와 튜토리얼에도 전열 설명을 넣었습니다.', '완료', 'jade'],
       ['2026.10.14', '천명 초상 불티 잘림 수정', '보유 무장의 천명 초상에서 불티 효과가 위쪽만 사각형으로 잘려 보이던 문제를 고쳤습니다. 이제 불티가 사진 전체에서 피어오르고 아래쪽 그늘도 제대로 보입니다.', '완료', 'jade'],
       ['2026.10.14', '무장 사진 테두리를 등급색으로', '무장마다 제각각이던 사진 테두리와 카드 강조색을 등급색으로 통일했습니다. 천명은 금빛, 명장은 비취빛, 정예는 푸른빛, 용사는 보랏빛, 신병은 회색이며, 테두리를 두껍게 해 더 또렷하게 보이고 도감의 미영입 무장도 테두리는 등급색 그대로 보입니다.', '완료', 'jade'],
       ['2026.10.14', '무장 등급 재설정', '삼국지 속 역할과 비중에 맞춰 무장 등급을 다시 매겼습니다. 천명은 촉·위·오·군웅에서 4명씩(유비·제갈량·관우·조운 / 조조·사마의·장료·하후돈 / 손권·손책·주유·육손 / 여포·동탁·원소·장각)입니다. 이미 가진 무장도 새 등급으로 옮겨지고, 등급이 내려간 무장은 단계마다 옥패로 보상합니다(천명→명장 1,000 · 명장→정예 300 · 정예→용사 100 · 용사→신병 50).', '완료', 'jade'],
