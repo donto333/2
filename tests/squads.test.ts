@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoEquipSquad, autoSquad, ensureSquads, squadIds, squadOf, swapWithFirstSquad, toggleSquadMember } from '../src/game/squads'
+import { applySquadCombo, autoEquipSquad, autoSquad, ensureSquads, squadIds, squadOf, swapWithFirstSquad, toggleSquadMember } from '../src/game/squads'
 import { createInitialState, equipEquipment, makeEquipment, templateGeneral } from '../src/game/strategy'
 
 const withRoster = () => {
@@ -9,6 +9,17 @@ const withRoster = () => {
 }
 
 describe('1·2·3군 편성', () => {
+  it('추천 덱을 2군에 세우면 다른 군에서 옮겨 오고, 1군은 최소 1명 남긴다', () => {
+    const state = withRoster()
+    expect(toggleSquadMember(state, 2, 'zhao-yun').ok).toBe(true)
+    expect(applySquadCombo(state, 1, ['guan-yu', 'zhang-fei', 'zhao-yun']).ok).toBe(true)
+    expect(squadIds(state, 1)).toEqual(['guan-yu', 'zhang-fei', 'zhao-yun'])
+    expect(squadIds(state, 2)).not.toContain('zhao-yun')
+    state.formation = ['cao-ren']
+    expect(applySquadCombo(state, 2, ['cao-ren', 'xu-chu', 'guan-yu']).ok).toBe(false)
+    expect(applySquadCombo(state, 2, ['nobody', 'xu-chu', 'guan-yu']).ok).toBe(false)
+    expect(state.formation).toEqual(['cao-ren'])
+  })
   it('한 무장은 한 군에만 선다: 다른 군에서 옮겨 오고, 1군에 넣으면 2·3군에서 빠진다', () => {
     const state = withRoster()
     expect(toggleSquadMember(state, 1, 'guan-yu').ok).toBe(true)

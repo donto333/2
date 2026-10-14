@@ -214,7 +214,7 @@ export interface StrategyUiCallbacks {
   onAutoFormation: (withEquipment: boolean) => void
   onAutoEquip: () => void
   /** 추천 덱으로 편성(좌·중·우 순서) */
-  onApplyCombo: (ids: string[]) => void
+  onApplyCombo: (ids: string[], squad?: number) => void
   onEquipmentDraw: (count: number) => void
   onEquipmentEnhance: (id: string) => void
   onEquipmentEquip: (generalId: string, itemId: string) => void
@@ -1176,31 +1176,21 @@ export class StrategyUI {
     return `<div class="squad-tabs" role="tablist">${SQUAD_LABELS.map((label, index) => { const count = squadIds(state, index).length; return `<button class="squad-tab ${this.formationSquad === index ? 'is-active' : ''}" role="tab" aria-selected="${this.formationSquad === index}" data-action="squad-tab" data-squad="${index}"><strong>${label}</strong><span>${count}/3 · ${formatNumber(squadPower(state, index))}</span></button>` }).join('')}<p class="squad-tabs__note">2군·3군은 레이드에서 1군 다음으로 이어 싸웁니다. 한 무장은 한 군에만 설 수 있습니다.</p></div>`
   }
 
-  /** 2군·3군 편성 화면 */
+  /** 2군·3군 편성 화면: 1군과 같은 짜임(자리 · 상성 · 전열 · 장착 장비 · 추천 덱 · 대기 무장). 상성은 이번 주 레이드 보스 기준 */
   private reserveSquadSection(state: StrategyState, squad: number): string {
     const ids = squadIds(state, squad)
     const label = SQUAD_LABELS[squad]
-    const power = (general: General) => combatPower(general) + equipmentPowerForUi(state, general.id)
-    const slots = [0, 1, 2].map(index => {
-      const general = ids[index] ? state.generals.find(item => item.id === ids[index]) : undefined
-      const lane = ['↙ 좌측', '↑ 중앙 · 전열', '↘ 우측'][index]
-      return general
-        ? `<div class="squad-slot is-filled" style="--accent:${gradeColor(general)}"><span class="squad-slot__lane">${lane}</span>${this.portrait(general, 'squad-slot__portrait')}<strong>${escapeHtml(general.name)}</strong><small>${general.role} · Lv.${general.level} · ${formatNumber(power(general))}</small><button class="mini-action mini-action--ghost" data-action="squad-toggle" data-squad="${squad}" data-id="${general.id}">빼기</button></div>`
-        : `<div class="squad-slot"><span class="squad-slot__lane">${lane}</span><div class="squad-slot__empty">빈 자리</div><small>아래 무장에서 넣기</small></div>`
-    }).join('')
-    const bench = [...state.generals].filter(general => !ids.includes(general.id)).sort((left, right) => power(right) - power(left))
-    const benchCards = bench.map(general => {
-      const where = squadOf(state, general.id)
-      return `<button class="squad-bench-card ${where >= 0 ? 'is-assigned' : ''}" data-action="squad-toggle" data-squad="${squad}" data-id="${general.id}" style="--accent:${gradeColor(general)}">${this.portrait(general, 'squad-bench-card__portrait')}<span><strong>${escapeHtml(general.name)}</strong><small>${general.role} · Lv.${general.level} · ${formatNumber(power(general))}</small>${where >= 0 ? `<em>${SQUAD_LABELS[where]}에서 옮기기</em>` : '<em>넣기</em>'}</span></button>`
-    }).join('')
-    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">${label}은 레이드에서 1군 다음으로 출전합니다. 1군에 넣은 무장은 ${label}에서 자동으로 빠집니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="squad-auto" data-squad="${squad}" data-with-equipment="1">${label} 자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="squad-auto" data-squad="${squad}">자동 편성</button><button class="action-button action-button--outline" data-action="squad-equip" data-squad="${squad}">자동 장착</button><button class="action-button action-button--outline" data-action="squad-swap" data-squad="${squad}">1군과 바꾸기</button></div></div><div class="section-counter"><span>${label} 전투력</span><strong>${formatNumber(squadPower(state, squad))}</strong></div></div>${this.squadTabs(state)}<div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">${label}</span><h3>${label} 진형 · ${ids.length}/3</h3><p>자동 장착은 다른 군 무장이 낀 장비를 건드리지 않습니다.</p></div><span class="formation-readiness">${ids.length >= 3 ? '출정 준비 완료' : ids.length ? '빈 자리가 있습니다' : '비어 있음 · 레이드에서 건너뜁니다'}</span></div><div class="squad-slots">${slots}</div></div><div class="formation-bench-head"><div><span class="eyebrow">무장</span><h3>${label}에 넣을 무장</h3></div><span class="rate-note">전투력 높은 순 · 다른 군 무장은 옮겨 옵니다</span></div><div class="squad-bench">${benchCards || '<div class="roster-empty">더 넣을 무장이 없습니다.</div>'}</div></section>`
+    const bench = this.sortedFormationBench(state, squad)
+    const sortOptions: Array<[FormationSort, string]> = [['power', '전투력'], ['grade', '등급']]
+    const boss = raidBossFor(this.raidView.info?.weekKey ?? raidWeekKey())
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">${label}은 레이드에서 1군 다음으로 출전합니다. 좌·중·우 자리와 전열 규칙은 1군과 같습니다. 한 무장은 한 군에만 설 수 있어, 다른 군 무장을 넣으면 그 군에서 옮겨 옵니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="squad-auto" data-squad="${squad}" data-with-equipment="1">${label} 자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="squad-auto" data-squad="${squad}">자동 편성</button><button class="action-button action-button--outline" data-action="squad-equip" data-squad="${squad}">자동 장착</button><button class="action-button action-button--outline" data-action="squad-swap" data-squad="${squad}">1군과 바꾸기</button></div></div><div class="section-counter"><span>${label} 편성 전투력</span><strong>${formatNumber(squadPower(state, squad))}</strong></div></div>${this.squadTabs(state)}<div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">${label} · 레이드 출전</span><h3>${label} 진형 · ${ids.length}/3</h3><p>상성은 이번 주 레이드 보스 ‘${escapeHtml(boss.name)}’ 기준입니다. 기병은 궁병에, 궁병은 보병에, 보병은 기병에 강합니다.</p></div><span class="formation-readiness">${ids.length >= 3 ? '출정 준비 완료' : ids.length ? '빈 자리가 있습니다' : '비어 있음 · 레이드에서 건너뜁니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index, squad)).join('')}</div></div>${this.comboAdvice(state, squad)}<div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>${label}에 넣을 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, text]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${text}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general, squad, state)).join('') : '<div class="formation-empty glass-card">더 넣을 무장이 없습니다.</div>'}</div></section>`
   }
 
   private formationSection(state: StrategyState): string {
     if (this.formationSquad > 0) return this.reserveSquadSection(state, this.formationSquad)
     const bench = this.sortedFormationBench(state)
     const sortOptions: Array<[FormationSort, string]> = [['power', '전투력'], ['grade', '등급']]
-    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리하고, 가운데(전열)에는 수호형이나 단단한 무장을 세우면 좌우 공격수가 오래 살아남습니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div>${this.squadTabs(state)}<div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">1군 · 출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div>${this.comboAdvice(state)}<div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리하고, 가운데(전열)에는 수호형이나 단단한 무장을 세우면 좌우 공격수가 오래 살아남습니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div>${this.squadTabs(state)}<div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">1군 · 출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div>${this.comboAdvice(state)}<div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general, 0, state)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
   }
 
   private equipmentSection(state: StrategyState): string {
@@ -1363,9 +1353,10 @@ export class StrategyUI {
     })
   }
 
-  private sortedFormationBench(state: StrategyState): General[] {
+  private sortedFormationBench(state: StrategyState, squad = 0): General[] {
     const direction = this.formationSortDescending ? -1 : 1
-    return state.generals.filter(general => !state.formation.includes(general.id)).sort((a, b) => {
+    const members = squadIds(state, squad)
+    return state.generals.filter(general => !members.includes(general.id)).sort((a, b) => {
       const left = this.formationSort === 'power' ? combatPower(a) + equipmentPowerForUi(state, a.id) : a.grade
       const right = this.formationSort === 'power' ? combatPower(b) + equipmentPowerForUi(state, b.id) : b.grade
       if (left < right) return -1 * direction
@@ -1702,16 +1693,17 @@ export class StrategyUI {
    * 무장별 추천 덱: 무장을 고르면 그 무장이 들어간 이상적인 조합을 유형마다 하나씩(스킬 연계·버티기·초반 끝내기·디버프·유틸) 보여 준다.
    * 지금 키운 정도는 따지지 않고 스킬 설계와 전열 규칙만 본다. 70명 전체에서 고르므로 없는 무장은 미보유로 표시한다.
    */
-  private comboAdvice(state: StrategyState): string {
+  private comboAdvice(state: StrategyState, squad = 0): string {
+    const members = squadIds(state, squad)
     const owned = new Set(state.generals.map(general => general.id))
     const catalog = allGenerals()
     const byId = new Map(catalog.map(general => [general.id, general]))
     const ownedFirst = [...catalog].sort((left, right) => Number(owned.has(right.id)) - Number(owned.has(left.id)) || right.grade - left.grade)
-    const anchorId = (this.comboAnchorId && byId.has(this.comboAnchorId) ? this.comboAnchorId : null) ?? state.formation[1] ?? state.formation[0] ?? ownedFirst[0].id
+    const anchorId = (this.comboAnchorId && byId.has(this.comboAnchorId) ? this.comboAnchorId : null) ?? members[1] ?? members[0] ?? state.formation[1] ?? ownedFirst[0].id
     const anchor = byId.get(anchorId)!
     let combos = this.comboCache.get(anchorId)
     if (!combos) { combos = recommendDecks(anchorId); this.comboCache.set(anchorId, combos) }
-    const current = state.formation.join(',')
+    const current = members.join(',')
     const chips = ownedFirst.map(general => `<button class="combo-chip ${general.id === anchorId ? 'is-active' : ''} ${owned.has(general.id) ? '' : 'is-unowned'}" data-action="combo-anchor" data-id="${general.id}" style="--accent:${gradeColor(general)}" aria-pressed="${general.id === anchorId}">${this.portrait(general, 'combo-chip__portrait')}<span>${escapeHtml(general.name)}</span></button>`).join('')
     const lanes = ['↙ 좌측', '↑ 전열', '↘ 우측']
     const rows = combos.map(combo => {
@@ -1724,7 +1716,7 @@ export class StrategyUI {
       }).join('')
       const tags = [combo.bond ? `<span class="combo-tag combo-tag--bond">인연 ‘${escapeHtml(combo.bond.name)}’</span>` : '', ...combo.keys.map(key => `<span class="combo-tag">${escapeHtml(key)}</span>`)].join('')
       const isCurrent = combo.ids.join(',') === current
-      const action = isCurrent ? '<span class="combo-current">현재 편성</span>' : missing.length ? `<span class="combo-missing">미보유 ${missing.length}명</span>` : `<button class="mini-action mini-action--deploy" data-action="apply-combo" data-ids="${combo.ids.join(',')}">이 덱으로 편성</button>`
+      const action = isCurrent ? '<span class="combo-current">현재 편성</span>' : missing.length ? `<span class="combo-missing">미보유 ${missing.length}명</span>` : `<button class="mini-action mini-action--deploy" data-action="apply-combo" data-squad="${squad}" data-ids="${combo.ids.join(',')}">${squad > 0 ? `${SQUAD_LABELS[squad]}에 ` : ''}이 덱으로 편성</button>`
       return `<li class="combo-row combo-row--${combo.archetype} ${isCurrent ? 'is-current' : ''}"><div class="combo-type"><b>${meta.label}</b><small>${meta.desc}</small></div><div class="combo-members">${members}</div><div class="combo-side"><div class="combo-tags">${tags}</div>${action}</div></li>`
     }).join('')
     return `<div class="combo-advice glass-card"><div class="card-header"><div><span class="eyebrow">추천 덱</span><h3>무장별 추천 덱</h3><p class="combo-note">무장을 고르면 그 무장이 들어간 이상적인 조합을 유형마다 하나씩 보여 드립니다. 지금 키운 정도는 따지지 않고 스킬 연계·인연과 전열 규칙만 보며, 가운데(전열)에는 수호형이나 단단한 무장을 세웁니다. 아직 없는 무장도 미보유로 함께 보여 줍니다.</p></div></div><div class="combo-anchor-row" role="group" aria-label="추천 덱을 볼 무장">${chips}</div><div class="combo-anchor-name"><b>${escapeHtml(anchor.name)}</b> 추천 덱</div><ol class="combo-list">${rows}</ol></div>`
@@ -1735,15 +1727,21 @@ export class StrategyUI {
     return next ? scenarioEnemyIds(next, state.faction).map(id => templateGeneral(id)) : []
   }
 
+  /** 2·3군 상성 기준: 이번 주 레이드 보스 덱(좌·중·우) */
+  private raidEnemies(): General[] {
+    const info = this.raidView.info
+    return raidBossDeck(info?.bossLevel ?? 30, info?.weekKey ?? raidWeekKey())
+  }
+
   private formationEnemyNote(state: StrategyState): string {
     const next = this.nextScenario(state)
     return next ? `상성은 다음 시나리오 ‘${escapeHtml(next.title)}’의 적장 기준입니다. 기병은 궁병에, 궁병은 보병에, 보병은 기병에 강합니다.` : '대기 무장의 편성 버튼으로 빈 자리를 채우십시오.'
   }
 
-  private formationSlot(state: StrategyState, index: number): string {
+  private formationSlot(state: StrategyState, index: number, squad = 0): string {
     const lane = ['↙ 좌측', '↑ 중앙 · 전열', '↘ 우측'][index]
-    const enemy = this.formationEnemies(state)[index]
-    const id = state.formation[index]
+    const enemy = (squad > 0 ? this.raidEnemies() : this.formationEnemies(state))[index]
+    const id = squadIds(state, squad)[index]
     const general = id ? state.generals.find(item => item.id === id) : undefined
     // 가운데는 전열: 적의 30%가 먼저 노리고 받는 피해 −20%, 수호형이면 도발 + 피해 −40%
     const tank = general ? skillDetail(general).type === '수호' : false
@@ -1758,11 +1756,16 @@ export class StrategyUI {
         ? `<div class="formation-equipment-chip is-equipped"><span><img class="gear-glyph" src="${equipmentImage(type)}" alt="" width="18" height="18" draggable="false"></span><strong>${escapeHtml(item.name)}</strong><button class="formation-unequip" data-action="equipment-unequip" data-equipment-type="${type}" data-general-id="${general.id}">해제</button></div>`
         : `<div class="formation-equipment-chip"><span><img class="gear-glyph" src="${equipmentImage(type)}" alt="" width="18" height="18" draggable="false"></span><strong>${EQUIPMENT_TYPE_META[type].label} 없음</strong><button class="formation-unequip formation-equip" data-action="equip-general" data-id="${general.id}">장착하기</button></div>`
     }).join('')
-    return `<div class="formation-slot formation-slot--filled ${index === 1 ? 'formation-slot--front' : ''}" style="--accent:${gradeColor(general)}"><div class="formation-slot-main"><span class="formation-slot-index">${lane}</span>${this.portrait(general, 'formation-portrait')}<strong>${general.name}</strong><small>${general.role} · Lv.${general.level}</small><b>${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</b><button class="text-button formation-release" data-action="formation" data-id="${general.id}">편성 해제</button></div>${enemyLine(enemy ? matchup(general.role, enemy.role) : 1)}${frontNote}<div class="formation-equipment"><span class="formation-equipment-label">장착 장비</span>${equipment}</div></div>`
+    return `<div class="formation-slot formation-slot--filled ${index === 1 ? 'formation-slot--front' : ''}" style="--accent:${gradeColor(general)}"><div class="formation-slot-main"><span class="formation-slot-index">${lane}</span>${this.portrait(general, 'formation-portrait')}<strong>${general.name}</strong><small>${general.role} · Lv.${general.level}</small><b>${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</b><button class="text-button formation-release" ${squad > 0 ? `data-action="squad-toggle" data-squad="${squad}"` : 'data-action="formation"'} data-id="${general.id}">편성 해제</button></div>${enemyLine(enemy ? matchup(general.role, enemy.role) : 1)}${frontNote}<div class="formation-equipment"><span class="formation-equipment-label">장착 장비</span>${equipment}</div></div>`
   }
 
-  private formationBenchCard(general: General): string {
-    return `<article class="formation-bench-card" style="--accent:${gradeColor(general)}">${this.portrait(general, 'formation-bench-portrait')}<div><strong>${general.name}</strong><small>${general.role} · ${GRADE_META[general.grade].label} · Lv.${general.level}</small></div><b>${formatNumber(combatPower(general))}</b><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">편성</button></article>`
+  private formationBenchCard(general: General, squad = 0, state?: StrategyState): string {
+    // 다른 군에 있는 무장은 어느 군에서 옮겨 오는지 알려 준다
+    const where = state ? squadOf(state, general.id) : -1
+    const button = squad > 0
+      ? `<button class="mini-action mini-action--deploy" data-action="squad-toggle" data-squad="${squad}" data-id="${general.id}">${where >= 0 ? `${SQUAD_LABELS[where]}에서 옮기기` : '편성'}</button>`
+      : `<button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${where > 0 ? `${SQUAD_LABELS[where]}에서 옮기기` : '편성'}</button>`
+    return `<article class="formation-bench-card ${where >= 0 && where !== squad ? 'is-assigned' : ''}" style="--accent:${gradeColor(general)}">${this.portrait(general, 'formation-bench-portrait')}<div><strong>${general.name}</strong><small>${general.role} · ${GRADE_META[general.grade].label} · Lv.${general.level}${where >= 0 && where !== squad ? ` · ${SQUAD_LABELS[where]}` : ''}</small></div><b>${formatNumber(combatPower(general) + (state ? equipmentPowerForUi(state, general.id) : 0))}</b>${button}</article>`
   }
 
   /** 추천 무장: 가졌으면 ✓, 없으면 같은 병과의 내 무장 중 가장 강한 무장을 대신 추천 */
@@ -2033,6 +2036,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.15', '2군·3군 편성 화면을 1군과 같게', '출전 편성의 2군·3군 탭이 1군과 같은 짜임으로 바뀌었습니다: 좌·중·우 자리 카드(상성 · 전열 안내 · 장착 장비 해제/장착), 무장별 추천 덱(‘2군에 이 덱으로 편성’), 정렬되는 대기 무장 목록. 2군·3군의 상성은 이번 주 레이드 보스 기준이고, 다른 군 무장은 ‘1군에서 옮기기’처럼 어디서 옮겨 오는지 보여 줍니다.', '완료', 'jade'],
       ['2026.10.15', '천하 영토 칼 표시 제거', '천하 영토 지도에서 적·중립 도시 옆에 붙던 칼(공격 가능) 표시를 모든 확대 단계에서 없앴습니다. 소속은 성 아래 점 색(초록 우리 · 노랑 중립 · 빨강 타 세력)으로 구분합니다.', '완료', 'jade'],
       ['2026.10.15', '모바일 글자 다듬기', '한글이 낱말 중간에서 줄이 바뀌던 것("이기세/요")을 낱말 단위로 바꿨습니다. 글꼴에 없던 기호(◆ ✦ ✕ ← 따옴표 등)를 게임에 넣어 기기마다 다른 글꼴로 튀지 않게 했고, 낫표 대신 ‘ ’ 따옴표를 씁니다. 11px 이하 글자를 12px로, 휴대폰 본문을 14px로 키우고 글자 굵기를 3단계로 정리했습니다. 카드·목록 제목은 고딕으로 통일했습니다. 작은 버튼과 글자 링크의 누르는 범위를 넓히고, 편성 화면에서 ‘출정 준비 완료’가 설명 위에 겹치던 것을 고쳤습니다.', '완료', 'jade'],
       ['2026.10.14', '고레벨 전투 렉 수정', '레벨이 높을수록 거의 모든 타격이 ‘강타’로 판정돼 화면이 계속 잠깐씩 멈추던(히트스톱) 문제를 고쳤습니다. 타격 연출 기준을 무장 병력 대비 비율로 바꾸고, 멈춤이 짧은 시간에 몰리지 않게 상한을 두었습니다(Lv200 레이드 30초 기준 멈춤 41초 → 4초).', '완료', 'jade'],
@@ -2292,7 +2296,7 @@ export class StrategyUI {
       this.comboAnchorId = button.dataset.id ?? null
       if (this.renderedState) this.render(this.renderedState)
     } else if (action === 'apply-combo') {
-      this.callbacks.onApplyCombo((button.dataset.ids ?? '').split(',').filter(Boolean))
+      this.callbacks.onApplyCombo((button.dataset.ids ?? '').split(',').filter(Boolean), Number(button.dataset.squad ?? 0))
     } else if (action === 'formation-sort-direction') {
       this.formationSortDescending = !this.formationSortDescending
       if (this.renderedState) this.render(this.renderedState)

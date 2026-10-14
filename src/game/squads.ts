@@ -126,3 +126,19 @@ export function squadPower(state: StrategyState, squad: number): number {
 export function packSquads(state: StrategyState): string[][] {
   return ensureSquads(state).map(list => [...list])
 }
+
+/** 추천 덱(좌·중·우 3명)을 2·3군에 그대로 세운다. 다른 군에 있던 무장은 옮겨 온다(1군은 최소 1명 남긴다) */
+export function applySquadCombo(state: StrategyState, squad: number, ids: string[]): SquadResult {
+  if (squad < 1 || squad >= SQUAD_COUNT) return { ok: false, message: '2군·3군만 여기서 편성합니다.' }
+  const owned = ids.map(id => findGeneral(state, id))
+  if (ids.length !== 3 || new Set(ids).size !== 3 || owned.some(general => !general)) return { ok: false, message: '이 조합의 무장을 모두 보유해야 편성할 수 있습니다.' }
+  const fromFirst = ids.filter(id => state.formation.includes(id))
+  if (fromFirst.length && state.formation.length - fromFirst.length < 1) return { ok: false, message: '1군에는 최소 1명이 있어야 합니다. 1군에 다른 무장을 먼저 넣으십시오.' }
+  const reserves = ensureSquads(state)
+  state.formation = state.formation.filter(id => !ids.includes(id))
+  reserves.forEach((list, index) => { if (index !== squad - 1) reserves[index] = list.filter(id => !ids.includes(id)) })
+  reserves[squad - 1] = [...ids]
+  const bond = bondFor(ids)
+  state.lastNotice = `${SQUAD_LABELS[squad]} 추천 덱 편성 · ${owned.map(general => general!.name).join(' · ')}${bond ? ` · 인연 ‘${bond.name}’` : ''}`
+  return { ok: true, message: state.lastNotice }
+}

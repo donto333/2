@@ -63,7 +63,7 @@ import { dummyDuelDecks } from './game/duel'
 import { raidBossDeck } from './game/raid'
 import { RaidRunner } from './game/raid-run'
 import { RAID_DAILY_LIMIT, RAID_DEFAULT_LEVEL, raidDayKey, raidResetIn, raidWeekKey } from '../server/raid.mjs'
-import { autoEquipSquad, autoSquad, ensureSquads, packSquads, swapWithFirstSquad, toggleSquadMember } from './game/squads'
+import { autoEquipSquad, autoSquad, ensureSquads, packSquads, swapWithFirstSquad, toggleSquadMember, applySquadCombo } from './game/squads'
 import { applyEquipmentPreset, bulkDismantle, dismantleEquipment, packLoadouts, saveEquipmentPreset, toggleEquipmentLock, unpackLoadouts } from './game/equipment-manage'
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, duelTierFor, pickDuelMatches, type DuelTier } from '../server/duel-match.mjs'
 import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
@@ -952,8 +952,8 @@ const ui = new StrategyUI(root, {
     if (formed.ok) queueAccountSave()
     onboarding.event('auto-formation')
   },
-  onApplyCombo: ids => {
-    const result = applyCombo(state, ids)
+  onApplyCombo: (ids, squad = 0) => {
+    const result = squad > 0 ? applySquadCombo(state, squad, ids) : applyCombo(state, ids)
     arena.setGenerals(battleGenerals())
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
