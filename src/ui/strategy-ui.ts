@@ -9,7 +9,7 @@ import { effectsSetting, qualitySetting, setEffectsSetting, setQualitySetting, t
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
 import { growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
-import { SCENARIOS, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
+import { SCENARIOS, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
 import { ARCHETYPE_META, recommendDecks, type ComboAdvice } from '../game/formation-advice'
 import { ensureIconSprite, icon, type IconName } from './icons'
@@ -351,6 +351,9 @@ export class StrategyUI {
   private scenarioSelectedId = SCENARIOS[0]?.id ?? ''
   /** 이번 접속에서 시나리오를 직접 골랐는지(안 골랐으면 다음에 깰 시나리오를 자동 선택) */
   private scenarioPicked = false
+  /** 시나리오 화면에서 마지막으로 본 클리어 수(새로 깨면 다음 단계로 넘어간다). -1이면 처음 */
+  private scenarioClearedSeen = -1
+  private scenarioListOpen = false
   private lastSection = ''
   private boardComposeOpen = false
   private battleViewActive = false
@@ -1772,13 +1775,38 @@ export class StrategyUI {
   }
 
   private scenarioSection(state: StrategyState): string {
-    const selected = scenarioById(this.scenarioSelectedId) ?? SCENARIOS[0]
-    const chapters = [...new Set(SCENARIOS.map(scenario => scenario.chapter))]
+    // 연대기를 한 단계씩: 지금 단계(다음 미완료)가 크게 보이고, 깨면 다음 단계로 넘어간다. 전체 목록은 접어 둔다
+    const next = this.nextScenario(state)
+    const reachable = Math.max(0, SCENARIOS.findIndex(scenario => scenario.id === next?.id))
+    const cleared = SCENARIOS.filter(scenario => state.scenarioCleared.includes(scenario.id)).length
+    // 새로 깬 단계가 있으면 다음 단계로 자동 이동
+    if (cleared > this.scenarioClearedSeen) { if (this.scenarioClearedSeen >= 0) { this.scenarioSelectedId = next?.id ?? this.scenarioSelectedId; this.scenarioPicked = false } this.scenarioClearedSeen = cleared }
+    let index = SCENARIOS.findIndex(scenario => scenario.id === this.scenarioSelectedId)
+    if (index < 0 || index > reachable) index = reachable
+    const selected = SCENARIOS[index] ?? SCENARIOS[0]
     const selectedCleared = Boolean(selected && state.scenarioCleared.includes(selected.id))
     const reward = selected?.reward
-    const cards = chapters.map(chapter => `<div class="scenario-chapter"><div class="scenario-chapter-head"><span>제${(SCENARIOS.find(scenario => scenario.chapter === chapter)?.chapterIndex ?? 0) + 1}장</span><strong>${escapeHtml(SCENARIOS.find(scenario => scenario.chapter === chapter)?.era ?? '')}</strong><small>${SCENARIOS.filter(scenario => scenario.chapter === chapter && state.scenarioCleared.includes(scenario.id)).length}/${SCENARIOS.filter(scenario => scenario.chapter === chapter).length} 클리어</small></div><div class="scenario-list">${SCENARIOS.filter(scenario => scenario.chapter === chapter).map(scenario => `<article class="scenario-card ${scenario.id === selected?.id ? 'is-selected' : ''} ${state.scenarioCleared.includes(scenario.id) ? 'is-cleared' : ''}"><button class="scenario-card-select" data-action="scenario-select" data-scenario-id="${scenario.id}"><span class="scenario-year">${scenario.year}</span><span><strong>${escapeHtml(scenario.title)}</strong><small>${escapeHtml(scenario.summary)}</small></span><b>${state.scenarioCleared.includes(scenario.id) ? `완료 ${'★'.repeat(scenarioStars(state.scenarioCleared, scenario.id))}` : '미완료'}</b></button><button class="mini-action scenario-card-start" data-action="scenario-start" data-scenario-id="${scenario.id}">${state.scenarioCleared.includes(scenario.id) ? '다시 전투' : '전투 실행'} <span>→</span></button></article>`).join('')}</div></div>`).join('')
-    return `<section class="page-section page-section--scenario"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>시나리오</h1><p class="heading-copy">184년부터 263년까지, 삼국지의 주요 사건을 전투로 직접 지휘하십시오.</p></div><div class="section-counter"><button class="action-button action-button--outline scenario-guide-button" data-action="battle-guide">? 전투 규칙</button><span>연대기 진행</span><strong>${SCENARIOS.filter(scenario => state.scenarioCleared.includes(scenario.id)).length}<small> / ${SCENARIOS.length}</small></strong></div></div><div class="scenario-layout"><div class="scenario-chapter-list">${cards}</div><aside class="scenario-detail glass-card"><span class="pill pill--jade">${selected?.year ?? ''} · ${escapeHtml(selected?.era ?? '')}</span><h2>${escapeHtml(selected?.title ?? '시나리오를 선택하십시오')}</h2><p class="scenario-story">${escapeHtml(selected?.story ?? '')}</p><div class="scenario-deck"><span class="eyebrow">추천 편성</span>${selected ? this.recommendedDeck(state, selected.deck) : '—'}</div><div class="scenario-deck scenario-enemy"><span class="eyebrow">적군 · 평균 Lv.${selected ? scenarioEnemyLevel(selected) : 1}</span><strong>${selected ? scenarioEnemyIds(selected, state.faction).map(id => escapeHtml(templateGeneral(id)?.name ?? id)).join(' · ') : '—'}</strong><small class="scenario-stars">${selected ? `최고 기록 ${'★'.repeat(scenarioStars(state.scenarioCleared, selected.id))}${'☆'.repeat(3 - scenarioStars(state.scenarioCleared, selected.id))}${scenarioStars(state.scenarioCleared, selected.id) >= 3 ? ' · 자동 전투 가능' : ' · 별 3개면 자동 전투'}` : ''}</small></div><div class="scenario-reward"><span class="eyebrow">최초 클리어 보상${selectedCleared ? ' · 획득 완료' : ''}</span><p>금화 +${formatNumber(reward?.gold ?? 0)} · 옥패 +${formatNumber(reward?.honor ?? 0)} · 은전 +${formatNumber(reward?.silver ?? 0)} · 병서 +${formatNumber(reward?.manuals ?? 0)}</p><small>식량 +${formatNumber(reward?.grain ?? 0)} · 목재 +${formatNumber(reward?.wood ?? 0)} · 철 +${formatNumber(reward?.iron ?? 0)} · 영향력 +${formatNumber(reward?.influence ?? 0)}</small><em class="scenario-replay-note">완료 후 재전투 가능 · 최초 클리어 보상은 1회만 지급</em></div><button class="action-button action-button--primary scenario-start-button" data-action="scenario-start" data-scenario-id="${selected?.id ?? ''}">${selectedCleared ? '다시 전투하기' : '시나리오 출전'} <span>→</span></button></aside></div></section>`
+    const stars = selected ? scenarioStars(state.scenarioCleared, selected.id) : 0
+    const chapterNo = (selected?.chapterIndex ?? 0) + 1
+    const inChapter = SCENARIOS.filter(scenario => scenario.chapter === selected?.chapter)
+    const chapterPos = inChapter.findIndex(scenario => scenario.id === selected?.id) + 1
+    const prev = SCENARIOS[index - 1]
+    const after = SCENARIOS[index + 1]
+    const nextLocked = !after || index + 1 > reachable
+    const chapters = [...new Set(SCENARIOS.map(scenario => scenario.chapter))]
+    const list = chapters.map(chapter => {
+      const items = SCENARIOS.filter(scenario => scenario.chapter === chapter)
+      const head = items[0]
+      return `<div class="scenario-mini-chapter"><div class="scenario-mini-head"><b>제${(head?.chapterIndex ?? 0) + 1}장</b><span>${escapeHtml(head?.era ?? '')}</span><small>${items.filter(scenario => state.scenarioCleared.includes(scenario.id)).length}/${items.length}</small></div>${items.map(scenario => { const at = SCENARIOS.indexOf(scenario); const locked = at > reachable; const done = state.scenarioCleared.includes(scenario.id); return `<button class="scenario-mini ${scenario.id === selected?.id ? 'is-selected' : ''} ${done ? 'is-cleared' : ''} ${locked ? 'is-locked' : ''}" data-action="scenario-select" data-scenario-id="${scenario.id}" ${locked ? 'disabled' : ''}><span>${scenario.year}</span><strong>${escapeHtml(scenario.title)}</strong><em>${locked ? '🔒' : done ? '★'.repeat(scenarioStars(state.scenarioCleared, scenario.id)) : '도전'}</em></button>` }).join('')}</div>`
+    }).join('')
+    return `<section class="page-section page-section--scenario"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투 · 제${chapterNo}장 ${escapeHtml(selected?.era ?? '')}</span><h1>시나리오</h1></div><div class="section-counter"><button class="action-button action-button--outline scenario-guide-button" data-action="battle-guide">? 전투 규칙</button><span>연대기 진행</span><strong>${cleared}<small> / ${SCENARIOS.length}</small></strong></div></div>
+      <div class="scenario-progress" aria-hidden="true"><i style="width:${(cleared / Math.max(1, SCENARIOS.length) * 100).toFixed(1)}%"></i></div>
+      <div class="scenario-stepper"><button class="action-button action-button--outline" data-action="scenario-select" data-scenario-id="${prev?.id ?? ''}" ${prev ? '' : 'disabled'}>← 이전</button><div><strong>${index + 1} / ${SCENARIOS.length}</strong><small>제${chapterNo}장 ${chapterPos}/${inChapter.length}단계</small></div><button class="action-button action-button--outline" data-action="scenario-select" data-scenario-id="${after?.id ?? ''}" ${nextLocked ? 'disabled' : ''} title="${nextLocked && after ? '이번 단계를 깨면 열립니다' : ''}">${nextLocked && after ? '🔒 다음' : '다음 →'}</button></div>
+      <article class="scenario-detail scenario-main glass-card ${selectedCleared ? 'is-cleared' : 'is-current'}"><span class="pill pill--jade">${selected?.year ?? ''} · ${escapeHtml(selected?.era ?? '')}</span>${selectedCleared ? `<span class="scenario-main__done">완료 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span>` : '<span class="scenario-main__done is-new">이번 단계</span>'}<h2>${escapeHtml(selected?.title ?? '')}</h2><p class="scenario-story">${escapeHtml(selected?.story ?? '')}</p><div class="scenario-deck"><span class="eyebrow">추천 편성</span>${selected ? this.recommendedDeck(state, selected.deck) : '—'}</div><div class="scenario-deck scenario-enemy"><span class="eyebrow">적군 · 평균 Lv.${selected ? scenarioEnemyLevel(selected) : 1}</span><strong>${selected ? scenarioEnemyIds(selected, state.faction).map(id => escapeHtml(templateGeneral(id)?.name ?? id)).join(' · ') : '—'}</strong><small class="scenario-stars">${selected ? `최고 기록 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}${stars >= 3 ? ' · 자동 전투 가능' : ' · 별 3개면 자동 전투'}` : ''}</small></div><div class="scenario-reward"><span class="eyebrow">최초 클리어 보상${selectedCleared ? ' · 획득 완료' : ''}</span><p>금화 +${formatNumber(reward?.gold ?? 0)} · 옥패 +${formatNumber(reward?.honor ?? 0)} · 은전 +${formatNumber(reward?.silver ?? 0)} · 병서 +${formatNumber(reward?.manuals ?? 0)}</p><small>식량 +${formatNumber(reward?.grain ?? 0)} · 목재 +${formatNumber(reward?.wood ?? 0)} · 철 +${formatNumber(reward?.iron ?? 0)} · 영향력 +${formatNumber(reward?.influence ?? 0)}</small></div>
+        <div class="scenario-main__actions"><button class="action-button action-button--primary scenario-start-button" data-action="scenario-start" data-scenario-id="${selected?.id ?? ''}">${selectedCleared ? '다시 전투하기' : '시나리오 출전'} <span>→</span></button>${selectedCleared && next && next.id !== selected?.id ? `<button class="action-button action-button--outline" data-action="scenario-select" data-scenario-id="${next.id}">이번 단계로 (${next.year} ${escapeHtml(next.title)}) →</button>` : ''}</div></article>
+      <details class="scenario-all glass-card" ${this.scenarioListOpen ? 'open' : ''}><summary data-action="scenario-list-toggle">전체 시나리오 목록 <small>${cleared}/${SCENARIOS.length} 클리어 · 다시 전투할 단계를 고르십시오</small></summary><div class="scenario-mini-list">${list}</div></details></section>`
   }
+
 
   private battleSection(state: StrategyState): string {
     const battle = this.latestBattle
@@ -1999,6 +2027,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '시나리오 단계별 진행', '시나리오 화면이 지금 도전할 단계 하나를 크게 보여 줍니다. ← 이전 / 다음 → 버튼으로 단계를 넘기고, 아직 깨지 않은 단계 너머는 잠겨 있습니다. 단계를 깨면 다음 단계로 자동으로 넘어가고, 58개 전체 목록은 「전체 시나리오 목록」을 눌러 펼칠 때만 보입니다.', '완료', 'jade'],
       ['2026.10.14', '보유 무장 1·2·3군 보기', '보유 무장 화면에서 1군 · 2군 · 3군을 나눠 보여 줍니다. 위쪽 1군·2군·3군 버튼(인원·전투력 표시)을 누르면 그 군으로 바로 이동하고, 2·3군 무장 그림에는 「2군 · 좌측」처럼 소속과 자리가 표시됩니다. 대기 목록에는 어느 군에도 없는 무장만 남고, 2·3군 무장의 버튼은 「1군으로」입니다.', '완료', 'jade'],
       ['2026.10.14', '모바일 아래쪽 잘림 수정', '휴대폰 브라우저·앱 안 화면에서 주소창·상단 바 높이만큼 화면 아래가 잘리던 문제를 고쳤습니다. 화면 높이를 실제로 보이는 높이에 맞추고(전투 화면·모집 결과·장비 결과 포함), 10명 모집 결과·전투 결과·출전 교체 창은 아래 메뉴보다 위에 떠서 「10명 다시 뽑기」「결과 확인 완료」 같은 아래 버튼이 가려지지 않습니다.', '완료', 'jade'],
       ['2026.10.14', '레이드 2·3군 출전 수정', '로그인한 계정은 다시 접속하면 2·3군 편성이 사라져 레이드에 1군만 나가던 문제를 고쳤습니다(서버 새 칸이 없어도 장착 정보와 함께 저장). 군 사이에는 방금 군의 피해·합계와 다음 출전 군을 보여 주고 5초 뒤 자동으로 이어 출전합니다. 전투 화면 위에 「주간 레이드 · 2군 2/3」처럼 지금 싸우는 군이 보이고, 레이드 중 전투 시작 버튼은 다음 군 출전으로 이어집니다. 2·3군이 비어 있으면 출전 전에 남은 무장으로 자동 편성할지 묻습니다.', '완료', 'jade'],
@@ -2288,7 +2317,8 @@ export class StrategyUI {
     else if (action === 'tutorial-skip') this.callbacks.onTutorial(true)
     else if (action === 'research-cancel') this.callbacks.onResearchCancel()
     else if (action === 'research-rush') this.callbacks.onResearchRush()
-    else if (action === 'scenario-select') { this.scenarioSelectedId = button.dataset.scenarioId ?? this.scenarioSelectedId; this.scenarioPicked = true; if (this.renderedState) this.render(this.renderedState) }
+    else if (action === 'scenario-select') { if (!button.dataset.scenarioId) return; this.scenarioSelectedId = button.dataset.scenarioId; this.scenarioPicked = true; if (this.renderedState) this.render(this.renderedState); this.root.querySelector('.scenario-main')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+    else if (action === 'scenario-list-toggle') { event.preventDefault(); this.scenarioListOpen = !this.scenarioListOpen; if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'scenario-start') this.callbacks.onScenarioStart(button.dataset.scenarioId ?? '')
     else if (action === 'battle-start') this.callbacks.onBattleStart()
     else if (action === 'battle-unit' || action === 'move') { if (Date.now() >= this.suppressMoveUntil) this.callbacks.onBattleMove(Number(button.dataset.index ?? 0)) }
