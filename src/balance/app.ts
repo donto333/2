@@ -122,10 +122,10 @@ export function mountBalance(root: HTMLElement, access: AccessState): void {
     const body = chapters.map(c => `<tr><td>${c.chapter}장</td><td>${esc(c.era)}</td><td>${c.count}개</td><td>Lv.${c.from}~${c.to}</td><td>${c.gold}</td><td>${c.total}</td>${cell(growth?.gold, c.chapter, '개')}${cell(growth?.daily, c.chapter, '일')}${cell(growth?.territory, c.chapter, '일')}</tr>`).join('')
     const sample = growth ? `<details class="bl-growth-sample"><summary>대표 유저 한 명의 진행(구매 금화로 돌파) · 시나리오별</summary><table class="bl-table"><thead><tr><th>#</th><th>사건</th><th>적</th><th>출전 무장</th><th>승률</th><th>받은 금화</th><th>더한 금화</th></tr></thead><tbody>${growth.sample.rows.map(row => `<tr class="${row.added ? 'is-wall' : ''}"><td>${row.n}</td><td>${esc(row.title)}</td><td>Lv.${row.enemyLevel}</td><td>${esc(row.team)}</td><td>${pct(row.winRate)}</td><td>+${row.goldEarned}</td><td>${row.added ? `+${row.added}` : ''}</td></tr>`).join('')}</tbody></table></details>` : ''
     return `<section class="bl-card bl-growth"><h3>성장 곡선 · 시나리오 금화로 어디까지 크는가</h3>
-      <p class="bl-note">시나리오를 처음부터 순서대로 깨며 받은 금화를 병서·은전으로 바꿔 출전 무장 레벨을 올리고, 옥패로는 무장을 모집합니다(게임과 같은 보상표·비용·모집 확률·전투 규칙). 승률 50% 미만이면 「정체」로 보고, 넘을 때까지 금화(5개씩) 또는 하루치 플레이를 더합니다. 시작은 3등급 무장 3명, 조작은 예고 60% 대응 기준입니다.</p>
+      <p class="bl-note">시나리오를 처음부터 순서대로 깨며 받은 금화를 병서·은전으로 바꿔 출전 무장 레벨을 올리고, 옥패로는 무장을 모집합니다(게임과 같은 보상표·비용·모집 확률·전투 규칙). 승률 50% 미만이면 ‘정체’로 보고, 넘을 때까지 금화(5개씩) 또는 하루치 플레이를 더합니다. 시작은 3등급 무장 3명, 조작은 예고 60% 대응 기준입니다.</p>
       <table class="bl-table bl-growth-table"><thead>${head}</thead><tbody>${body}</tbody></table>
       <p class="bl-note">무료 플레이 하루 = 일일·주간 임무(주간은 ÷7) + 일반 전투 보상 ${REPEAT_BATTLE_DAILY_LIMIT}회 + 수도 내정 수확 → 은전 ${daily.silver.toLocaleString('ko-KR')} · 병서 ${daily.manuals} · 옥패 ${daily.honor.toLocaleString('ko-KR')}. 영토전은 하루 최종 세력전 1승(금화 40)을 더한 경우입니다. 칸의 숫자는 ${growth ? `유저 ${growth.users}명` : '여러 유저'}의 중앙값, 괄호는 25~75% 범위입니다(모집 운에 따라 차이가 큽니다).</p>
-      ${growth ? sample : '<p class="bl-note">「성장 곡선 계산」을 누르면 정체 구간과 돌파에 필요한 금화·일수를 계산합니다(1~2분).</p>'}
+      ${growth ? sample : '<p class="bl-note">‘성장 곡선 계산’을 누르면 정체 구간과 돌파에 필요한 금화·일수를 계산합니다(1~2분).</p>'}
     </section>`
   }
 

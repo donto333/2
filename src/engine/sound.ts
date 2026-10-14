@@ -606,7 +606,7 @@ export class SoundEngine {
     oscs.forEach(o => { o.start(t); o.stop(end + 0.12) })
     oscs[0].onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
   }
-  /** 합창 「아」: 톱니파를 모음 공명(800 · 1150 · 2800Hz)으로 걸러 사람 목소리처럼, 천천히 들어온다 */
+  /** 합창 ‘아’: 톱니파를 모음 공명(800 · 1150 · 2800Hz)으로 걸러 사람 목소리처럼, 천천히 들어온다 */
   choir(out: AudioNode, midis: number[], t: number, dur: number, vol: number): void {
     const ctx = this.ctx!
     const g = ctx.createGain(), sum = ctx.createGain()
@@ -807,7 +807,7 @@ export class SoundEngine {
     }
     if (grand) this.choir(out, [55, 62, 67, 71], t + 0.4, 3.2, 0.12)
   }
-  /** 등장 연출(5성 「천명 강림」 · 전설/신화 장비): 합창이 열리고 맑은 오음계가 올라간다 */
+  /** 등장 연출(5성 ‘천명 강림’ · 전설/신화 장비): 합창이 열리고 맑은 오음계가 올라간다 */
   heaven(level: number): void {
     if (!this.ceremonyReady()) return
     this.duckFor(7000)

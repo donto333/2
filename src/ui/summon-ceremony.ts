@@ -1,4 +1,4 @@
-// 무장 모집·장비 뽑기 연출: 의식(기 모으기 → 균열 → 섬광) → 최고 등급이면 등장 연출(5등급 「천명 강림」, 전설·신화 장비) → 결과
+// 무장 모집·장비 뽑기 연출: 의식(기 모으기 → 균열 → 섬광) → 최고 등급이면 등장 연출(5등급 ‘천명 강림’, 전설·신화 장비) → 결과
 // 화면 전체를 덮는 층은 document.body에 붙여, 게임 화면이 다시 그려져도 끊기지 않게 한다.
 // 소리는 Web Audio로 직접 합성한다(파일 없이, 모집 버튼을 누른 뒤라 브라우저가 허용).
 import type { Equipment, EquipmentGrade, General } from '../game/strategy'
@@ -94,7 +94,7 @@ function dropLater(layer: HTMLElement | null): void {
 
 interface Spotlight { stamp: string; grade: string; name: string; sub: string; extra: string; portrait?: string; image?: string; color: string }
 
-/** 최고 등급 등장 연출(5등급 무장 「천명 강림」, 전설·신화 장비). 계속을 누르거나 잠시 뒤 넘어간다 */
+/** 최고 등급 등장 연출(5등급 무장 ‘천명 강림’, 전설·신화 장비). 계속을 누르거나 잠시 뒤 넘어간다 */
 async function spotlight(item: Spotlight, level = 5): Promise<void> {
   const reduced = effectsSetting() === 'reduced'
   const layer = document.createElement('div')

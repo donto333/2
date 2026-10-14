@@ -180,7 +180,7 @@ export class TerritoryMapController {
     this.viewport?.closest('.territory-map')?.classList.toggle('is-fullscreen', on)
     document.body.classList.toggle('map-fullscreen-open', on)
     const button = this.viewport?.querySelector<HTMLElement>('[data-map-action="fullscreen"]')
-    if (button) { button.textContent = on ? '✕' : '⛶'; button.setAttribute('aria-label', on ? '전체 화면 닫기' : '지도 전체 화면') }
+    if (button) { button.textContent = on ? '✕' : '□'; button.setAttribute('aria-label', on ? '전체 화면 닫기' : '지도 전체 화면') }
     requestAnimationFrame(() => this.apply())
   }
 

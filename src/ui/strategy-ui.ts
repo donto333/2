@@ -67,9 +67,9 @@ const MAP_REGION_LABELS: ReadonlyArray<{ id: string; name: string; hanja: string
   { id: 'jiaozhou', name: '교주', hanja: '交州', x: 48.1, y: 81.0 },
 ]
 
-/** 휴대폰 하단 탭에 늘 보이는 메뉴(나머지는 「더보기」) */
+/** 휴대폰 하단 탭에 늘 보이는 메뉴(나머지는 ‘더보기’) */
 const MOBILE_TABS: Section[] = ['overview', 'roster', 'formation', 'recruit', 'battle']
-/** 휴대폰에서 쓰는 짧은 메뉴 이름(한·영을 직접 고른다: 「장비」 같은 말이 사전에서 인물 이름으로 바뀌지 않게) */
+/** 휴대폰에서 쓰는 짧은 메뉴 이름(한·영을 직접 고른다: ‘장비’ 같은 말이 사전에서 인물 이름으로 바뀌지 않게) */
 const SHORT_NAV: Record<string, [string, string]> = {
   overview: ['본영', 'Base'], roster: ['무장', 'Generals'], codex: ['도감', 'Codex'], formation: ['편성', 'Lineup'], recruit: ['모집', 'Recruit'], equipment: ['장비', 'Gear'], research: ['연구', 'Research'], territory: ['영토', 'Territory'],
   battle: ['전투', 'Battle'], duel: ['대련', 'Duel'], raid: ['레이드', 'Raid'], rank: ['랭킹', 'Ranks'], board: ['게시판', 'Board'], shop: ['상점', 'Shop'], updates: ['소식', 'News'], account: ['계정', 'Account'], admin: ['관리', 'Admin'], balance: ['밸런스', 'Balance'],
@@ -429,7 +429,7 @@ export class StrategyUI {
         return
       }
     }
-    // 「모집 · 장비」 메뉴에 새로 들어오면 언제나 무장 모집 탭부터
+    // ‘모집 · 장비’ 메뉴에 새로 들어오면 언제나 무장 모집 탭부터
     if (state.section === 'recruit' && this.lastSection !== 'recruit') this.summonTab = 'generals'
     if (state.section !== 'equipment') this.equipmentScrollTop = 0
     if (state.section !== 'battle') this.battleViewActive = false
@@ -457,7 +457,7 @@ export class StrategyUI {
     this.tidyChrome()
   }
 
-  /** 꾸밈 기호(→ ↗ ✦ ↻ …)를 버튼에서 걷어 내고, 제목 아래 설명 문장은 ⓘ 안으로 접는다 */
+  /** 꾸밈 기호(→ ↗ ✦ ↻ …)를 버튼에서 걷어 내고, 제목 아래 설명 문장은 (i) 안으로 접는다 */
   private tidyChrome(): void {
     const ornament = /^[\s→↗✦↻✎⚒⌁⌖›»]+$/
     this.root.querySelectorAll<HTMLElement>('.main-content button, .main-content a.action-button, .topbar button').forEach(button => {
@@ -793,7 +793,7 @@ export class StrategyUI {
     const warn = q('[data-bt-enemy-warn]')
     if (warn) {
       warn.hidden = !snapshot.enemyWarning
-      if (snapshot.enemyWarning) warn.textContent = `적장 스킬 예고 · ${snapshot.enemyWarning.general}의 「${snapshot.enemyWarning.name}」 · 철벽 태세로 막거나 같은 레인 무장의 스킬로 끊으십시오`
+      if (snapshot.enemyWarning) warn.textContent = `적장 스킬 예고 · ${snapshot.enemyWarning.general}의 ‘${snapshot.enemyWarning.name}’ · 철벽 태세로 막거나 같은 레인 무장의 스킬로 끊으십시오`
     }
     section.classList.toggle('is-enemy-warning', Boolean(snapshot.enemyWarning))
     snapshot.units.forEach(unit => {
@@ -960,14 +960,14 @@ export class StrategyUI {
   }
 
   private navButton(section: Section, icon: string, label: string, current: Section, badge = ''): string {
-    // 배지: 숫자는 금테 작은 상자, 새 소식(NEW)은 붉은 「새」 표시
+    // 배지: 숫자는 금테 작은 상자, 새 소식(NEW)은 붉은 ‘새’ 표시
     const mark = !badge ? '' : badge === 'NEW' ? '<b class="nav-badge nav-badge--new">새</b>' : `<b class="nav-badge">${badge}</b>`
     const coach = this.coachSection === section && current !== section ? 'nav-coach' : ''
     const primary = MOBILE_TABS.includes(section) ? 'nav-button--primary' : ''
     return `<button class="nav-button ${primary} ${current === section ? 'is-active' : ''} ${coach}" data-action="section" data-section="${section}" data-nav><span class="nav-icon">${icon}</span><span class="nav-label">${label}</span>${shortNavLabel(section)}${mark}</button>`
   }
 
-  /** 휴대폰 하단 탭의 「더보기」: 주요 5개 밖의 메뉴를 펼친다 */
+  /** 휴대폰 하단 탭의 ‘더보기’: 주요 5개 밖의 메뉴를 펼친다 */
   private navMoreButton(state: StrategyState): string {
     const outside = !MOBILE_TABS.includes(state.section)
     const coach = this.coachSection && !MOBILE_TABS.includes(this.coachSection as Section) && this.coachSection !== state.section ? 'nav-coach' : ''
@@ -1217,7 +1217,7 @@ export class StrategyUI {
     return `<section class="page-section page-section--equipment"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>장비 관리</h1><p class="heading-copy">무기·갑옷·장신구를 장착하고 강화해 무장의 네 가지 전투 능력과 세트 능력을 끌어올리십시오.</p></div><div class="section-counter"><span>보유 장비</span><strong>${equipmentInventoryCount(state)}</strong></div></div>${equipmentHero}<div class="equipment-layout"><div><div class="equipment-toolbar glass-card"><div><span class="eyebrow">장착 무장</span><h3>장착 무장</h3><small>장비 반영 전투력 높은 순</small></div><button class="mini-action mini-action--deploy equipment-auto" data-action="auto-equip" title="출전 무장 3명에게 가장 좋은 장비 조합을 장착">출전 무장 자동 장착</button><select data-action="equipment-general">${selectableGenerals.map(general => `<option value="${general.id}" ${general.id === selected?.id ? 'selected' : ''}>${general.name} · ${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</option>`).join('')}</select></div><div class="equipment-slots glass-card">${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => this.equipmentSlot(type, loadout[type], state, selected?.id ?? '')).join('')}</div>${selected ? this.equipmentPresetBar(state, selected.id) : ''}${setBonusPanel}${recent}</div><div><div class="equipment-inventory"><div class="equipment-inventory-toolbar"><div class="card-header"><div><span class="eyebrow">보관 장비</span><h3>보유 장비</h3></div><span class="rate-note">${state.equipmentInventory.length}줄 · ${formatNumber(equipmentInventoryCount(state))}개</span></div><div class="equipment-sort-controls"><label>정렬 <select data-action="equipment-sort"><option value="grade" ${this.equipmentSort === 'grade' ? 'selected' : ''}>등급</option><option value="level" ${this.equipmentSort === 'level' ? 'selected' : ''}>강화 레벨</option><option value="name" ${this.equipmentSort === 'name' ? 'selected' : ''}>이름</option></select></label><button class="sort-direction" data-action="equipment-sort-direction">${this.equipmentSortDescending ? '↓' : '↑'}</button></div></div><div class="equipment-manage">${this.equipmentManageBar(state)}</div>${this.equipmentVirtualList(state, selected?.id ?? '', equipped)}</div></div></div></section>`
   }
 
-  /** 모집 · 장비 > 장비 뽑기: 뽑기만(장착·강화·보유 목록은 「장비 관리」에서). 무장 모집과 같은 짜임 */
+  /** 모집 · 장비 > 장비 뽑기: 뽑기만(장착·강화·보유 목록은 ‘장비 관리’에서). 무장 모집과 같은 짜임 */
   private equipmentDrawSection(state: StrategyState): string {
     const rates: Array<[EquipmentGrade, string]> = [['legendary', '5%'], ['unique', '12%'], ['rare', '28%'], ['normal', '55%']]
     const rank: Record<EquipmentGrade, number> = { normal: 1, rare: 2, unique: 3, legendary: 4, mythic: 5 }
@@ -1410,7 +1410,7 @@ export class StrategyUI {
 
   private mapViewport(state: StrategyState): string {
     const home = FACTION_CAPITALS[state.faction]
-    return `<div class="map-viewport" data-map-viewport data-lod="far"><div class="map-world map-canvas" data-map-world><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}${MAP_REGION_LABELS.map(region => `<span class="map-label map-label--province" style="left:${region.x}%;top:${region.y}%">${region.name}</span>`).join('')}</div><div class="map-controls"><button type="button" data-map-action="zoom-in" data-map-zoom-in aria-label="확대">＋</button><button type="button" data-map-action="zoom-out" data-map-zoom-out aria-label="축소">－</button><button type="button" data-map-action="home" data-home="${home}" aria-label="내 영토로">⌖</button><button type="button" data-map-action="fullscreen" aria-label="지도 전체 화면">${this.territoryMap.fullscreen ? '✕' : '⛶'}</button></div><div class="map-hint"><span class="hint-touch">두 손가락으로 확대 · 끌어서 이동 · 눌러서 도시 선택</span><span class="hint-mouse">휠로 확대 · 끌어서 이동 · 눌러서 도시 선택</span></div></div>`
+    return `<div class="map-viewport" data-map-viewport data-lod="far"><div class="map-world map-canvas" data-map-world><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}${MAP_REGION_LABELS.map(region => `<span class="map-label map-label--province" style="left:${region.x}%;top:${region.y}%">${region.name}</span>`).join('')}</div><div class="map-controls"><button type="button" data-map-action="zoom-in" data-map-zoom-in aria-label="확대">+</button><button type="button" data-map-action="zoom-out" data-map-zoom-out aria-label="축소">−</button><button type="button" data-map-action="home" data-home="${home}" aria-label="내 영토로">◎</button><button type="button" data-map-action="fullscreen" aria-label="지도 전체 화면">${this.territoryMap.fullscreen ? '✕' : '□'}</button></div><div class="map-hint"><span class="hint-touch">두 손가락으로 확대 · 끌어서 이동 · 눌러서 도시 선택</span><span class="hint-mouse">휠로 확대 · 끌어서 이동 · 눌러서 도시 선택</span></div></div>`
   }
 
   private attachTerritoryMap(state: StrategyState): void {
@@ -1599,7 +1599,7 @@ export class StrategyUI {
       : status === 'locked' ? `<span class="research-lock">${node.tier - 1}단계 완료 필요</span>`
       : status === 'busy' ? '<span class="research-lock">다른 연구 진행 중</span>'
       : `<button class="mini-action mini-action--research" data-action="research" data-research="${node.id}">${status === 'switch' ? '이쪽으로 바꾸기' : '연구 시작'} <span>→</span></button>`
-    return `<article class="research-node is-${status}"><div class="research-node-top"><span class="research-tier">${node.tier}단계${node.choice ? ` · ${node.choice === 'a' ? '갑' : '을'}` : ''}</span><span class="research-time">⏱ ${formatDuration(node.durationMs)}</span></div><h4>${node.name}</h4><p>${node.description}</p><div class="research-node-footer"><span class="research-cost ${status === 'available' && !canPay(state, node.cost) ? 'is-short' : ''}">${researchCost(node)}</span>${footer}</div>${status === 'switch' ? '<small class="research-switch-note">바꾸면 같은 단계의 다른 연구 효과는 사라집니다.</small>' : ''}</article>`
+    return `<article class="research-node is-${status}"><div class="research-node-top"><span class="research-tier">${node.tier}단계${node.choice ? ` · ${node.choice === 'a' ? '갑' : '을'}` : ''}</span><span class="research-time">${formatDuration(node.durationMs)}</span></div><h4>${node.name}</h4><p>${node.description}</p><div class="research-node-footer"><span class="research-cost ${status === 'available' && !canPay(state, node.cost) ? 'is-short' : ''}">${researchCost(node)}</span>${footer}</div>${status === 'switch' ? '<small class="research-switch-note">바꾸면 같은 단계의 다른 연구 효과는 사라집니다.</small>' : ''}</article>`
   }
 
 
@@ -1640,7 +1640,7 @@ export class StrategyUI {
     // 유형별 성장: 레벨업 때 가장 많이 오르는 능력치(무력형=무력, 책사형=모략, 방어·지휘형=통솔)
     const weights = growthWeights(general)
     const grow = stats.reduce((best, row) => weights[row[2]] > weights[best[2]] ? row : best)[2]
-    return stats.map(([label, value, key]) => `<div class="${value === top ? 'is-top' : ''}${key === grow ? ' is-grow' : ''}"><span>${label}${key === grow ? '<sup title="레벨업 때 가장 많이 오릅니다">▲성장</sup>' : ''}</span><i><b style="width:${Math.min(100, value / base * 100).toFixed(1)}%"></b></i><em>${value}</em></div>`).join('')
+    return stats.map(([label, value, key]) => `<div class="${value === top ? 'is-top' : ''}${key === grow ? ' is-grow' : ''}"><span>${label}${key === grow ? '<sup title="레벨업 때 가장 많이 오릅니다">▲</sup>' : ''}</span><i><b style="width:${Math.min(100, value / base * 100).toFixed(1)}%"></b></i><em>${value}</em></div>`).join('')
   }
 
   private skillDetailPanel(general: General): string {
@@ -1722,7 +1722,7 @@ export class StrategyUI {
         const has = owned.has(id)
         return `<div class="combo-member ${id === anchorId ? 'is-anchor' : ''} ${has ? '' : 'is-unowned'}" style="--accent:${gradeColor(general)}">${this.portrait(general, 'combo-member__portrait')}<div><small>${lanes[lane]}</small><strong>${escapeHtml(general.name)}</strong><span>${general.role} · ${GRADE_META[general.grade].label}</span>${has ? '' : '<em class="combo-edge is-dis">미보유</em>'}</div></div>`
       }).join('')
-      const tags = [combo.bond ? `<span class="combo-tag combo-tag--bond">인연 「${escapeHtml(combo.bond.name)}」</span>` : '', ...combo.keys.map(key => `<span class="combo-tag">${escapeHtml(key)}</span>`)].join('')
+      const tags = [combo.bond ? `<span class="combo-tag combo-tag--bond">인연 ‘${escapeHtml(combo.bond.name)}’</span>` : '', ...combo.keys.map(key => `<span class="combo-tag">${escapeHtml(key)}</span>`)].join('')
       const isCurrent = combo.ids.join(',') === current
       const action = isCurrent ? '<span class="combo-current">현재 편성</span>' : missing.length ? `<span class="combo-missing">미보유 ${missing.length}명</span>` : `<button class="mini-action mini-action--deploy" data-action="apply-combo" data-ids="${combo.ids.join(',')}">이 덱으로 편성</button>`
       return `<li class="combo-row combo-row--${combo.archetype} ${isCurrent ? 'is-current' : ''}"><div class="combo-type"><b>${meta.label}</b><small>${meta.desc}</small></div><div class="combo-members">${members}</div><div class="combo-side"><div class="combo-tags">${tags}</div>${action}</div></li>`
@@ -1737,7 +1737,7 @@ export class StrategyUI {
 
   private formationEnemyNote(state: StrategyState): string {
     const next = this.nextScenario(state)
-    return next ? `상성은 다음 시나리오 「${escapeHtml(next.title)}」의 적장 기준입니다. 기병은 궁병에, 궁병은 보병에, 보병은 기병에 강합니다.` : '대기 무장의 편성 버튼으로 빈 자리를 채우십시오.'
+    return next ? `상성은 다음 시나리오 ‘${escapeHtml(next.title)}’의 적장 기준입니다. 기병은 궁병에, 궁병은 보병에, 보병은 기병에 강합니다.` : '대기 무장의 편성 버튼으로 빈 자리를 채우십시오.'
   }
 
   private formationSlot(state: StrategyState, index: number): string {
@@ -2033,16 +2033,17 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
-      ['2026.10.14', '고레벨 전투 렉 수정', '레벨이 높을수록 거의 모든 타격이 「강타」로 판정돼 화면이 계속 잠깐씩 멈추던(히트스톱) 문제를 고쳤습니다. 타격 연출 기준을 무장 병력 대비 비율로 바꾸고, 멈춤이 짧은 시간에 몰리지 않게 상한을 두었습니다(Lv200 레이드 30초 기준 멈춤 41초 → 4초).', '완료', 'jade'],
-      ['2026.10.14', '5성 팡파르 · 웅장한 전투 음악', '무장 모집·장비 뽑기에서 5성 무장이나 신화 장비가 나오면 균열 순간 북이 빨라지며 소리가 부풀어 오르고, 섬광과 함께 징 · 큰북 · 금관 팡파르 · 합창 · 쏟아지는 방울 소리가 울립니다(전설 장비는 한 단계 작게). 「천명 강림」 연출에도 합창과 금관이 깔립니다. 전투 · 대련 · 레이드 음악에는 금관 합주 · 합창 · 현악 반복음과 큰 전당 울림을 더하고, 큰북을 겹쳐 무게를 키웠습니다. 2막부터 금관이 가락을 함께 연주하고, 승리 · 패배 곡에도 금관과 합창이 들어갑니다.', '완료', 'jade'],
-      ['2026.10.14', '유저 대련: 스킬 자동 · 난이도 완화', '대련 전투 상단에 「스킬 자동」 버튼이 생겼습니다(기본 켬). 스킬이 준비되면 알아서 쓰고, 적 예고 대응만 직접 하면 됩니다. 예고를 잘 막아도 스킬을 손으로 쓰지 못하면 병력이 먼저 무너지던 문제를 줄이려고 대련 상대 보정도 낮췄습니다(사기 ×1.6→×1.45, 피해 ×1.7→×1.55, 스킬 쿨다운 ×0.8→×0.85).', '완료', 'jade'],
+      ['2026.10.15', '모바일 글자 다듬기', '한글이 낱말 중간에서 줄이 바뀌던 것("이기세/요")을 낱말 단위로 바꿨습니다. 글꼴에 없던 기호(◆ ✦ ✕ ← 따옴표 등)를 게임에 넣어 기기마다 다른 글꼴로 튀지 않게 했고, 낫표 대신 ‘ ’ 따옴표를 씁니다. 11px 이하 글자를 12px로, 휴대폰 본문을 14px로 키우고 글자 굵기를 3단계로 정리했습니다. 카드·목록 제목은 고딕으로 통일했습니다. 작은 버튼과 글자 링크의 누르는 범위를 넓히고, 편성 화면에서 ‘출정 준비 완료’가 설명 위에 겹치던 것을 고쳤습니다.', '완료', 'jade'],
+      ['2026.10.14', '고레벨 전투 렉 수정', '레벨이 높을수록 거의 모든 타격이 ‘강타’로 판정돼 화면이 계속 잠깐씩 멈추던(히트스톱) 문제를 고쳤습니다. 타격 연출 기준을 무장 병력 대비 비율로 바꾸고, 멈춤이 짧은 시간에 몰리지 않게 상한을 두었습니다(Lv200 레이드 30초 기준 멈춤 41초 → 4초).', '완료', 'jade'],
+      ['2026.10.14', '5성 팡파르 · 웅장한 전투 음악', '무장 모집·장비 뽑기에서 5성 무장이나 신화 장비가 나오면 균열 순간 북이 빨라지며 소리가 부풀어 오르고, 섬광과 함께 징 · 큰북 · 금관 팡파르 · 합창 · 쏟아지는 방울 소리가 울립니다(전설 장비는 한 단계 작게). ‘천명 강림’ 연출에도 합창과 금관이 깔립니다. 전투 · 대련 · 레이드 음악에는 금관 합주 · 합창 · 현악 반복음과 큰 전당 울림을 더하고, 큰북을 겹쳐 무게를 키웠습니다. 2막부터 금관이 가락을 함께 연주하고, 승리 · 패배 곡에도 금관과 합창이 들어갑니다.', '완료', 'jade'],
+      ['2026.10.14', '유저 대련: 스킬 자동 · 난이도 완화', '대련 전투 상단에 ‘스킬 자동’ 버튼이 생겼습니다(기본 켬). 스킬이 준비되면 알아서 쓰고, 적 예고 대응만 직접 하면 됩니다. 예고를 잘 막아도 스킬을 손으로 쓰지 못하면 병력이 먼저 무너지던 문제를 줄이려고 대련 상대 보정도 낮췄습니다(사기 ×1.6→×1.45, 피해 ×1.7→×1.55, 스킬 쿨다운 ×0.8→×0.85).', '완료', 'jade'],
       ['2026.10.14', '배경음악 · 효과음', '화면마다 배경음악이 흐릅니다: 본영(잔잔한 가야금과 피리), 전투(큰북과 호궁 · 막이 오를수록 북이 거세짐), 유저 대련, 주간 레이드(무거운 북과 징). 승리 · 패배 때는 짧은 곡이 울립니다. 버튼 · 강화 · 장비 · 보상 · 연구 · 건물 소리와 전투의 공격 · 피격 · 스킬(돌격 · 사격 · 계략 · 통솔 · 수호 · 치유마다 다름) · 적 스킬 예고 · 막 전환 소리도 넣었습니다. 위쪽 🔊 버튼으로 모든 소리를 끄고 켜고, 계정 → 이 기기 설정에서 배경음악과 효과음 크기를 따로 고를 수 있습니다.', '완료', 'jade'],
-      ['2026.10.14', '더보기 메뉴 레이드 이름 표시', '휴대폰 하단 「더보기」 메뉴에서 주간 레이드 아이콘 밑에 이름이 빠져 있던 것을 고쳤습니다. 이제 「레이드」로 표시됩니다.', '완료', 'jade'],
-      ['2026.10.14', '시나리오 단계별 진행', '시나리오 화면이 지금 도전할 단계 하나를 크게 보여 줍니다. ← 이전 / 다음 → 버튼으로 단계를 넘기고, 아직 깨지 않은 단계 너머는 잠겨 있습니다. 단계를 깨면 다음 단계로 자동으로 넘어가고, 58개 전체 목록은 「전체 시나리오 목록」을 눌러 펼칠 때만 보입니다.', '완료', 'jade'],
-      ['2026.10.14', '보유 무장 1·2·3군 보기', '보유 무장 화면에서 1군 · 2군 · 3군을 나눠 보여 줍니다. 위쪽 1군·2군·3군 버튼(인원·전투력 표시)을 누르면 그 군으로 바로 이동하고, 2·3군 무장 그림에는 「2군 · 좌측」처럼 소속과 자리가 표시됩니다. 대기 목록에는 어느 군에도 없는 무장만 남고, 2·3군 무장의 버튼은 「1군으로」입니다.', '완료', 'jade'],
-      ['2026.10.14', '모바일 아래쪽 잘림 수정', '휴대폰 브라우저·앱 안 화면에서 주소창·상단 바 높이만큼 화면 아래가 잘리던 문제를 고쳤습니다. 화면 높이를 실제로 보이는 높이에 맞추고(전투 화면·모집 결과·장비 결과 포함), 10명 모집 결과·전투 결과·출전 교체 창은 아래 메뉴보다 위에 떠서 「10명 다시 뽑기」「결과 확인 완료」 같은 아래 버튼이 가려지지 않습니다.', '완료', 'jade'],
-      ['2026.10.14', '레이드 2·3군 출전 수정', '로그인한 계정은 다시 접속하면 2·3군 편성이 사라져 레이드에 1군만 나가던 문제를 고쳤습니다(서버 새 칸이 없어도 장착 정보와 함께 저장). 군 사이에는 방금 군의 피해·합계와 다음 출전 군을 보여 주고 5초 뒤 자동으로 이어 출전합니다. 전투 화면 위에 「주간 레이드 · 2군 2/3」처럼 지금 싸우는 군이 보이고, 레이드 중 전투 시작 버튼은 다음 군 출전으로 이어집니다. 2·3군이 비어 있으면 출전 전에 남은 무장으로 자동 편성할지 묻습니다.', '완료', 'jade'],
-      ['2026.10.14', '1·2·3군 편성 · 주간 레이드', '출전 편성에 1군·2군·3군 탭이 생겼습니다. 한 무장은 한 군에만 설 수 있고, 2·3군도 자동 편성·자동 장착(다른 군 장비는 건드리지 않음)·1군과 바꾸기를 할 수 있습니다. 새 콘텐츠 「주간 레이드」: 병력이 줄지 않는 보스 군단에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화, 하루 3회. 보스 레벨은 덱을 저장한 지휘관이 20명 이하면 Lv30, 그보다 많으면 전력 상위 300명의 평균 레벨입니다. 3막 사기를 무너뜨릴 때마다 큰 피해 보너스가 붙습니다. 순위 보상(다음 주에 받기): 1위 금화 200·낙양 강화석 2 · 2위 금화 200·강화석 1 · 3위 금화 100·강화석 1 · 4~10위 금화 100 · 11~50위 80 · 51~100위 60 · 101~200위 40 · 201~300위 20 · 301위부터 10. 군 전력으로 낼 수 없는 피해 기록은 서버가 잘라 냅니다. 게스트는 연습 모드(기록·보상 없음)입니다.', '완료', 'jade'],
+      ['2026.10.14', '더보기 메뉴 레이드 이름 표시', '휴대폰 하단 ‘더보기’ 메뉴에서 주간 레이드 아이콘 밑에 이름이 빠져 있던 것을 고쳤습니다. 이제 ‘레이드’로 표시됩니다.', '완료', 'jade'],
+      ['2026.10.14', '시나리오 단계별 진행', '시나리오 화면이 지금 도전할 단계 하나를 크게 보여 줍니다. ← 이전 / 다음 → 버튼으로 단계를 넘기고, 아직 깨지 않은 단계 너머는 잠겨 있습니다. 단계를 깨면 다음 단계로 자동으로 넘어가고, 58개 전체 목록은 ‘전체 시나리오 목록’을 눌러 펼칠 때만 보입니다.', '완료', 'jade'],
+      ['2026.10.14', '보유 무장 1·2·3군 보기', '보유 무장 화면에서 1군 · 2군 · 3군을 나눠 보여 줍니다. 위쪽 1군·2군·3군 버튼(인원·전투력 표시)을 누르면 그 군으로 바로 이동하고, 2·3군 무장 그림에는 ‘2군 · 좌측’처럼 소속과 자리가 표시됩니다. 대기 목록에는 어느 군에도 없는 무장만 남고, 2·3군 무장의 버튼은 ‘1군으로’입니다.', '완료', 'jade'],
+      ['2026.10.14', '모바일 아래쪽 잘림 수정', '휴대폰 브라우저·앱 안 화면에서 주소창·상단 바 높이만큼 화면 아래가 잘리던 문제를 고쳤습니다. 화면 높이를 실제로 보이는 높이에 맞추고(전투 화면·모집 결과·장비 결과 포함), 10명 모집 결과·전투 결과·출전 교체 창은 아래 메뉴보다 위에 떠서 ‘10명 다시 뽑기’‘결과 확인 완료’ 같은 아래 버튼이 가려지지 않습니다.', '완료', 'jade'],
+      ['2026.10.14', '레이드 2·3군 출전 수정', '로그인한 계정은 다시 접속하면 2·3군 편성이 사라져 레이드에 1군만 나가던 문제를 고쳤습니다(서버 새 칸이 없어도 장착 정보와 함께 저장). 군 사이에는 방금 군의 피해·합계와 다음 출전 군을 보여 주고 5초 뒤 자동으로 이어 출전합니다. 전투 화면 위에 ‘주간 레이드 · 2군 2/3’처럼 지금 싸우는 군이 보이고, 레이드 중 전투 시작 버튼은 다음 군 출전으로 이어집니다. 2·3군이 비어 있으면 출전 전에 남은 무장으로 자동 편성할지 묻습니다.', '완료', 'jade'],
+      ['2026.10.14', '1·2·3군 편성 · 주간 레이드', '출전 편성에 1군·2군·3군 탭이 생겼습니다. 한 무장은 한 군에만 설 수 있고, 2·3군도 자동 편성·자동 장착(다른 군 장비는 건드리지 않음)·1군과 바꾸기를 할 수 있습니다. 새 콘텐츠 ‘주간 레이드’: 병력이 줄지 않는 보스 군단에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화, 하루 3회. 보스 레벨은 덱을 저장한 지휘관이 20명 이하면 Lv30, 그보다 많으면 전력 상위 300명의 평균 레벨입니다. 3막 사기를 무너뜨릴 때마다 큰 피해 보너스가 붙습니다. 순위 보상(다음 주에 받기): 1위 금화 200·낙양 강화석 2 · 2위 금화 200·강화석 1 · 3위 금화 100·강화석 1 · 4~10위 금화 100 · 11~50위 80 · 51~100위 60 · 101~200위 40 · 201~300위 20 · 301위부터 10. 군 전력으로 낼 수 없는 피해 기록은 서버가 잘라 냅니다. 게스트는 연습 모드(기록·보상 없음)입니다.', '완료', 'jade'],
       ['2026.10.14', '장비 보관·관리', '장비 관리에 보관함 필터(부위·세트·등급·장착 중/미장착/잠금)와 장착 무장 표시(예: 관우 장착)를 넣었습니다. 장비마다 잠금을 걸 수 있고 신화장비는 처음부터 잠겨 있습니다. 남는 장비는 분해해 옥패·철을 돌려받습니다(노멀 6·30 · 레어 15·60 · 유니크 40·120 · 전설 100·250, 강화한 장비는 강화 비용의 50%도 환급). 노멀·레어 이하 일괄 분해는 잠금·장착·강화한 장비와 신화장비를 남깁니다. 무장마다 장비 프리셋 3개를 저장해 시나리오·대련·공성용 조합을 한 번에 바꿀 수 있습니다. 보관 장비가 300줄을 넘으면 정리를 안내합니다.', '완료', 'jade'],
       ['2026.10.14', '신화장비 조각 개편', '신화장비 1개에 필요한 조각이 20개에서 100개로 늘었습니다. 대신 대련 승리 보상이 난이도에 따라 달라집니다: 쉬움 1개 · 보통 2개 · 어려움 3개(하루 5회). 실제 유저 상대는 내 덱보다 전력이 8% 이상 세면 어려움, 8% 이상 약하면 쉬움, 그 사이는 보통입니다. 상대 카드마다 난이도와 보상 조각이 표시됩니다. 난이도(승률)는 그대로입니다.', '완료', 'jade'],
       ['2026.10.14', '유저 대련 난이도', '대련 상대 덱은 AI가 움직여 예고 대응·연계·전술을 쓰지 못해, 전력이 2배인 상대에게도 대부분 이기던 문제를 고쳤습니다. 대련에서만 상대의 사기 최대치 ×1.6, 주는 피해 ×1.7, 스킬 쿨다운 ×0.8로 보정합니다. 훈련 상대는 쉬움 85% · 보통 100% · 어려움 115% 전력이며, 예고 대응을 70% 맞히는 지휘관 기준 승률은 약 80% · 60% · 35%입니다(대응을 잘할수록 더 이깁니다).', '완료', 'jade'],
@@ -2058,24 +2059,24 @@ export class StrategyUI {
       ['2026.10.14', '무장 등급 재설정', '삼국지 속 역할과 비중에 맞춰 무장 등급을 다시 매겼습니다. 천명은 촉·위·오·군웅에서 4명씩(유비·제갈량·관우·조운 / 조조·사마의·장료·하후돈 / 손권·손책·주유·육손 / 여포·동탁·원소·장각)입니다. 이미 가진 무장도 새 등급으로 옮겨지고, 등급이 내려간 무장은 단계마다 옥패로 보상합니다(천명→명장 1,000 · 명장→정예 300 · 정예→용사 100 · 용사→신병 50).', '완료', 'jade'],
       ['2026.10.14', '명장·천명 무장 카드 오라', '보유 무장과 무장 도감에서 명장(4등급) 카드는 비취빛, 천명(5등급) 카드는 금빛 테두리 빛이 돌며 은은하게 숨쉬고, 천명 초상 위로는 금빛 불티가 피어오릅니다. 효과 줄임 설정에서는 빛만 남기고 움직임을 멈춥니다.', '완료', 'jade'],
       ['2026.10.14', '휴대폰 가로 화면 지원', '휴대폰을 가로로 눕혀도 쓰기 좋게 바꿨습니다. 메뉴는 왼쪽 아이콘 띠로 줄이고 상단바를 한 줄로 얇게 했습니다. 전투에서는 아군 무장을 왼쪽, 상대 무장을 오른쪽 세로 줄로 옮겨 전장이 넓게 보이고, 로그인 화면은 그림과 로그인 버튼을 나란히 놓았습니다.', '완료', 'jade'],
-      ['2026.10.14', '의미 없는 문구 정리', '상단의 「전술 사령부」를 지우고, 장 이름 대신 다음에 치를 전투(누르면 시나리오로 이동)를 보여 줍니다. 왼쪽 아래의 고정 문구 「옥패 07 · Lv.12」는 실제 보유 무장·영토 수로 바꿨고, PC 옆 메뉴에 빈 채로 보이던 휴대폰용 더보기 버튼을 숨겼습니다. 장비 칸·연구 갈래·도시 생산량에 남아 있던 기호도 그림으로 바꿨습니다.', '완료', 'jade'],
+      ['2026.10.14', '의미 없는 문구 정리', '상단의 ‘전술 사령부’를 지우고, 장 이름 대신 다음에 치를 전투(누르면 시나리오로 이동)를 보여 줍니다. 왼쪽 아래의 고정 문구 ‘옥패 07 · Lv.12’는 실제 보유 무장·영토 수로 바꿨고, PC 옆 메뉴에 빈 채로 보이던 휴대폰용 더보기 버튼을 숨겼습니다. 장비 칸·연구 갈래·도시 생산량에 남아 있던 기호도 그림으로 바꿨습니다.', '완료', 'jade'],
       ['2026.10.14', '로그인 화면 그림', '로그인 화면 위쪽에 제갈량·관우·여포·조조·손권을 담은 대표 그림을 넣고, 뒤에는 황혼의 관문 풍경을 깔았습니다.', '완료', 'jade'],
       ['2026.10.14', '전투 동작을 자연스럽게', '무장이 출발할 때 서서히 속도를 붙이고 멈출 때 미끄러지듯 섭니다. 공격은 살짝 당겼다가 빨라지며 베고 조금 더 밀고 나간 뒤 돌아오며, 맞으면 밀렸다가 되튕기고 강타일수록 화면이 잠깐 더 멈춥니다. 쓰러질 때는 무릎이 꺾이며 넘어가 흙먼지가 일고, 화면 흔들림도 부드러워졌습니다.', '완료', 'jade'],
-      ['2026.10.14', '장비 뽑기 화면 새 단장', '장비 뽑기 탭을 무장 모집과 같은 짜임으로 바꿨습니다. 무기·갑옷·장신구를 담은 「명장의 병기」 그림, 1회·10회 뽑기 버튼, 등급별 확률 막대, 최근 획득 장비를 보여 주고 장비 관리로 바로 갈 수 있습니다.', '완료', 'jade'],
-      ['2026.10.14', '모집·장비 정리', '「모집 · 장비」의 장비 뽑기 탭에는 뽑기(1회·10회, 확률, 최근 결과)만 남기고, 장착·강화·보유 목록은 「장비 관리」 메뉴로 모았습니다. 장비 관리에는 위쪽 모집 탭이 더 이상 나오지 않습니다.', '완료', 'jade'],
+      ['2026.10.14', '장비 뽑기 화면 새 단장', '장비 뽑기 탭을 무장 모집과 같은 짜임으로 바꿨습니다. 무기·갑옷·장신구를 담은 ‘명장의 병기’ 그림, 1회·10회 뽑기 버튼, 등급별 확률 막대, 최근 획득 장비를 보여 주고 장비 관리로 바로 갈 수 있습니다.', '완료', 'jade'],
+      ['2026.10.14', '모집·장비 정리', '‘모집 · 장비’의 장비 뽑기 탭에는 뽑기(1회·10회, 확률, 최근 결과)만 남기고, 장착·강화·보유 목록은 ‘장비 관리’ 메뉴로 모았습니다. 장비 관리에는 위쪽 모집 탭이 더 이상 나오지 않습니다.', '완료', 'jade'],
       ['2026.10.14', '무장 사진 고해상도', '무장 70명의 사진을 256×382에서 768×1146으로 키웠습니다(인공지능 업스케일러로 뭉개짐·네모 얼룩을 걷어 냄). 본영 대표 무장, 천명 강림, 무장 카드에서 더 선명하게 보입니다.', '완료', 'jade'],
       ['2026.10.14', '뽑기 결과는 기다린 뒤에', '뽑기를 누르면 약 2.6초 동안 기를 모으는 대기 연출이 먼저 나오고, 금이 가는 순간에야 등급 색이 드러납니다. 장비 뽑기의 가운데 그림도 결과와 상관없는 덩이쇠로 바꿨고, 결과 알림과 최근 획득 표시는 연출이 끝난 뒤에 나옵니다.', '완료', 'jade'],
-      ['2026.10.14', '무장 모집 · 장비 뽑기 연출', '무장 모집과 장비 뽑기에 연출을 더했습니다. 옥패(장비는 대장간 불꽃)에 기가 모이고 금이 간 뒤 섬광과 징 소리가 울리며, 최고 등급에 따라 빛의 색이 달라집니다. 5등급 무장이 나오면 빛기둥과 함께 무장 그림이 들어오는 「천명 강림」, 전설·신화 장비가 나오면 「장비 출현」 장면이 이어집니다. 10회 결과 카드는 한 장씩 뒤집히고, 최고 등급 카드는 금빛 테두리가 돕니다. 화면을 누르면 건너뛸 수 있습니다.', '완료', 'gold'],
-      ['2026.10.14', '처음 시작 안내 마지막 단계 수정', '「임무 보상 받기」의 바로 가기를 누르면 본영의 임무 칸으로 내려가 받을 수 있는 보상이 깜빡입니다. 이미 오늘·이번 주 임무 보상을 받은 계정은 이 단계가 바로 완료 처리됩니다.', '완료', 'jade'],
+      ['2026.10.14', '무장 모집 · 장비 뽑기 연출', '무장 모집과 장비 뽑기에 연출을 더했습니다. 옥패(장비는 대장간 불꽃)에 기가 모이고 금이 간 뒤 섬광과 징 소리가 울리며, 최고 등급에 따라 빛의 색이 달라집니다. 5등급 무장이 나오면 빛기둥과 함께 무장 그림이 들어오는 ‘천명 강림’, 전설·신화 장비가 나오면 ‘장비 출현’ 장면이 이어집니다. 10회 결과 카드는 한 장씩 뒤집히고, 최고 등급 카드는 금빛 테두리가 돕니다. 화면을 누르면 건너뛸 수 있습니다.', '완료', 'gold'],
+      ['2026.10.14', '처음 시작 안내 마지막 단계 수정', '‘임무 보상 받기’의 바로 가기를 누르면 본영의 임무 칸으로 내려가 받을 수 있는 보상이 깜빡입니다. 이미 오늘·이번 주 임무 보상을 받은 계정은 이 단계가 바로 완료 처리됩니다.', '완료', 'jade'],
       ['2026.10.14', '버튼을 눌러도 화면 고정', '강화·장착·구매처럼 같은 메뉴 안에서 버튼을 누르면 화면이 맨 위로 튀어 오르던 문제를 고쳤습니다. 보던 위치와 펼쳐 둔 칸(스킬 자세히 등)이 그대로 유지됩니다.', '완료', 'jade'],
       ['2026.10.13', '재화 그림', '금화(놋쇠 엽전)·은전(말굽은)·옥패(비취 패와 붉은 끈)·영향력(인장)·식량(이삭 다발)·목재(통나무)·철(덩이쇠)·병서(죽간)·신화 조각(자수정)을 질감과 빛이 있는 사실적인 그림으로 바꿨습니다.', '완료', 'jade'],
-      ['2026.10.13', '화면 개편 · 모바일 정리', '본영을 대표 무장 그림과 큰 출전 버튼, 아이콘 바로가기로 바꿨습니다. 제목 위 머리글과 설명 문장은 ⓘ 안으로 접고, 버튼의 꾸밈 기호를 걷어 냈습니다. 패널은 옻칠 나무판과 금장 모서리, 버튼은 눌리는 입체 모양이 되었고, 비용은 아이콘과 숫자로(모자라면 붉게) 보여 줍니다. 휴대폰은 하단 메뉴를 한 줄(본영·무장·편성·모집·전투 + 더보기)로 줄이고, 글자 크기를 키운 기기에서 글자가 겹치거나 넘치던 곳을 고쳤습니다.', '완료', 'gold'],
+      ['2026.10.13', '화면 개편 · 모바일 정리', '본영을 대표 무장 그림과 큰 출전 버튼, 아이콘 바로가기로 바꿨습니다. 제목 위 머리글과 설명 문장은 (i) 안으로 접고, 버튼의 꾸밈 기호를 걷어 냈습니다. 패널은 옻칠 나무판과 금장 모서리, 버튼은 눌리는 입체 모양이 되었고, 비용은 아이콘과 숫자로(모자라면 붉게) 보여 줍니다. 휴대폰은 하단 메뉴를 한 줄(본영·무장·편성·모집·전투 + 더보기)로 줄이고, 글자 크기를 키운 기기에서 글자가 겹치거나 넘치던 곳을 고쳤습니다.', '완료', 'gold'],
       ['2026.10.13', '명망 → 옥패', '무장 모집·장비 뽑기에 쓰는 재화 이름을 명망에서 옥패로 바꿨습니다. 보유량과 쓰임새는 그대로입니다.', '완료', 'jade'],
       ['2026.10.13', '튜토리얼 전투 난이도 완화', '튜토리얼의 첫 시나리오(184년 황건적의 난)는 쉬운 전투로 진행됩니다. 적 사기가 크게 낮고, 예고를 막을 시간이 1.5초 더 길며, 실수했을 때 오르는 위협도와 받는 병력 피해가 크게 줄었습니다. 튜토리얼이 끝난 뒤 다시 싸우면 원래 난이도입니다.', '완료', 'jade'],
       ['2026.10.13', '게스트 기록 초기화', '계정 관리 › 이 기기 설정에 게스트 기록 초기화 버튼을 추가했습니다. 이 기기의 게스트 진행과 튜토리얼·안내 기록을 지우고 접속 화면부터 다시 시작합니다(회원 계정 기록과 언어·화면 설정은 그대로).', '완료', 'jade'],
       ['2026.10.13', '첫 입장 튜토리얼', '처음 들어오면 건너뛸 수 없는 튜토리얼이 시작됩니다. 금화 100개로 상점에서 옥패 사기 → 무료 10회 모집(5등급 무장 1명 확정) → 장비 10회 뽑기 → 자동 편성 → 무장 강화 → 장비 강화 → 첫 시나리오 클리어 순서로, 빛나는 버튼만 눌러 따라 하면 됩니다. 이미 전투를 이긴 기존 계정에는 나오지 않습니다.', '완료', 'gold'],
       ['2026.10.13', '영문판 · 언어 선택', '게임 전체를 한국어 또는 영어로 볼 수 있습니다. 계정 관리의 이 기기 설정, 상단 바의 언어 버튼, 접속 화면에서 바꿀 수 있고 기기마다 저장됩니다. 메뉴·무장·스킬·시나리오·전투 기록과 전장 이름표까지 영어로 바뀝니다. 게시판 글과 사용자 이름은 쓴 그대로 보입니다.', '완료', 'jade'],
-      ['2026.10.13', '재화 획득 밸런스', '시나리오 최초 클리어 보상을 금화 중심으로 바꿨습니다(1~4장 11~13개, 5~8장 54~80개). 금화로 병서(무장 레벨업 재료)를 살 수 있어 금화가 곧 성장입니다. 시나리오 금화만으로 키우면 4장(적벽)·6장(남정)·8장(최종장)에서 성장이 멈추고, 구매 금화·영토전 금화·며칠의 일일 플레이로 넘을 수 있습니다. 일반 전투 보상은 하루 5회까지, 일일·주간 임무의 옥패·병서 보상은 줄였습니다. 7·8장 적 레벨은 Lv.39~55로 올렸습니다. 밸런스 페이지에 「성장 곡선」을 추가했습니다.', '완료', 'jade'],
+      ['2026.10.13', '재화 획득 밸런스', '시나리오 최초 클리어 보상을 금화 중심으로 바꿨습니다(1~4장 11~13개, 5~8장 54~80개). 금화로 병서(무장 레벨업 재료)를 살 수 있어 금화가 곧 성장입니다. 시나리오 금화만으로 키우면 4장(적벽)·6장(남정)·8장(최종장)에서 성장이 멈추고, 구매 금화·영토전 금화·며칠의 일일 플레이로 넘을 수 있습니다. 일반 전투 보상은 하루 5회까지, 일일·주간 임무의 옥패·병서 보상은 줄였습니다. 7·8장 적 레벨은 Lv.39~55로 올렸습니다. 밸런스 페이지에 ‘성장 곡선’을 추가했습니다.', '완료', 'jade'],
       ['2026.10.13', '메뉴 전반 정리', '무장 도감에 등급·병과·영입 필터와 이름 찾기가 생기고 스킬 상세는 접어 두었습니다. 출전 편성은 좌·중·우 자리 이름과 다음 시나리오 적장과의 병종 상성을 보여 주고, 빈 장비 칸에서 바로 장착하러 갈 수 있습니다. 장비 관리는 위쪽에 출전 무장 3명의 장비 현황을, 보유 장비는 한 줄형 목록으로 바꿨습니다. 기술 연구는 연구소가 비면 추천 연구를 바로 시작할 수 있고 끝난 단계는 한 줄로 접힙니다. 영토는 PC에서 지도와 도시 정보를 나란히 보여 줍니다. 시나리오는 다음에 깰 사건이 자동으로 골라지고, 추천 무장의 보유 여부와 대신 쓸 무장을 알려 줍니다. 대련 훈련 상대는 내 무장 레벨에 맞춰지고, 랭킹은 예시 순위 대신 실제 기록만 보여 줍니다. 남아 있던 영어·개발용 문구도 정리했습니다.', '완료', 'jade'],
       ['2026.10.13', '보유 무장 개편', '초상이 잘리지 않는 가로형 카드로 바꿨습니다. 능력치 막대가 실제 차이를 보여 주고, 천명·명장·병과 필터가 동작합니다. 3명이 출전 중일 때 편성하면 바꿀 자리를 고르는 창이 뜹니다. 강화 버튼에 다음 레벨과 비용이 보이고, 재료가 되는 만큼 연속 강화(최대 10회)할 수 있습니다. 스킬 해금까지 남은 레벨, 장착 장비와 세트 효과도 카드에 표시됩니다.', '완료', 'jade'],
       ['2026.10.13', '글꼴 · 본영 · 배경', '모든 기기에서 같은 모양으로 보이도록 한글 글꼴(본문 프리텐다드, 제목 고운바탕)을 넣었습니다. 본영 제목이 상황(첫 시작·연구 대기·낙양전)에 맞게 바뀌고, 오늘의 작전 카드가 다음 시나리오를 보여 주며, 전투력 변화는 실제 기록으로 계산합니다. 전투 밖 화면 배경을 황혼의 관문 그림으로 바꾸고 그동안 3D 전장은 쉬게 해 기기 부담을 줄였습니다. PC 전투 화면은 위·아래 판을 줄여 전장이 넓게 보입니다.', '완료', 'jade'],
@@ -2093,12 +2094,12 @@ export class StrategyUI {
       ['2026.10.12', '실사 3D 모델 적용', '여포·조조·제갈량 전용 모델과 기병·창병·궁병 장수 모델, 실사 전장 지형을 넣었습니다. 서로 달랐던 크기·방향을 맞춰 말은 모두 같은 크기, 병사는 같은 키로 보이며, 무장은 대기·걷기·질주·공격·스킬 동작을 합니다. 부대 병사도 실사 모델로 바뀌고 적군은 붉은 기운으로 구분됩니다. 모델은 전투를 시작할 때 불러오며, 그동안은 기존 모형으로 바로 싸울 수 있습니다.', '완료', 'gold'],
       ['2026.10.12', '전투 화면 전면 개편', '노을 하늘과 겹겹의 산맥, 멀리 성채가 보이는 넓은 전장으로 바꿨습니다. 무장마다 고유 무기(청룡언월도·방천화극·장팔사모·깃털 부채 등)와 갑옷·망토·말을 새로 만들고, 부대마다 병사 수십 명이 대열을 이루며 양 진영 뒤에 대군과 깃발이 늘어섭니다. 빛번짐·색보정, 포물선 화살 사격, 스킬을 쓰면 무장 실사 초상이 화면을 가로지르는 컷인 연출을 넣었습니다. 휴대폰에서는 자동으로 가벼운 설정을 씁니다.', '완료', 'gold'],
       ['2026.10.12', '왼쪽 메뉴 새 디자인', '메뉴를 한 줄 목록으로 바꾸고 본진·육성·전투·소통 네 묶음으로 나눴습니다. 옻칠한 나무판 위에 금박 분류 패를 달고, 선택한 메뉴는 금테 두른 붉은 칠기 패로 보입니다. 화면의 한자 표기는 모두 한글로 바꿨습니다.', '완료', 'gold'],
-      ['2026.10.12', '무장 모집 그림 · 천하 인장', '무장 모집의 「옥패의 부름」에 여러 장수가 모인 군웅할거 그림을 넣고, 모서리에 비취 옥패를 달았습니다. 왼쪽 위 천하 로고는 「천하」 주홍 인장으로 바꿨습니다.', '완료', 'gold'],
+      ['2026.10.12', '무장 모집 그림 · 천하 인장', '무장 모집의 ‘옥패의 부름’에 여러 장수가 모인 군웅할거 그림을 넣고, 모서리에 비취 옥패를 달았습니다. 왼쪽 위 천하 로고는 ‘천하’ 주홍 인장으로 바꿨습니다.', '완료', 'gold'],
       ['2026.10.12', '유저 대련 전투 화면 전환 수정', '유저 대련을 시작해도 시나리오 목록이 그대로 보이던 문제를 고쳐, 바로 전투 화면으로 넘어가도록 했습니다.', '완료', 'jade'],
       ['2026.10.12', '밸런스 조정 테스트 페이지', '아군·적군 3명씩 편성과 장비(세트·등급·강화)를 정하고 게임과 같은 전투 규칙으로 수십~수천 판을 시뮬레이션해 승률·별 분포·전투 시간·무장별 스킬 기여를 봅니다. 한 판 상세 기록, 레벨 차이 분석, 설정 공유 링크를 지원합니다. 정식 출시 전에는 누구나, 출시 후에는 운영자 계정만 열 수 있습니다.', '완료', 'jade'],
       ['2026.10.12', '자동 편성 · 자동 장착', '출전 편성 화면에 자동 편성(전투력 상위 10명 중 인연·병종 조합까지 따져 3명 선택, 가운데에 방어형 배치), 자동 장착(출전 무장마다 세트 효과를 포함해 가장 좋은 장비 조합), 둘을 한 번에 하는 버튼을 넣었습니다. 장비 관리 화면에서도 자동 장착을 쓸 수 있습니다.', '완료', 'gold'],
       ['2026.10.12', '전투 상단 바', '전투 중 화면 맨 위에 멈춤·×2 배속·전투 중지 버튼을 넣었습니다. 멈추면 전투 시간과 적의 행동이 모두 멈추고, 전투 중지는 한 번 더 눌러 확인하면 보상 없이 시나리오 목록으로 돌아갑니다. ×2 배속은 처음부터 쓸 수 있습니다.', '완료', 'gold'],
-      ['2026.10.12', '황건적 무장 5명 합류', '장각(5등급 책사)·장보(4등급 책사)·장량(4등급 보병)·관해(3등급 보병)·주창(3등급 기병)을 모집할 수 있습니다. 새 스킬 체계에 맞춘 고유 스킬·패시브와 장각의 각성, 인연 「황천당립」(3명 이상 편성 시 공격 +5%, 계략 쿨다운 −1초)을 넣었고, 184~190년 시나리오의 적으로도 등장합니다.', '완료', 'gold'],
+      ['2026.10.12', '황건적 무장 5명 합류', '장각(5등급 책사)·장보(4등급 책사)·장량(4등급 보병)·관해(3등급 보병)·주창(3등급 기병)을 모집할 수 있습니다. 새 스킬 체계에 맞춘 고유 스킬·패시브와 장각의 각성, 인연 ‘황천당립’(3명 이상 편성 시 공격 +5%, 계략 쿨다운 −1초)을 넣었고, 184~190년 시나리오의 적으로도 등장합니다.', '완료', 'gold'],
       ['2026.10.12', '무장 스킬 재구성', '70명 모두 고사에 맞는 고유 스킬로 바꾸고 3성 패시브·5성 각성·인연 7종을 더했습니다. 스킬 한 번의 사기 피해는 최대 40, 쿨다운은 무장마다 따로 돕니다. 이름이 바뀐 스킬 12개: 정군산 일격(황충), 가정 고지(왕평), 장팔사모(장포), 견벽청야(사마의), 여츤결사(방덕), 번성 해위(서황), 발시담목(하후돈), 호가십팔박(채문희), 북해 구원(태사자), 서량 철기 대열(마등), 오두미도(장로), 적토 헌상(송헌).', '완료', 'gold'],
       ['2026.10.12', '전투 개편', '적 사기를 0으로 만들면 다음 막, 3막을 넘기면 승리합니다(제한 90초). 예고 하나에 첫 입력만 판정하고 순서는 무작위입니다. 2막 양익 협공·3막 적장 돌격, 적장 스킬 예고, 전열 붕괴(2회 패배), 방어·병종 상성 피해, 별 3개 평가와 별에 따른 반복 보상, 시나리오별 실제 상대 덱을 넣었습니다. 무장 버튼을 길게 누르면 스킬입니다.', '완료', 'gold'],
       ['2026.10.11', '장비 관리 무장 선택 정렬 개선', '장비 관리의 장착 무장 선택 목록을 장비 효과가 반영된 실제 전투력 높은 순으로 정렬하고, 등급·레벨·이름을 보조 기준으로 적용했습니다.', '완료', 'gold'],
@@ -2147,7 +2148,7 @@ export class StrategyUI {
     const tabs: BoardPost['board'][] = ['전체', state.faction]
     const posts = this.boardPosts.filter(post => post.board === this.boardTab)
     const formatDate = (value: string | Date) => new Intl.DateTimeFormat(locale(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
-    return `<section class="page-section page-section--board"><div class="section-heading section-heading--compact"><div><span class="eyebrow">소통</span><h1>진영 게시판</h1><p class="heading-copy">전체 지휘관과 ${escapeHtml(state.faction)} 진영 동료에게 작전 소식을 전하십시오.</p></div><button class="ghost-button" data-action="board-refresh">게시글 새로고침 ↻</button></div><div class="board-tabs">${tabs.map(tab => `<button class="filter-tab ${this.boardTab === tab ? 'is-active' : ''}" data-action="board-tab" data-board="${tab}">${tab} 게시판</button>`).join('')}</div><div class="board-layout"><div class="glass-card board-list"><div class="card-header"><div><span class="eyebrow">${this.boardTab} 게시판</span><h2>최근 게시글</h2></div><span class="sync-label">최대 100건</span></div>${posts.length ? posts.map(post => `<article class="board-post"><div class="board-post__meta"><span class="pill pill--jade">${escapeHtml(post.authorFaction)}</span><strong>${ugc(post.authorName)}</strong><time>${formatDate(post.createdAt)}</time></div><h3>${ugc(post.title)}</h3><p>${ugc(post.content).replace(/\n/g, '<br>')}</p>${post.canDelete ? `<form class="board-delete-form" data-board-delete-form><input type="hidden" name="postId" value="${post.id}"><input name="password" type="password" minlength="4" maxlength="64" placeholder="삭제 비밀번호" required><button class="text-button" type="submit">내 글 삭제</button></form>` : ''}</article>`).join('') : '<div class="board-empty">아직 게시글이 없습니다.<br><small>오른쪽 「새 글 쓰기」로 첫 소식을 남겨 보십시오.</small></div>'}</div><div class="glass-card board-compose ${this.boardComposeOpen ? 'is-open' : ''}"><div class="card-header"><div><span class="eyebrow">글쓰기</span><h2>새 글 작성</h2></div><button class="text-button board-compose-toggle" data-action="board-compose">${this.boardComposeOpen ? '접기' : '새 글 쓰기 ✎'}</button></div><form data-board-form><label>게시판<select name="board">${tabs.map(tab => `<option value="${tab}" ${this.boardTab === tab ? 'selected' : ''}>${tab} 게시판</option>`).join('')}</select></label><label>제목<input name="title" maxlength="120" placeholder="작전 제목을 입력하세요" required></label><label>내용<textarea name="content" rows="7" maxlength="4000" placeholder="진영에 전할 내용을 작성하세요" required></textarea></label><label>삭제 비밀번호<input name="password" type="password" minlength="4" maxlength="64" placeholder="4자 이상 · 삭제할 때 필요" required></label><button class="action-button action-button--primary" type="submit">게시글 올리기 <span>→</span></button></form><p class="board-note">삭제 비밀번호를 알아야만 글을 지울 수 있습니다.</p></div></div></section>`
+    return `<section class="page-section page-section--board"><div class="section-heading section-heading--compact"><div><span class="eyebrow">소통</span><h1>진영 게시판</h1><p class="heading-copy">전체 지휘관과 ${escapeHtml(state.faction)} 진영 동료에게 작전 소식을 전하십시오.</p></div><button class="ghost-button" data-action="board-refresh">게시글 새로고침 ↻</button></div><div class="board-tabs">${tabs.map(tab => `<button class="filter-tab ${this.boardTab === tab ? 'is-active' : ''}" data-action="board-tab" data-board="${tab}">${tab} 게시판</button>`).join('')}</div><div class="board-layout"><div class="glass-card board-list"><div class="card-header"><div><span class="eyebrow">${this.boardTab} 게시판</span><h2>최근 게시글</h2></div><span class="sync-label">최대 100건</span></div>${posts.length ? posts.map(post => `<article class="board-post"><div class="board-post__meta"><span class="pill pill--jade">${escapeHtml(post.authorFaction)}</span><strong>${ugc(post.authorName)}</strong><time>${formatDate(post.createdAt)}</time></div><h3>${ugc(post.title)}</h3><p>${ugc(post.content).replace(/\n/g, '<br>')}</p>${post.canDelete ? `<form class="board-delete-form" data-board-delete-form><input type="hidden" name="postId" value="${post.id}"><input name="password" type="password" minlength="4" maxlength="64" placeholder="삭제 비밀번호" required><button class="text-button" type="submit">내 글 삭제</button></form>` : ''}</article>`).join('') : '<div class="board-empty">아직 게시글이 없습니다.<br><small>오른쪽 ‘새 글 쓰기’로 첫 소식을 남겨 보십시오.</small></div>'}</div><div class="glass-card board-compose ${this.boardComposeOpen ? 'is-open' : ''}"><div class="card-header"><div><span class="eyebrow">글쓰기</span><h2>새 글 작성</h2></div><button class="text-button board-compose-toggle" data-action="board-compose">${this.boardComposeOpen ? '접기' : '새 글 쓰기 ✎'}</button></div><form data-board-form><label>게시판<select name="board">${tabs.map(tab => `<option value="${tab}" ${this.boardTab === tab ? 'selected' : ''}>${tab} 게시판</option>`).join('')}</select></label><label>제목<input name="title" maxlength="120" placeholder="작전 제목을 입력하세요" required></label><label>내용<textarea name="content" rows="7" maxlength="4000" placeholder="진영에 전할 내용을 작성하세요" required></textarea></label><label>삭제 비밀번호<input name="password" type="password" minlength="4" maxlength="64" placeholder="4자 이상 · 삭제할 때 필요" required></label><button class="action-button action-button--primary" type="submit">게시글 올리기 <span>→</span></button></form><p class="board-note">삭제 비밀번호를 알아야만 글을 지울 수 있습니다.</p></div></div></section>`
   }
   private raidSection(state: StrategyState): string {
     const view = this.raidView
@@ -2206,7 +2207,7 @@ export class StrategyUI {
   private handleClick = (event: MouseEvent): void => {
     const target = event.target as HTMLElement
     const button = target.closest<HTMLElement>('[data-action]')
-    // 「더보기」를 펼친 채 다른 곳을 누르면 닫는다
+    // ‘더보기’를 펼친 채 다른 곳을 누르면 닫는다
     const openMore = this.root.querySelector('.sidebar.is-more-open')
     if (openMore && !target.closest('.sidebar')) openMore.classList.remove('is-more-open')
     if (!button) return
@@ -2386,7 +2387,7 @@ export class StrategyUI {
     }
     else if (action === 'admin-tab') {
       this.adminTab = button.dataset.adminTab ?? 'overview'
-      this.callbacks.onAdminAction(`관리자 탭을 「${button.textContent?.trim() ?? '운영 개요'}」로 전환했습니다.`)
+      this.callbacks.onAdminAction(`관리자 탭을 ‘${button.textContent?.trim() ?? '운영 개요'}’로 전환했습니다.`)
     } else if (action === 'admin-filter') {
       this.adminFilter = button.dataset.adminFilter ?? 'all'
       this.callbacks.onAdminAction('장수 콘텐츠 필터를 적용했습니다.')

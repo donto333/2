@@ -294,7 +294,7 @@ export class BattleCore {
     this.morale = this.moraleMax
     this.gauge = Math.min(100, this.research.startGauge ?? 0)
     if (this.players.some(unit => this.passive(unit) === 'startFear')) this.addEffect('debuff', 'fear', 3)
-    this.log(`작전 개시 · 적 ${this.enemies.map(unit => unit.general.name).join(' · ')}${this.bond ? ` · 인연 「${this.bond.name}」 ${this.bond.desc}` : ''}`)
+    this.log(`작전 개시 · 적 ${this.enemies.map(unit => unit.general.name).join(' · ')}${this.bond ? ` · 인연 ‘${this.bond.name}’ ${this.bond.desc}` : ''}`)
   }
 
   // ── 준비 ─────────────────────────────────────────
@@ -860,7 +860,7 @@ export class BattleCore {
       this.combo = Math.min(8, this.combo + 1)
       this.maxCombo = Math.max(this.maxCombo, this.combo)
       this.drainMorale(10)
-      notes.push(`「${foe.def.active.name}」 차단 · 적 사기 −10`)
+      notes.push(`‘${foe.def.active.name}’ 차단 · 적 사기 −10`)
       this.events.push({ kind: 'counter', lane, name: foe.def.active.name })
     }
     // 치유·수호형도 승리에 이바지하도록: 쓰면 연계 +1과 작은 사기 피해(군심 고양)
@@ -872,7 +872,7 @@ export class BattleCore {
       notes.push(`군심 고양 · 연계 ${this.combo} · 적 사기 −${rally}`)
     }
     this.events.push({ kind: 'skill', side: 'player', lane, name, morale, type: unit.def.type, target: this.skillFocus(this.enemies, unit) })
-    this.log(`${unit.general.name} · 「${name}」${morale > 0 ? ` · 적 사기 −${morale}` : ''}${notes.length ? ` · ${notes.join(' · ')}` : ''}`, 'jade')
+    this.log(`${unit.general.name} · ‘${name}’${morale > 0 ? ` · 적 사기 −${morale}` : ''}${notes.length ? ` · ${notes.join(' · ')}` : ''}`, 'jade')
     return true
   }
 
@@ -963,7 +963,7 @@ export class BattleCore {
       if (!unit.warned && unit.cd <= BATTLE_RULES.enemySkillWarning + (this.research.enemyWarn ?? 0)) {
         unit.warned = true
         this.events.push({ kind: 'enemySkillWarn', lane: unit.lane, name: unit.def.active.name })
-        this.log(`적장 스킬 예고 · ${unit.general.name}의 「${unit.def.active.name}」 · 철벽 태세로 막거나, 같은 레인 무장의 스킬로 끊으십시오`, 'ember')
+        this.log(`적장 스킬 예고 · ${unit.general.name}의 ‘${unit.def.active.name}’ · 철벽 태세로 막거나, 같은 레인 무장의 스킬로 끊으십시오`, 'ember')
       }
       if (unit.cd > 0) continue
       unit.cd = unit.cdMax
@@ -993,7 +993,7 @@ export class BattleCore {
       this.addEffect('ebuff', 'e-guard', 6, 0.2)
     }
     if (!guarded && type !== '치유') this.raiseThreat(BATTLE_RULES.threatEnemySkill, 'skill')
-    this.log(`적장 ${unit.general.name} · 「${name}」${guarded ? ' · 철벽 태세로 피해 절반' : ''}`, 'ember')
+    this.log(`적장 ${unit.general.name} · ‘${name}’${guarded ? ' · 철벽 태세로 피해 절반' : ''}`, 'ember')
   }
 
   // ── 진행 ─────────────────────────────────────────

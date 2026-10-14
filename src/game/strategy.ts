@@ -1517,7 +1517,7 @@ export function unlockSkill(state: StrategyState, id: string): UpgradeResult {
   general.skillUnlocked = true
   general.skillRank = Math.max(1, general.skillRank ?? general.stars)
   general.skillPower = general.skillPower ?? 100
-  state.lastNotice = `${general.name}의 「${general.skillName}」이(가) 해금되었습니다.`
+  state.lastNotice = `${general.name}의 ‘${general.skillName}’이(가) 해금되었습니다.`
   return { ok: true, message: state.lastNotice }
 }
 
@@ -2025,6 +2025,6 @@ export function autoFormation(state: StrategyState): AutoResult {
   const changed = next.join() !== state.formation.join() ? 1 : 0
   state.formation = next
   const bond = bondFor(next)
-  state.lastNotice = `자동 편성 완료 · ${ordered.map(general => general.name).join(' · ')}${bond ? ` · 인연 「${bond.name}」` : ''} · 편성 전투력 ${formatNumber(totalPower(state))}`
+  state.lastNotice = `자동 편성 완료 · ${ordered.map(general => general.name).join(' · ')}${bond ? ` · 인연 ‘${bond.name}’` : ''} · 편성 전투력 ${formatNumber(totalPower(state))}`
   return { ok: true, message: state.lastNotice, changed }
 }

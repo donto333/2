@@ -306,7 +306,7 @@ export class BattleCoach {
     }
     const ready = s.units.find(unit => unit.ready)
     if (!has('skill') && ready && !pattern) {
-      this.open('skill', { target: `[data-bt-unit="${ready.lane}"] .bt-unit-skill`, title: '스킬 준비 완료', body: `${ready.name}의 스킬 「${ready.skillName}」을 쓸 수 있습니다. 스킬 칸을 누르거나 무장 버튼을 길게 누르면 됩니다. 쓰고 나면 다시 찰 때까지 기다립니다.`, expect: 'click' }, { kind: 'skill', lane: ready.lane })
+      this.open('skill', { target: `[data-bt-unit="${ready.lane}"] .bt-unit-skill`, title: '스킬 준비 완료', body: `${ready.name}의 스킬 ‘${ready.skillName}’을 쓸 수 있습니다. 스킬 칸을 누르거나 무장 버튼을 길게 누르면 됩니다. 쓰고 나면 다시 찰 때까지 기다립니다.`, expect: 'click' }, { kind: 'skill', lane: ready.lane })
       return
     }
     if (!has('tactic') && s.tacticGauge >= s.tacticCosts.guard && !pattern) {

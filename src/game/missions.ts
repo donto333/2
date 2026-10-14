@@ -37,7 +37,7 @@ export const TUTORIAL_STEPS: Array<{ id: string; label: string; hint: string; se
   { id: 't-formation', label: '출전 편성 확인', hint: '출전 무장 3명과 좌·중·우 자리를 확인하세요.', section: 'formation', event: 'visitFormation' },
   { id: 't-battle', label: '첫 전투 승리', hint: '시나리오에서 첫 전투를 이기세요.', section: 'battle', event: 'battleWin' },
   { id: 't-income', label: '내정 수확', hint: '영토에서 아군 도시의 재화를 거두세요.', section: 'territory', event: 'income' },
-  { id: 't-research', label: '기술 연구 시작', hint: '강병 1단계 「오부 훈련」부터 시작하세요(5분).', section: 'research', event: 'researchStart' },
+  { id: 't-research', label: '기술 연구 시작', hint: '강병 1단계 ‘오부 훈련’부터 시작하세요(5분).', section: 'research', event: 'researchStart' },
   { id: 't-recruit', label: '무장 모집', hint: '옥패로 새 무장을 모집하세요.', section: 'recruit', event: 'recruit' },
   { id: 't-mission', label: '임무 보상 받기', hint: '본영의 일일 임무에서 보상을 받으세요.', section: 'overview', event: 'missionClaim' },
 ]
@@ -62,7 +62,7 @@ export function ensureMissions(state: StrategyState, now = Date.now()): MissionS
   const missions = state.missions
   if (!missions.progress || typeof missions.progress !== 'object') missions.progress = {}
   if (!Array.isArray(missions.claimed)) missions.claimed = []
-  // 이미 임무 보상을 받은 적이 있으면(오늘·이번 주) 처음 시작 안내의 「임무 보상 받기」는 끝난 것으로 본다
+  // 이미 임무 보상을 받은 적이 있으면(오늘·이번 주) 처음 시작 안내의 ‘임무 보상 받기’는 끝난 것으로 본다
   if (!missions.tutorialDone && missions.claimed.length && !(missions.tutorial ?? []).includes('t-mission')) missions.tutorial = [...(missions.tutorial ?? []), 't-mission']
   // 이미 시나리오를 깨거나 전투를 이긴 기존 유저는 첫 입장 튜토리얼을 건너뛴다
   if (missions.onboardDone === undefined && ((state.scenarioCleared?.length ?? 0) > 0 || (state.wins ?? 0) > 0)) missions.onboardDone = true
@@ -86,7 +86,7 @@ export function recordMission(state: StrategyState, event: MissionEvent, amount 
   const completed: string[] = []
   if (!missions.tutorialDone) {
     const done = new Set(missions.tutorial ?? [])
-    // 이미 임무 보상을 받은 적이 있으면(오늘·이번 주) 「임무 보상 받기」 단계는 끝난 것으로 본다
+    // 이미 임무 보상을 받은 적이 있으면(오늘·이번 주) ‘임무 보상 받기’ 단계는 끝난 것으로 본다
     if (missions.claimed.length) done.add('t-mission')
     for (const step of TUTORIAL_STEPS) if (step.event === event && !done.has(step.id)) { done.add(step.id); completed.push(`안내: ${step.label}`) }
     missions.tutorial = [...done]

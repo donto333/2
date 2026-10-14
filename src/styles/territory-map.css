@@ -65,7 +65,7 @@ body .map-viewport .map-label--province {
   text-shadow: 0 1px 2px #000, 0 0 8px rgba(30, 10, 2, .9);
   transition: opacity .25s;
 }
-body .map-viewport .map-label--province small { font-size: 11px; letter-spacing: .2em; color: rgba(255, 228, 168, .75); }
+body .map-viewport .map-label--province small { font-size: 12px; letter-spacing: .2em; color: rgba(255, 228, 168, .75); }
 body .map-viewport[data-lod='mid'] .map-label--province { opacity: .88; }
 body .map-viewport[data-lod='near'] .map-label--province { opacity: .35; }
 
@@ -150,7 +150,7 @@ body .map-hint {
   border-radius: 999px;
   background: rgba(24, 10, 4, .72);
   color: #f0e3c8;
-  font-size: 11px;
+  font-size: 12px;
   pointer-events: none;
   transition: opacity .4s;
 }
@@ -288,7 +288,7 @@ body .city-sheet-bar { display: none; }
     color: #ffe3a3;
     font-size: 18px;
   }
-  body .map-hint { font-size: 11px; }
+  body .map-hint { font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   body .page-section--territory .city-management { transition: none; }

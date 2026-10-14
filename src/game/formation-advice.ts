@@ -171,7 +171,7 @@ function trioScore(trio: Profile[], archetype: Archetype, anchor: Profile = trio
 /** 조합에서 이 유형을 이끄는 스킬 */
 function keySkills(trio: Profile[], archetype: Archetype): string[] {
   const weight = (item: Profile) => archetype === 'sustain' ? item.tank + item.heal : archetype === 'early' ? item.early + item.dmg * 0.3 : archetype === 'debuff' ? item.debuff : archetype === 'utility' ? item.util : trio.reduce((total, other) => total + (other !== item ? pairSynergy(item, other) : 0), 0) + item.dmg * 0.1
-  return [...trio].sort((left, right) => weight(right) - weight(left)).slice(0, 2).filter(item => weight(item) > 0.05).map(item => `${item.general.name} 「${item.def.active.name}」`)
+  return [...trio].sort((left, right) => weight(right) - weight(left)).slice(0, 2).filter(item => weight(item) > 0.05).map(item => `${item.general.name} ‘${item.def.active.name}’`)
 }
 
 /**
@@ -207,7 +207,7 @@ export function applyCombo(state: { generals: General[]; formation: string[]; la
   if (ids.length !== 3 || new Set(ids).size !== 3 || owned.some(general => !general)) return { ok: false, message: '이 조합의 무장을 모두 보유해야 편성할 수 있습니다.' }
   state.formation = [...ids]
   const bond = bondFor(ids)
-  state.lastNotice = `추천 덱으로 편성 · ${owned.map(general => general!.name).join(' · ')}${bond ? ` · 인연 「${bond.name}」` : ''}`
+  state.lastNotice = `추천 덱으로 편성 · ${owned.map(general => general!.name).join(' · ')}${bond ? ` · 인연 ‘${bond.name}’` : ''}`
   return { ok: true, message: state.lastNotice }
 }
 

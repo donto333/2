@@ -28,7 +28,7 @@ function holding(state: StrategyState, resource: ShopResource): number {
 }
 
 export interface ShopNeed {
-  /** 무엇 때문에 모자란지(예: 기술 연구 「오부 훈련」) */
+  /** 무엇 때문에 모자란지(예: 기술 연구 ‘오부 훈련’) */
   reason: string
   resource: ShopResource
   short: number
@@ -55,7 +55,7 @@ export function shopNeeds(state: StrategyState): ShopNeed[] {
   const research = state.research
     .filter(node => { const status = researchStatus(state, node); return status === 'available' || status === 'busy' })
     .sort((a, b) => (a.cost.influence ?? 0) - (b.cost.influence ?? 0))[0]
-  if (research) add(`기술 연구 「${research.name}」`, research.cost)
+  if (research) add(`기술 연구 ‘${research.name}’`, research.cost)
   // 내 도시에서 가장 싼 다음 건물 강화
   const buildings = state.cities.filter(city => city.owner === state.faction).flatMap(city => city.buildings.filter(building => building.level < building.maxLevel).map(building => ({ city, building, cost: buildingCost(building, state) })))
   const cheapest = buildings.sort((a, b) => (a.cost.silver ?? 0) - (b.cost.silver ?? 0))[0]
