@@ -44,9 +44,12 @@ body .map-viewport .map-world.map-canvas {
   transform-origin: 0 0;
   background-size: 100% 100%;
   background-position: 0 0;
-  will-change: transform;
+  /* 4배 해상도(4608×2592) 지도. 받기 전에는 원래 작은 지도가 밑에 먼저 보인다 */
+  background-image: linear-gradient(180deg, rgba(23,14,9,.12), rgba(23,14,9,.3)), url('/assets/territory/china-strategic-map-hd.webp'), url('/assets/territory/china-strategic-map.webp');
+  background-repeat: no-repeat;
   --map-inv: 1;
 }
+body .map-viewport .map-world.is-moving { will-change: transform; }
 body .map-viewport .map-world .territory-frontlines line { vector-effect: non-scaling-stroke; stroke-width: 2px; }
 /* 13주(州) 이름표: 실제 위치 중심에 놓고 화면 크기 고정. 가까이 확대하면 도시 이름을 가리지 않게 흐리게 */
 body .map-viewport .map-label--province {

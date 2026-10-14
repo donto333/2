@@ -106,6 +106,7 @@ export class TerritoryMapController {
   private selectedId = ''
   private transform: MapTransform | null = null
   private frame = 0
+  private settleTimer = 0
   private animation = 0
   private resize: ResizeObserver | null = null
   private pointers = new Map<number, { x: number; y: number }>()
@@ -229,6 +230,10 @@ export class TerritoryMapController {
     this.view = view
     this.transform = transform
     world.style.transform = `translate(${transform.tx}px, ${transform.ty}px) scale(${transform.scale})`
+    // 움직이는 동안만 한 장의 그림으로 늘려 부드럽게, 멈추면 그 배율로 다시 그려 선명하게
+    world.classList.add('is-moving')
+    window.clearTimeout(this.settleTimer)
+    this.settleTimer = window.setTimeout(() => world.classList.remove('is-moving'), 180)
     world.style.setProperty('--map-inv', String(1 / transform.scale))
     const lod = lodFor(transform.scale)
     viewport.dataset.lod = lod
