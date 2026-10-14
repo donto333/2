@@ -7,6 +7,7 @@ import { affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST,
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
 import { SCENARIOS, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
+import { recommendCombos } from '../game/formation-advice'
 import { ensureIconSprite, icon, type IconName } from './icons'
 import { playForgeCeremony, playSummonCeremony } from './summon-ceremony'
 
@@ -180,6 +181,8 @@ export interface StrategyUiCallbacks {
   onUpgradeMany: (id: string) => void
   onAutoFormation: (withEquipment: boolean) => void
   onAutoEquip: () => void
+  /** 추천 조합으로 편성(좌·중·우 순서) */
+  onApplyCombo: (ids: string[]) => void
   onEquipmentDraw: (count: number) => void
   onEquipmentEnhance: (id: string) => void
   onEquipmentEquip: (generalId: string, itemId: string) => void
@@ -280,6 +283,8 @@ export class StrategyUI {
   private codexQuery = ''
   private formationSort: FormationSort = 'power'
   private formationSortDescending = true
+  /** 추천 조합을 볼 무장(없으면 출전 첫 무장) */
+  private comboAnchorId: string | null = null
   private renderedState: StrategyState | null = null
   private summonTab: 'generals' | 'equipment' = 'generals'
   private equipmentSort: EquipmentSort = 'grade'
@@ -1098,7 +1103,7 @@ export class StrategyUI {
   private formationSection(state: StrategyState): string {
     const bench = this.sortedFormationBench(state)
     const sortOptions: Array<[FormationSort, string]> = [['power', '전투력'], ['grade', '등급']]
-    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리합니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리합니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div>${this.comboAdvice(state)}<div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
   }
 
   private equipmentSection(state: StrategyState): string {
@@ -1557,6 +1562,32 @@ export class StrategyUI {
 
 
   /** 출전 편성 비교 대상: 다음 시나리오의 같은 자리 적장 */
+  /** 무장별 추천 조합: 무장을 고르면 그 무장이 들어간 3인 조합 5개를 점수순으로 보여 주고 바로 편성할 수 있다 */
+  private comboAdvice(state: StrategyState): string {
+    if (state.generals.length < 3) return `<div class="combo-advice glass-card"><div class="card-header"><div><span class="eyebrow">추천 조합</span><h3>무장별 추천 조합</h3></div></div><p class="combo-empty">무장이 3명 이상이면 무장마다 추천 조합 5개를 보여 드립니다.</p></div>`
+    const power = (general: General) => combatPower(general) + equipmentPowerForUi(state, general.id)
+    const ranked = [...state.generals].sort((left, right) => power(right) - power(left))
+    const anchor = state.generals.find(general => general.id === this.comboAnchorId) ?? state.generals.find(general => general.id === state.formation[0]) ?? ranked[0]
+    const enemies = this.formationEnemies(state)
+    const combos = recommendCombos(state, anchor.id, enemies, 5)
+    const byId = new Map(state.generals.map(general => [general.id, general]))
+    const current = state.formation.join(',')
+    const chips = ranked.map(general => `<button class="combo-chip ${general.id === anchor.id ? 'is-active' : ''}" data-action="combo-anchor" data-id="${general.id}" style="--accent:${gradeColor(general)}" aria-pressed="${general.id === anchor.id}">${this.portrait(general, 'combo-chip__portrait')}<span>${escapeHtml(general.name)}</span></button>`).join('')
+    const lanes = ['↙ 좌측', '↑ 중앙', '↘ 우측']
+    const rows = combos.map((combo, rank) => {
+      const members = combo.ids.map((id, lane) => {
+        const general = byId.get(id)!
+        const edge = combo.edges[lane]
+        const edgeTag = edge > 1 ? '<em class="combo-edge is-adv">상성 유리</em>' : edge < 1 ? '<em class="combo-edge is-dis">상성 불리</em>' : ''
+        return `<div class="combo-member ${id === anchor.id ? 'is-anchor' : ''}" style="--accent:${gradeColor(general)}">${this.portrait(general, 'combo-member__portrait')}<div><small>${lanes[lane]}</small><strong>${escapeHtml(general.name)}</strong><span>${general.role} · ${GRADE_META[general.grade].label}</span>${edgeTag}</div></div>`
+      }).join('')
+      const tags = [combo.bond ? `<span class="combo-tag combo-tag--bond">인연 「${escapeHtml(combo.bond.name)}」</span>` : '', `<span class="combo-tag">병종 ${combo.roles}종</span>`, combo.edges.some(edge => edge > 1) ? `<span class="combo-tag">상성 유리 ${combo.edges.filter(edge => edge > 1).length}자리</span>` : ''].join('')
+      const isCurrent = combo.ids.join(',') === current
+      return `<li class="combo-row ${isCurrent ? 'is-current' : ''}"><span class="combo-rank">${rank + 1}</span><div class="combo-members">${members}</div><div class="combo-side"><div class="combo-tags">${tags}</div><div class="combo-power"><small>전투력</small><b>${formatNumber(combo.power)}</b></div>${isCurrent ? '<span class="combo-current">현재 편성</span>' : `<button class="mini-action mini-action--deploy" data-action="apply-combo" data-ids="${combo.ids.join(',')}">이 조합으로 편성</button>`}</div></li>`
+    }).join('')
+    return `<div class="combo-advice glass-card"><div class="card-header"><div><span class="eyebrow">추천 조합</span><h3>무장별 추천 조합</h3><p class="combo-note">무장을 고르면 그 무장이 들어간 조합 5개를 보여 드립니다. 전투력, 인연, 병종 구성${enemies.length ? ', 다음 시나리오 적장과의 자리별 상성' : ''}을 함께 따져 순위를 매기고, 자리도 가장 유리하게 배치합니다.</p></div></div><div class="combo-anchor-row" role="group" aria-label="추천 조합을 볼 무장">${chips}</div><div class="combo-anchor-name"><b>${escapeHtml(anchor.name)}</b> 추천 조합</div><ol class="combo-list">${rows}</ol></div>`
+  }
+
   private formationEnemies(state: StrategyState): Array<General | undefined> {
     const next = this.nextScenario(state)
     return next ? scenarioEnemyIds(next, state.faction).map(id => templateGeneral(id)) : []
@@ -1788,6 +1819,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '출전 편성 · 무장별 추천 조합', '출전 편성 화면에서 무장을 고르면 그 무장이 들어간 3인 조합 5개를 보여 줍니다. 전투력, 인연, 병종 구성, 다음 시나리오 적장과의 자리별 상성을 따져 순위를 매기고 자리도 가장 유리하게 배치하며, 버튼 하나로 바로 편성할 수 있습니다. 천명 초상의 불티 효과가 위쪽만 사각형으로 잘려 보이던 문제도 고쳤습니다.', '완료', 'jade'],
       ['2026.10.14', '무장 사진 테두리를 등급색으로', '무장마다 제각각이던 사진 테두리와 카드 강조색을 등급색으로 통일했습니다. 천명은 금빛, 명장은 비취빛, 정예는 푸른빛, 용사는 보랏빛, 신병은 회색이며, 테두리를 두껍게 해 더 또렷하게 보이고 도감의 미영입 무장도 테두리는 등급색 그대로 보입니다.', '완료', 'jade'],
       ['2026.10.14', '무장 등급 재설정', '삼국지 속 역할과 비중에 맞춰 무장 등급을 다시 매겼습니다. 천명은 촉·위·오·군웅에서 4명씩(유비·제갈량·관우·조운 / 조조·사마의·장료·하후돈 / 손권·손책·주유·육손 / 여포·동탁·원소·장각)입니다. 이미 가진 무장도 새 등급으로 옮겨지고, 등급이 내려간 무장은 단계마다 옥패로 보상합니다(천명→명장 1,000 · 명장→정예 300 · 정예→용사 100 · 용사→신병 50).', '완료', 'jade'],
       ['2026.10.14', '명장·천명 무장 카드 오라', '보유 무장과 무장 도감에서 명장(4등급) 카드는 비취빛, 천명(5등급) 카드는 금빛 테두리 빛이 돌며 은은하게 숨쉬고, 천명 초상 위로는 금빛 불티가 피어오릅니다. 효과 줄임 설정에서는 빛만 남기고 움직임을 멈춥니다.', '완료', 'jade'],
@@ -1952,6 +1984,11 @@ export class StrategyUI {
     } else if (action === 'roster-sort-direction') {
       this.rosterSortDescending = !this.rosterSortDescending
       if (this.renderedState) this.render(this.renderedState)
+    } else if (action === 'combo-anchor') {
+      this.comboAnchorId = button.dataset.id ?? null
+      if (this.renderedState) this.render(this.renderedState)
+    } else if (action === 'apply-combo') {
+      this.callbacks.onApplyCombo((button.dataset.ids ?? '').split(',').filter(Boolean))
     } else if (action === 'formation-sort-direction') {
       this.formationSortDescending = !this.formationSortDescending
       if (this.renderedState) this.render(this.renderedState)
