@@ -348,6 +348,8 @@ export class StrategyUI {
   }
 
   render(state: StrategyState): void {
+    // 효과 줄임 설정을 CSS에서도 알 수 있게(카드 오라 등 반복 효과를 멈춘다)
+    document.documentElement.dataset.fx = effectsSetting()
     this.coachSection = nextTutorialStep(state)?.section ?? null
     if (this.noticeSeen !== undefined && this.noticeSeen !== state.lastNotice) this.noticeAt = Date.now()
     this.noticeSeen = state.lastNotice
@@ -1530,7 +1532,7 @@ export class StrategyUI {
       : general.level >= unlockAt
         ? `<button class="mini-action mini-action--skill gcard-unlock" data-action="skill" data-id="${general.id}" ${state.silver >= 1500 ? '' : 'disabled'}>스킬 해금 · 은전 1,500</button>`
         : `<span class="gcard-skill-state">해금까지 ${unlockAt - general.level}레벨 (Lv.${unlockAt})</span>`
-    return `<article class="gcard ${inFormation ? 'is-deployed' : ''} ${!general.skillUnlocked && general.level >= unlockAt ? 'is-unlockable' : ''}" style="--accent:${general.accent};--grade:${meta.color}">
+    return `<article class="gcard ${general.grade >= 4 ? `gcard--aura gcard--g${general.grade}` : ''} ${inFormation ? 'is-deployed' : ''} ${!general.skillUnlocked && general.level >= unlockAt ? 'is-unlockable' : ''}" style="--accent:${general.accent};--grade:${meta.color}">
       <div class="gcard-portrait" style="--portrait:url('${this.portraitAsset(general)}')"><span class="gcard-grade">${general.grade} · ${meta.label}</span>${inFormation ? `<span class="gcard-lane">${['좌측', '중앙', '우측'][lane]} 출전</span>` : ''}</div>
       <div class="gcard-body">
         <div class="gcard-head"><div><h3>${general.name}<span class="star-row">${'★'.repeat(general.stars)}${'☆'.repeat(5 - general.stars)}</span></h3><p>${escapeHtml(general.epithet)}</p></div><span class="role-tag">${general.role}</span></div>
@@ -1548,7 +1550,7 @@ export class StrategyUI {
     const body = owned
       ? `<div class="codex-stat-line"><span>Lv.${general.level} · ${'★'.repeat(general.stars)}</span><b>${formatNumber(combatPower(general))}</b></div><details class="gcard-skill"><summary><span>◈ ${escapeHtml(general.skillName)}</span><em>${skillDetail(general).type}</em></summary><p>${escapeHtml(general.skillDescription)}</p>${this.skillDetailPanel(general)}</details>`
       : `<div class="codex-lock-note">무장 모집에서 획득할 수 있습니다. (${meta.label} 등급 확률 ${meta.rate})</div>`
-    return `<article class="codex-card${hidden}" data-codex-name="${escapeHtml(general.name)}" style="--accent:${general.accent};--grade:${meta.color}"><div class="codex-card-art">${this.portrait(general, 'codex-portrait')}<span class="codex-grade">${general.grade} · ${meta.label}</span><span class="codex-state">${owned ? '영입 완료' : '미영입'}</span></div><div class="codex-card-body"><div class="codex-card-heading"><div><h3>${owned ? general.name : '???'}</h3><p>${owned ? escapeHtml(general.epithet) : `${general.role} · ${meta.label}`}</p></div><span>${general.role}</span></div>${body}</div></article>`
+    return `<article class="codex-card${hidden}${general.grade >= 4 ? ` gcard--aura gcard--g${general.grade}` : ''}" data-codex-name="${escapeHtml(general.name)}" style="--accent:${general.accent};--grade:${meta.color}"><div class="codex-card-art">${this.portrait(general, 'codex-portrait')}<span class="codex-grade">${general.grade} · ${meta.label}</span><span class="codex-state">${owned ? '영입 완료' : '미영입'}</span></div><div class="codex-card-body"><div class="codex-card-heading"><div><h3>${owned ? general.name : '???'}</h3><p>${owned ? escapeHtml(general.epithet) : `${general.role} · ${meta.label}`}</p></div><span>${general.role}</span></div>${body}</div></article>`
   }
 
 
@@ -1784,6 +1786,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '명장·천명 무장 카드 오라', '보유 무장과 무장 도감에서 명장(4등급) 카드는 비취빛, 천명(5등급) 카드는 금빛 테두리 빛이 돌며 은은하게 숨쉬고, 천명 초상 위로는 금빛 불티가 피어오릅니다. 효과 줄임 설정에서는 빛만 남기고 움직임을 멈춥니다.', '완료', 'jade'],
       ['2026.10.14', '휴대폰 가로 화면 지원', '휴대폰을 가로로 눕혀도 쓰기 좋게 바꿨습니다. 메뉴는 왼쪽 아이콘 띠로 줄이고 상단바를 한 줄로 얇게 했습니다. 전투에서는 아군 무장을 왼쪽, 상대 무장을 오른쪽 세로 줄로 옮겨 전장이 넓게 보이고, 로그인 화면은 그림과 로그인 버튼을 나란히 놓았습니다.', '완료', 'jade'],
       ['2026.10.14', '의미 없는 문구 정리', '상단의 「전술 사령부」를 지우고, 장 이름 대신 다음에 치를 전투(누르면 시나리오로 이동)를 보여 줍니다. 왼쪽 아래의 고정 문구 「옥패 07 · Lv.12」는 실제 보유 무장·영토 수로 바꿨고, PC 옆 메뉴에 빈 채로 보이던 휴대폰용 더보기 버튼을 숨겼습니다. 장비 칸·연구 갈래·도시 생산량에 남아 있던 기호도 그림으로 바꿨습니다.', '완료', 'jade'],
       ['2026.10.14', '로그인 화면 그림', '로그인 화면 위쪽에 제갈량·관우·여포·조조·손권을 담은 대표 그림을 넣고, 뒤에는 황혼의 관문 풍경을 깔았습니다.', '완료', 'jade'],
