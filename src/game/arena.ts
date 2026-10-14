@@ -211,6 +211,8 @@ interface ArenaEffect {
 
 const ease = (k: number) => k * k * (3 - 2 * k)
 /** 맞붙는 선: 아군·적 무장 사이 최소 간격(말 길이와 돌진 거리를 감안) */
+/** 타격 연출 기준 병력(Lv20 무렵 무장 병력) */
+const HIT_FX_TROOPS = 6600
 const PLAYER_LINE_Z = -1.6
 const ENEMY_LINE_Z = -6.0
 const MIN_LINE_GAP = 3.6
@@ -265,6 +267,8 @@ export class Arena {
   /** 연출용 시간 흐름: 스킬 기 모으기 슬로모션 · 강타 순간 멈춤(실제 초) */
   private slowMo = 0
   private hitStop = 0
+  /** 최근 히트스톱 사용량(초): 1초에 0.15초씩 줄어든다. 0.2초를 넘으면 더 멈추지 않는다(고레벨에서 계속 멈춰 렉처럼 보이던 문제) */
+  private hitStopSpent = 0
   /** 스킬 쓰는 무장에게 카메라를 당긴다 */
   private cameraFocus: { target: THREE.Vector3; age: number; life: number; strength: number; side: 'player' | 'enemy' } | null = null
   /** 공격 동작 직후의 피해: 칼이 닿거나 화살이 꽂히는 순간에 맞춰 보여 준다 */
@@ -580,9 +584,9 @@ export class Arena {
     return sprite
   }
 
-  private spawnImpact(position: THREE.Vector3, damage: number, color = 0xf6c56d, showNumber = true): void {
+  private spawnImpact(position: THREE.Vector3, damage: number, color = 0xf6c56d, showNumber = true, felt = damage): void {
     const group = new THREE.Group()
-    const intensity = Math.min(1.65, 0.82 + damage / 180)
+    const intensity = Math.min(1.65, 0.82 + felt / 180)
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.72, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
     const innerRing = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.3, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
     ring.rotation.x = -Math.PI / 2
@@ -845,7 +849,7 @@ export class Arena {
       case 'hit': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
-        sound.play(event.amount >= 150 ? 'hitBig' : 'hit', { pan: this.lanePan(event.lane) })
+        sound.play(event.amount / Math.max(1, unit.maxTroops / HIT_FX_TROOPS) >= 150 ? 'hitBig' : 'hit', { pan: this.lanePan(event.lane) })
         const strike = this.pendingStrike
         if (strike && strike.source === event.source && strike.side !== event.side) {
           this.pendingStrike = null
@@ -904,7 +908,7 @@ export class Arena {
           const at = foe.group.position.clone()
           this.floatText(at.clone().add(new THREE.Vector3(0, 3.4, 0)), '차단!', '#9ff5e2', 1.3)
           this.fx(shockwave(at, 0x9ff5e2, 3, 0.6))
-          this.hitStop = Math.max(this.hitStop, 0.08)
+          this.addHitStop(0.08)
           this.kick(foe, 1)
           foe.shake = 0.12
         }
@@ -1019,6 +1023,13 @@ export class Arena {
     return null
   }
 
+  /** 강타 순간 멈춤. 최근에 많이 멈췄으면 건너뛴다 */
+  private addHitStop(sec: number): void {
+    if (this.hitStopSpent >= 0.2) return
+    this.hitStop = Math.max(this.hitStop, sec)
+    this.hitStopSpent += sec
+  }
+
   /** 피격 표시: 번쩍임 · 밀려남 · 숫자 · 흔들림 */
   private showHit(unit: BattleUnit, side: 'player' | 'enemy', amount: number, edge?: 'adv' | 'dis'): void {
     if (unit.dying > 0 && unit.troops <= 0) return
@@ -1028,16 +1039,18 @@ export class Arena {
       this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 3.1, 0)), edge === 'adv' ? '상성 우위!' : '상성 열세', edge === 'adv' ? '#ffd27a' : '#b9c2c9', edge === 'adv' ? 1.05 : 0.8)
       if (edge === 'adv') { this.cameraShake = Math.min(0.62, this.cameraShake + 0.08); this.kick(unit, 0.25) }
     }
+    // 연출 기준은 Lv20 무렵 병력(약 6,600)에 맞춘 값이다. 병력이 많은 고레벨은 피해를 병력 비율로 줄여 같은 기준을 쓴다(낮은 레벨은 그대로)
+    const felt = amount / Math.max(1, unit.maxTroops / HIT_FX_TROOPS)
     unit.hitFlash = 0.18
-    this.kick(unit, Math.min(0.72, 0.22 + amount / 300))
+    this.kick(unit, Math.min(0.72, 0.22 + felt / 300))
     // 밀려남은 속도로 준다(이동 스프링이 받아 부드럽게 멈춘다)
     unit.vel.add(new THREE.Vector3(unit.group.position.x > 0 ? 1.2 : -1.2, 0, side === 'enemy' ? -3.3 : 3.3))
-    this.cameraShake = Math.min(0.62, this.cameraShake + (amount >= 160 ? 0.18 : 0.06))
+    this.cameraShake = Math.min(0.62, this.cameraShake + (felt >= 160 ? 0.18 : 0.06))
     // 히트스톱은 피해에 비례(격투 게임의 히트랙처럼): 약한 타격은 멈추지 않고, 강타일수록 길게. 멈춘 동안 맞은 쪽이 떨린다
-    const stop = amount >= 160 ? Math.min(0.11, 0.05 + (amount - 160) / 3000) : amount >= 110 ? 0.03 : 0
-    if (stop > 0) { this.hitStop = Math.max(this.hitStop, stop); unit.shake = Math.max(unit.shake, stop + 0.05) }
-    if (!this.reducedFx) this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, amount >= 120 ? 1.3 : 0.9))
-    if (amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember, amount >= Math.max(120, unit.maxTroops * 0.05) || edge === 'adv')
+    const stop = felt >= 160 ? Math.min(0.11, 0.05 + (felt - 160) / 3000) : felt >= 110 ? 0.03 : 0
+    if (stop > 0) { this.addHitStop(stop); unit.shake = Math.max(unit.shake, stop + 0.05) }
+    if (!this.reducedFx) this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, felt >= 120 ? 1.3 : 0.9))
+    if (felt >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember, felt >= 120 || amount >= unit.maxTroops * 0.05 || edge === 'adv', felt)
   }
 
   /** 일반 공격: 근접은 튀어나가 베고, 궁병은 화살·책사는 기탄을 날린다 */
@@ -1164,7 +1177,7 @@ export class Arena {
     const big = (at: THREE.Vector3, size = 1) => {
       this.fx(shockwave(at, color, 3.2 * size, 0.65))
       this.fx(hitSpark(at.clone().setY(1.1), color, 1.6 * size))
-      this.hitStop = Math.max(this.hitStop, 0.09)
+      this.addHitStop(0.09)
       this.cameraShake = Math.min(0.7, this.cameraShake + 0.26)
     }
     // 발동
@@ -1450,6 +1463,7 @@ export class Arena {
     // 강타 순간 멈춤(아주 짧게) · 스킬 기 모으기 슬로모션
     const scale = this.hitStop > 0 ? 0.05 : this.slowMo > 0 ? 0.32 : 1
     this.hitStop = Math.max(0, this.hitStop - realDelta)
+    this.hitStopSpent = Math.max(0, this.hitStopSpent - realDelta * 0.15)
     this.slowMo = Math.max(0, this.slowMo - realDelta)
     const delta = realDelta * scale
     this.updateEffects(delta)
