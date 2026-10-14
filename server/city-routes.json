@@ -57,6 +57,7 @@
     ["poyang", "kuaiji"],
     ["shixing", "nanhai"],
     ["nanhai", "jiaozhi"],
+    ["jianning", "jiaozhi"],
     ["jianye", "poyang"]
   ]
 }
