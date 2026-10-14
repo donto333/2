@@ -366,14 +366,17 @@ export class StrategyUI {
         return
       }
     }
+    // 「모집 · 장비」 메뉴에 새로 들어오면 언제나 무장 모집 탭부터
+    if (state.section === 'recruit' && this.lastSection !== 'recruit') this.summonTab = 'generals'
     if (state.section !== 'equipment') this.equipmentScrollTop = 0
     if (state.section !== 'battle') this.battleViewActive = false
     else if (this.latestBattle?.active) this.battleViewActive = true // 전투가 진행 중이면 그리는 순서와 관계없이 전투 화면
     const enteringScenario = state.section === 'battle' && this.lastSection !== 'battle'
+    // 상태 객체를 그대로 고쳐 쓰므로 이전 메뉴는 따로 기억해 둔 값으로 비교한다
+    const sameSection = this.lastSection === state.section
     this.lastSection = state.section
     if (enteringScenario && !this.scenarioPicked) this.scenarioSelectedId = this.nextScenario(state)?.id ?? this.scenarioSelectedId
     // 같은 메뉴 안에서 버튼을 눌러 다시 그릴 때는 보던 자리(스크롤)와 펼친 칸을 그대로 둔다
-    const sameSection = previousSection === state.section
     const kept = sameSection ? this.captureView() : null
     this.root.innerHTML = this.shell(state)
     if (kept) this.restoreView(kept)
@@ -1013,7 +1016,6 @@ export class StrategyUI {
 
   private summoningSection(state: StrategyState): string {
     const active = state.section === 'equipment' ? 'equipment' : this.summonTab
-    if (state.section === 'equipment') this.summonTab = 'equipment'
     return `<section class="page-section page-section--summoning"><div class="summon-menu-head"><div><span class="eyebrow">육성</span><h1>모집 · 장비</h1><p class="heading-copy">무장과 병장기를 한 곳에서 모집하고, 결과를 확인한 뒤 바로 성장시키십시오.</p></div><div class="summon-tabs"><button class="summon-tab ${active === 'generals' ? 'is-active' : ''}" data-action="summon-tab" data-summon-tab="generals">✦ 무장 모집</button><button class="summon-tab ${active === 'equipment' ? 'is-active' : ''}" data-action="summon-tab" data-summon-tab="equipment">⚒ 장비 뽑기</button></div></div>${active === 'equipment' ? this.equipmentSection(state) : this.recruitSection(state)}</section>`
   }
 
