@@ -1459,7 +1459,8 @@ body .mission-card { scroll-margin-top: 96px; }
 .summon-ceremony, .heaven-descends { position: fixed; inset: 0; z-index: 9500; display: grid; place-items: center; overflow: hidden; opacity: 0; transition: opacity .25s; cursor: pointer; --glow: #f6c56d; }
 .summon-ceremony.is-on, .heaven-descends.is-on { opacity: 1; }
 .summon-ceremony.is-out, .heaven-descends.is-out { opacity: 0; }
-.sc-bg { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--glow) 18%, #1a0c05) 0%, #0b0502 60%, #000 100%); }
+.sc-bg { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--glow) 18%, #1a0c05) 0%, #0b0502 60%, #000 100%); transition: background .3s; }
+.summon-ceremony { background: #000; }
 .sc-rays { position: absolute; width: 160vmax; height: 160vmax; left: 50%; top: 50%; transform: translate(-50%, -50%); background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--glow) 22%, transparent) 0 4deg, transparent 4deg 18deg); opacity: 0; animation: sc-spin 9s linear infinite; mask-image: radial-gradient(circle, #000 0%, transparent 55%); -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 55%); transition: opacity .6s; }
 .summon-ceremony.is-charge .sc-rays, .summon-ceremony.is-crack .sc-rays { opacity: .9; }
 .sc-ring { position: absolute; width: min(78vmin, 520px); height: min(78vmin, 520px); color: var(--glow); opacity: .75; filter: drop-shadow(0 0 8px var(--glow)); }
@@ -1484,8 +1485,7 @@ body .mission-card { scroll-margin-top: 96px; }
 .sc-particles, .hd-sparks { position: absolute; inset: 0; pointer-events: none; }
 .sc-particles i, .hd-sparks i { position: absolute; bottom: -10px; width: var(--z); height: var(--z); border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); opacity: 0; animation: sc-rise var(--s) var(--d) linear infinite; }
 .sc-hint { position: absolute; bottom: 7vh; margin: 0; color: rgba(255, 240, 210, .55); font-size: 13px; letter-spacing: .1em; }
-.summon-ceremony--g5 { --glow: #ffd36a; }
-.summon-ceremony--g5.is-crack .sc-bg { animation: sc-quake .12s linear infinite; }
+.summon-ceremony.is-g5.is-crack .sc-bg { animation: sc-quake .12s linear infinite; }
 .summon-ceremony--forge .sc-bg { background: radial-gradient(circle at 50% 60%, color-mix(in srgb, var(--glow) 20%, #2a0e04) 0%, #0d0502 60%, #000 100%); }
 .summon-ceremony--forge .sc-token { width: min(30vmin, 180px); border-radius: 8px; }
 .summon-ceremony--forge .sc-particles i { background: #ff9a3c; box-shadow: 0 0 10px #ff7a1a; border-radius: 1px; }
@@ -1536,3 +1536,6 @@ body .mission-card { scroll-margin-top: 96px; }
 @property --rc-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
 @keyframes rc-aura { to { --rc-a: 360deg; } }
 @media (max-width: 760px) { @keyframes hd-item { to { opacity: 1; transform: translate(50%, -50%) scale(1) rotate(0); } } }
+
+/* 기다리는 동안: 기가 천천히 모인다(빛살·고리가 점점 빨라짐) */
+.summon-ceremony.is-charge:not(.is-crack) .sc-token { animation: sc-float 2.4s ease-in-out infinite, sc-shake .3s linear infinite; }

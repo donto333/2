@@ -6,6 +6,7 @@ import { EQUIPMENT_GRADE_META, GRADE_META } from '../game/strategy'
 import { effectsSetting } from '../game/settings'
 
 const esc = (value: string) => value.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch))
+const NEUTRAL = '#e9dcb8'
 const wait = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms))
 
 // ── 소리 ─────────────────────────────────────────────────
@@ -54,15 +55,16 @@ async function ritual(level: number, color: string, centerpiece = '/assets/curre
   const top = level
   const reduced = effectsSetting() === 'reduced'
   const layer = document.createElement('div')
-  layer.className = `summon-ceremony summon-ceremony--g${top} summon-ceremony--${kind}`
-  layer.style.setProperty('--glow', color)
+  layer.className = `summon-ceremony summon-ceremony--${kind}`
+  // 기다리는 동안에는 결과를 짐작할 수 없게 중립색, 금이 가는 순간에 등급 색으로 바뀐다
+  layer.style.setProperty('--glow', NEUTRAL)
   layer.innerHTML = `<div class="sc-bg"></div><div class="sc-rays"></div>
     <svg class="sc-ring sc-ring--outer" viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 6"/><circle cx="100" cy="100" r="84" fill="none" stroke="currentColor" stroke-width="1" opacity=".6"/>${Array.from({ length: 12 }, (_, i) => `<rect x="98" y="4" width="4" height="10" fill="currentColor" transform="rotate(${i * 30} 100 100)"/>`).join('')}</svg>
     <svg class="sc-ring sc-ring--inner" viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="70" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="14 8"/><path d="M100 36l55 32v64l-55 32-55-32V68z" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".7"/></svg>
     <div class="sc-beam"></div>
     <img class="sc-token" src="${centerpiece}" alt="" draggable="false">
     <div class="sc-cracks"></div>
-    <div class="sc-particles">${particles(reduced ? 14 : 36, color)}</div>
+    <div class="sc-particles">${particles(reduced ? 14 : 36, NEUTRAL)}</div>
     <div class="sc-flash"></div>
     <p class="sc-hint">화면을 누르면 넘어갑니다</p>`
   document.body.appendChild(layer)
@@ -70,14 +72,16 @@ async function ritual(level: number, color: string, centerpiece = '/assets/curre
   layer.addEventListener('click', () => { skipped = true })
   requestAnimationFrame(() => layer.classList.add('is-on'))
   soundCharge()
-  const steps: Array<[string, number]> = reduced ? [['is-crack', 500], ['is-flash', 350]] : [['is-charge', 700], ['is-crack', 700], ['is-flash', 450]]
+  // 대기(기 모으기) → 균열(여기서 등급 색이 드러남) → 섬광
+  const steps: Array<[string, number]> = reduced ? [['is-charge', 900], ['is-crack', 500], ['is-flash', 350]] : [['is-charge', 1700], ['is-crack', 900], ['is-flash', 450]]
   for (const [cls, ms] of steps) {
     if (skipped) break
     layer.classList.add(cls)
+    if (cls === 'is-crack') { layer.style.setProperty('--glow', color); layer.classList.add(`is-g${top}`) }
     if (cls === 'is-flash') soundGong(top >= 5)
     await wait(ms)
   }
-  if (skipped) soundGong(top >= 5)
+  if (skipped) { layer.style.setProperty('--glow', color); soundGong(top >= 5) }
   // 뒤이어 등장 연출이 있으면 화면이 비지 않게 이 층을 남겨 두었다가 그쪽이 뜬 뒤에 걷는다
   if (keep) return layer
   layer.classList.add('is-out')
@@ -159,7 +163,7 @@ export async function playForgeCeremony(items: Equipment[], imageOf: (item: Equi
     const best = [...items].sort((a, b) => EQUIP_RANK[b.grade] - EQUIP_RANK[a.grade])[0]
     const level = EQUIP_RANK[best.grade]
     const stars = items.filter(item => EQUIP_RANK[item.grade] >= 4)
-    let behind = await ritual(level, EQUIPMENT_GRADE_META[best.grade].color, imageOf(best), 'forge', stars.length > 0)
+    let behind = await ritual(level, EQUIPMENT_GRADE_META[best.grade].color, '/assets/currency/iron.webp', 'forge', stars.length > 0)
     for (const item of stars) {
       const label = labelOf(item)
       const shown = spotlight({ stamp: EQUIPMENT_GRADE_META[item.grade].label, grade: `${EQUIPMENT_GRADE_META[item.grade].label} 장비 출현`, name: item.name, sub: `${label.type} · ${label.set}`, extra: item.skillName, image: imageOf(item), color: EQUIPMENT_GRADE_META[item.grade].color })

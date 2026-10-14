@@ -644,17 +644,18 @@ const ui = new StrategyUI(root, {
     // 튜토리얼 10회 모집: 무료, 5등급 무장 1명 확정
     const tutorialPull = count === 10 && onboarding.at('recruit')
     const result = recruit(state, count, tutorialPull ? { free: true, guaranteeGrade: 5 } : {})
-    if (result.ok) mission('recruit', count)
-    ui.render(state)
-    if (result.ok) syncSteam()
-    ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) queueAccountSave()
-    // 연출(옥패 의식 → 5등급 천명 강림) 뒤에 결과를 보여 준다
-    if (result.ok) void ui.celebrateRecruit(result.rewards).then(() => {
+    if (!result.ok) { ui.render(state); ui.notify(result.message, 'ember'); return }
+    mission('recruit', count)
+    syncSteam()
+    queueAccountSave()
+    // 결과는 연출(옥패 의식 → 5등급 천명 강림)이 끝난 뒤에야 화면·알림에 나온다
+    void ui.celebrateRecruit(result.rewards).then(() => {
+      ui.render(state)
+      ui.notify(result.message, 'jade')
       if (count === 10) ui.showRecruitResults(result.rewards)
       else if (result.general) void ui.playRecruitAnimation(result.general, count, true)
     })
-    if (result.ok && count === 10) onboarding.event('recruit10')
+    if (count === 10) onboarding.event('recruit10')
   },
   onUpgrade: id => {
     const result = upgrade(state, id)
@@ -694,11 +695,11 @@ const ui = new StrategyUI(root, {
     // 튜토리얼: 옥패가 모자라면 10회 뽑기만큼 채워 준다
     if (count === 10 && onboarding.at('gear') && state.honor < ONBOARD_GEAR_COST) state.honor = ONBOARD_GEAR_COST
     const result = drawEquipment(state, count)
-    if (result.ok) queueAccountSave(true)
-    ui.render(state)
-    ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) {
-      void ui.celebrateDraw(result.rewards).then(() => ui.showEquipmentResults(result.rewards))
+    if (!result.ok) { ui.render(state); ui.notify(result.message, 'ember'); return }
+    queueAccountSave(true)
+    {
+      // 결과는 연출(대장간 의식 → 전설·신화 출현)이 끝난 뒤에야 보여 준다
+      void ui.celebrateDraw(result.rewards).then(() => { ui.render(state); ui.notify(result.message, 'jade'); ui.showEquipmentResults(result.rewards) })
       if (count === 10) onboarding.event('gear10')
     }
   },
