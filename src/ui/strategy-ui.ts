@@ -71,7 +71,7 @@ const MOBILE_TABS: Section[] = ['overview', 'roster', 'formation', 'recruit', 'b
 /** 휴대폰에서 쓰는 짧은 메뉴 이름(한·영을 직접 고른다: 「장비」 같은 말이 사전에서 인물 이름으로 바뀌지 않게) */
 const SHORT_NAV: Record<string, [string, string]> = {
   overview: ['본영', 'Base'], roster: ['무장', 'Generals'], codex: ['도감', 'Codex'], formation: ['편성', 'Lineup'], recruit: ['모집', 'Recruit'], equipment: ['장비', 'Gear'], research: ['연구', 'Research'], territory: ['영토', 'Territory'],
-  battle: ['전투', 'Battle'], duel: ['대련', 'Duel'], rank: ['랭킹', 'Ranks'], board: ['게시판', 'Board'], shop: ['상점', 'Shop'], updates: ['소식', 'News'], account: ['계정', 'Account'], admin: ['관리', 'Admin'], balance: ['밸런스', 'Balance'],
+  battle: ['전투', 'Battle'], duel: ['대련', 'Duel'], raid: ['레이드', 'Raid'], rank: ['랭킹', 'Ranks'], board: ['게시판', 'Board'], shop: ['상점', 'Shop'], updates: ['소식', 'News'], account: ['계정', 'Account'], admin: ['관리', 'Admin'], balance: ['밸런스', 'Balance'],
 }
 /** 무장 사진 테두리·카드 강조색: 무장마다 다르던 색 대신 등급색으로 통일 */
 const gradeColor = (general: Pick<General, 'grade' | 'accent'>) => GRADE_META[general.grade]?.color ?? general.accent
@@ -2027,6 +2027,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '더보기 메뉴 레이드 이름 표시', '휴대폰 하단 「더보기」 메뉴에서 주간 레이드 아이콘 밑에 이름이 빠져 있던 것을 고쳤습니다. 이제 「레이드」로 표시됩니다.', '완료', 'jade'],
       ['2026.10.14', '시나리오 단계별 진행', '시나리오 화면이 지금 도전할 단계 하나를 크게 보여 줍니다. ← 이전 / 다음 → 버튼으로 단계를 넘기고, 아직 깨지 않은 단계 너머는 잠겨 있습니다. 단계를 깨면 다음 단계로 자동으로 넘어가고, 58개 전체 목록은 「전체 시나리오 목록」을 눌러 펼칠 때만 보입니다.', '완료', 'jade'],
       ['2026.10.14', '보유 무장 1·2·3군 보기', '보유 무장 화면에서 1군 · 2군 · 3군을 나눠 보여 줍니다. 위쪽 1군·2군·3군 버튼(인원·전투력 표시)을 누르면 그 군으로 바로 이동하고, 2·3군 무장 그림에는 「2군 · 좌측」처럼 소속과 자리가 표시됩니다. 대기 목록에는 어느 군에도 없는 무장만 남고, 2·3군 무장의 버튼은 「1군으로」입니다.', '완료', 'jade'],
       ['2026.10.14', '모바일 아래쪽 잘림 수정', '휴대폰 브라우저·앱 안 화면에서 주소창·상단 바 높이만큼 화면 아래가 잘리던 문제를 고쳤습니다. 화면 높이를 실제로 보이는 높이에 맞추고(전투 화면·모집 결과·장비 결과 포함), 10명 모집 결과·전투 결과·출전 교체 창은 아래 메뉴보다 위에 떠서 「10명 다시 뽑기」「결과 확인 완료」 같은 아래 버튼이 가려지지 않습니다.', '완료', 'jade'],
