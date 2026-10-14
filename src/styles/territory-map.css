@@ -98,8 +98,8 @@ body .map-viewport[data-lod='far'] .city-marker::before {
   box-shadow: 0 0 0 2px rgba(24, 10, 4, .75), 0 3px 6px rgba(0, 0, 0, .5);
 }
 body .map-viewport[data-lod='far'] .city-marker strong { font-size: 19px; margin-top: 0; }
-/* 멀리서 볼 때는 점 색이 소속을 알려 주므로 '공격 가능(⚔)' 표시는 숨긴다 */
-body .map-viewport[data-lod='far'] .city-marker::after { display: none; }
+/* 지도의 '공격 가능(칼)' 표시는 모든 확대 단계에서 숨긴다(성 색이 소속을 알려 준다) */
+body .map-viewport .city-marker::after, body .city-marker.is-enemy::after, body .city-marker.is-neutral::after { content: none; display: none; }
 body .map-viewport[data-lod='far'] .city-marker.is-selected::before { box-shadow: 0 0 0 3px var(--gold), 0 0 14px var(--gold); }
 body .map-viewport .city-marker.is-ally { --marker-color: #4fcf98; }
 body .map-viewport .city-marker.is-neutral { --marker-color: #f0c26a; }
@@ -110,7 +110,6 @@ body .map-viewport[data-lod='mid'] .city-marker { --marker-size: .62; }
 body .map-viewport[data-lod='mid'] .city-marker.is-selected { --marker-size: .74; }
 body .map-viewport[data-lod='mid'] .city-marker strong { font-size: 20px; }
 body .map-viewport[data-lod='mid'] .city-marker-level { width: 26px !important; height: 26px !important; font-size: 18px !important; line-height: 26px !important; }
-body .map-viewport[data-lod='mid'] .city-marker::after { transform: scale(1.5); }
 /* near: 큰 성 */
 body .map-viewport[data-lod='near'] .city-marker { --marker-size: .86; }
 body .map-viewport[data-lod='near'] .city-marker.is-selected { --marker-size: .98; }
