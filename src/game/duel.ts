@@ -6,9 +6,9 @@ import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strat
 
 export interface DummyTier { id: string; name: string; label: string; ratio: number }
 export const DUMMY_TIERS: DummyTier[] = [
-  { id: 'dummy-iron-gate', name: '철벽 관문 수비대', label: '쉬움', ratio: 0.9 },
+  { id: 'dummy-iron-gate', name: '철벽 관문 수비대', label: '쉬움', ratio: 0.85 },
   { id: 'dummy-jade-banner', name: '청람 진형 부대', label: '보통', ratio: 1 },
-  { id: 'dummy-wind-tactician', name: '질풍 책사단', label: '어려움', ratio: 1.1 },
+  { id: 'dummy-wind-tactician', name: '질풍 책사단', label: '어려움', ratio: 1.15 },
 ]
 
 const hash = (text: string) => [...text].reduce((sum, character) => (sum * 31 + character.charCodeAt(0)) >>> 0, 7)
@@ -45,7 +45,7 @@ function fitDeck(trio: General[], target: number, stars: number): { deck: Genera
 export interface DummyOpponent { id: string; displayName: string; note: string; power: number; deck: General[] }
 
 /**
- * 내 덱 전력에 맞춘 훈련 상대 3팀(쉬움 90% · 보통 100% · 어려움 110%).
+ * 내 덱 전력에 맞춘 훈련 상대 3팀(쉬움 85% · 보통 100% · 어려움 115%).
  * dayKey가 바뀌면 상대 무장 구성이 바뀐다.
  */
 export function dummyDuelDecks(myDeck: General[], dayKey = ''): DummyOpponent[] {

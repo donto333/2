@@ -13,14 +13,14 @@ describe('유저 대련 매칭', () => {
     const picked = pickDuelMatches(candidates, 1000, 3)
     expect(picked.map(item => item.power)).toEqual([900, 1000, 1100])
   })
-  it('훈련 상대는 내 덱 전력의 90%·100%·110%에 맞추고, 가운데에 수호형을 세운다', () => {
+  it('훈련 상대는 내 덱 전력의 85%·100%·115%에 맞추고, 가운데에 수호형을 세운다', () => {
     for (const level of [1, 5, 20, 45]) {
       const mine = [grown('guan-yu', level), grown('cao-ren', level), grown('zhuge-liang', level)]
       const power = duelDeckPower(mine)
       const dummies = dummyDuelDecks(mine, '2026-10-14')
       expect(dummies).toHaveLength(3)
       dummies.forEach((dummy, index) => {
-        const target = power * [0.9, 1, 1.1][index]
+        const target = power * [0.85, 1, 1.15][index]
         expect(Math.abs(dummy.power - target) / target).toBeLessThan(0.08)
         expect(GENERAL_SKILLS[dummy.deck[1].id].type).toBe('수호')
       })

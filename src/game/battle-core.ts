@@ -62,6 +62,13 @@ export const BATTLE_RULES = {
   tacticCost: { guard: 35, feint: 50, charge: 65 } as Record<BattleTactic, number>,
   guardDuration: 4.5,
   enemySkillCooldownMult: 1.3,
+  /**
+   * 유저 대련 보정: 상대 덱은 AI가 움직여 예고 대응·연계·전술을 못 쓰므로, 같은 전력이면 내가 거의 늘 이긴다(시뮬레이션: 전력 2배도 대부분 승리).
+   * 상대 사기 최대치·피해·스킬 빈도를 올려 같은 전력이면 승률 약 60%가 되게 맞춘다.
+   */
+  duelMorale: 1.6,
+  duelDamage: 1.7,
+  duelSkillCooldown: 0.8,
   enemySkillWarning: 1.5,
   skillTroopDamagePerMorale: 4,
   enemySkillTroopPerMorale: 4,
@@ -261,12 +268,12 @@ export class BattleCore {
       unit.cd = Math.max(0, unit.cdMax * 0.4 * opener(unit) - head)
     })
     this.enemies.forEach(unit => {
-      unit.cdMax = skillCooldownFor(this.growth(unit), unit.base) * (this.mode === 'duel' ? 1 : BATTLE_RULES.enemySkillCooldownMult) * (hasGearSet(unit, 'speed') ? 1 - BATTLE_RULES.galeCooldownCut : 1)
+      unit.cdMax = skillCooldownFor(this.growth(unit), unit.base) * (this.mode === 'duel' ? BATTLE_RULES.duelSkillCooldown : BATTLE_RULES.enemySkillCooldownMult) * (hasGearSet(unit, 'speed') ? 1 - BATTLE_RULES.galeCooldownCut : 1)
       unit.cd = Math.max(0, unit.cdMax * 0.6 * opener(unit) - (hasGearSet(unit, 'speed') ? BATTLE_RULES.galeOpenerSec : 0))
     })
     this.enemyMaxTotal = Math.max(1, this.enemies.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const enemyLevel = this.enemies.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.enemies.length)
-    this.moraleScale = Math.min(BATTLE_RULES.moraleScaleCap, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1)) * (this.easy ? 0.35 : 1)
+    this.moraleScale = Math.min(BATTLE_RULES.moraleScaleCap, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1)) * (this.easy ? 0.35 : 1) * (this.mode === 'duel' ? BATTLE_RULES.duelMorale : 1)
     const playerLevel = this.players.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.players.length)
     this.levelGap = clamp(enemyLevel - playerLevel, -40, 60)
     this.moraleMax = Math.round(BATTLE_RULES.moraleByPhase[0] * this.moraleScale) + this.moraleBonus
@@ -527,7 +534,7 @@ export class BattleCore {
       attacker.attackTimer = interval
       let multiplier = 1 + this.attackBonus(attacker)
       if (attacker.side === 'enemy') {
-        multiplier *= this.pressure() * this.gapScale()
+        multiplier *= this.pressure() * this.gapScale() * (this.mode === 'duel' ? BATTLE_RULES.duelDamage : 1)
         if (hasBattleEffect(this.debuffs, 'confusion') || hasBattleEffect(this.debuffs, 'blind')) multiplier *= 0.9
         if (hasBattleEffect(this.debuffs, 'rage')) multiplier *= 1.1
       }
@@ -961,7 +968,7 @@ export class BattleCore {
     this.events.push({ kind: 'skill', side: 'enemy', lane: unit.lane, name, morale: 0, type: unit.def.type, target: this.skillFocus(this.players, unit) })
     if (type === '돌격' || type === '사격') {
       const target = strikeTarget
-      if (target) this.dealDamage(target, Math.max(40, power * BATTLE_RULES.enemySkillTroopPerMorale) * (guarded ? 0.5 : 1), name, unit)
+      if (target) this.dealDamage(target, Math.max(40, power * BATTLE_RULES.enemySkillTroopPerMorale) * (guarded ? 0.5 : 1) * (this.mode === 'duel' ? BATTLE_RULES.duelDamage : 1), name, unit)
     } else if (type === '계략') {
       const id: PlayerDebuffId = FIRE_IDS.has(unit.general.id) ? 'p-burn' : unit.general.id === 'zhang-jiao' || unit.general.id === 'zhang-bo' || unit.def.active.fx.some(effect => effect.k === 'debuff' && (effect.id === 'confusion' || effect.id === 'blind')) ? 'p-confuse' : 'p-fear'
       this.addEffect('pdebuff', id, (6 - shortDebuff) * (guarded ? 0.5 : 1))
