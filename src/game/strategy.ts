@@ -685,7 +685,8 @@ const withSkillText = (general: General): General => {
   const def = GENERAL_SKILLS[general.id]
   return def ? { ...general, skillName: def.active.name, skillDescription: def.active.desc } : general
 }
-const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText)
+// 강조색(사진 테두리 등)은 등급색으로 통일한다
+const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkillText).map(general => ({ ...general, accent: GRADE_META[general.grade].color }))
 
 /** 도감(Lv1) 원형. 성장 전 능력치가 필요한 스킬 공식에서 쓴다. */
 export function templateGeneral(id: string): General | undefined {
@@ -727,7 +728,6 @@ export function migrateGeneralGrades(state: StrategyState): { changed: number; h
     const before = previousTemplate(general.id)
     if (!template || !before || general.grade !== before.grade || template.grade === general.grade) continue
     for (const key of STAT_KEYS) general[key] = Math.max(1, general[key] + (template[key] - before[key]))
-    if (general.accent === GRADE_META[before.grade].color) general.accent = GRADE_META[template.grade].color
     if (template.grade < before.grade) {
       for (let grade = before.grade; grade > template.grade; grade -= 1) result.honor += GRADE_DOWN_COMPENSATION[grade as Grade]
       result.down.push(general.name)
@@ -735,6 +735,8 @@ export function migrateGeneralGrades(state: StrategyState): { changed: number; h
     general.grade = template.grade
     result.changed += 1
   }
+  // 보유 무장의 강조색도 등급색으로 맞춘다(예전 저장분은 무장마다 다른 색)
+  for (const general of state.generals) if (GRADE_META[general.grade]) general.accent = GRADE_META[general.grade].color
   if (result.honor > 0) state.honor += result.honor
   if (result.changed) {
     const parts = [result.up.length ? `등급 상승 ${result.up.join('·')}` : '', result.down.length ? `등급 조정 ${result.down.join('·')} · 보상 옥패 +${formatNumber(result.honor)}` : ''].filter(Boolean)

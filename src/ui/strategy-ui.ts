@@ -68,6 +68,8 @@ const SHORT_NAV: Record<string, [string, string]> = {
   overview: ['본영', 'Base'], roster: ['무장', 'Generals'], codex: ['도감', 'Codex'], formation: ['편성', 'Lineup'], recruit: ['모집', 'Recruit'], equipment: ['장비', 'Gear'], research: ['연구', 'Research'], territory: ['영토', 'Territory'],
   battle: ['전투', 'Battle'], duel: ['대련', 'Duel'], rank: ['랭킹', 'Ranks'], board: ['게시판', 'Board'], shop: ['상점', 'Shop'], updates: ['소식', 'News'], account: ['계정', 'Account'], admin: ['관리', 'Admin'], balance: ['밸런스', 'Balance'],
 }
+/** 무장 사진 테두리·카드 강조색: 무장마다 다르던 색 대신 등급색으로 통일 */
+const gradeColor = (general: Pick<General, 'grade' | 'accent'>) => GRADE_META[general.grade]?.color ?? general.accent
 const shortNavLabel = (key: string) => { const pair = SHORT_NAV[key]; return pair ? `<span class="nav-short" data-no-tr>${isEnglish() ? pair[1] : pair[0]}</span>` : '' }
 
 /** 사용자가 쓴 글·이름: 번역하지 않는다 */
@@ -613,7 +615,7 @@ export class StrategyUI {
     const meta = GRADE_META[general.grade]
     const overlay = document.createElement('div')
     overlay.className = 'summon-ritual'
-    overlay.innerHTML = `<div class="ritual-backdrop"></div><div class="ritual-orbit ritual-orbit--one"></div><div class="ritual-orbit ritual-orbit--two"></div><div class="ritual-stage"><div class="ritual-heading"><span class="eyebrow">${count === 10 ? '10회 연속 모집 · 대표 등장' : '1회 모집 · 옥패의 응답'}</span><strong>천명이 인장을 깨운다</strong></div><div class="ritual-seal"><span>✦</span><i>옥패의 응답</i></div><div class="ritual-reveal" style="--grade:${meta.color};--accent:${general.accent}"><span class="ritual-grade">${meta.label} · ${general.grade}등급</span>${this.ritualPortrait(general)}<h2>${general.name}</h2><p>${general.epithet}</p><small>${general.role} · Lv.${general.level} · ${general.stars}성</small><div class="ritual-skill"><b>${general.skillName}</b><span>${general.skillDescription}</span></div></div><button class="action-button action-button--primary ritual-continue" data-action="close-summon">결과 확인 <span>→</span></button></div>`
+    overlay.innerHTML = `<div class="ritual-backdrop"></div><div class="ritual-orbit ritual-orbit--one"></div><div class="ritual-orbit ritual-orbit--two"></div><div class="ritual-stage"><div class="ritual-heading"><span class="eyebrow">${count === 10 ? '10회 연속 모집 · 대표 등장' : '1회 모집 · 옥패의 응답'}</span><strong>천명이 인장을 깨운다</strong></div><div class="ritual-seal"><span>✦</span><i>옥패의 응답</i></div><div class="ritual-reveal" style="--grade:${meta.color};--accent:${gradeColor(general)}"><span class="ritual-grade">${meta.label} · ${general.grade}등급</span>${this.ritualPortrait(general)}<h2>${general.name}</h2><p>${general.epithet}</p><small>${general.role} · Lv.${general.level} · ${general.stars}성</small><div class="ritual-skill"><b>${general.skillName}</b><span>${general.skillDescription}</span></div></div><button class="action-button action-button--primary ritual-continue" data-action="close-summon">결과 확인 <span>→</span></button></div>`
     this.root.appendChild(overlay)
 
     return new Promise(resolve => {
@@ -639,7 +641,7 @@ export class StrategyUI {
     this.root.querySelector('.recruit-results')?.remove()
     const overlay = document.createElement('div')
     overlay.className = 'recruit-results'
-    const cards = rewards.map((general, index) => `<div class="recruit-result-card ${general.grade === 5 ? 'recruit-result-card--five-star' : ''}" style="--grade:${GRADE_META[general.grade].color};--accent:${general.accent};--reveal-delay:${Math.min(index, 9) * 70}ms"><span class="recruit-result-index">${String(index + 1).padStart(2, '0')}</span>${this.ritualPortrait(general)}<div><b>${escapeHtml(general.name)}</b><small>${general.grade}등급 · ${GRADE_META[general.grade].label} · Lv.${general.level}</small></div></div>`).join('')
+    const cards = rewards.map((general, index) => `<div class="recruit-result-card ${general.grade === 5 ? 'recruit-result-card--five-star' : ''}" style="--grade:${GRADE_META[general.grade].color};--accent:${gradeColor(general)};--reveal-delay:${Math.min(index, 9) * 70}ms"><span class="recruit-result-index">${String(index + 1).padStart(2, '0')}</span>${this.ritualPortrait(general)}<div><b>${escapeHtml(general.name)}</b><small>${general.grade}등급 · ${GRADE_META[general.grade].label} · Lv.${general.level}</small></div></div>`).join('')
     overlay.innerHTML = `<div class="recruit-results-backdrop"></div><div class="recruit-results-panel"><div class="recruit-results-heading"><div><span class="eyebrow">10회 모집 결과</span><h2>열 명의 무장이 응답했습니다</h2><p>획득한 무장은 도감에 기록되고, 중복 인장은 성급 성장에 사용됩니다.</p></div><button class="mini-action" data-action="close-recruit-results">닫기</button></div><div class="recruit-results-grid">${cards}</div><div class="recruit-results-actions"><button class="action-button action-button--outline" data-action="reroll-recruit"><span>10명 다시 뽑기</span><b class="cost">${icon('honor', 'gi--cost')}${this.renderedState ? formatNumber(recruitCost(this.renderedState, 10)) : '900'}</b></button><button class="action-button action-button--primary" data-action="close-recruit-results">결과 확인 완료 <span>→</span></button></div></div>`
     this.root.appendChild(overlay)
     requestAnimationFrame(() => overlay.classList.add('is-visible'))
@@ -1471,14 +1473,14 @@ export class StrategyUI {
     const portraitPath = this.portraitAsset(general)
     const imageClass = ' has-portrait'
     const imageStyle = `--portrait:url('${portraitPath}');`
-    return `<div class="general-portrait${className ? ` ${className}` : ''}${imageClass}" style="--accent:${general.accent};${imageStyle}"><span>${general.portrait}</span><i></i></div>`
+    return `<div class="general-portrait${className ? ` ${className}` : ''}${imageClass}" style="--accent:${gradeColor(general)};${imageStyle}"><span>${general.portrait}</span><i></i></div>`
   }
 
   private ritualPortrait(general: General): string {
     const portraitPath = this.portraitAsset(general)
     const imageClass = ' has-portrait'
     const imageStyle = `--portrait:url('${portraitPath}');`
-    return `<div class="ritual-portrait${imageClass}" style="--accent:${general.accent};${imageStyle}"><span>${general.portrait}</span><i></i></div>`
+    return `<div class="ritual-portrait${imageClass}" style="--accent:${gradeColor(general)};${imageStyle}"><span>${general.portrait}</span><i></i></div>`
   }
 
   private battleEffectsMarkup(effects: BattleSnapshot['activeEffects'] = []): string {
@@ -1532,7 +1534,7 @@ export class StrategyUI {
       : general.level >= unlockAt
         ? `<button class="mini-action mini-action--skill gcard-unlock" data-action="skill" data-id="${general.id}" ${state.silver >= 1500 ? '' : 'disabled'}>스킬 해금 · 은전 1,500</button>`
         : `<span class="gcard-skill-state">해금까지 ${unlockAt - general.level}레벨 (Lv.${unlockAt})</span>`
-    return `<article class="gcard ${general.grade >= 4 ? `gcard--aura gcard--g${general.grade}` : ''} ${inFormation ? 'is-deployed' : ''} ${!general.skillUnlocked && general.level >= unlockAt ? 'is-unlockable' : ''}" style="--accent:${general.accent};--grade:${meta.color}">
+    return `<article class="gcard ${general.grade >= 4 ? `gcard--aura gcard--g${general.grade}` : ''} ${inFormation ? 'is-deployed' : ''} ${!general.skillUnlocked && general.level >= unlockAt ? 'is-unlockable' : ''}" style="--accent:${gradeColor(general)};--grade:${meta.color}">
       <div class="gcard-portrait" style="--portrait:url('${this.portraitAsset(general)}')"><span class="gcard-grade">${general.grade} · ${meta.label}</span>${inFormation ? `<span class="gcard-lane">${['좌측', '중앙', '우측'][lane]} 출전</span>` : ''}</div>
       <div class="gcard-body">
         <div class="gcard-head"><div><h3>${general.name}<span class="star-row">${'★'.repeat(general.stars)}${'☆'.repeat(5 - general.stars)}</span></h3><p>${escapeHtml(general.epithet)}</p></div><span class="role-tag">${general.role}</span></div>
@@ -1550,7 +1552,7 @@ export class StrategyUI {
     const body = owned
       ? `<div class="codex-stat-line"><span>Lv.${general.level} · ${'★'.repeat(general.stars)}</span><b>${formatNumber(combatPower(general))}</b></div><details class="gcard-skill"><summary><span>◈ ${escapeHtml(general.skillName)}</span><em>${skillDetail(general).type}</em></summary><p>${escapeHtml(general.skillDescription)}</p>${this.skillDetailPanel(general)}</details>`
       : `<div class="codex-lock-note">무장 모집에서 획득할 수 있습니다. (${meta.label} 등급 확률 ${meta.rate})</div>`
-    return `<article class="codex-card${hidden}${general.grade >= 4 ? ` gcard--aura gcard--g${general.grade}` : ''}" data-codex-name="${escapeHtml(general.name)}" style="--accent:${general.accent};--grade:${meta.color}"><div class="codex-card-art">${this.portrait(general, 'codex-portrait')}<span class="codex-grade">${general.grade} · ${meta.label}</span><span class="codex-state">${owned ? '영입 완료' : '미영입'}</span></div><div class="codex-card-body"><div class="codex-card-heading"><div><h3>${owned ? general.name : '???'}</h3><p>${owned ? escapeHtml(general.epithet) : `${general.role} · ${meta.label}`}</p></div><span>${general.role}</span></div>${body}</div></article>`
+    return `<article class="codex-card${hidden}${general.grade >= 4 ? ` gcard--aura gcard--g${general.grade}` : ''}" data-codex-name="${escapeHtml(general.name)}" style="--accent:${gradeColor(general)};--grade:${meta.color}"><div class="codex-card-art">${this.portrait(general, 'codex-portrait')}<span class="codex-grade">${general.grade} · ${meta.label}</span><span class="codex-state">${owned ? '영입 완료' : '미영입'}</span></div><div class="codex-card-body"><div class="codex-card-heading"><div><h3>${owned ? general.name : '???'}</h3><p>${owned ? escapeHtml(general.epithet) : `${general.role} · ${meta.label}`}</p></div><span>${general.role}</span></div>${body}</div></article>`
   }
 
 
@@ -1580,11 +1582,11 @@ export class StrategyUI {
         ? `<div class="formation-equipment-chip is-equipped"><span><img class="gear-glyph" src="${equipmentImage(type)}" alt="" width="18" height="18" draggable="false"></span><strong>${escapeHtml(item.name)}</strong><button class="formation-unequip" data-action="equipment-unequip" data-equipment-type="${type}" data-general-id="${general.id}">해제</button></div>`
         : `<div class="formation-equipment-chip"><span><img class="gear-glyph" src="${equipmentImage(type)}" alt="" width="18" height="18" draggable="false"></span><strong>${EQUIPMENT_TYPE_META[type].label} 없음</strong><button class="formation-unequip formation-equip" data-action="equip-general" data-id="${general.id}">장착하기</button></div>`
     }).join('')
-    return `<div class="formation-slot formation-slot--filled" style="--accent:${general.accent}"><div class="formation-slot-main"><span class="formation-slot-index">${lane}</span>${this.portrait(general, 'formation-portrait')}<strong>${general.name}</strong><small>${general.role} · Lv.${general.level}</small><b>${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</b><button class="text-button formation-release" data-action="formation" data-id="${general.id}">편성 해제</button></div>${enemyLine(enemy ? matchup(general.role, enemy.role) : 1)}<div class="formation-equipment"><span class="formation-equipment-label">장착 장비</span>${equipment}</div></div>`
+    return `<div class="formation-slot formation-slot--filled" style="--accent:${gradeColor(general)}"><div class="formation-slot-main"><span class="formation-slot-index">${lane}</span>${this.portrait(general, 'formation-portrait')}<strong>${general.name}</strong><small>${general.role} · Lv.${general.level}</small><b>${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</b><button class="text-button formation-release" data-action="formation" data-id="${general.id}">편성 해제</button></div>${enemyLine(enemy ? matchup(general.role, enemy.role) : 1)}<div class="formation-equipment"><span class="formation-equipment-label">장착 장비</span>${equipment}</div></div>`
   }
 
   private formationBenchCard(general: General): string {
-    return `<article class="formation-bench-card" style="--accent:${general.accent}">${this.portrait(general, 'formation-bench-portrait')}<div><strong>${general.name}</strong><small>${general.role} · ${GRADE_META[general.grade].label} · Lv.${general.level}</small></div><b>${formatNumber(combatPower(general))}</b><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">편성</button></article>`
+    return `<article class="formation-bench-card" style="--accent:${gradeColor(general)}">${this.portrait(general, 'formation-bench-portrait')}<div><strong>${general.name}</strong><small>${general.role} · ${GRADE_META[general.grade].label} · Lv.${general.level}</small></div><b>${formatNumber(combatPower(general))}</b><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">편성</button></article>`
   }
 
   /** 추천 무장: 가졌으면 ✓, 없으면 같은 병과의 내 무장 중 가장 강한 무장을 대신 추천 */
@@ -1621,7 +1623,7 @@ export class StrategyUI {
       const live = battle?.units[index]
       const pct = live && live.maxTroops ? live.troops / live.maxTroops * 100 : 100
       const detail = skillDetail(general)
-      return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${general.accent}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span><span class="bt-unit-edge" data-bt-unit-edge hidden></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
+      return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${gradeColor(general)}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span><span class="bt-unit-edge" data-bt-unit-edge hidden></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
     }).join('')
     const modeLabel = battle?.mode === 'scenario' ? '시나리오 전투' : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : '일반 전투'
     const tactic = (id: 'guard' | 'feint' | 'charge', icon: string, label: string, note: string) => `<button class="bt-tactic bt-tactic--${id}" title="${label} · ${note}" data-action="battle-tactic" data-tactic="${id}" ${id === 'guard' ? 'data-bt-guard' : ''} disabled><span>${icon}</span><strong>${label}</strong><small>${note}</small><em>${battle?.tacticCosts[id] ?? { guard: 35, feint: 50, charge: 65 }[id]}</em></button>`
@@ -1786,6 +1788,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '무장 사진 테두리를 등급색으로', '무장마다 제각각이던 사진 테두리와 카드 강조색을 등급색으로 통일했습니다. 천명은 금빛, 명장은 비취빛, 정예는 푸른빛, 용사는 보랏빛, 신병은 회색입니다.', '완료', 'jade'],
       ['2026.10.14', '무장 등급 재설정', '삼국지 속 역할과 비중에 맞춰 무장 등급을 다시 매겼습니다. 천명은 촉·위·오·군웅에서 4명씩(유비·제갈량·관우·조운 / 조조·사마의·장료·하후돈 / 손권·손책·주유·육손 / 여포·동탁·원소·장각)입니다. 이미 가진 무장도 새 등급으로 옮겨지고, 등급이 내려간 무장은 단계마다 옥패로 보상합니다(천명→명장 1,000 · 명장→정예 300 · 정예→용사 100 · 용사→신병 50).', '완료', 'jade'],
       ['2026.10.14', '명장·천명 무장 카드 오라', '보유 무장과 무장 도감에서 명장(4등급) 카드는 비취빛, 천명(5등급) 카드는 금빛 테두리 빛이 돌며 은은하게 숨쉬고, 천명 초상 위로는 금빛 불티가 피어오릅니다. 효과 줄임 설정에서는 빛만 남기고 움직임을 멈춥니다.', '완료', 'jade'],
       ['2026.10.14', '휴대폰 가로 화면 지원', '휴대폰을 가로로 눕혀도 쓰기 좋게 바꿨습니다. 메뉴는 왼쪽 아이콘 띠로 줄이고 상단바를 한 줄로 얇게 했습니다. 전투에서는 아군 무장을 왼쪽, 상대 무장을 오른쪽 세로 줄로 옮겨 전장이 넓게 보이고, 로그인 화면은 그림과 로그인 버튼을 나란히 놓았습니다.', '완료', 'jade'],
