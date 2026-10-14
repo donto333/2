@@ -1120,7 +1120,10 @@ export class StrategyUI {
     const match = (general: General) => this.rosterFilter === 'all' ? true : this.rosterFilter === '5' ? general.grade === 5 : this.rosterFilter === '4' ? general.grade === 4 : general.role === this.rosterFilter
     // 출전 무장은 좌·중·우 순서로 맨 앞에 고정, 나머지는 고른 정렬
     const deployed = state.formation.map(id => state.generals.find(general => general.id === id)).filter((general): general is General => Boolean(general) && match(general!))
-    const reserve = this.sortedOwnedGenerals(state).filter(general => !state.formation.includes(general.id) && match(general))
+    // 2군·3군도 따로 묶어 보여 준다(편성 순서대로), 대기는 어느 군에도 없는 무장
+    const squadGroups = [1, 2].map(squad => ({ squad, list: squadIds(state, squad).map(id => state.generals.find(general => general.id === id)).filter((general): general is General => Boolean(general) && match(general!)) }))
+    const inSquad = new Set([1, 2].flatMap(squad => squadIds(state, squad)))
+    const reserve = this.sortedOwnedGenerals(state).filter(general => !state.formation.includes(general.id) && !inSquad.has(general.id) && match(general))
     const filters: Array<[typeof this.rosterFilter, string, number]> = [
       ['all', '전체', state.generals.length], ['5', '천명', state.generals.filter(g => g.grade === 5).length], ['4', '명장', state.generals.filter(g => g.grade === 4).length],
       ...(['기병', '보병', '궁병', '책사'] as Role[]).map(role => [role, role, state.generals.filter(g => g.role === role).length] as [Role, string, number]),
@@ -1129,8 +1132,9 @@ export class StrategyUI {
     const cards = (list: General[]) => list.map(general => this.generalCard(state, general, scale)).join('')
     const empty = !deployed.length && !reserve.length ? '<div class="roster-empty">이 조건에 맞는 무장이 없습니다.</div>' : ''
     return `<section class="page-section page-section--roster"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>보유 무장</h1><p class="heading-copy">무장을 키우고 장비를 갖춰 출전 진형에 배치하십시오.</p></div><div class="section-counter"><span>출전 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="roster-toolbar roster-toolbar--expanded"><div class="filter-tabs">${filters.map(([id, label, count]) => `<button class="filter-tab ${this.rosterFilter === id ? 'is-active' : ''}" data-action="roster-filter" data-filter="${id}">${label} <b>${count}</b></button>`).join('')}</div><div class="roster-sort-controls"><label>정렬 <select data-action="roster-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.rosterSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="roster-sort-direction" title="정렬 방향">${this.rosterSortDescending ? '↓' : '↑'}</button><button class="ghost-button ghost-button--small" data-action="section" data-section="formation">편성 화면 →</button></div></div>
-      <div class="roster-summary"><span>보유 ${state.generals.length}명 · 출전 ${state.formation.length}/3명 · 은전 ${formatNumber(state.silver)} · 병서 ${formatNumber(state.manuals)}</span><span>대기 무장은 ${this.sortLabel()} ${this.rosterSortDescending ? '높은 순' : '낮은 순'}</span></div>
-      ${deployed.length ? `<h2 class="roster-group">출전 중</h2><div class="roster-grid">${cards(deployed)}</div>` : ''}${reserve.length ? `<h2 class="roster-group">대기</h2><div class="roster-grid">${cards(reserve)}</div>` : ''}${empty}</section>`
+      <div class="roster-summary"><span>보유 ${state.generals.length}명 · 1군 ${state.formation.length}/3 · 2군 ${squadIds(state, 1).length}/3 · 3군 ${squadIds(state, 2).length}/3 · 은전 ${formatNumber(state.silver)} · 병서 ${formatNumber(state.manuals)}</span><span>대기 무장은 ${this.sortLabel()} ${this.rosterSortDescending ? '높은 순' : '낮은 순'}</span></div>
+      <nav class="roster-squad-jump">${SQUAD_LABELS.map((label, index) => `<button class="roster-squad-chip" data-action="roster-jump" data-squad="${index}" ${squadIds(state, index).length ? '' : 'disabled'}>${label} <b>${squadIds(state, index).length}/3</b><small>${formatNumber(squadPower(state, index))}</small></button>`).join('')}<button class="text-button" data-action="section" data-section="formation">편성 바꾸기 →</button></nav>
+      ${deployed.length ? `<h2 class="roster-group" id="roster-squad-0">1군 · 출전 중</h2><div class="roster-grid">${cards(deployed)}</div>` : ''}${squadGroups.map(group => group.list.length ? `<h2 class="roster-group" id="roster-squad-${group.squad}">${SQUAD_LABELS[group.squad]} <small>레이드에서 ${group.squad === 1 ? '1군' : '2군'} 다음으로 출전</small></h2><div class="roster-grid">${cards(group.list)}</div>` : '').join('')}${reserve.length ? `<h2 class="roster-group">대기</h2><div class="roster-grid">${cards(reserve)}</div>` : ''}${empty}</section>`
   }
 
   /** 도감 이름 찾기: 다시 그리지 않고 카드만 숨긴다(입력 칸 초점 유지) */
@@ -1663,14 +1667,14 @@ export class StrategyUI {
         ? `<button class="mini-action mini-action--skill gcard-unlock" data-action="skill" data-id="${general.id}" ${state.silver >= 1500 ? '' : 'disabled'}>스킬 해금 · 은전 1,500</button>`
         : `<span class="gcard-skill-state">해금까지 ${unlockAt - general.level}레벨 (Lv.${unlockAt})</span>`
     return `<article class="gcard ${general.grade >= 4 ? `gcard--aura gcard--g${general.grade}` : ''} ${inFormation ? 'is-deployed' : ''} ${!general.skillUnlocked && general.level >= unlockAt ? 'is-unlockable' : ''}" style="--accent:${gradeColor(general)};--grade:${meta.color}">
-      <div class="gcard-portrait" style="--portrait:url('${this.portraitAsset(general)}')"><span class="gcard-grade">${general.grade} · ${meta.label}</span>${inFormation ? `<span class="gcard-lane">${['좌측', '중앙', '우측'][lane]} 출전</span>` : ''}</div>
+      <div class="gcard-portrait" style="--portrait:url('${this.portraitAsset(general)}')"><span class="gcard-grade">${general.grade} · ${meta.label}</span>${inFormation ? `<span class="gcard-lane">1군 · ${['좌측', '중앙', '우측'][lane]}</span>` : (() => { const where = squadOf(state, general.id); return where > 0 ? `<span class="gcard-lane gcard-lane--reserve">${SQUAD_LABELS[where]} · ${['좌측', '중앙', '우측'][squadIds(state, where).indexOf(general.id)] ?? ''}</span>` : '' })()}</div>
       <div class="gcard-body">
         <div class="gcard-head"><div><h3>${general.name}<span class="star-row">${'★'.repeat(general.stars)}${'☆'.repeat(5 - general.stars)}</span></h3><p>${escapeHtml(general.epithet)}</p></div><span class="role-tag">${general.role}</span></div>
         <div class="level-line"><span>Lv.${general.level}</span><span>전투력 <b>${formatNumber(combatPower(general) + gearPower)}</b>${gearPower ? `<small> (장비 +${formatNumber(gearPower)})</small>` : ''}</span></div>
         <div class="stat-bars stat-bars--attributes">${this.attributeRows(general, scale)}</div>
         <details class="gcard-skill"><summary><span>◈ ${escapeHtml(general.skillName)}</span><em>${detail.type}</em>${skillState}</summary><p>${escapeHtml(general.skillDescription)}</p>${this.skillDetailPanel(general)}</details>
         <button class="gcard-gear" data-action="equip-general" data-id="${general.id}" title="이 무장의 장비 화면으로">${gear}<span>${sets || (gearPower ? '세트 효과 없음' : '장비 없음')}</span><b>장착</b></button>
-        <div class="gcard-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : '출전 편성'}</button><button class="mini-action gcard-up" data-action="upgrade" data-id="${general.id}" ${canUpgrade ? '' : 'disabled'} title="은전 ${formatNumber(cost.silver)} · 병서 ${formatNumber(cost.manuals)}">강화 Lv.${general.level + 1}<small class="cost-row"><span class="cost ${state.silver < cost.silver ? 'is-short' : ''}">${icon('silver', 'gi--cost')}${compactNumber(cost.silver)}</span><span class="cost ${state.manuals < cost.manuals ? 'is-short' : ''}">${icon('manuals', 'gi--cost')}${formatNumber(cost.manuals)}</span></small></button>${many >= 2 ? `<button class="mini-action gcard-up-many" data-action="upgrade-many" data-id="${general.id}">${many}회 강화</button>` : ''}</div>
+        <div class="gcard-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : squadOf(state, general.id) > 0 ? '1군으로' : '출전 편성'}</button><button class="mini-action gcard-up" data-action="upgrade" data-id="${general.id}" ${canUpgrade ? '' : 'disabled'} title="은전 ${formatNumber(cost.silver)} · 병서 ${formatNumber(cost.manuals)}">강화 Lv.${general.level + 1}<small class="cost-row"><span class="cost ${state.silver < cost.silver ? 'is-short' : ''}">${icon('silver', 'gi--cost')}${compactNumber(cost.silver)}</span><span class="cost ${state.manuals < cost.manuals ? 'is-short' : ''}">${icon('manuals', 'gi--cost')}${formatNumber(cost.manuals)}</span></small></button>${many >= 2 ? `<button class="mini-action gcard-up-many" data-action="upgrade-many" data-id="${general.id}">${many}회 강화</button>` : ''}</div>
       </div></article>`
   }
 
@@ -1995,6 +1999,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '보유 무장 1·2·3군 보기', '보유 무장 화면에서 1군 · 2군 · 3군을 나눠 보여 줍니다. 위쪽 1군·2군·3군 버튼(인원·전투력 표시)을 누르면 그 군으로 바로 이동하고, 2·3군 무장 그림에는 「2군 · 좌측」처럼 소속과 자리가 표시됩니다. 대기 목록에는 어느 군에도 없는 무장만 남고, 2·3군 무장의 버튼은 「1군으로」입니다.', '완료', 'jade'],
       ['2026.10.14', '모바일 아래쪽 잘림 수정', '휴대폰 브라우저·앱 안 화면에서 주소창·상단 바 높이만큼 화면 아래가 잘리던 문제를 고쳤습니다. 화면 높이를 실제로 보이는 높이에 맞추고(전투 화면·모집 결과·장비 결과 포함), 10명 모집 결과·전투 결과·출전 교체 창은 아래 메뉴보다 위에 떠서 「10명 다시 뽑기」「결과 확인 완료」 같은 아래 버튼이 가려지지 않습니다.', '완료', 'jade'],
       ['2026.10.14', '레이드 2·3군 출전 수정', '로그인한 계정은 다시 접속하면 2·3군 편성이 사라져 레이드에 1군만 나가던 문제를 고쳤습니다(서버 새 칸이 없어도 장착 정보와 함께 저장). 군 사이에는 방금 군의 피해·합계와 다음 출전 군을 보여 주고 5초 뒤 자동으로 이어 출전합니다. 전투 화면 위에 「주간 레이드 · 2군 2/3」처럼 지금 싸우는 군이 보이고, 레이드 중 전투 시작 버튼은 다음 군 출전으로 이어집니다. 2·3군이 비어 있으면 출전 전에 남은 무장으로 자동 편성할지 묻습니다.', '완료', 'jade'],
       ['2026.10.14', '1·2·3군 편성 · 주간 레이드', '출전 편성에 1군·2군·3군 탭이 생겼습니다. 한 무장은 한 군에만 설 수 있고, 2·3군도 자동 편성·자동 장착(다른 군 장비는 건드리지 않음)·1군과 바꾸기를 할 수 있습니다. 새 콘텐츠 「주간 레이드」: 병력이 줄지 않는 보스 군단에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화, 하루 3회. 보스 레벨은 덱을 저장한 지휘관이 20명 이하면 Lv30, 그보다 많으면 전력 상위 300명의 평균 레벨입니다. 3막 사기를 무너뜨릴 때마다 큰 피해 보너스가 붙습니다. 순위 보상(다음 주에 받기): 1위 금화 200·낙양 강화석 2 · 2위 금화 200·강화석 1 · 3위 금화 100·강화석 1 · 4~10위 금화 100 · 11~50위 80 · 51~100위 60 · 101~200위 40 · 201~300위 20 · 301위부터 10. 군 전력으로 낼 수 없는 피해 기록은 서버가 잘라 냅니다. 게스트는 연습 모드(기록·보상 없음)입니다.', '완료', 'jade'],
@@ -2201,6 +2206,7 @@ export class StrategyUI {
     else if (action === 'raid-start') this.callbacks.onRaidStart()
     else if (action === 'raid-refresh') this.callbacks.onRaidRefresh()
     else if (action === 'raid-claim') this.callbacks.onRaidClaim()
+    else if (action === 'roster-jump') this.root.querySelector(`#roster-squad-${button.dataset.squad ?? '0'}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     else if (action === 'squad-tab') { this.formationSquad = Math.max(0, Math.min(2, Number(button.dataset.squad ?? 0))); if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'squad-toggle') this.callbacks.onSquadToggle(Number(button.dataset.squad ?? 1), button.dataset.id ?? '')
     else if (action === 'squad-auto') this.callbacks.onSquadAuto(Number(button.dataset.squad ?? 1), button.dataset.withEquipment === '1')

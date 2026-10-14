@@ -1917,3 +1917,12 @@ body .duel-opponent { grid-template-columns: 42px 42px 1fr auto auto; }
 .recruit-results, .result-modal, .summon-ritual { z-index: 40; }
 body .slot-picker { z-index: 40; }
 .recruit-results-panel { padding-bottom: calc(19px + env(safe-area-inset-bottom, 0px)); }
+/* 보유 무장: 1·2·3군 바로가기와 묶음 */
+.roster-squad-jump { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 14px; }
+.roster-squad-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 7px 12px; border: 1px solid rgba(224, 177, 82, .35); border-radius: 999px; background: rgba(30, 18, 10, .6); color: var(--white, #f6ead2); font-size: 13px; }
+.roster-squad-chip b { color: var(--gold, #f2c46d); }
+.roster-squad-chip small { color: var(--muted, #b9a58a); font-size: 11px; }
+.roster-squad-chip:disabled { opacity: .45; }
+.roster-group small { margin-left: 8px; color: var(--muted, #b9a58a); font-size: 12px; font-weight: 400; }
+.gcard-lane--reserve { background: rgba(82, 224, 196, .85) !important; color: #10231d !important; }
+.roster-group[id] { scroll-margin-top: calc(var(--mobile-top, 92px) + 8px); }
