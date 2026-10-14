@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { allGenerals, scaleGeneral, type General } from './strategy'
+import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
 import { BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import type { SkillType } from './skills'
@@ -702,7 +702,8 @@ export class Arena {
       if (chosen.filter(item => item.role === general.role).length >= 2) continue
       chosen.push(general)
     }
-    return chosen.map(general => scaleGeneral({ ...general, level: 1, stars: 1 }, level, stars))
+    // 적도 전열 규칙대로(수호형·단단한 무장이 가운데)
+    return frontLineOrder(chosen).map(general => scaleGeneral({ ...general, level: 1, stars: 1 }, level, stars))
   }
 
   startBattle(options: { autoPlay?: boolean } = {}): void {

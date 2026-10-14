@@ -7,6 +7,7 @@ import { affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST,
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
 import { SCENARIOS, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
+import { ARCHETYPE_META, recommendDecks, type ComboAdvice } from '../game/formation-advice'
 import { ensureIconSprite, icon, type IconName } from './icons'
 import { playForgeCeremony, playSummonCeremony } from './summon-ceremony'
 
@@ -180,6 +181,8 @@ export interface StrategyUiCallbacks {
   onUpgradeMany: (id: string) => void
   onAutoFormation: (withEquipment: boolean) => void
   onAutoEquip: () => void
+  /** 추천 덱으로 편성(좌·중·우 순서) */
+  onApplyCombo: (ids: string[]) => void
   onEquipmentDraw: (count: number) => void
   onEquipmentEnhance: (id: string) => void
   onEquipmentEquip: (generalId: string, itemId: string) => void
@@ -280,6 +283,9 @@ export class StrategyUI {
   private codexQuery = ''
   private formationSort: FormationSort = 'power'
   private formationSortDescending = true
+  /** 추천 덱을 볼 무장(없으면 출전 첫 무장) */
+  private comboAnchorId: string | null = null
+  private comboCache = new Map<string, ComboAdvice[]>()
   private renderedState: StrategyState | null = null
   private summonTab: 'generals' | 'equipment' = 'generals'
   private equipmentSort: EquipmentSort = 'grade'
@@ -1098,7 +1104,7 @@ export class StrategyUI {
   private formationSection(state: StrategyState): string {
     const bench = this.sortedFormationBench(state)
     const sortOptions: Array<[FormationSort, string]> = [['power', '전투력'], ['grade', '등급']]
-    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리하고, 가운데(전열)에는 수호형이나 단단한 무장을 세우면 좌우 공격수가 오래 살아남습니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div><div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리하고, 가운데(전열)에는 수호형이나 단단한 무장을 세우면 좌우 공격수가 오래 살아남습니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div>${this.comboAdvice(state)}<div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
   }
 
   private equipmentSection(state: StrategyState): string {
@@ -1557,6 +1563,38 @@ export class StrategyUI {
 
 
   /** 출전 편성 비교 대상: 다음 시나리오의 같은 자리 적장 */
+  /**
+   * 무장별 추천 덱: 무장을 고르면 그 무장이 들어간 이상적인 조합을 유형마다 하나씩(스킬 연계·버티기·초반 끝내기·디버프·유틸) 보여 준다.
+   * 지금 키운 정도는 따지지 않고 스킬 설계와 전열 규칙만 본다. 70명 전체에서 고르므로 없는 무장은 미보유로 표시한다.
+   */
+  private comboAdvice(state: StrategyState): string {
+    const owned = new Set(state.generals.map(general => general.id))
+    const catalog = allGenerals()
+    const byId = new Map(catalog.map(general => [general.id, general]))
+    const ownedFirst = [...catalog].sort((left, right) => Number(owned.has(right.id)) - Number(owned.has(left.id)) || right.grade - left.grade)
+    const anchorId = (this.comboAnchorId && byId.has(this.comboAnchorId) ? this.comboAnchorId : null) ?? state.formation[1] ?? state.formation[0] ?? ownedFirst[0].id
+    const anchor = byId.get(anchorId)!
+    let combos = this.comboCache.get(anchorId)
+    if (!combos) { combos = recommendDecks(anchorId); this.comboCache.set(anchorId, combos) }
+    const current = state.formation.join(',')
+    const chips = ownedFirst.map(general => `<button class="combo-chip ${general.id === anchorId ? 'is-active' : ''} ${owned.has(general.id) ? '' : 'is-unowned'}" data-action="combo-anchor" data-id="${general.id}" style="--accent:${gradeColor(general)}" aria-pressed="${general.id === anchorId}">${this.portrait(general, 'combo-chip__portrait')}<span>${escapeHtml(general.name)}</span></button>`).join('')
+    const lanes = ['↙ 좌측', '↑ 전열', '↘ 우측']
+    const rows = combos.map(combo => {
+      const meta = ARCHETYPE_META[combo.archetype]
+      const missing = combo.ids.filter(id => !owned.has(id))
+      const members = combo.ids.map((id, lane) => {
+        const general = byId.get(id)!
+        const has = owned.has(id)
+        return `<div class="combo-member ${id === anchorId ? 'is-anchor' : ''} ${has ? '' : 'is-unowned'}" style="--accent:${gradeColor(general)}">${this.portrait(general, 'combo-member__portrait')}<div><small>${lanes[lane]}</small><strong>${escapeHtml(general.name)}</strong><span>${general.role} · ${GRADE_META[general.grade].label}</span>${has ? '' : '<em class="combo-edge is-dis">미보유</em>'}</div></div>`
+      }).join('')
+      const tags = [combo.bond ? `<span class="combo-tag combo-tag--bond">인연 「${escapeHtml(combo.bond.name)}」</span>` : '', ...combo.keys.map(key => `<span class="combo-tag">${escapeHtml(key)}</span>`)].join('')
+      const isCurrent = combo.ids.join(',') === current
+      const action = isCurrent ? '<span class="combo-current">현재 편성</span>' : missing.length ? `<span class="combo-missing">미보유 ${missing.length}명</span>` : `<button class="mini-action mini-action--deploy" data-action="apply-combo" data-ids="${combo.ids.join(',')}">이 덱으로 편성</button>`
+      return `<li class="combo-row combo-row--${combo.archetype} ${isCurrent ? 'is-current' : ''}"><div class="combo-type"><b>${meta.label}</b><small>${meta.desc}</small></div><div class="combo-members">${members}</div><div class="combo-side"><div class="combo-tags">${tags}</div>${action}</div></li>`
+    }).join('')
+    return `<div class="combo-advice glass-card"><div class="card-header"><div><span class="eyebrow">추천 덱</span><h3>무장별 추천 덱</h3><p class="combo-note">무장을 고르면 그 무장이 들어간 이상적인 조합을 유형마다 하나씩 보여 드립니다. 지금 키운 정도는 따지지 않고 스킬 연계·인연과 전열 규칙만 보며, 가운데(전열)에는 수호형이나 단단한 무장을 세웁니다. 아직 없는 무장도 미보유로 함께 보여 줍니다.</p></div></div><div class="combo-anchor-row" role="group" aria-label="추천 덱을 볼 무장">${chips}</div><div class="combo-anchor-name"><b>${escapeHtml(anchor.name)}</b> 추천 덱</div><ol class="combo-list">${rows}</ol></div>`
+  }
+
   private formationEnemies(state: StrategyState): Array<General | undefined> {
     const next = this.nextScenario(state)
     return next ? scenarioEnemyIds(next, state.faction).map(id => templateGeneral(id)) : []
@@ -1791,6 +1829,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '무장별 추천 덱 · 적도 전열 배치', '출전 편성 화면에서 무장을 고르면 그 무장이 들어간 이상적인 덱을 스킬 연계·버티기·초반 끝내기·디버프·유틸 다섯 유형으로 하나씩 보여 줍니다. 지금 키운 정도는 따지지 않고 스킬 설계·인연·전열 규칙만 보며, 70명 전체에서 고르므로 없는 무장은 미보유로 표시하고 모두 있으면 바로 편성할 수 있습니다. 시나리오와 일반 전투의 적 덱도 수호형(없으면 가장 단단한 무장)을 가운데 전열에 세웁니다.', '완료', 'jade'],
       ['2026.10.14', '진형 개편 · 가운데는 전열', '가운데 자리가 전열이 됩니다. 적은 같은 자리를 치되 30%는 전열부터 노리고, 전열은 받는 피해가 20% 줄어듭니다. 수호형 무장(조인·허저·전위·우금·정욱 등)을 전열에 세우면 적을 더 끌어당기고 받는 피해가 40%까지 줄어, 전열이 먼저 맞아 주는 동안 좌우 공격수가 오래 살아남아 딜을 합니다. 무장이 쓰러진 자리를 치던 적은 이제 늘 왼쪽이 아니라 남은 무장 중 무작위로 공격합니다. 자동 편성은 수호형을 전열에 세우고, 전투 규칙 안내와 튜토리얼에도 전열 설명을 넣었습니다.', '완료', 'jade'],
       ['2026.10.14', '천명 초상 불티 잘림 수정', '보유 무장의 천명 초상에서 불티 효과가 위쪽만 사각형으로 잘려 보이던 문제를 고쳤습니다. 이제 불티가 사진 전체에서 피어오르고 아래쪽 그늘도 제대로 보입니다.', '완료', 'jade'],
       ['2026.10.14', '무장 사진 테두리를 등급색으로', '무장마다 제각각이던 사진 테두리와 카드 강조색을 등급색으로 통일했습니다. 천명은 금빛, 명장은 비취빛, 정예는 푸른빛, 용사는 보랏빛, 신병은 회색이며, 테두리를 두껍게 해 더 또렷하게 보이고 도감의 미영입 무장도 테두리는 등급색 그대로 보입니다.', '완료', 'jade'],
@@ -1957,6 +1996,11 @@ export class StrategyUI {
     } else if (action === 'roster-sort-direction') {
       this.rosterSortDescending = !this.rosterSortDescending
       if (this.renderedState) this.render(this.renderedState)
+    } else if (action === 'combo-anchor') {
+      this.comboAnchorId = button.dataset.id ?? null
+      if (this.renderedState) this.render(this.renderedState)
+    } else if (action === 'apply-combo') {
+      this.callbacks.onApplyCombo((button.dataset.ids ?? '').split(',').filter(Boolean))
     } else if (action === 'formation-sort-direction') {
       this.formationSortDescending = !this.formationSortDescending
       if (this.renderedState) this.render(this.renderedState)

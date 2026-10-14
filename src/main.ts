@@ -55,6 +55,7 @@ import {
   type FactionTerritorySnapshot,
   type Faction,
 } from './game/strategy'
+import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
@@ -723,6 +724,13 @@ const ui = new StrategyUI(root, {
     ui.notify(equipped?.ok ? `${formed.message} · ${equipped.message}` : formed.message, formed.ok ? 'jade' : 'ember')
     if (formed.ok) queueAccountSave()
     onboarding.event('auto-formation')
+  },
+  onApplyCombo: ids => {
+    const result = applyCombo(state, ids)
+    arena.setGenerals(battleGenerals())
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
   },
   onAutoEquip: () => {
     const result = autoEquip(state)

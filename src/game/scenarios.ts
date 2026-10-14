@@ -1,3 +1,4 @@
+import { frontLineOrder, templateGeneral } from './strategy'
 import { SCENARIO_HONOR_BY_CHAPTER, SCENARIO_MANUALS_BY_CHAPTER, SCENARIO_SILVER_BY_CHAPTER, scenarioGold } from '../../server/economy.mjs'
 export interface ScenarioReward {
   gold: number
@@ -225,7 +226,12 @@ const ENEMY_PLANS: EnemyPlan[] = [
 export function scenarioEnemyIds(scenario: ScenarioDefinition, faction: string): string[] {
   const plan = ENEMY_PLANS[scenario.chapterIndex] ?? ENEMY_PLANS[0]
   const key: FactionKey = faction === '위나라' || faction === '오나라' ? faction : '촉한'
-  return plan.byYear?.[scenario.year]?.[key] ?? plan.deck[key]
+  const ids = plan.byYear?.[scenario.year]?.[key] ?? plan.deck[key]
+  // 적도 전열 규칙대로 선다: 수호형(없으면 가장 단단한 무장)이 가운데, 좌우는 적힌 순서
+  const generals = ids.map(id => templateGeneral(id)).filter((general): general is NonNullable<typeof general> => Boolean(general))
+  if (generals.length !== ids.length) return ids
+  const order = new Map(ids.map((id, index) => [id, index]))
+  return frontLineOrder(generals, general => -(order.get(general.id) ?? 0)).map(general => general.id)
 }
 
 /** 장 안에서 뒤 사건일수록 높아지는 적 평균 레벨 */

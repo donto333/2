@@ -1940,6 +1940,18 @@ export function autoEquip(state: StrategyState, generalIds: string[] = state.for
 }
 
 /**
+ * 전열 배치: 가운데(전열)에는 수호형 무장을, 없으면 방어·통솔이 가장 높은 무장을 세우고, 좌우에는 나머지를 강한 순서로.
+ * 아군 자동 편성·시나리오 적 덱·일반 전투 적 덱이 모두 이 규칙을 쓴다.
+ */
+export function frontLineOrder<T extends Pick<General, 'id' | 'defense' | 'leadership'>>(list: T[], strength: (item: T) => number = () => 0): T[] {
+  if (list.length !== 3) return [...list]
+  const sturdy = (item: T) => item.defense + item.leadership + (GENERAL_SKILLS[item.id]?.type === '수호' ? 1000 : 0)
+  const tank = [...list].sort((left, right) => sturdy(right) - sturdy(left))[0]
+  const flanks = list.filter(item => item !== tank).sort((left, right) => strength(right) - strength(left))
+  return [flanks[0], tank, flanks[1]]
+}
+
+/**
  * 자동 편성: 전투력 상위 10명 안에서 3명 조합을 모두 따져
  * 전투력 합 × (인연 +8%) × (병종이 다양할수록 +3%씩) × (수호형이 있으면 +6%)이 가장 높은 조합을 고른다.
  * 가운데(전열)에는 수호형, 없으면 방어·통솔이 높은 무장을 둔다(적은 같은 레인을 치되 30%는 전열부터 노린다).
@@ -1961,11 +1973,7 @@ export function autoFormation(state: StrategyState): AutoResult {
   }
   if (size < 3) consider(pool.slice(0, size))
   else for (let a = 0; a < pool.length; a += 1) for (let b = a + 1; b < pool.length; b += 1) for (let c = b + 1; c < pool.length; c += 1) consider([pool[a], pool[b], pool[c]])
-  // 가운데(전열)에는 수호형 무장을, 없으면 방어·통솔이 가장 높은 무장을 세운다
-  const sturdy = (general: General) => general.defense + general.leadership + (GENERAL_SKILLS[general.id]?.type === '수호' ? 1000 : 0)
-  const tank = [...best].sort((left, right) => sturdy(right) - sturdy(left))[0]
-  const flanks = best.filter(general => general !== tank).sort((left, right) => power(right) - power(left))
-  const ordered = best.length === 3 ? [flanks[0], tank, flanks[1]] : best
+  const ordered = frontLineOrder(best, power)
   const next = ordered.map(general => general.id)
   const changed = next.join() !== state.formation.join() ? 1 : 0
   state.formation = next
