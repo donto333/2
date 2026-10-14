@@ -37,8 +37,6 @@ function tone(freq: number, start: number, duration: number, volume: number, typ
 const soundCharge = () => { tone(55, 0, 1.6, 0.18, 'sine', 110); tone(110, 0.2, 1.4, 0.06, 'triangle', 220) }
 /** 징 소리(섬광) */
 const soundGong = (strong: boolean) => { [82, 164, 247, 329].forEach((f, i) => tone(f, 0, strong ? 3.2 : 2, (strong ? 0.22 : 0.14) / (i + 1), 'sine')); tone(1200, 0, 0.25, 0.05, 'triangle', 300) }
-/** 5등급: 맑은 오음계가 올라간다 */
-const soundHeaven = () => { [523, 587, 659, 784, 880, 1047, 1175].forEach((f, i) => tone(f, i * 0.09, 1.4, 0.07, 'sine')); tone(65, 0, 3, 0.2, 'sine') }
 
 // ── 연출 ─────────────────────────────────────────────────
 function particles(count: number, color: string): string {
@@ -75,11 +73,11 @@ async function ritual(level: number, color: string, centerpiece = '/assets/curre
   for (const [cls, ms] of steps) {
     if (skipped) break
     layer.classList.add(cls)
-    if (cls === 'is-crack') { layer.style.setProperty('--glow', color); layer.classList.add(`is-g${top}`) }
-    if (cls === 'is-flash') soundGong(top >= 5)
+    if (cls === 'is-crack') { layer.style.setProperty('--glow', color); layer.classList.add(`is-g${top}`); sound.rise(top, (ms + (reduced ? 350 : 450)) / 1000) }
+    if (cls === 'is-flash') { soundGong(top >= 5); sound.fanfare(top) }
     await wait(ms)
   }
-  if (skipped) { layer.style.setProperty('--glow', color); soundGong(top >= 5) }
+  if (skipped) { layer.style.setProperty('--glow', color); soundGong(top >= 5); sound.fanfare(top) }
   // 뒤이어 등장 연출이 있으면 화면이 비지 않게 이 층을 남겨 두었다가 그쪽이 뜬 뒤에 걷는다
   if (keep) return layer
   layer.classList.add('is-out')
@@ -97,7 +95,7 @@ function dropLater(layer: HTMLElement | null): void {
 interface Spotlight { stamp: string; grade: string; name: string; sub: string; extra: string; portrait?: string; image?: string; color: string }
 
 /** 최고 등급 등장 연출(5등급 무장 「천명 강림」, 전설·신화 장비). 계속을 누르거나 잠시 뒤 넘어간다 */
-async function spotlight(item: Spotlight): Promise<void> {
+async function spotlight(item: Spotlight, level = 5): Promise<void> {
   const reduced = effectsSetting() === 'reduced'
   const layer = document.createElement('div')
   layer.className = `heaven-descends ${item.image ? 'heaven-descends--item' : ''}`
@@ -116,7 +114,7 @@ async function spotlight(item: Spotlight): Promise<void> {
       <button class="action-button action-button--primary hd-continue" type="button">계속</button>
     </div>`
   document.body.appendChild(layer)
-  soundHeaven()
+  sound.heaven(level)
   requestAnimationFrame(() => layer.classList.add('is-on'))
   await new Promise<void>(resolve => {
     let done = false
@@ -164,7 +162,7 @@ export async function playForgeCeremony(items: Equipment[], imageOf: (item: Equi
     let behind = await ritual(level, EQUIPMENT_GRADE_META[best.grade].color, '/assets/currency/iron.webp', 'forge', stars.length > 0)
     for (const item of stars) {
       const label = labelOf(item)
-      const shown = spotlight({ stamp: EQUIPMENT_GRADE_META[item.grade].label, grade: `${EQUIPMENT_GRADE_META[item.grade].label} 장비 출현`, name: item.name, sub: `${label.type} · ${label.set}`, extra: item.skillName, image: imageOf(item), color: EQUIPMENT_GRADE_META[item.grade].color })
+      const shown = spotlight({ stamp: EQUIPMENT_GRADE_META[item.grade].label, grade: `${EQUIPMENT_GRADE_META[item.grade].label} 장비 출현`, name: item.name, sub: `${label.type} · ${label.set}`, extra: item.skillName, image: imageOf(item), color: EQUIPMENT_GRADE_META[item.grade].color }, EQUIP_RANK[item.grade])
       dropLater(behind); behind = null
       await shown
     }

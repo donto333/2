@@ -50,6 +50,8 @@ function vary(motif: Note[], random: () => number): Note[] {
 type Inst = SoundEngine
 interface ThemeDef {
   bpm: number
+  /** 큰 전당 울림(전투 곡) 양 */
+  hall?: number
   /** 음계(낮은 음부터 15음) */
   scale: number[]
   /** 16분음표 한 칸마다 부른다 */
@@ -68,6 +70,7 @@ class ThemePlayer {
     this.out.gain.value = 0
     this.out.connect(e.musicIn)
     this.out.connect(e.musicSend)
+    if (def.hall) { const h = e.ctx!.createGain(); h.gain.value = def.hall; this.out.connect(h).connect(e.hallSend) }
     this.random = rng(seed)
     this.refreshMotifs()
     this.next = e.ctx!.currentTime + 0.12
@@ -143,76 +146,109 @@ const HOME: ThemeDef = {
   },
 }
 
-/** 전투: 우조(E) 단조 오음계, 큰북과 비파 16분음표 반복, 호궁 가락. 막이 오를수록 북이 거세진다 */
+// ── 웅장한 전투 곡 공통: 화음(근음 + 음정), 합창 · 금관 · 현악 반복음을 깐다 ──
+type Chord = { root: number; tones: number[] }
+const MIN3 = [0, 3, 7], MAJ3 = [0, 4, 7]
+/** 마디 첫 박마다 합창·금관 화음을 깔고, 현악은 8분/16분 반복음 */
+function epicBed(p: ThemePlayer, chord: Chord, bar: number, pos: number, t: number, opts: { choir: number; brass: number; strings: number; stringsFast: boolean; brassEvery: number }): void {
+  const e = p.e, barDur = p.stepDur * 16
+  const voice = chord.tones.map(offset => chord.root + 24 + offset)
+  if (pos === 0 && opts.choir > 0) e.choir(p.out, voice, t, barDur * 1.02, opts.choir)
+  if (pos === 0 && opts.brass > 0 && bar % opts.brassEvery === 0) e.brass(p.out, [chord.root + 12, chord.root + 19, chord.root + 24], t, barDur * opts.brassEvery * 0.96, opts.brass)
+  if (opts.strings > 0 && (opts.stringsFast || pos % 2 === 0)) {
+    const figure = [0, 0, 7, 0, 12, 0, 7, 0, 0, 0, 7, 0, 12, 7, 0, 7]
+    e.strings(p.out, chord.root + 24 + figure[pos], t, p.stepDur * (opts.stringsFast ? 0.8 : 1.6), opts.strings * (pos % 4 === 0 ? 1.25 : 1), (pos % 2 ? 0.35 : -0.35))
+  }
+}
+
+/** 전투: 우조(E) 단조. 큰북 합주 위에 합창 · 금관 · 현악 반복음, 호궁 가락. 막이 오를수록 금관이 가락을 받고 북이 거세진다 */
 const BATTLE: ThemeDef = {
-  bpm: 132,
+  bpm: 124,
+  hall: 1,
   scale: pent(52, MINOR_P),
   step(p, s, t) {
     const e = p.e, bar = Math.floor(s / 16), pos = s % 16, lv = p.intensity
-    const roots = bar % 8 < 4 ? [40, 40, 36, 38] : [40, 38, 36, 35]
-    const root = roots[bar % 4]
-    // 북
-    if (pos === 0) e.drum(p.out, 'taiko', t, 0.62)
-    if (pos === 8) e.drum(p.out, 'taiko', t, 0.46)
-    if (pos === 6 || pos === 10 || pos === 14) e.drum(p.out, 'tom', t, 0.26 + (pos === 14 ? 0.06 : 0), (pos - 10) / 20)
-    if (pos === 4 || pos === 12) e.drum(p.out, 'rim', t, 0.16)
-    if (lv >= 1 && (pos === 3 || pos === 11)) e.drum(p.out, 'taiko', t, 0.32)
+    const chords: Chord[] = [{ root: 40, tones: MIN3 }, { root: 36, tones: MAJ3 }, { root: 38, tones: MAJ3 }, { root: 40, tones: MIN3 }, { root: 40, tones: MIN3 }, { root: 36, tones: MAJ3 }, { root: 33, tones: MIN3 }, { root: 35, tones: MAJ3 }]
+    const chord = chords[bar % 8]
+    epicBed(p, chord, bar, pos, t, { choir: 0.05 + lv * 0.015, brass: lv >= 1 ? 0.05 : 0.04, strings: 0.04 + lv * 0.008, stringsFast: lv >= 1, brassEvery: lv >= 1 ? 1 : 2 })
+    // 큰북 합주(낮은 북을 겹쳐 무게를 더한다)
+    if (pos === 0) { e.drum(p.out, 'taiko', t, 0.62); e.drum(p.out, 'taiko', t, 0.45, 0, 0.62) }
+    if (pos === 8) e.drum(p.out, 'taiko', t, 0.48)
+    if (pos === 6 || pos === 10 || pos === 14) e.drum(p.out, 'tom', t, 0.24 + (pos === 14 ? 0.06 : 0), (pos - 10) / 20)
+    if (pos === 4 || pos === 12) e.drum(p.out, 'rim', t, 0.12)
+    if (lv >= 1 && (pos === 3 || pos === 11)) e.drum(p.out, 'taiko', t, 0.34)
     if (lv >= 1 && bar % 4 === 3 && pos >= 12) e.drum(p.out, 'tom', t, 0.2 + (pos - 12) * 0.06, 0.3 - (pos - 12) * 0.2)
-    if (lv >= 2 && (pos === 6 || pos === 14)) e.drum(p.out, 'taiko', t, 0.4)
+    if (lv >= 2 && (pos === 6 || pos === 14)) { e.drum(p.out, 'taiko', t, 0.42); e.drum(p.out, 'taiko', t, 0.3, 0, 0.6) }
     if (lv >= 2 && bar % 2 === 1 && pos >= 8 && pos % 2 === 1) e.drum(p.out, 'tom', t, 0.18)
-    if (pos === 0 && bar % 8 === 0) e.drum(p.out, 'cymbal', t, 0.16 + lv * 0.05)
-    if (pos === 0 && bar % 16 === 0) e.gong(p.out, t, 0.2, 0.9)
-    // 비파 반복음
-    const ost = [0, 0, 12, 0, 7, 0, 12, 0, 0, 0, 12, 0, 10, 0, 7, 0]
-    if (lv >= 1 || pos % 2 === 0) e.pluck(p.out, root + 12 + ost[pos], t, 0.15 + (pos % 4 === 0 ? 0.06 : 0), { bright: 0.45, dur: 0.6, pan: -0.25 })
-    if (pos === 0) e.pluck(p.out, root, t, 0.36, { bright: 0.2, dur: 1.6 })
-    // 호궁 가락: 막이 낮으면 8마디 중 뒤 4마디만
+    // 8마디 단락: 앞에서 심벌이 부풀어 오르고, 첫 박에 징
+    if (bar % 8 === 7 && pos === 8) e.swell(p.out, t, p.stepDur * 8, 0.1 + lv * 0.03)
+    if (pos === 0 && bar % 8 === 0) { e.drum(p.out, 'cymbal', t, 0.2 + lv * 0.05); e.gong(p.out, t, 0.24, 0.85) }
+    // 금관 금음(마디 안 당김음)
+    if (lv >= 1 && (pos === 6 || pos === 12) && bar % 2 === 1) e.brass(p.out, [chord.root + 24 + chord.tones[1], chord.root + 31], t, p.stepDur * 1.6, 0.045)
+    // 낮은 비파
+    if (pos % 4 === 0) e.pluck(p.out, chord.root + 12, t, 0.13, { bright: 0.35, dur: 0.7, pan: -0.25 })
+    // 가락: 호궁(막이 낮으면 8마디 중 뒤 4마디), 2막부터 금관이 같은 가락을 한 옥타브 아래로
     const note = p.melodyAt(s)
     if (note && (lv >= 1 || bar % 8 >= 4)) {
-      e.erhu(p.out, this.scale[note.deg], t, note.dur * p.stepDur * 0.97, 0.11, note.pos === 0 ? -2 : 0)
-      if (lv >= 2) e.flute(p.out, this.scale[note.deg] + 12, t, note.dur * p.stepDur * 0.9, 0.05)
+      const dur = note.dur * p.stepDur * 0.97
+      e.erhu(p.out, this.scale[note.deg], t, dur, 0.1, note.pos === 0 ? -2 : 0)
+      if (lv >= 1) e.brass(p.out, [this.scale[note.deg]], t, dur, lv >= 2 ? 0.06 : 0.04)
+      if (lv >= 2) e.flute(p.out, this.scale[note.deg] + 12, t, dur * 0.9, 0.045)
     }
   },
 }
 
-/** 유저 대련: 상조(A) 단조, 가벼운 북과 피리 */
+/** 유저 대련: 상조(A) 단조, 현악 반복음과 피리, 4마디마다 금관 */
 const DUEL: ThemeDef = {
   bpm: 118,
+  hall: 0.8,
   scale: pent(57, MINOR_P),
   step(p, s, t) {
     const e = p.e, bar = Math.floor(s / 16), pos = s % 16, lv = p.intensity
-    const root = [45, 43, 41, 43][bar % 4]
-    if (pos === 0) e.drum(p.out, 'taiko', t, 0.45)
+    const chords: Chord[] = [{ root: 45, tones: MIN3 }, { root: 43, tones: MAJ3 }, { root: 41, tones: MAJ3 }, { root: 40, tones: MAJ3 }]
+    const chord = chords[bar % 4]
+    epicBed(p, chord, bar, pos, t, { choir: lv >= 1 ? 0.045 : 0.03, brass: 0.04, strings: 0.035 + lv * 0.008, stringsFast: lv >= 2, brassEvery: 4 })
+    if (pos === 0) e.drum(p.out, 'taiko', t, 0.5)
     if (pos === 6 || pos === 10) e.drum(p.out, 'tom', t, 0.24)
-    if (pos === 4 || pos === 12 || pos === 14) e.drum(p.out, 'rim', t, 0.14)
-    if (lv >= 1 && (pos === 3 || pos === 8)) e.drum(p.out, 'taiko', t, 0.3)
+    if (pos === 4 || pos === 12 || pos === 14) e.drum(p.out, 'rim', t, 0.12)
+    if (lv >= 1 && (pos === 3 || pos === 8)) e.drum(p.out, 'taiko', t, 0.32)
     if (lv >= 2 && pos % 4 === 2) e.drum(p.out, 'tom', t, 0.16)
-    if (pos === 0 && bar % 8 === 0) e.drum(p.out, 'cymbal', t, 0.12)
-    if (pos % 2 === 0) e.pluck(p.out, root + 12 + [0, 7, 12, 7, 0, 7, 15, 7][pos / 2], t, 0.15, { bright: 0.5, dur: 0.9, pan: 0.2 })
-    if (pos === 0) e.pluck(p.out, root, t, 0.3, { bright: 0.2, dur: 1.4 })
+    if (bar % 8 === 7 && pos === 8) e.swell(p.out, t, p.stepDur * 8, 0.08)
+    if (pos === 0 && bar % 8 === 0) e.drum(p.out, 'cymbal', t, 0.15)
+    if (pos % 2 === 0) e.pluck(p.out, chord.root + 12 + [0, 7, 12, 7, 0, 7, 15, 7][pos / 2], t, 0.12, { bright: 0.5, dur: 0.9, pan: 0.2 })
     const note = p.melodyAt(s)
-    if (note) e.flute(p.out, this.scale[note.deg], t, note.dur * p.stepDur * 0.92, 0.12)
+    if (note) {
+      e.flute(p.out, this.scale[note.deg], t, note.dur * p.stepDur * 0.92, 0.11)
+      if (lv >= 2) e.brass(p.out, [this.scale[note.deg] - 12], t, note.dur * p.stepDur * 0.92, 0.04)
+    }
   },
 }
 
-/** 레이드: 어두운 라(D) 단조, 낮은 지속음과 무거운 북, 4마디마다 징 */
+/** 레이드: 어두운 라(D) 단조. 낮은 합창과 금관이 매 마디 깔리고, 무거운 북과 징, 호궁 가락 */
 const RAID: ThemeDef = {
   bpm: 88,
+  hall: 1.2,
   scale: pent(50, MINOR_P),
   step(p, s, t) {
     const e = p.e, bar = Math.floor(s / 16), pos = s % 16, lv = p.intensity
-    const root = [38, 38, 34, 36][bar % 4]
-    if (pos === 0 && bar % 2 === 0) e.pad(p.out, [26, 33, 38], t, p.stepDur * 32, 0.07)
-    if (pos === 0) e.drum(p.out, 'taiko', t, 0.75, 0, 0.82)
-    if (pos === 10) e.drum(p.out, 'taiko', t, 0.42, 0, 0.9)
+    const chords: Chord[] = [{ root: 38, tones: MIN3 }, { root: 34, tones: MAJ3 }, { root: 36, tones: MAJ3 }, { root: 33, tones: MAJ3 }]
+    const chord = chords[bar % 4]
+    epicBed(p, chord, bar, pos, t, { choir: 0.07, brass: 0.055, strings: lv >= 1 ? 0.04 : 0, stringsFast: true, brassEvery: 1 })
+    if (pos === 0 && bar % 2 === 0) e.pad(p.out, [26, 33], t, p.stepDur * 32, 0.06)
+    if (pos === 0) { e.drum(p.out, 'taiko', t, 0.75, 0, 0.82); e.drum(p.out, 'taiko', t, 0.5, 0, 0.55) }
+    if (pos === 10) e.drum(p.out, 'taiko', t, 0.45, 0, 0.9)
     if (pos === 6 || pos === 14) e.drum(p.out, 'tom', t, 0.22, -0.2)
-    if (lv >= 1 && (pos === 3 || pos === 8)) e.drum(p.out, 'taiko', t, 0.38, 0, 0.88)
+    if (lv >= 1 && (pos === 3 || pos === 8)) e.drum(p.out, 'taiko', t, 0.4, 0, 0.88)
     if (lv >= 1 && bar % 2 === 1 && pos >= 12) e.drum(p.out, 'tom', t, 0.18 + (pos - 12) * 0.05)
     if (lv >= 2 && pos % 2 === 1) e.drum(p.out, 'tom', t, 0.1)
-    if (pos === 0 && bar % 4 === 0) e.gong(p.out, t, 0.28, 0.78)
-    if (lv >= 1 && pos % 2 === 0) e.pluck(p.out, root + 12, t, 0.1, { bright: 0.3, dur: 0.5, pan: -0.3 })
+    if (bar % 4 === 3 && pos === 8) e.swell(p.out, t, p.stepDur * 8, 0.11)
+    if (pos === 0 && bar % 4 === 0) { e.gong(p.out, t, 0.3, 0.78); e.drum(p.out, 'cymbal', t, 0.14) }
     const note = p.melodyAt(s)
-    if (note && note.pos % 2 === 0) e.erhu(p.out, this.scale[note.deg], t, Math.max(4, note.dur) * p.stepDur * 1.2, 0.12, -2)
+    if (note && note.pos % 2 === 0) {
+      const dur = Math.max(4, note.dur) * p.stepDur * 1.2
+      e.erhu(p.out, this.scale[note.deg], t, dur, 0.11, -2)
+      if (lv >= 1) e.brass(p.out, [this.scale[note.deg] - 12], t, dur, 0.05)
+    }
   },
 }
 
@@ -223,6 +259,8 @@ export class SoundEngine {
   ctx: AudioContext | null = null
   musicIn!: GainNode
   musicSend!: GainNode
+  /** 전투 곡용 큰 전당 울림 */
+  hallSend!: GainNode
   private master!: GainNode
   private musicVol!: GainNode
   private duckNode!: GainNode
@@ -280,6 +318,11 @@ export class SoundEngine {
       this.musicSend = ctx.createGain(); this.musicSend.gain.value = 0.5
       this.musicIn.connect(this.duckNode)
       this.musicSend.connect(reverb)
+      const hall = ctx.createConvolver()
+      hall.buffer = this.impulse(4.2)
+      const hallWet = ctx.createGain(); hallWet.gain.value = 0.42
+      this.hallSend = ctx.createGain(); this.hallSend.gain.value = 0.3
+      this.hallSend.connect(hall); hall.connect(hallWet).connect(this.master)
       this.duckNode.connect(this.musicVol).connect(this.master)
       this.sfxVol = ctx.createGain()
       this.sfxSend = ctx.createGain(); this.sfxSend.gain.value = 0.2
@@ -299,6 +342,7 @@ export class SoundEngine {
     this.sfxVol.gain.setTargetAtTime(muted ? 0 : SOUND_LEVEL_VALUE[sfxSetting()] * 0.95, t, 0.08)
     this.sfxSend.gain.setTargetAtTime(muted ? 0 : SOUND_LEVEL_VALUE[sfxSetting()] * 0.2, t, 0.08)
     this.musicSend.gain.setTargetAtTime(muted ? 0 : SOUND_LEVEL_VALUE[musicSetting()] * 0.32, t, 0.08)
+    this.hallSend.gain.setTargetAtTime(muted ? 0 : SOUND_LEVEL_VALUE[musicSetting()] * 0.3, t, 0.08)
   }
 
   /** 화면에 맞는 곡으로 바꾼다(같은 곡이면 그대로) */
@@ -380,7 +424,7 @@ export class SoundEngine {
         const t = i / ctx.sampleRate
         const a = 0.9 - 0.75 * (t / seconds) // 뒤로 갈수록 어두워진다
         lp += a * ((Math.random() * 2 - 1) - lp)
-        d[i] = lp * Math.exp(-t * 2.6) * (t < 0.012 ? t / 0.012 : 1)
+        d[i] = lp * Math.exp(-t * (seconds > 3 ? 1.7 : 2.6)) * (t < (seconds > 3 ? 0.03 : 0.012) ? t / (seconds > 3 ? 0.03 : 0.012) : 1)
       }
     }
     return buffer
@@ -549,6 +593,60 @@ export class SoundEngine {
     oscs.forEach(o => { o.start(t); o.stop(t + dur + 0.05) })
     oscs[0].onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
   }
+  /** 금관 합주: 음마다 톱니파 3개(조금씩 어긋나게), 필터가 열렸다 닫히며 숨을 쉰다 */
+  brass(out: AudioNode, midis: number[], t: number, dur: number, vol: number, send?: AudioNode): void {
+    const ctx = this.ctx!
+    const lp = ctx.createBiquadFilter(), g = ctx.createGain()
+    lp.type = 'lowpass'; lp.Q.value = 0.9
+    const end = t + Math.max(0.2, dur)
+    lp.frequency.setValueAtTime(350, t); lp.frequency.exponentialRampToValueAtTime(2300, t + 0.16); lp.frequency.exponentialRampToValueAtTime(1100, t + Math.min(dur, 0.9))
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.09); g.gain.linearRampToValueAtTime(vol * 0.78, t + Math.min(dur, 0.5)); g.gain.setValueAtTime(vol * 0.78, end - 0.12); g.gain.linearRampToValueAtTime(0.0001, end + 0.08)
+    lp.connect(g); this.route(out, g, 0, send)
+    const oscs = midis.flatMap(midi => [-9, 0, 9].map(cents => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(midi); o.detune.value = cents + (Math.random() - 0.5) * 4; o.connect(lp); return o }))
+    oscs.forEach(o => { o.start(t); o.stop(end + 0.12) })
+    oscs[0].onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 합창 「아」: 톱니파를 모음 공명(800 · 1150 · 2800Hz)으로 걸러 사람 목소리처럼, 천천히 들어온다 */
+  choir(out: AudioNode, midis: number[], t: number, dur: number, vol: number): void {
+    const ctx = this.ctx!
+    const g = ctx.createGain(), sum = ctx.createGain()
+    sum.gain.value = 1
+    ;[[800, 6, 1], [1150, 7, 0.6], [2800, 9, 0.25], [350, 3, 0.5]].forEach(([freq, q, amp]) => { const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q; const a = ctx.createGain(); a.gain.value = amp * 3; sum.connect(f).connect(a).connect(g) })
+    const end = t + Math.max(0.4, dur)
+    const attack = Math.min(0.7, dur / 3)
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + attack); g.gain.setValueAtTime(vol, end - attack * 0.6); g.gain.linearRampToValueAtTime(0.0001, end + 0.3)
+    this.route(out, g, 0, this.hallSend)
+    const lfo = ctx.createOscillator(), depth = ctx.createGain()
+    lfo.frequency.value = 4.6; depth.gain.value = 9
+    lfo.connect(depth)
+    const oscs = midis.flatMap(midi => [-11, 11].map(cents => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(midi); o.detune.value = cents; depth.connect(o.detune); o.connect(sum); return o }))
+    ;[...oscs, lfo].forEach(o => { o.start(t); o.stop(end + 0.4) })
+    lfo.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 현악 반복음(짧게 끊어 켜는 소리) */
+  strings(out: AudioNode, midi: number, t: number, dur: number, vol: number, pan = 0): void {
+    const ctx = this.ctx!
+    const lp = ctx.createBiquadFilter(), hp = ctx.createBiquadFilter(), g = ctx.createGain()
+    lp.type = 'lowpass'; lp.frequency.value = 2600; hp.type = 'highpass'; hp.frequency.value = 140
+    const end = t + Math.max(0.05, dur)
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.015); g.gain.exponentialRampToValueAtTime(vol * 0.5, end); g.gain.linearRampToValueAtTime(0.0001, end + 0.06)
+    lp.connect(hp).connect(g); this.route(out, g, pan)
+    const oscs = [-7, 0, 7].map(cents => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(midi); o.detune.value = cents; o.connect(lp); return o })
+    oscs.forEach(o => { o.start(t); o.stop(end + 0.08) })
+    oscs[0].onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 거꾸로 부풀어 오르는 심벌(다음 단락으로 넘어가기 직전) */
+  swell(out: AudioNode, t: number, dur: number, vol: number): void {
+    const ctx = this.ctx!
+    const n = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), g = ctx.createGain()
+    n.buffer = this.noise; n.loop = true
+    hp.type = 'highpass'; hp.frequency.setValueAtTime(2500, t); hp.frequency.exponentialRampToValueAtTime(6000, t + dur)
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + dur); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.04)
+    n.connect(hp).connect(g); this.route(out, g, 0, this.hallSend)
+    n.start(t); n.stop(t + dur + 0.06)
+    n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+
   /** 뿔나팔: 낮은 음에서 미끄러져 올라가며 필터가 열린다 */
   horn(out: AudioNode, midi: number, t: number, dur: number, vol: number, send?: AudioNode): void {
     const ctx = this.ctx!
@@ -655,6 +753,78 @@ export class SoundEngine {
     }
   }
 
+  // ── 뽑기 연출 ──
+  private ceremonyReady(): boolean {
+    if (!this.ensure()) return false
+    if (this.ctx!.state === 'suspended') void this.ctx!.resume()
+    this.applyVolumes()
+    return true
+  }
+  /** 최고 등급이 정해진 순간(균열): 북이 빨라지고 소리가 부풀어 오른다. level 5 = 5성 무장 · 신화 장비 */
+  rise(level: number, seconds = 1.3): void {
+    if (level < 4 || !this.ceremonyReady()) return
+    this.duckFor(7000)
+    const out = this.sfxVol, t = this.ctx!.currentTime + 0.01
+    this.swell(out, t, seconds, level >= 5 ? 0.28 : 0.18)
+    // 점점 빨라지는 북
+    let at = 0, gap = 0.22
+    for (let i = 0; at < seconds - 0.05; i += 1) { this.drum(out, i % 3 === 2 ? 'taiko' : 'tom', t + at, 0.18 + (at / seconds) * 0.35); gap = Math.max(0.05, gap * 0.82); at += gap }
+    // 올라가는 낮은 소리
+    if (level >= 5) {
+      const o = this.ctx!.createOscillator(), g = this.ctx!.createGain()
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(55, t); o.frequency.exponentialRampToValueAtTime(220, t + seconds)
+      const lp = this.ctx!.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(200, t); lp.frequency.exponentialRampToValueAtTime(1800, t + seconds)
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + seconds); g.gain.linearRampToValueAtTime(0.0001, t + seconds + 0.05)
+      o.connect(lp).connect(g); this.route(out, g, 0, this.hallSend)
+      o.start(t); o.stop(t + seconds + 0.1)
+      o.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+    }
+  }
+  /** 섬광: 5성이면 징 · 큰북 · 금관 팡파르 · 합창 · 쏟아지는 방울과 현 */
+  fanfare(level: number): void {
+    if (level < 4 || !this.ceremonyReady()) return
+    this.duckFor(level >= 5 ? 7500 : 5000)
+    const out = this.sfxVol, hall = this.hallSend, t = this.ctx!.currentTime + 0.01
+    const grand = level >= 5
+    this.gong(out, t, grand ? 0.55 : 0.38, 0.9, hall)
+    this.drum(out, 'taiko', t, 0.8); this.drum(out, 'taiko', t, 0.6, 0, 0.6)
+    this.drum(out, 'cymbal', t, grand ? 0.35 : 0.25)
+    // 금관 팡파르: 짧게 · 짧게 · 길게(사 장조 화음)
+    const triad = [55, 59, 62, 67]
+    this.brass(out, triad, t + 0.05, 0.16, grand ? 0.09 : 0.07, hall)
+    this.brass(out, triad, t + 0.25, 0.16, grand ? 0.09 : 0.07, hall)
+    this.brass(out, grand ? [55, 62, 67, 71, 74] : triad, t + 0.45, grand ? 2.4 : 1.5, grand ? 0.11 : 0.08, hall)
+    if (grand) { this.drum(out, 'taiko', t + 0.25, 0.5); this.drum(out, 'taiko', t + 0.45, 0.7); this.drum(out, 'taiko', t + 0.45, 0.5, 0, 0.6) }
+    // 현을 세 옥타브 쓸어 올림
+    const sweep = pent(55, MAJOR_P).concat(pent(91, MAJOR_P).slice(0, grand ? 5 : 0))
+    sweep.forEach((midi, i) => this.pluck(out, midi, t + 0.45 + i * 0.026, 0.16 + Math.min(0.1, i * 0.006), { bright: 0.8, dur: 2.2, pan: -0.7 + (i / sweep.length) * 1.4, send: hall }))
+    // 쏟아지는 방울
+    const bells = grand ? 16 : 8
+    const notes = [79, 81, 83, 86, 88, 91, 93, 95, 98]
+    for (let i = 0; i < bells; i += 1) {
+      const midi = notes[Math.floor(Math.random() * notes.length)]
+      this.bell(out, t + 0.5 + i * 0.075 + Math.random() * 0.03, 0.09, mtof(midi) / 1046.5, (Math.random() - 0.5) * 1.4, hall)
+    }
+    if (grand) this.choir(out, [55, 62, 67, 71], t + 0.4, 3.2, 0.12)
+  }
+  /** 등장 연출(5성 「천명 강림」 · 전설/신화 장비): 합창이 열리고 맑은 오음계가 올라간다 */
+  heaven(level: number): void {
+    if (!this.ceremonyReady()) return
+    this.duckFor(7000)
+    const out = this.sfxVol, hall = this.hallSend, t = this.ctx!.currentTime + 0.01
+    const grand = level >= 5
+    this.gong(out, t, grand ? 0.35 : 0.25, 0.75, hall)
+    ;[72, 74, 76, 79, 81, 84, 86, 88].slice(0, grand ? 8 : 6).forEach((midi, i) => this.pluck(out, midi, t + 0.1 + i * 0.09, 0.16, { bright: 0.8, dur: 2, pan: -0.5 + i * 0.14, send: hall }))
+    if (grand) {
+      this.choir(out, [60, 67, 72, 76], t, 3.6, 0.13)
+      this.brass(out, [48, 55, 60], t + 0.2, 3, 0.06, hall)
+      ;[0, 0.6, 1.2].forEach(d => this.bell(out, t + 0.9 + d, 0.1, mtof(84 + d * 5) / 1046.5, 0, hall))
+      this.flute(out, 84, t + 0.9, 0.5, 0.11); this.flute(out, 86, t + 1.4, 0.4, 0.11); this.flute(out, 88, t + 1.8, 1.4, 0.12)
+    } else {
+      this.choir(out, [60, 67, 72], t, 2.6, 0.08)
+    }
+  }
+
   /** 승리·패배 짧은 곡(음악 볼륨). 끝나면 본영 곡으로 돌아간다 */
   private stinger(won: boolean): void {
     if (!this.ctx) return
@@ -668,12 +838,16 @@ export class SoundEngine {
       pent(55, MAJOR_P).slice(0, 11).forEach((midi, i) => this.pluck(out, midi, t + 0.58 + i * 0.032, 0.18 + i * 0.01, { bright: 0.75, dur: 2.4, pan: -0.5 + i * 0.1, send }))
       ;[[79, 0.4], [81, 0.2], [83, 0.2], [86, 1.5]].reduce((at, [midi, dur]) => { this.flute(out, midi, at, dur, 0.16); return at + dur }, t + 1)
       this.pad(out, [55, 59, 62, 67], t + 0.6, 3.2, 0.06)
+      this.brass(out, [43, 50, 55, 59, 62], t + 0.55, 2.6, 0.08, this.hallSend)
+      this.choir(out, [55, 62, 67, 71], t + 0.6, 3.4, 0.09)
       this.drum(out, 'cymbal', t + 0.55, 0.22)
     } else {
       this.gong(out, t, 0.45, 0.7, send)
       this.drum(out, 'taiko', t, 0.45, 0, 0.75)
       ;[[64, 0.6], [62, 0.5], [59, 0.5], [57, 1.6]].reduce((at, [midi, dur]) => { this.erhu(out, midi, at, dur, 0.13, -1); return at + dur }, t + 0.35)
       this.pad(out, [40, 47, 52], t + 0.2, 3.4, 0.06)
+      this.choir(out, [52, 55, 59, 64], t + 0.3, 3.6, 0.07)
+      this.brass(out, [28, 35, 40], t, 2.4, 0.06, this.hallSend)
     }
     this.setThemeAfter('home', won ? 4800 : 5200)
   }
