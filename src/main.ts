@@ -35,7 +35,7 @@ import {
   normalizeInitialSeasonTerritories,
   ensureResearchRoster,
   mergeFactionTerritories,
-  migrateGeneralGrades, migrateLegacyStarterRoster,
+  migrateGeneralGrades, migrateLegacyStarterRoster, normalizeGeneralStats,
   ensurePrelaunchDailyGold,
   dayKey,
   FACTION_CAPITALS,
@@ -244,8 +244,10 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   // 무장 등급 재설정(2026.10): 보유 무장을 새 등급으로 옮기고 내려간 무장은 옥패로 보상
   const regraded = migrateGeneralGrades(state).changed > 0
   if (regraded) { const message = state.lastNotice; window.setTimeout(() => ui.notify(message), 1800) }
-  if (receivedDailyGold || migratedStarter || normalizedTerritories || regraded) persistLocalGame()
-  localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories || regraded) && mode === 'guest'
+  // 유형별 성장(2026.10): 보유 무장 능력치를 새 성장 공식으로 다시 계산(레벨·성급·장비 유지)
+  const regrown = normalizeGeneralStats(state) > 0
+  if (receivedDailyGold || migratedStarter || normalizedTerritories || regraded || regrown) persistLocalGame()
+  localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories || regraded || regrown) && mode === 'guest'
 }
 
 function resetAccountSavePipeline(): void {
@@ -1420,7 +1422,8 @@ async function refreshAccount(): Promise<void> {
       const migratedStarter = migrateLegacyStarterRoster(state)
       const regraded = migrateGeneralGrades(state).changed > 0
       if (regraded) { const message = state.lastNotice; window.setTimeout(() => ui.notify(message), 1800) }
-      if (migratedStarter || regraded) {
+      const regrown = normalizeGeneralStats(state) > 0
+      if (migratedStarter || regraded || regrown) {
         persistLocalGame()
         localSaveDirty = true
       }

@@ -1,7 +1,7 @@
 import type { MissionState } from './missions'
 import { createResearch, normalizeResearch, researchMods, researchCostText, startResearch } from './research'
 import cityRoutes from '../../server/city-routes.json'
-import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
+import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, GENERAL_SKILLS, GROWTH_OWN_SHARE, GROWTH_PROFILE, GROWTH_STATS, levelBudget, starBudget, type GrowthStat, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 import { MANUAL_PACKAGE_AMOUNTS } from '../../server/economy.mjs'
 import { locale } from '../i18n/lang'
@@ -745,22 +745,53 @@ export function migrateGeneralGrades(state: StrategyState): { changed: number; h
   return result
 }
 
-/** 적 무장 성장: 아군 강화·성급 상승과 같은 공식으로 능력치를 올린다. */
-export function scaleGeneral(general: General, level: number, stars: number): General {
-  const scaled = { ...general }
+// ── 유형별 성장 ─────────────────────────────────────────────
+// 레벨·성급이 오를 때 받는 능력치 총량은 모두 같고(레벨당 26 + 2.5×성급), 나누는 비율이 스킬 유형마다 다르다.
+// 무력형(돌격·사격)은 무력·공격, 책사형(계략)은 모략, 방어형(수호)은 통솔·방어, 지휘형(통솔)은 통솔, 치유형은 통솔·모략이 크게 오른다.
+// 여기에 무장 본래 능력치 비율을 30% 섞어 같은 유형 안에서도 개성이 남는다(예: 관우는 통솔도 꽤 오른다).
+// 능력치는 (원형, 레벨, 성급)만으로 정해지므로 언제 다시 계산해도 같은 값이 나온다.
+export { GROWTH_PROFILE, GROWTH_STATS, type GrowthStat } from './skills'
+
+/** 이 무장의 능력치 성장 비율(합 1) */
+export function growthWeights(base: Pick<General, 'id' | 'role' | GrowthStat>): Record<GrowthStat, number> {
+  const profile = GROWTH_PROFILE[skillDefFor(base.id, base.role).type]
+  const total = GROWTH_STATS.reduce((sum, key) => sum + Math.max(1, base[key]), 0)
+  const weights = {} as Record<GrowthStat, number>
+  for (const key of GROWTH_STATS) weights[key] = profile[key] * (1 - GROWTH_OWN_SHARE) + Math.max(1, base[key]) / total * GROWTH_OWN_SHARE
+  return weights
+}
+
+/** 원형(Lv1·1성) 능력치에서 레벨·성급만큼 성장한 능력치 */
+export function statsAt(base: Pick<General, 'id' | 'role' | GrowthStat>, level: number, stars: number): Record<GrowthStat, number> {
+  const weights = growthWeights(base)
   const targetStars = Math.max(1, Math.min(5, Math.trunc(stars)))
-  const targetLevel = Math.max(1, Math.trunc(level))
-  for (let star = scaled.stars + 1; star <= targetStars; star += 1) {
-    scaled.attack += 4 + star; scaled.defense += 3 + Math.floor(star / 2); scaled.command += 3 + Math.floor(star / 2)
-    scaled.leadership += 3 + star; scaled.martial += 4 + star; scaled.stratagem += 2 + Math.floor(star / 2); scaled.speed += 2 + Math.floor(star / 2)
+  let budget = Math.max(0, Math.trunc(level) - 1) * levelBudget(targetStars)
+  for (let k = 2; k <= targetStars; k += 1) budget += starBudget(k)
+  const out = {} as Record<GrowthStat, number>
+  for (const key of GROWTH_STATS) out[key] = base[key] + Math.round(budget * weights[key])
+  return out
+}
+
+/** 저장된 무장 능력치를 성장 공식으로 다시 맞춘다(레벨·성급·장비는 그대로). 몇 번을 불러도 같다 */
+export function normalizeGeneralStats(state: StrategyState): number {
+  let changed = 0
+  for (const general of state.generals) {
+    const template = templateGeneral(general.id)
+    if (!template) continue
+    const stats = statsAt(template, general.level, general.stars)
+    if (GROWTH_STATS.some(key => general[key] !== stats[key])) { Object.assign(general, stats); changed += 1 }
   }
-  scaled.stars = Math.max(scaled.stars, targetStars)
+  return changed
+}
+
+/** 적 무장 성장: 아군 강화·성급 상승과 같은 공식(statsAt)으로 능력치를 올린다. */
+export function scaleGeneral(general: General, level: number, stars: number): General {
+  const targetStars = Math.max(1, Math.min(5, Math.trunc(stars), Math.max(general.stars, Math.trunc(stars))))
+  const targetLevel = Math.max(1, Math.trunc(level), general.level)
+  // Lv1·1성으로 넘어오면 그 능력치를 원형으로, 아니면 도감 원형에서 다시 계산한다
+  const base = general.level <= 1 && general.stars <= 1 ? general : templateGeneral(general.id) ?? general
+  const scaled: General = { ...general, ...statsAt(base, targetLevel, targetStars), level: targetLevel, stars: targetStars }
   scaled.skillRank = scaled.stars
-  for (let next = scaled.level + 1; next <= targetLevel; next += 1) {
-    scaled.attack += 6 + scaled.stars; scaled.defense += 4 + Math.floor(scaled.stars / 2); scaled.command += 3; scaled.leadership += 3
-    scaled.martial += 6 + scaled.stars; scaled.stratagem += 2; scaled.speed += 2
-  }
-  scaled.level = Math.max(scaled.level, targetLevel)
   scaled.skillUnlocked = scaled.level >= skillUnlockLevel(scaled)
   return scaled
 }
@@ -981,8 +1012,12 @@ export function findGeneral(state: StrategyState, id: string): General | undefin
   return state.generals.find(general => general.id === id)
 }
 
+const POWER_WEIGHT_TOTAL = 4.2
+
 export function combatPower(general: General): number {
-  const basePower = general.leadership * 1.15 + general.martial * 1.25 + general.stratagem * 0.9 + general.speed * 0.65 + general.defense * 0.25
+  // 유형마다 중요한 능력치가 다르다(무력형=무력, 책사형=모략, 방어형=통솔·방어). 가중치 합은 모두 같다
+  const profile = GROWTH_PROFILE[skillDefFor(general.id, general.role).type]
+  const basePower = GROWTH_STATS.reduce((sum, key) => sum + general[key] * POWER_WEIGHT_TOTAL * (0.4 / GROWTH_STATS.length + 0.6 * profile[key]), 0)
   return Math.round(basePower * GRADE_POWER_MULTIPLIER[general.grade] * (1 + (general.level - 1) * 0.035) * (1 + (general.stars - 1) * 0.06))
 }
 
@@ -1379,13 +1414,8 @@ export function recruit(state: StrategyState, count = 1, options: RecruitOptions
       const previousStars = owned.stars
       if (previousStars < 5) {
         owned.stars += 1
-        owned.attack += 4 + owned.stars
-        owned.defense += 3 + Math.floor(owned.stars / 2)
-        owned.command += 3 + Math.floor(owned.stars / 2)
-        owned.leadership += 3 + owned.stars
-        owned.martial += 4 + owned.stars
-        owned.stratagem += 2 + Math.floor(owned.stars / 2)
-        owned.speed += 2 + Math.floor(owned.stars / 2)
+        const template = templateGeneral(owned.id)
+        if (template) Object.assign(owned, statsAt(template, owned.level, owned.stars))
         owned.skillRank = Math.min(5, (owned.skillRank ?? previousStars) + 1)
         owned.skillPower = (owned.skillPower ?? 100) + 18
       } else {
@@ -1448,13 +1478,9 @@ export function upgrade(state: StrategyState, id: string): UpgradeResult {
   state.resources.silver = state.silver
   state.manuals -= manualCost
   general.level += 1
-  general.attack += 6 + general.stars
-  general.defense += 4 + Math.floor(general.stars / 2)
-  general.command += 3
-  general.leadership += 3
-  general.martial += 6 + general.stars
-  general.stratagem += 2
-  general.speed += 2
+  // 유형별 성장: 무력형은 무력, 책사형은 모략, 방어형은 통솔·방어가 크게 오른다
+  const template = templateGeneral(general.id)
+  if (template) Object.assign(general, statsAt(template, general.level, general.stars))
   general.skillPower = (general.skillPower ?? 100) + 3
   if (general.level >= skillUnlockLevel(general) && !general.skillUnlocked) state.lastNotice = `${general.name}이(가) Lv.${general.level}에 도달했습니다. ${general.stars}성 스킬 해금이 가능합니다.`
   else state.lastNotice = `${general.name} 강화 완료 · Lv.${general.level}`

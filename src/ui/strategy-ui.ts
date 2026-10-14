@@ -3,7 +3,7 @@ import { TUTORIAL_REWARD, TUTORIAL_STEPS, nextTutorialStep, tutorialFinished, DA
 import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResource } from '../game/shop'
 import { effectsSetting, qualitySetting, setEffectsSetting, setQualitySetting, type EffectsSetting, type QualitySetting } from '../game/settings'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
-import { affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
+import { growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
 import { SCENARIOS, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
@@ -1497,15 +1497,18 @@ export class StrategyUI {
 
   private attributeRows(general: General, scale = 0): string {
     const stats = [
-      ['통솔', general.leadership],
-      ['무력', general.martial],
-      ['모략', general.stratagem],
-      ['속도', general.speed],
+      ['통솔', general.leadership, 'leadership'],
+      ['무력', general.martial, 'martial'],
+      ['모략', general.stratagem, 'stratagem'],
+      ['속도', general.speed, 'speed'],
     ] as const
     // 기준값(보유 무장 중 가장 높은 능력치) 대비 비율. 이 무장의 가장 높은 능력치는 강조
     const top = Math.max(...stats.map(([, value]) => value))
     const base = scale || Math.max(100, top)
-    return stats.map(([label, value]) => `<div class="${value === top ? 'is-top' : ''}"><span>${label}</span><i><b style="width:${Math.min(100, value / base * 100).toFixed(1)}%"></b></i><em>${value}</em></div>`).join('')
+    // 유형별 성장: 레벨업 때 가장 많이 오르는 능력치(무력형=무력, 책사형=모략, 방어·지휘형=통솔)
+    const weights = growthWeights(general)
+    const grow = stats.reduce((best, row) => weights[row[2]] > weights[best[2]] ? row : best)[2]
+    return stats.map(([label, value, key]) => `<div class="${value === top ? 'is-top' : ''}${key === grow ? ' is-grow' : ''}"><span>${label}${key === grow ? '<sup title="레벨업 때 가장 많이 오릅니다">▲성장</sup>' : ''}</span><i><b style="width:${Math.min(100, value / base * 100).toFixed(1)}%"></b></i><em>${value}</em></div>`).join('')
   }
 
   private skillDetailPanel(general: General): string {
@@ -1829,6 +1832,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '유형별 능력치 성장', '레벨업·성급 상승 때 무장 유형에 맞는 능력치가 크게 오릅니다. 무력형(돌격·사격)은 무력·공격, 책사형(계략)은 모략, 방어형(수호)은 통솔·방어, 지휘형(통솔)은 통솔, 치유형은 통솔·모략 중심이며, 무장 본래 능력치 비율도 섞여 같은 유형 안에서도 개성이 남습니다. 오르는 총량은 모두 같습니다. 스킬 위력은 주 능력치가 얼마나 올랐는지에 따라 커지고(장비로 올려도 반영), 회복량도 등급과 통솔 성장에 따라 달라집니다. 책사·치유형은 모략으로, 지휘형은 통솔로 일반 공격을 합니다. 전투력도 유형마다 중요한 능력치를 더 크게 칩니다. 보유 무장 능력치는 새 공식으로 다시 계산했습니다(레벨·성급·장비 그대로). 함께 계략 스킬 위력 8→11, 노숙 스킬에 병력 6% 회복 추가, 유비 회복 12→10%, 시나리오 난이도는 예전과 비슷하게 맞췄습니다. 무장 카드의 ▲성장 표시가 가장 많이 오르는 능력치입니다.', '완료', 'jade'],
       ['2026.10.14', '통솔형 무장 강화', '아군 강화(통솔)형 무장이 약하던 문제를 고쳤습니다. 공격 버프가 일반 공격뿐 아니라 스킬의 사기 피해에도 붙고, 버프는 2초 더 오래 가며 등급이 높을수록 세집니다(신병 ×1 ~ 천명 ×1.9). 통솔 스킬의 다시 쓰기 시간은 14초에서 11초로 줄고, 스킬 자체의 사기 피해도 커졌습니다. 이제 천명 통솔형(조조·손권·원소)을 넣은 덱이 공격수를 넣은 덱과 비슷한 속도로 이깁니다.', '완료', 'jade'],
       ['2026.10.14', '무장별 추천 덱 · 적도 전열 배치', '출전 편성 화면에서 무장을 고르면 그 무장이 들어간 이상적인 덱을 스킬 연계·버티기·초반 끝내기·디버프·유틸 다섯 유형으로 하나씩 보여 줍니다. 지금 키운 정도는 따지지 않고 스킬 설계·인연·전열 규칙만 보며, 70명 전체에서 고르므로 없는 무장은 미보유로 표시하고 모두 있으면 바로 편성할 수 있습니다. 시나리오와 일반 전투의 적 덱도 수호형(없으면 가장 단단한 무장)을 가운데 전열에 세웁니다.', '완료', 'jade'],
       ['2026.10.14', '진형 개편 · 가운데는 전열', '가운데 자리가 전열이 됩니다. 적은 같은 자리를 치되 30%는 전열부터 노리고, 전열은 받는 피해가 20% 줄어듭니다. 수호형 무장(조인·허저·전위·우금·정욱 등)을 전열에 세우면 적을 더 끌어당기고 받는 피해가 40%까지 줄어, 전열이 먼저 맞아 주는 동안 좌우 공격수가 오래 살아남아 딜을 합니다. 무장이 쓰러진 자리를 치던 적은 이제 늘 왼쪽이 아니라 남은 무장 중 무작위로 공격합니다. 자동 편성은 수호형을 전열에 세우고, 전투 규칙 안내와 튜토리얼에도 전열 설명을 넣었습니다.', '완료', 'jade'],

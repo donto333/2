@@ -3,7 +3,7 @@
 import type { General } from './strategy'
 import { templateGeneral } from './strategy'
 import { BATTLE_EFFECTS, effectValue, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId, type BuffId, type DebuffId, type PlayerDebuffId } from './battle-effects'
-import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, SKILL_MORALE_CAP, SKILL_TYPE_META, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type BondDef, type GeneralSkillDef, type SkillFx, type SkillType } from './skills'
+import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, SKILL_MORALE_CAP, SKILL_TYPE_META, baseMoraleDamage, bondFor, mainStatGrowth, isAwakened, skillCooldownFor, skillDefFor, type BondDef, type GeneralSkillDef, type SkillFx, type SkillType } from './skills'
 
 export type BattleMode = 'normal' | 'scenario' | 'siege' | 'duel'
 export type BattleTactic = 'guard' | 'feint' | 'charge'
@@ -14,6 +14,8 @@ export const BATTLE_RULES = {
   /** 통솔(아군 강화)형: 버프 지속 +초, 버프 수치는 등급이 높을수록 크게(skills.ts가 원본) */
   commandBuffSec: COMMAND_BUFF_SEC,
   commandBuffGrade: COMMAND_BUFF_GRADE,
+  /** 회복량 등급 보정(낮은 등급 치유형이 천명급만큼 회복하지 않게). 여기에 주 능력치(통솔) 성장이 곱해진다 */
+  healGrade: { 1: 0.4, 2: 0.46, 3: 0.52, 4: 0.6, 5: 0.7 } as Record<number, number>,
   /** 전열(가운데 자리): 상대의 일반 공격·단일 스킬이 이 확률로 전열부터 노리고, 전열은 받는 피해가 줄어든다 */
   frontLane: 1,
   frontPull: 0.3,
@@ -26,11 +28,13 @@ export const BATTLE_RULES = {
   responseWindow: [2.5, 2.5, 2.0] as const,
   firstPatternAt: 2.0,
   troopScale: 2,
-  pressureStart: 1.0,
-  pressureEnd: 1.4,
+  pressureStart: 1.05,
+  pressureEnd: 1.5,
   pressureRamp: 75,
-  /** 적 평균 레벨 1당 막별 사기 최대치 +2% (최대 2배). 스킬이 해금된 덱이 너무 빨리 끝나지 않게 한다. */
-  moralePerEnemyLevel: 0.02,
+  /** 적 평균 레벨 1당 막별 사기 최대치 +2.2% (최대 2배). 스킬이 해금된 덱이 너무 빨리 끝나지 않게 한다. */
+  moralePerEnemyLevel: 0.022,
+  /** 사기 최대치 배율 상한 */
+  moraleScaleCap: 2,
   moraleDrain: 0.4,
   moraleDrainPerTroopPct: 0.3,
   threatDecay: 0.6,
@@ -234,7 +238,7 @@ export class BattleCore {
     this.enemies.forEach(unit => { unit.cdMax = skillCooldownFor(this.growth(unit), unit.base) * (this.mode === 'duel' ? 1 : BATTLE_RULES.enemySkillCooldownMult); unit.cd = unit.cdMax * 0.6 })
     this.enemyMaxTotal = Math.max(1, this.enemies.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const enemyLevel = this.enemies.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.enemies.length)
-    this.moraleScale = Math.min(2, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1)) * (this.easy ? 0.35 : 1)
+    this.moraleScale = Math.min(BATTLE_RULES.moraleScaleCap, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1)) * (this.easy ? 0.35 : 1)
     const playerLevel = this.players.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.players.length)
     this.levelGap = clamp(enemyLevel - playerLevel, -40, 60)
     this.moraleMax = Math.round(BATTLE_RULES.moraleByPhase[0] * this.moraleScale) + this.moraleBonus
@@ -497,7 +501,11 @@ export class BattleCore {
         if (hasBattleEffect(this.debuffs, 'confusion') || hasBattleEffect(this.debuffs, 'blind')) multiplier *= 0.9
         if (hasBattleEffect(this.debuffs, 'rage')) multiplier *= 1.1
       }
-      const raw = (20 + g.attack * 0.34 + g.martial * 0.24 + g.leadership * 0.1) * 120 / (120 + target.general.defense) * matchup(g.role, target.general.role) * Math.max(0.1, multiplier)
+      // 유형의 주 능력치로 친다: 무력형·수호형=무력, 책사·치유형=모략, 통솔형=통솔(병사를 부려 싸운다)
+      const type = attacker.def.type
+      const mainStat = type === '계략' || type === '치유' ? g.stratagem : type === '통솔' ? g.leadership : g.martial
+      // 성장분이 유형별로 나뉘어 공격·주 능력치 비중이 예전(54%)보다 낮아졌으므로 계수를 올려 레벨당 피해 증가를 예전과 맞춘다(Lv1 피해는 그대로)
+      const raw = (8 + g.attack * 0.42 + mainStat * 0.3 + g.leadership * 0.1) * 120 / (120 + target.general.defense) * matchup(g.role, target.general.role) * Math.max(0.1, multiplier)
       attacker.firstAttackDone = true
       this.events.push({ kind: 'attack', side: attacker.side, lane: attacker.lane, target: target.lane })
       this.dealDamage(target, raw, g.name, attacker)
@@ -817,7 +825,8 @@ export class BattleCore {
   }
 
   private applyFx(unit: CoreUnit, effect: SkillFx): string[] {
-    const healBoost = 1 + this.players.reduce((sum, other) => sum + (this.passive(other) === 'healBoost' ? other.def.passive?.value ?? 0 : 0), 0)
+    const healBoost = (1 + this.players.reduce((sum, other) => sum + (this.passive(other) === 'healBoost' ? other.def.passive?.value ?? 0 : 0), 0))
+      * (BATTLE_RULES.healGrade[unit.general.grade] ?? 1) * mainStatGrowth(this.growth(unit), unit.base, unit.def.type)
     switch (effect.k) {
       case 'debuff': {
         let seconds = effect.sec

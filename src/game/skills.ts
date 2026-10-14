@@ -9,7 +9,7 @@ type Grade = 1 | 2 | 3 | 4 | 5
 export const SKILL_TYPE_META: Record<SkillType, { base: number; cooldown: number; stat: 'martial' | 'stratagem' | 'leadership'; label: string }> = {
   돌격: { base: 14, cooldown: 10, stat: 'martial', label: '단일 대상 큰 피해' },
   사격: { base: 11, cooldown: 8, stat: 'martial', label: '약한 적 마무리' },
-  계략: { base: 8, cooldown: 12, stat: 'stratagem', label: '디버프·지속 피해' },
+  계략: { base: 11, cooldown: 12, stat: 'stratagem', label: '디버프·지속 피해' },
   통솔: { base: 10, cooldown: 11, stat: 'leadership', label: '아군 전체 버프' },
   수호: { base: 3, cooldown: 12, stat: 'leadership', label: '피해 감소·반격' },
   치유: { base: 0, cooldown: 16, stat: 'leadership', label: '회복·상태이상 해제' },
@@ -74,7 +74,7 @@ const p = (id: string, name: string, desc: string, extra: Partial<PassiveDef> = 
 
 export const GENERAL_SKILLS: Record<string, GeneralSkillDef> = {
   // ── 촉 ──
-  'liu-bei': { faction: '촉', type: '치유', mult: 1, active: a('인덕의 결집', '아군 병력 12% 회복, 상태이상 2개 해제', { k: 'heal', pct: 12, target: 'all' }, { k: 'cleanse', n: 2 }), passive: p('cdForStrategists', '삼고초려', '편성한 책사의 쿨다운 −15%', { value: 0.15 }), awaken: a('도원의 맹세', '회복 +6%, 아군 공격 +10% 6초', { k: 'heal', pct: 6, target: 'all' }, { k: 'buff', id: 'atk-up', sec: 6, value: 0.1 }), weakness: { id: 'noMorale', desc: '자기 사기 피해 없음' } },
+  'liu-bei': { faction: '촉', type: '치유', mult: 1, active: a('인덕의 결집', '아군 병력 10% 회복, 상태이상 2개 해제', { k: 'heal', pct: 10, target: 'all' }, { k: 'cleanse', n: 2 }), passive: p('cdForStrategists', '삼고초려', '편성한 책사의 쿨다운 −15%', { value: 0.15 }), awaken: a('도원의 맹세', '회복 +6%, 아군 공격 +10% 6초', { k: 'heal', pct: 6, target: 'all' }, { k: 'buff', id: 'atk-up', sec: 6, value: 0.1 }), weakness: { id: 'noMorale', desc: '자기 사기 피해 없음' } },
   'guan-yu': { faction: '촉', type: '돌격', mult: 1.1, active: a('오관참장', '사기 피해 ×1.1 + 갑주 균열 6초', { k: 'debuff', id: 'armor-break', sec: 6 }), passive: p('startFear', '미염공의 위엄', '전투 시작 시 적 공포 3초', { value: 3 }), awaken: a('수엄칠군', '수공 5초 추가', { k: 'debuff', id: 'flood', sec: 5 }), weakness: { id: 'weakToStrategist', desc: '책사 상대 받는 피해 +10% (맥성)' } },
   'zhao-yun': { faction: '촉', type: '돌격', mult: 1, active: a('장판 돌파', '사기 피해 + 3초 동안 자신 받는 피해 −50%', { k: 'selfDr', value: 0.5, sec: 3 }), passive: p('cdIfAllyLow', '일신시담', '병력 30% 이하 아군이 있으면 쿨다운 −2초', { value: 2 }), awaken: a('칠진칠출', '3회 연속 타격(각 ×0.5)', { k: 'hits', n: 3, each: 0.5 }) },
   'zhuge-liang': { faction: '촉', type: '계략', mult: 1, active: a('팔진도', '혼란 6초 + 아군 상태이상 전부 해제', { k: 'debuff', id: 'confusion', sec: 6 }, { k: 'cleanse', n: 99 }), passive: p('threatSave', '공성계', '위협도 80 이상이면 위협도 −20 (전투당 1회)', { value: 20 }), awaken: a('칠성 동남풍', '아군 화계 지속 +3초, 화계 피해 ×1.5', { k: 'buff', id: 'east-wind', sec: 12 }), weakness: { id: 'frail10', desc: '최대 병력 −10%' } },
@@ -124,7 +124,7 @@ export const GENERAL_SKILLS: Record<string, GeneralSkillDef> = {
   'zhou-yu': { faction: '오', type: '계략', mult: 1, active: a('적벽 화공', '화계 7초 (연환된 적이면 적 전체로 번짐)', { k: 'debuff', id: 'burning', sec: 7 }), passive: p('vsBurning', '곡유오 주랑고', '화계 피해 +15%', { value: 0.15 }), awaken: a('적벽 대화', '화계 9초 + 적 공포 3초', { k: 'debuff', id: 'burning', sec: 9 }, { k: 'debuff', id: 'fear', sec: 3 }) },
   'huang-gai': { faction: '오', type: '돌격', mult: 2, active: a('고육지계', '자기 병력 15% 소모, 사기 피해 ×2 + 화계 4초', { k: 'selfCost', pct: 15 }, { k: 'debuff', id: 'burning', sec: 4 }), passive: p('vsBurning', '거짓 항복', '화계 걸린 적에게 피해 +10%', { value: 0.1 }) },
   'gan-ning': { faction: '오', type: '돌격', mult: 1, active: a('백기 야습', '사기 피해 + 시야 차단 5초', { k: 'debuff', id: 'blind', sec: 5 }), passive: p('fastOpener', '금범적', '첫 스킬 쿨다운 −3초', { value: 3 }) },
-  'lu-su': { faction: '오', type: '치유', mult: 1, active: a('강동 동맹', '상태이상 전부 해제 + 전술 게이지 +15', { k: 'cleanse', n: 99 }, { k: 'gauge', n: 15 }), passive: p('alliance', '손유동맹', '다른 세력 무장 1명당 위력 +5%', { value: 0.05 }) },
+  'lu-su': { faction: '오', type: '치유', mult: 1, active: a('강동 동맹', '아군 병력 6% 회복 + 상태이상 전부 해제 + 전술 게이지 +15', { k: 'heal', pct: 6, target: 'all' }, { k: 'cleanse', n: 99 }, { k: 'gauge', n: 15 }), passive: p('alliance', '손유동맹', '다른 세력 무장 1명당 위력 +5%', { value: 0.05 }) },
   'lu-meng': { faction: '오', type: '돌격', mult: 1, active: a('백의 도하', '적 버프 1개 제거, 제거했으면 사기 피해 ×1.3', { k: 'strip', n: 1 }, { k: 'cond', when: 'stripped', mult: 1.3 }), passive: p('veteran', '괄목상대', 'Lv30 이상이면 위력 +10%', { value: 0.1 }) },
   'ling-tong': { faction: '오', type: '돌격', mult: 1, active: a('필사의 연격', '2회 타격(각 ×0.6)', { k: 'hits', n: 2, each: 0.6 }), passive: p('partnerAtk', '화해', '감녕과 편성 시 공격 +10%', { partner: 'gan-ning', value: 0.1 }) },
   'taishi-ci': { faction: '오', type: '사격', mult: 1, active: a('북해 구원', '사격 + 시야 차단 5초', { k: 'debuff', id: 'blind', sec: 5 }), passive: p('partnerPower', '신정의 맹약', '손책과 편성 시 위력 +10%', { partner: 'sun-ce', value: 0.1 }) },
@@ -177,6 +177,24 @@ export function skillDefFor(id: string, role = '보병', name = '고유 스킬',
   return GENERAL_SKILLS[id] ?? { faction: '군웅', type: FALLBACK[role] ?? '돌격', mult: 1, active: a(name, desc) }
 }
 
+export type GrowthStat = 'attack' | 'defense' | 'command' | 'leadership' | 'martial' | 'stratagem' | 'speed'
+export const GROWTH_STATS: GrowthStat[] = ['attack', 'defense', 'command', 'leadership', 'martial', 'stratagem', 'speed']
+export const GROWTH_PROFILE: Record<SkillType, Record<GrowthStat, number>> = {
+  돌격: { attack: 0.22, defense: 0.14, command: 0.08, leadership: 0.12, martial: 0.24, stratagem: 0.06, speed: 0.14 },
+  사격: { attack: 0.22, defense: 0.12, command: 0.08, leadership: 0.12, martial: 0.24, stratagem: 0.06, speed: 0.16 },
+  계략: { attack: 0.20, defense: 0.14, command: 0.04, leadership: 0.18, martial: 0.04, stratagem: 0.30, speed: 0.10 },
+  수호: { attack: 0.20, defense: 0.20, command: 0.12, leadership: 0.22, martial: 0.12, stratagem: 0.04, speed: 0.10 },
+  통솔: { attack: 0.18, defense: 0.12, command: 0.16, leadership: 0.28, martial: 0.08, stratagem: 0.10, speed: 0.08 },
+  치유: { attack: 0.22, defense: 0.14, command: 0.12, leadership: 0.22, martial: 0.04, stratagem: 0.20, speed: 0.06 },
+}
+export const GROWTH_OWN_SHARE = 0.3
+/** 레벨 1 오를 때 받는 능력치 총량 */
+export const levelBudget = (stars: number) => 26 + 2.5 * stars
+/** 성급 k가 될 때 받는 능력치 총량 */
+export const starBudget = (k: number) => 21 + 3 * k + 4 * Math.floor(k / 2)
+/** Lv60·5성까지 받는 능력치 총량 */
+export const MAX_GROWTH_BUDGET = 59 * levelBudget(5) + [2, 3, 4, 5].reduce((sum, k) => sum + starBudget(k), 0)
+
 export interface SkillGrowthInput { id: string; role: string; grade: Grade; level: number; stars: number; skillRank?: number; martial: number; stratagem: number; leadership: number; speed: number; skillName?: string; skillDescription?: string }
 
 /** 공식의 주 능력치 보정: 도감 Lv1 능력치 기준 0.85~1.15. */
@@ -196,8 +214,20 @@ export function baseMoraleDamage(general: SkillGrowthInput, base?: Pick<SkillGro
   const def = skillDefFor(general.id, general.role)
   const meta = SKILL_TYPE_META[def.type]
   const stat = (base ?? general)[meta.stat]
-  const level = 1 + 0.005 * Math.min(Math.max(general.level, 1) - 1, 59)
+  const level = mainStatGrowth(general, base, def.type)
   return meta.base * def.mult * statFactor(stat) * SKILL_GRADE_COEF[general.grade] * (SKILL_STAR_COEF[starRank(general)] ?? 1) * level
+}
+
+/**
+ * 스킬 성장: 주 능력치(돌격·사격=무력, 계략=모략, 통솔·수호·치유=통솔)가 원형보다 얼마나 올랐는지로 정한다.
+ * Lv60·5성에서 유형 기본 성장만큼 올랐으면 ×1.3, 장비로 더 올리면 더 세진다(최대 ×1.45).
+ * 원형을 모르면 예전처럼 레벨로 정한다.
+ */
+export function mainStatGrowth(general: SkillGrowthInput, base: Pick<SkillGrowthInput, 'martial' | 'stratagem' | 'leadership'> | undefined, type: SkillType): number {
+  const key = SKILL_TYPE_META[type].stat
+  if (!base || base === general) return 1 + 0.005 * Math.min(Math.max(general.level, 1) - 1, 59)
+  const expected = MAX_GROWTH_BUDGET * (GROWTH_PROFILE[type][key] * (1 - GROWTH_OWN_SHARE) + GROWTH_OWN_SHARE / 7)
+  return Math.min(1.45, Math.max(1, 1 + 0.3 * (general[key] - base[key]) / expected))
 }
 
 export function skillCooldownFor(general: SkillGrowthInput, base?: Pick<SkillGrowthInput, 'speed'>): number {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GRADE_POWER_MULTIPLIER, GOLD_PACKAGES, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseHonorPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentInventoryCount, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill } from '../src/game/strategy'
-import { GENERAL_SKILLS } from '../src/game/skills'
+import { EQUIPMENT_GRADE_META, EQUIPMENT_SPECIALTIES, EQUIPMENT_SET_META, GRADE_POWER_MULTIPLIER, GOLD_PACKAGES, HONOR_SHOP_PACKAGES, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, RESOURCE_SHOP_PACKAGES, consumeDuelAttempt, duelAttemptsRemaining, ensurePrelaunchDailyGold, purchaseGoldPackage, purchaseHonorPackage, purchaseResourcePackage, purchaseMythicEquipment, allGenerals, combatPower, createInitialState, drawEquipment, enhanceEquipment, ensureEquipmentState, ensureResearchRoster, equipmentBonus, equipmentInventoryCount, equipmentPower, equipmentSetCounts, equipEquipment, findGeneral, migrateLegacyStarterRoster, recruit, skillDetail, skillPower, skillUnlockLevel, toggleFormation, totalPower, unequipEquipment, upgrade, unlockResearch, unlockSkill, normalizeGeneralStats, statsAt, templateGeneral } from '../src/game/strategy'
+import { GENERAL_SKILLS, GROWTH_STATS, SKILL_TYPE_META, skillDefFor } from '../src/game/skills'
 
 describe('commander attributes', () => {
   it('starts with the four battle attributes and uses them in combat power', () => {
@@ -35,16 +35,16 @@ describe('commander attributes', () => {
     expect(migrateLegacyStarterRoster(state)).toBe(false)
   })
 
-  it('raises the four attributes when a general is upgraded', () => {
+  it('raises stats by the general type when a general is upgraded', () => {
     const state = createInitialState()
     const general = state.generals[0]
-    const before = { leadership: general.leadership, martial: general.martial, stratagem: general.stratagem, speed: general.speed }
+    const before = { ...general }
     const result = upgrade(state, general.id)
     expect(result.ok).toBe(true)
-    expect(general.leadership).toBe(before.leadership + 3)
-    expect(general.martial).toBe(before.martial + 7)
-    expect(general.stratagem).toBe(before.stratagem + 2)
-    expect(general.speed).toBe(before.speed + 2)
+    const gain = GROWTH_STATS.reduce((sum, key) => sum + general[key] - before[key], 0)
+    expect(Math.abs(gain - (26 + 2.5 * general.stars))).toBeLessThanOrEqual(3)
+    expect(general.leadership).toBeGreaterThan(before.leadership)
+    expect(general.martial).toBeGreaterThan(before.martial)
   })
 
   it('makes higher stars unlock skills earlier and strengthen skill power', () => {
@@ -66,12 +66,35 @@ describe('commander attributes', () => {
   it('applies the current star tier to every future level-up stat gain', () => {
     const state = createInitialState()
     const general = state.generals[0]
-    general.stars = 4
-    const beforeAttack = general.attack
-    const beforeMartial = general.martial
+    const sum = () => GROWTH_STATS.reduce((total, key) => total + general[key], 0)
+    let before = sum()
     expect(upgrade(state, general.id).ok).toBe(true)
-    expect(general.attack - beforeAttack).toBe(10)
-    expect(general.martial - beforeMartial).toBe(10)
+    const oneStar = sum() - before
+    general.stars = 4
+    before = sum()
+    expect(upgrade(state, general.id).ok).toBe(true)
+    expect(sum() - before).toBeGreaterThan(oneStar)
+  })
+
+  it('grows each type in its main stat, keeps the same total, and recomputes saved stats the same way', () => {
+    const lib = new Map(allGenerals().map(general => [general.id, general]))
+    const main = (id: string) => ({ martial: 'martial', stratagem: 'stratagem', leadership: 'leadership' } as const)[SKILL_TYPE_META[skillDefFor(id).type].stat]
+    for (const id of ['guan-yu', 'zhuge-liang', 'cao-ren', 'cao-cao']) {
+      const base = lib.get(id)!
+      const grown = statsAt(base, 60, 5)
+      const gains = GROWTH_STATS.map(key => grown[key] - base[key])
+      const key = main(id)
+      // 주 능력치가 가장 많이 오르거나 그에 버금간다
+      expect(grown[key] - base[key]).toBeGreaterThanOrEqual(Math.max(...gains) * 0.95)
+    }
+    const totals = ['guan-yu', 'zhuge-liang', 'cao-ren'].map(id => { const base = lib.get(id)!; const grown = statsAt(base, 30, 3); return GROWTH_STATS.reduce((sum, key) => sum + grown[key] - base[key], 0) })
+    expect(Math.max(...totals) - Math.min(...totals)).toBeLessThanOrEqual(4)
+    const state = createInitialState()
+    const general = state.generals[0]
+    general.level = 20; general.martial = 1; general.stratagem = 999
+    expect(normalizeGeneralStats(state)).toBeGreaterThan(0)
+    expect(general.martial).toBe(statsAt(templateGeneral(general.id)!, 20, general.stars).martial)
+    expect(normalizeGeneralStats(state)).toBe(0)
   })
 
   it('includes the original roster plus 50 new Three Kingdoms generals', () => {
