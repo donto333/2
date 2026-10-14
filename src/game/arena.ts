@@ -105,6 +105,8 @@ export interface BattleSnapshot {
   speed: number
   paused: boolean
   autoPlay: boolean
+  /** 대련 스킬 자동 */
+  autoSkill: boolean
   log: string[]
   result: BattleResult | null
 }
@@ -438,6 +440,15 @@ export class Arena {
     if (this.core) this.core.autoPilot = on ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null
   }
 
+  /** 대련 스킬 자동(기본 켬, 기기에 기억) */
+  private duelAutoSkill = (() => { try { return window.localStorage.getItem('cheonharo.duelAutoSkill') !== '0' } catch { return true } })()
+
+  setAutoSkill(on: boolean): void {
+    this.duelAutoSkill = on
+    try { window.localStorage.setItem('cheonharo.duelAutoSkill', on ? '1' : '0') } catch { /* 무시 */ }
+    if (this.core) this.core.autoSkill = on && this.mode === 'duel'
+  }
+
   stopBattle(): void {
     this.battleActive = false
     sound.setPausedDuck(false)
@@ -717,7 +728,7 @@ export class Arena {
     const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
     this.enemyDeck = deck
     this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
-    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, autoPilot: options.autoPlay ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null })
+    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: options.autoPlay ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null })
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()
@@ -1424,6 +1435,7 @@ export class Arena {
       speed: this.speed,
       paused: this.paused,
       autoPlay: Boolean(core?.autoPilot),
+      autoSkill: Boolean(core?.autoSkill),
       log: this.logLines.slice(-12),
       result: core?.result ?? null,
     }

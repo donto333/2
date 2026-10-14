@@ -64,13 +64,15 @@ export const BATTLE_RULES = {
   enemySkillCooldownMult: 1.3,
   /**
    * 유저 대련 보정: 상대 덱은 AI가 움직여 예고 대응·연계·전술을 못 쓰므로, 같은 전력이면 내가 거의 늘 이긴다(시뮬레이션: 전력 2배도 대부분 승리).
-   * 상대 사기 최대치·피해·스킬 빈도를 올려 같은 전력이면 승률 약 60%가 되게 맞춘다.
+   * 상대 사기 최대치·피해·스킬 빈도를 올린다. 기준은 휴대폰 사람 플레이(예고 0.9~1.6초에 78% 대응, 전술 안 씀):
+   * 스킬 자동이면 쉬움·보통은 대부분 이기고 어려움은 약 70%, 스킬을 3초쯤 늦게 손으로 쓰면 쉬움 약 85%·보통 약 30%.
+   * (이전 1.6·1.7·0.8은 자동 전투 수준이 아니면 보통도 거의 못 이겼다)
    */
   /** 레이드: 3막 사기를 무너뜨릴 때마다 보스 최대 병력의 이 비율만큼 피해 보너스 */
   raidBreakBonus: 0.15,
-  duelMorale: 1.6,
-  duelDamage: 1.7,
-  duelSkillCooldown: 0.8,
+  duelMorale: 1.45,
+  duelDamage: 1.55,
+  duelSkillCooldown: 0.85,
   enemySkillWarning: 1.5,
   skillTroopDamagePerMorale: 4,
   enemySkillTroopPerMorale: 4,
@@ -162,6 +164,7 @@ export interface CoreConfig {
   moraleBonus?: number
   rng?: () => number
   autoPilot?: AutoPilot | null
+  autoSkill?: boolean
   /** 기술 연구(강병·지략)의 아군 보정 */
   research?: BattleResearch | null
   /** 튜토리얼 전투: 적 사기 절반, 예고를 받을 시간 넉넉히, 실수의 대가(위협도·병력 피해) 크게 줄임 */
@@ -251,6 +254,8 @@ export class BattleCore {
   private collapseSaved = false
   /** 자동 전투(3성 시나리오). 전투 중에 켜고 끌 수 있다. */
   autoPilot: AutoPilot | null
+  /** 스킬 자동(대련): 예고 대응은 직접, 스킬만 준비되면 알아서 쓴다 */
+  autoSkill = false
   /** 방금 스킬이 맞힌 상대 자리(연출용) */
   private lastSkillTarget: number | null = null
 
@@ -259,6 +264,7 @@ export class BattleCore {
     this.easy = Boolean(config.easy)
     this.rng = config.rng ?? Math.random
     this.autoPilot = config.autoPilot ?? null
+    this.autoSkill = Boolean(config.autoSkill)
     this.moraleBonus = clamp(Math.round(config.moraleBonus ?? 0), 0, 50)
     this.research = config.research ?? {}
     this.players = players.slice(0, 3).map((general, lane) => this.makeUnit(general, 'player', lane))
@@ -1009,6 +1015,7 @@ export class BattleCore {
     }
     this.expirePattern()
     this.runAutoPilot()
+    if (this.autoSkill && !this.autoPilot) this.autoCastSkills()
     this.enemySkills(dt)
     this.autoCombat(dt)
     const burnRate = 2.2 * (hasBattleEffect(this.buffs, 'east-wind') ? 1.5 : 1) * (hasBattleEffect(this.debuffs, 'chain') ? 1.5 : 1) * (1 + (this.research.fire ?? 0))
@@ -1104,15 +1111,21 @@ export class BattleCore {
     }
     const warned = this.enemies.some(unit => unit.warned && unit.troops > 0)
     if (warned && this.guardTimer <= 0 && this.gauge >= this.tacticCost('guard') + (this.phase === 2 ? 0 : 10)) this.useTactic('guard')
+    this.autoCastSkills()
+    if (this.gauge >= this.tacticCost('charge') + (this.phase === 2 ? this.tacticCost('guard') : 0)) this.useTactic('charge')
+  }
+
+  /** 준비된 스킬을 쓴다(치유는 다쳤거나 디버프가 있을 때, 수호는 다쳤거나 적장 스킬 예고가 있을 때만) */
+  private autoCastSkills(): void {
+    const warned = this.enemies.some(unit => unit.warned && unit.troops > 0)
+    const hurt = this.players.some(other => other.troops > 0 && other.troops < other.maxTroops * 0.7)
     this.players.forEach(unit => {
       if (unit.troops <= 0 || !unit.skillOn || unit.cd > 0) return
       const type = unit.def.type
-      const hurt = this.players.some(other => other.troops > 0 && other.troops < other.maxTroops * 0.7)
       if (type === '치유' && !hurt && this.playerDebuffs.length === 0) return
       if (type === '수호' && !hurt && !warned) return
       this.castSkill(unit.lane)
     })
-    if (this.gauge >= this.tacticCost('charge') + (this.phase === 2 ? this.tacticCost('guard') : 0)) this.useTactic('charge')
   }
 
   log(text: string, tone?: 'jade' | 'ember'): void {

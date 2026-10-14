@@ -1280,6 +1280,11 @@ const ui = new StrategyUI(root, {
     arena.setAutoPlay(on)
     ui.updateBattle(arena.getSnapshot())
   },
+  onBattleAutoSkill: on => {
+    arena.setAutoSkill(on)
+    ui.updateBattle(arena.getSnapshot())
+    ui.notify(on ? '스킬 자동을 켰습니다 · 예고 대응은 직접 하십시오.' : '스킬 자동을 껐습니다 · 무장 버튼을 길게 눌러 스킬을 쓰십시오.')
+  },
   onBattleTactic: tactic => {
     arena.useTactic(tactic)
     ui.updateBattle(arena.getSnapshot())

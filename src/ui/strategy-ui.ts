@@ -254,6 +254,7 @@ export interface StrategyUiCallbacks {
   onBattleSkill: (index?: number) => void
   onBattleSpeed: (speed: number) => void
   onBattleAuto: (on: boolean) => void
+  onBattleAutoSkill: (on: boolean) => void
   onBattlePause: (on: boolean) => void
   /** 전투 규칙 그림 설명 열기 */
   onBattleGuide: () => void
@@ -856,6 +857,9 @@ export class StrategyUI {
     const stop = q('[data-bt-stop]')
     if (stop) stop.textContent = Date.now() < this.stopConfirmUntil ? '한 번 더 누르면 중지' : '■ 전투 중지'
     q('[data-bt-auto]')?.classList.toggle('is-on', snapshot.autoPlay)
+    const autoSkillButton = q('[data-bt-auto-skill]')
+    autoSkillButton?.classList.toggle('is-on', snapshot.autoSkill)
+    autoSkillButton?.setAttribute('aria-pressed', String(snapshot.autoSkill))
     const startButton = q('[data-action="battle-start"]')
     if (startButton) startButton.style.display = snapshot.active ? 'none' : 'inline-flex'
   }
@@ -1837,7 +1841,7 @@ export class StrategyUI {
   /** 전투 중 상단 바: 멈춤 · ×2 배속 · 자동(별 3개 시나리오) · 전투 중지 */
   private battleTopControls(): string {
     const battle = this.latestBattle
-    return `<div class="topbar-battle"><button class="tb-btn" data-action="battle-pause" data-bt-pause aria-label="일시 정지">${battle?.paused ? '▶ 계속' : '❚❚ 멈춤'}</button><button class="tb-btn ${(battle?.speed ?? 1) >= 2 ? 'is-on' : ''}" data-action="battle-speed" data-bt-speed aria-label="2배속">×2 배속</button>${this.battleAutoAvailable ? `<button class="tb-btn ${battle?.autoPlay ? 'is-on' : ''}" data-action="battle-auto" data-bt-auto>자동</button>` : ''}<button class="tb-btn" data-action="battle-guide" aria-label="전투 규칙">? 규칙</button><button class="tb-btn tb-btn--stop" data-action="battle-stop" data-bt-stop>■ 전투 중지</button></div>`
+    return `<div class="topbar-battle"><button class="tb-btn" data-action="battle-pause" data-bt-pause aria-label="일시 정지">${battle?.paused ? '▶ 계속' : '❚❚ 멈춤'}</button><button class="tb-btn ${(battle?.speed ?? 1) >= 2 ? 'is-on' : ''}" data-action="battle-speed" data-bt-speed aria-label="2배속">×2 배속</button>${this.battleAutoAvailable ? `<button class="tb-btn ${battle?.autoPlay ? 'is-on' : ''}" data-action="battle-auto" data-bt-auto>자동</button>` : ''}${battle?.duelMode ? `<button class="tb-btn ${battle.autoSkill ? 'is-on' : ''}" data-action="battle-auto-skill" data-bt-auto-skill aria-pressed="${battle.autoSkill}" title="스킬이 준비되면 알아서 씁니다. 예고 대응은 직접 하세요.">스킬 자동</button>` : ''}<button class="tb-btn" data-action="battle-guide" aria-label="전투 규칙">? 규칙</button><button class="tb-btn tb-btn--stop" data-action="battle-stop" data-bt-stop>■ 전투 중지</button></div>`
   }
 
   /** 상단 HUD의 적 무장 카드(초상·레벨·병력 막대) — Manus 전투 HUD 개선안 */
@@ -2029,6 +2033,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '유저 대련: 스킬 자동 · 난이도 완화', '대련 전투 상단에 「스킬 자동」 버튼이 생겼습니다(기본 켬). 스킬이 준비되면 알아서 쓰고, 적 예고 대응만 직접 하면 됩니다. 예고를 잘 막아도 스킬을 손으로 쓰지 못하면 병력이 먼저 무너지던 문제를 줄이려고 대련 상대 보정도 낮췄습니다(사기 ×1.6→×1.45, 피해 ×1.7→×1.55, 스킬 쿨다운 ×0.8→×0.85).', '완료', 'jade'],
       ['2026.10.14', '배경음악 · 효과음', '화면마다 배경음악이 흐릅니다: 본영(잔잔한 가야금과 피리), 전투(큰북과 호궁 · 막이 오를수록 북이 거세짐), 유저 대련, 주간 레이드(무거운 북과 징). 승리 · 패배 때는 짧은 곡이 울립니다. 버튼 · 강화 · 장비 · 보상 · 연구 · 건물 소리와 전투의 공격 · 피격 · 스킬(돌격 · 사격 · 계략 · 통솔 · 수호 · 치유마다 다름) · 적 스킬 예고 · 막 전환 소리도 넣었습니다. 위쪽 🔊 버튼으로 모든 소리를 끄고 켜고, 계정 → 이 기기 설정에서 배경음악과 효과음 크기를 따로 고를 수 있습니다.', '완료', 'jade'],
       ['2026.10.14', '더보기 메뉴 레이드 이름 표시', '휴대폰 하단 「더보기」 메뉴에서 주간 레이드 아이콘 밑에 이름이 빠져 있던 것을 고쳤습니다. 이제 「레이드」로 표시됩니다.', '완료', 'jade'],
       ['2026.10.14', '시나리오 단계별 진행', '시나리오 화면이 지금 도전할 단계 하나를 크게 보여 줍니다. ← 이전 / 다음 → 버튼으로 단계를 넘기고, 아직 깨지 않은 단계 너머는 잠겨 있습니다. 단계를 깨면 다음 단계로 자동으로 넘어가고, 58개 전체 목록은 「전체 시나리오 목록」을 눌러 펼칠 때만 보입니다.', '완료', 'jade'],
@@ -2347,6 +2352,7 @@ export class StrategyUI {
       else { this.stopConfirmUntil = Date.now() + 3000; button.textContent = '한 번 더 누르면 중지'; button.classList.add('is-confirm'); window.setTimeout(() => { button.classList.remove('is-confirm'); if (Date.now() >= this.stopConfirmUntil) button.textContent = '■ 전투 중지' }, 3050) }
     }
     else if (action === 'battle-auto') this.callbacks.onBattleAuto(!this.latestBattle?.autoPlay)
+    else if (action === 'battle-auto-skill') this.callbacks.onBattleAutoSkill(!this.latestBattle?.autoSkill)
     else if (action === 'battle-log') { this.battleLogOpen = !this.battleLogOpen; button.textContent = this.battleLogOpen ? '접기' : '전체 기록'; const log = this.root.querySelector<HTMLElement>('[data-bt-log]'); if (log) log.dataset.html = ''; if (this.latestBattle) this.updateBattle(this.latestBattle) }
     else if (action === 'battle-tactic') this.callbacks.onBattleTactic((button.dataset.tactic ?? 'guard') as 'guard' | 'feint' | 'charge')
     else if (action === 'duel-refresh') this.callbacks.onDuelRefresh()
