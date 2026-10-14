@@ -2,6 +2,7 @@
 // 모델이 원래 가진 동작(Idle 등) 위에, "몸 기준 축으로 몇 도 돌린다"는 열쇠 자세를 시간에 따라 섞어 얹는다.
 // 몸 기준 축: 모델은 +Z(앞)를 보고 +Y가 위, +X는 몸의 왼쪽이다.
 import * as THREE from 'three'
+import { monotoneSample } from './motion-math'
 
 type Axis = 'x' | 'y' | 'z'
 /** 열쇠 자세: 뼈 이름 끝부분 → 몸 기준 [x, y, z] 회전(도) */
@@ -11,21 +12,16 @@ export interface PoseKey { t: number; r: Record<string, [number, number, number]
 const ORDER = ['Pelvis', 'Hips', 'Spine_01', 'Spine_02', 'Neck', 'Head', 'UpperArm_R', 'Forearm_R', 'Hand_R', 'UpperArm_L', 'Forearm_L', 'Hand_L', 'Thigh_L', 'Calf_L', 'Thigh_R', 'Calf_R']
 
 const AXES: Record<Axis, THREE.Vector3> = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) }
-const smooth = (k: number) => k * k * (3 - 2 * k)
 
-/** 열쇠 자세 사이를 부드럽게 섞은 각도 목록 */
+/** 열쇠 자세 사이를 단조 큐빅으로 이은 각도 목록(열쇠마다 멈칫하지 않게) */
 export function sampleKeys(keys: PoseKey[], t: number): Map<string, number> {
   const out = new Map<string, number>()
   if (!keys.length) return out
-  let a = keys[0], b = keys[keys.length - 1]
-  if (t <= a.t) b = a
-  else for (let i = 0; i < keys.length - 1; i += 1) if (t >= keys[i].t && t <= keys[i + 1].t) { a = keys[i]; b = keys[i + 1]; break }
-  const k = b.t > a.t ? smooth(Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t)))) : 1
+  const times = keys.map(key => key.t)
   for (const bone of ORDER) {
-    const ra = a.r[bone], rb = b.r[bone]
-    if (!ra && !rb) continue
+    if (!keys.some(key => key.r[bone])) continue
     ;(['x', 'y', 'z'] as const).forEach((axis, i) => {
-      const deg = (ra?.[i] ?? 0) * (1 - k) + (rb?.[i] ?? 0) * k
+      const deg = monotoneSample(times, keys.map(key => key.r[bone]?.[i] ?? 0), t)
       if (Math.abs(deg) > 0.01) out.set(`${bone}|${axis}`, deg)
     })
   }

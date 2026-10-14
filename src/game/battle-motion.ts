@@ -3,6 +3,7 @@
 // 효과(VFX)는 ArenaEffect와 같은 모양(Fx)을 돌려주며, 도형은 모듈에서 한 번만 만들어 함께 쓴다.
 import * as THREE from 'three'
 import type { SkillType } from './skills'
+import { easeIn2, easeInOut, easeOut2, easeOut3, easeStrike, track, type Ease, type Key } from './motion-math'
 
 export interface Fx {
   object: THREE.Object3D
@@ -53,49 +54,54 @@ const ease = (k: number) => k * k * (3 - 2 * k)
 const clamp01 = (k: number) => Math.min(1, Math.max(0, k))
 const seg = (t: number, a: number, b: number) => ease(clamp01((t - a) / (b - a)))
 
+// 동작 곡선(애니메이션 원칙): 예비 동작은 천천히 당기고(easeInOut) → 타격은 빨라지며 닿고(easeIn)
+// → 닿은 뒤 조금 더 밀려 나갔다가(팔로스루, easeOut) → 늦어지며 제자리로. 상체 비틀기는 몸보다 조금 늦게 따라온다(겹침 동작).
+const K = (t: number, v: number, e?: Ease): Key => ({ t, v, e })
+
 export function actorPose(motion: Motion | null, hitReact: number, out: Pose): Pose {
   out.z = 0; out.y = 0; out.tilt = 0; out.twist = 0; out.scale = 1
   if (motion) {
-    const t = motion.t
+    const t = motion.t, D = motion.dur
     if (motion.kind === 'melee') {
-      // 뒤로 당겼다가 → 튀어나가 베고 → 잠시 멈춘 뒤 → 제자리
       // (팔·무기 동작은 병종별 자세 모프가 맡고, 여기서는 몸 전체의 쏠림만)
-      const hit = motion.hit ?? MELEE_STRIKE
-      const back = seg(t, 0, hit * 0.55), dash = seg(t, hit * 0.55, hit), ret = seg(t, hit + 0.15, motion.dur)
-      out.z = (0.22 * back) * (1 - dash) + (-0.95 * dash) * (1 - ret)
-      out.tilt = (0.08 * back) * (1 - dash) + (-0.12 * dash) * (1 - ret)
-      out.twist = (-0.12 * back) * (1 - dash) + (0.16 * dash) * (1 - ret)
+      const h = motion.hit ?? MELEE_STRIKE
+      const a = h * 0.55, f = h + 0.07, s = Math.min(D - 0.05, h + 0.18)
+      out.z = track([K(0, 0), K(a, 0.24), K(h, -0.95, easeStrike), K(f, -1.04, easeOut2), K(s, -0.98), K(D, 0, easeInOut)], t)
+      out.y = track([K(0, 0), K(a, -0.04), K(h, 0.02, easeIn2), K(s, 0, easeOut2)], t)
+      out.tilt = track([K(0, 0), K(a, 0.09), K(h, -0.14, easeStrike), K(f, -0.17, easeOut2), K(s, -0.12), K(D, 0, easeInOut)], t)
+      // 비틀기는 0.04초 늦게 따라온다
+      out.twist = track([K(0, 0), K(a + 0.04, -0.14), K(h + 0.04, 0.16, easeStrike), K(f + 0.06, 0.2, easeOut2), K(D, 0, easeInOut)], t)
     } else if (motion.kind === 'shoot') {
-      const release = motion.hit ?? SHOOT_RELEASE
-      const draw = seg(t, 0, release), recoil = seg(t, release, release + 0.08), ret = seg(t, release + 0.08, motion.dur)
-      out.z = 0.08 * draw * (1 - recoil) + 0.22 * recoil * (1 - ret)
-      out.tilt = 0.04 * draw + 0.07 * recoil * (1 - ret) - 0.04 * draw * recoil
+      const r = motion.hit ?? SHOOT_RELEASE
+      out.z = track([K(0, 0), K(r, 0.08), K(r + 0.06, 0.22, easeOut3), K(D, 0, easeInOut)], t)
+      out.tilt = track([K(0, 0), K(r, 0.04), K(r + 0.06, 0.09, easeOut3), K(D, 0, easeInOut)], t)
     } else {
       const type = motion.skillType ?? '돌격'
-      const windup = seg(t, 0, SKILL_RELEASE)
+      const R = SKILL_RELEASE
       if (type === '돌격') {
-        const dashDist = motion.dash ?? 2.4
-        const dash = seg(t, SKILL_RELEASE, CHARGE_STRIKE), ret = seg(t, 0.95, motion.dur)
-        out.z = 0.45 * windup * (1 - dash) + -dashDist * dash * (1 - ret)
-        out.y = -0.06 * windup * (1 - dash) + Math.sin(dash * Math.PI) * 0.35
-        out.tilt = 0.2 * windup * (1 - dash) + -0.32 * dash * (1 - ret)
-        out.twist = 0.5 * Math.sin(seg(t, CHARGE_STRIKE - 0.06, 0.9) * Math.PI)
-        out.scale = 1 + 0.08 * windup * (1 - ret)
+        const d = motion.dash ?? 2.4, S = CHARGE_STRIKE
+        // 몸을 낮춰 뒤로 모았다가 → 튀어 나가 → 닿은 뒤 조금 더 미끄러지고 → 돌아온다
+        out.z = track([K(0, 0), K(R, 0.45), K(S, -d, easeStrike), K(S + 0.1, -d * 1.06, easeOut2), K(0.95, -d), K(D, 0, easeInOut)], t)
+        // 도약: 올라갈 때 늦어지고 내려올 때 빨라진다(중력) → 착지에서 무릎을 굽힌다
+        out.y = track([K(0, 0), K(R, -0.08), K((R + S) / 2, 0.35, easeOut2), K(S, 0, easeIn2), K(S + 0.07, -0.07, easeOut2), K(S + 0.2, 0)], t)
+        out.tilt = track([K(0, 0), K(R, 0.2), K(S, -0.36, easeStrike), K(0.95, -0.3), K(D, 0, easeInOut)], t)
+        out.twist = 0.5 * Math.sin(seg(t, S - 0.06, 0.9) * Math.PI)
+        out.scale = track([K(0, 1), K(R, 1.08), K(0.95, 1.08), K(D, 1)], t)
       } else if (type === '사격') {
-        const recoil = seg(t, SKILL_RELEASE, SKILL_RELEASE + 0.1), ret = seg(t, 0.7, motion.dur)
-        out.z = 0.2 * windup * (1 - recoil) + 0.55 * recoil * (1 - ret)
-        out.tilt = 0.16 * windup * (1 - ret)
-        out.scale = 1 + 0.06 * windup * (1 - ret)
+        out.z = track([K(0, 0), K(R, 0.2), K(R + 0.1, 0.55, easeOut3), K(0.7, 0.5), K(D, 0, easeInOut)], t)
+        out.tilt = track([K(0, 0), K(R, 0.16), K(R + 0.08, 0.2, easeOut3), K(0.7, 0.16), K(D, 0, easeInOut)], t)
+        out.scale = track([K(0, 1), K(R, 1.06), K(0.7, 1.06), K(D, 1)], t)
       } else {
-        // 계략·통솔·수호·치유: 기를 모으며 살짝 떠올랐다 내려온다
-        const fall = seg(t, 0.75, motion.dur)
-        out.y = 0.42 * windup * (1 - fall) + Math.sin(t * 9) * 0.03 * (1 - fall)
-        out.tilt = 0.1 * windup * (1 - fall) - 0.12 * seg(t, SKILL_RELEASE, SKILL_RELEASE + 0.12) * (1 - fall)
-        out.scale = 1 + 0.1 * windup * (1 - fall)
+        // 계략·통솔·수호·치유: 기를 모으며 떠올랐다가(위로 갈수록 늦어짐) 떨어져(빨라짐) 무릎을 굽히며 내려선다
+        const land = D - 0.1
+        out.y = track([K(0, 0), K(R, 0.42, easeOut2), K(0.75, 0.38), K(land, 0, easeIn2), K(land + 0.05, -0.05, easeOut2), K(D, 0)], t)
+          + Math.sin(t * 9) * 0.03 * (1 - seg(t, 0.6, 0.85)) * seg(t, 0, R)
+        out.tilt = track([K(0, 0), K(R, 0.1), K(R + 0.12, -0.04, easeOut2), K(land, 0), K(land + 0.05, -0.05, easeOut2), K(D, 0)], t)
+        out.scale = track([K(0, 1), K(R, 1.1), K(0.75, 1.1), K(D, 1)], t)
       }
     }
   }
-  // 피격: 뒤로 밀리며 젖혀진다
+  // 피격(감쇠 진동 스프링 값, 음수로 살짝 넘어오기도 한다): 뒤로 밀리며 젖혀진다
   out.z += hitReact * 0.35
   out.tilt += hitReact * 0.22
   return out

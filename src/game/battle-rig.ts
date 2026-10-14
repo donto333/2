@@ -12,6 +12,7 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { applyLayer, findBones, sampleKeys, type PoseKey } from './battle-poses'
 import type { ModelName } from './battle-models'
+import { monotoneSample } from './motion-math'
 
 export type StrikeKind = 'thrust' | 'slash' | 'shoot' | 'cast'
 
@@ -24,7 +25,7 @@ export const STRIKE_TIMING: Record<StrikeKind, { duration: number; hit: number }
 }
 
 /** 구워 두는 자세 수(0번 = 기본 자세, 나머지가 모프 타깃) */
-export const STRIKE_FRAMES = 10
+export const STRIKE_FRAMES = 12
 
 type V3 = [number, number, number]
 interface RigBone { name: string; parent: number; pivot: V3 }
@@ -235,15 +236,46 @@ const ARCHER_KEYS: PoseKey[] = [
 ]
 
 // ── 굽기 ─────────────────────────────────────────────────────
+/**
+ * 열쇠 자세 사이를 단조 큐빅으로 잇는다: 예전처럼 열쇠마다 속도가 0이 되어 "멈칫멈칫" 끊기지 않고,
+ * 같은 방향으로 이어지는 동작(내려치기 → 끝까지 밀기)은 속도를 이어 가며, 방향이 바뀌는 꼭대기(크게 들어 올린 자세)에서는 넘치지 않는다.
+ */
 function sampleRig(keys: RigKey[], t: number, bone: string): { r: V3; m: V3 } {
-  let a = keys[0], b = keys[keys.length - 1]
-  if (t <= a.t) b = a
-  else for (let i = 0; i < keys.length - 1; i += 1) if (t >= keys[i].t && t <= keys[i + 1].t) { a = keys[i]; b = keys[i + 1]; break }
-  const k = b.t > a.t ? sm(a.t, b.t, t) : 1
-  const ra = a.b[bone]?.r ?? [0, 0, 0], rb = b.b[bone]?.r ?? [0, 0, 0]
-  const ma = a.b[bone]?.m ?? [0, 0, 0], mb = b.b[bone]?.m ?? [0, 0, 0]
-  const mix = (x: V3, y: V3): V3 => [x[0] + (y[0] - x[0]) * k, x[1] + (y[1] - x[1]) * k, x[2] + (y[2] - x[2]) * k]
-  return { r: mix(ra, rb), m: mix(ma, mb) }
+  const times = keys.map(key => key.t)
+  const channel = (pick: (key: RigKey) => V3 | undefined, i: number) => monotoneSample(times, keys.map(key => pick(key)?.[i] ?? 0), t)
+  const r: V3 = [0, 1, 2].map(i => channel(key => key.b[bone]?.r, i)) as V3
+  const m: V3 = [0, 1, 2].map(i => channel(key => key.b[bone]?.m, i)) as V3
+  return { r, m }
+}
+
+/**
+ * 구울 자세의 시각(0~1). 열쇠 자세는 반드시 넣고, 남은 칸은 자세가 크게 바뀌는(빠르게 휘두르는) 구간에 더 준다.
+ * 같은 칸 수로 휘두르는 순간이 더 매끄럽게 보이고, 칼끝이 직선으로 질러가며 짧아 보이는 일이 줄어든다.
+ */
+function frameTimes(keys: RigKey[], count: number): number[] {
+  const kt = keys.map(key => Math.min(0.999, key.t))
+  const gaps: Array<{ a: number; b: number; change: number; n: number }> = []
+  for (let i = 0; i < kt.length - 1; i += 1) {
+    let change = 0
+    for (const bone of new Set([...Object.keys(keys[i].b), ...Object.keys(keys[i + 1].b)])) {
+      const ra = keys[i].b[bone]?.r ?? [0, 0, 0], rb = keys[i + 1].b[bone]?.r ?? [0, 0, 0]
+      const ma = keys[i].b[bone]?.m ?? [0, 0, 0], mb = keys[i + 1].b[bone]?.m ?? [0, 0, 0]
+      for (let k = 0; k < 3; k += 1) change += Math.abs(rb[k] - ra[k]) + Math.abs(mb[k] - ma[k]) * 120
+    }
+    if (kt[i + 1] > kt[i]) gaps.push({ a: kt[i], b: kt[i + 1], change, n: 1 })
+  }
+  let total = gaps.length
+  while (total < count - 1 && gaps.length) {
+    // 한 칸이 맡는 변화가 가장 큰 구간을 나눈다(시간 길이도 조금 따져 느린 구간이 비지 않게)
+    let best = gaps[0]
+    for (const gap of gaps) if ((gap.change + (gap.b - gap.a) * 400) / gap.n > (best.change + (best.b - best.a) * 400) / best.n) best = gap
+    best.n += 1
+    total += 1
+  }
+  const out: number[] = [0]
+  for (const gap of gaps) for (let j = 1; j <= gap.n; j += 1) out.push(gap.a + (gap.b - gap.a) * j / gap.n)
+  while (out.length < count) out.push(0.999)
+  return out.slice(0, count)
 }
 
 function boneMatrices(spec: RigSpec, t: number): THREE.Matrix4[] {
@@ -298,6 +330,8 @@ function posedBase(gltf: GLTF, layer?: (root: THREE.Object3D) => void, clipName 
 
 export interface StrikeModel {
   kind: StrikeKind
+  /** 구운 자세들의 시각(0~1, 0번은 기본 자세). 1이 되면 다시 기본 자세 */
+  times: number[]
   geometry: THREE.BufferGeometry
   /** 몸(원래 재질) + 무기(있으면) */
   materials: THREE.Material[]
@@ -366,7 +400,7 @@ function buildFromRig(gltf: GLTF, spec: RigSpec): StrikeModel {
     }
     return { position, normal }
   }
-  return assemble(spec.kind, src, bodyCount, propCount, deform, base.source.material as THREE.Material, prop?.material, propColor)
+  return assemble(spec.kind, src, bodyCount, propCount, deform, base.source.material as THREE.Material, prop?.material, propColor, frameTimes(spec.keys, STRIKE_FRAMES))
 }
 
 function buildArcher(gltf: GLTF): StrikeModel {
@@ -380,10 +414,11 @@ function buildArcher(gltf: GLTF): StrikeModel {
     return posedBase(gltf, root => applyLayer(root, findBones(root), sampleKeys(ARCHER_KEYS, p)), 'Attack', fraction)
   }
   const first = frameAt(0)
-  return assemble('shoot', first.source.geometry, first.position.length / 3, 0, t => frameAt(t), first.source.material as THREE.Material)
+  // 들어 올림(0.12~0.32) · 당기기(0.3~0.55) · 놓기(0.55~0.63)에 칸을 더 준다
+  return assemble('shoot', first.source.geometry, first.position.length / 3, 0, t => frameAt(t), first.source.material as THREE.Material, undefined, null, [0, 0.12, 0.2, 0.28, 0.36, 0.44, 0.51, 0.56, 0.6, 0.64, 0.74, 0.86])
 }
 
-function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number, propCount: number, deform: (t: number) => { position: Float32Array; normal: Float32Array }, bodyMaterial: THREE.Material, propMaterial?: THREE.Material, propColor?: Float32Array | null): StrikeModel {
+function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number, propCount: number, deform: (t: number) => { position: Float32Array; normal: Float32Array }, bodyMaterial: THREE.Material, propMaterial?: THREE.Material, propColor?: Float32Array | null, times: number[] = uniformTimes()): StrikeModel {
   const total = bodyCount + propCount
   const geometry = new THREE.BufferGeometry()
   const rest = deform(0)
@@ -411,7 +446,7 @@ function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number
   if (propCount) geometry.addGroup(bodyIndexCount, propCount, 1)
   const morphPos: THREE.BufferAttribute[] = [], morphNor: THREE.BufferAttribute[] = []
   for (let f = 1; f < STRIKE_FRAMES; f += 1) {
-    const frame = deform(f / (STRIKE_FRAMES - 1) * 0.999)
+    const frame = deform(times[f])
     morphPos.push(new THREE.BufferAttribute(frame.position, 3))
     morphNor.push(new THREE.BufferAttribute(frame.normal, 3))
   }
@@ -420,7 +455,7 @@ function assemble(kind: StrikeKind, src: THREE.BufferGeometry, bodyCount: number
   geometry.computeBoundingSphere()
   const body = (bodyMaterial as THREE.MeshStandardMaterial).clone()
   const materials: THREE.Material[] = propMaterial ? [body, propMaterial] : [body]
-  return { kind, geometry, materials, ...STRIKE_TIMING[kind] }
+  return { kind, times, geometry, materials, ...STRIKE_TIMING[kind] }
 }
 
 const cache = new Map<string, StrikeModel>()
@@ -436,14 +471,22 @@ export function strikeModel(name: ModelName, gltf: GLTF, weapon?: SignatureWeapo
   return model
 }
 
-/** 공격 진행도(0~1, 범위 밖이면 기본 자세) → 모프 가중치 */
-export function strikeInfluences(progress: number, out: number[]): number[] {
+/** 고르게 나눈 자세 시각(예전 방식) */
+export function uniformTimes(count = STRIKE_FRAMES): number[] {
+  return Array.from({ length: count }, (_, f) => f / (count - 1) * 0.999)
+}
+
+/** 공격 진행도(0~1, 범위 밖이면 기본 자세) → 모프 가중치. times는 구운 자세들의 시각 */
+export function strikeInfluences(progress: number, out: number[], times: number[] = uniformTimes(out.length + 1)): number[] {
   out.fill(0)
   if (!(progress > 0 && progress < 1)) return out
-  const f = progress * (STRIKE_FRAMES - 1)
-  const i = Math.floor(f), a = f - i
-  // 0번 자세는 기본 메시이므로 모프 번호는 하나씩 밀린다
+  const n = times.length
+  // 0번 자세는 기본 메시이므로 모프 번호는 하나씩 밀린다. 마지막 자세 뒤(→1)는 기본 자세로 돌아간다
+  let i = 0
+  while (i < n - 1 && progress >= times[i + 1]) i += 1
+  const next = i + 1 < n ? times[i + 1] : 1
+  const a = next > times[i] ? (progress - times[i]) / (next - times[i]) : 0
   if (i >= 1) out[i - 1] = 1 - a
-  if (i + 1 <= STRIKE_FRAMES - 1) out[i] = (out[i] ?? 0) + a
+  if (i + 1 <= n - 1) out[i] += a
   return out
 }

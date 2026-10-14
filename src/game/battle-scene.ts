@@ -1,6 +1,8 @@
 // 전투 장면 그래픽: 하늘·원경 산·성채·지형·풀·깃발·연기·후방 대군, 무장·병사 모델.
 // 외부 3D 파일 없이 도형과 직접 그린 질감으로 만든다. 전투 규칙(battle-core)과는 무관하다.
 import * as THREE from 'three'
+import { easeIn2, easeInOut, track } from './motion-math'
+import { strikeInfluences } from './battle-rig'
 import type { General } from './strategy'
 import { loadModel } from './battle-models'
 
@@ -167,9 +169,10 @@ export function soldierGeometry(kind: 'infantry' | 'archer' | 'cavalry' | 'pike'
 export interface Squad {
   group: THREE.Group
   /** strike: 부대 공격이 시작된 뒤 흐른 시간(초, 공격 중이 아니면 음수) */
-  update: (t: number, moving: boolean, attack: number, hit: number, alive: number, strike?: number) => void
+  /** moving: 걸음 가중치(0~1, true/false도 받는다) */
+  update: (t: number, moving: boolean | number, attack: number, hit: number, alive: number, strike?: number) => void
   /** 실사 모델(병종별 공격 자세를 구운 도형)로 교체: 병사가 커지므로 간격을 넓히고 수를 줄인다 */
-  upgrade: (geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], strikeDuration?: number, frames?: number) => void
+  upgrade: (geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], strikeDuration?: number, frames?: number, times?: number[]) => void
 }
 export function createSquad(role: General['role'], team: Team, quality: SceneQuality): Squad {
   const kind = role === '기병' ? 'cavalry' : role === '궁병' ? 'archer' : role === '보병' ? 'pike' : 'infantry'
@@ -214,11 +217,13 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
   // 병종별 공격 자세(모프): 병사마다 조금씩 늦게 시작해 한 몸처럼 보이지 않게 한다
   let strikeDuration = 0
   let morphHolder: { morphTargetInfluences: number[] } | null = null
+  let strikeTimes: number[] | null = null
   // 병력이 줄면 그만큼의 병사가 뒤로 쓰러지며 사라진다(쓰러지기 시작한 시각, 없으면 -1)
   let prevVisible = -1
   let fallAt: number[] = []
   const FALL_TIME = 0.9
-  const update = (t: number, moving: boolean, attack: number, hit: number, alive: number, strike = -1) => {
+  const update = (t: number, movingIn: boolean | number, attack: number, hit: number, alive: number, strike = -1) => {
+    const g = Math.min(1, Math.max(0, Number(movingIn)))
     const visible = Math.max(0, Math.min(count, Math.ceil(count * alive)))
     if (fallAt.length !== count) { fallAt = new Array(count).fill(-1); prevVisible = visible }
     if (visible < prevVisible) for (let i = visible; i < prevVisible; i += 1) fallAt[i] = t
@@ -229,27 +234,25 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
     mesh.count = drawn
     if (morphHolder && strikeDuration > 0) {
       const influences = morphHolder.morphTargetInfluences
-      const frames = influences.length + 1
       for (let i = 0; i < count; i += 1) {
         influences.fill(0)
         const p = strike < 0 ? -1 : (strike - base[i].jitter * 0.22) / strikeDuration
-        if (p > 0 && p < 1) {
-          const f = p * (frames - 1), k = Math.floor(f), a = f - k
-          if (k >= 1) influences[k - 1] = 1 - a
-          if (k <= frames - 2) influences[k] += a
-        }
+        strikeInfluences(p, influences, strikeTimes ?? undefined)
         mesh.setMorphAt(i, morphHolder as unknown as THREE.Mesh)
       }
       if (mesh.morphTexture) mesh.morphTexture.needsUpdate = true
     }
-    const lunge = Math.sin(Math.min(1, attack) * Math.PI)
+    // 병사 돌진: 살짝 물러섰다가(예비 동작) → 빨라지며 밀고 나가 → 천천히 돌아온다
+    const ak = Math.min(1, Math.max(0, attack))
+    const lunge = attack <= 0 ? 0 : track([{ t: 0, v: 0 }, { t: 0.2, v: -0.25 }, { t: 0.45, v: 1, e: easeIn2 }, { t: 1, v: 0, e: easeInOut }], ak)
     for (let i = 0; i < drawn; i += 1) {
       const b = base[i]
       // 맞으면 병사마다 조금씩 다르게 뒤로 밀리며 몸이 젖혀진다(기병은 말이 앞발을 드는 듯 크게)
       const stagger = hit * (0.6 + b.jitter * 0.8)
-      const bob = (moving ? Math.abs(Math.sin(t * (kind === 'cavalry' ? 9 : 7) + b.phase)) * 0.07 : Math.sin(t * 1.4 + b.phase) * 0.012) * bobScale
+      // 걷기와 서 있기를 걸음 가중치로 섞는다(멈출 때 병사들이 뚝 서지 않게)
+      const bob = (Math.abs(Math.sin(t * (kind === 'cavalry' ? 9 : 7) + b.phase)) * 0.07 * g + Math.sin(t * 1.4 + b.phase) * 0.012 * (1 - g)) * bobScale
       p.set(b.x + Math.sin(t * 0.7 + b.phase) * 0.02, bob, b.z - lunge * (kind === 'archer' ? 0.05 : 0.35) * (0.6 + b.jitter * 0.4) * bobScale + stagger * 0.2)
-      e.set((moving ? -0.06 : 0) + stagger * (kind === 'cavalry' ? 0.3 : 0.22), yaw + Math.sin(t * 0.5 + b.phase) * 0.06 + stagger * (b.jitter - 0.5) * 0.4, Math.sin(t * (moving ? 7 : 1.4) + b.phase) * (moving ? 0.04 : 0.012))
+      e.set(-0.06 * g + stagger * (kind === 'cavalry' ? 0.3 : 0.22), yaw + Math.sin(t * 0.5 + b.phase) * 0.06 + stagger * (b.jitter - 0.5) * 0.4, Math.sin(t * 7 + b.phase) * 0.04 * g + Math.sin(t * 1.4 + b.phase) * 0.012 * (1 - g))
       if (i >= visible) {
         // 쓰러지는 병사: 뒤로 넘어가며 땅으로 가라앉는다
         const f = Math.min(1, (t - fallAt[i]) / FALL_TIME)
@@ -265,7 +268,8 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
     }
     mesh.instanceMatrix.needsUpdate = true
   }
-  const upgrade = (geometry: THREE.BufferGeometry, realMaterial: THREE.Material | THREE.Material[], duration = 0, frames = 0) => {
+  const upgrade = (geometry: THREE.BufferGeometry, realMaterial: THREE.Material | THREE.Material[], duration = 0, frames = 0, times?: number[]) => {
+    strikeTimes = times ?? null
     const cav = kind === 'cavalry'
     const [c2, r2] = quality === 'low' ? (cav ? [2, 1] : [3, 2]) : (cav ? [2, 2] : [4, 3])
     base = cav ? layout(c2, r2, 1.25, 3.0, 0.9, 1.4) : layout(c2, r2, 0.82, 0.86, 0.75, 0.75)

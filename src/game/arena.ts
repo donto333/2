@@ -13,6 +13,7 @@ import { STRIKE_FRAMES } from './battle-rig'
 import { tr } from '../i18n/translate'
 import { effectsSetting } from './settings'
 import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
+import { clamp01, damp, easeIn2, easeOut2, smoothNoise, springTo, wobble, type Spring1 } from './motion-math'
 import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
 
 /** 마지막 색보정: 가장자리 어둡게(비네트) · 따뜻한 대비 */
@@ -151,8 +152,8 @@ interface BattleUnit {
   statusGroup: THREE.Group
   statusFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
   hitFlash: number
-  hitReact: number
-  knockback: THREE.Vector3
+  /** 피격 흔들림(감쇠 진동 스프링: 밀렸다가 살짝 되튕겨 자리 잡는다) */
+  hit: Spring1
   motionPhase: number
   motionPulse: number
   troopType: TroopType
@@ -174,7 +175,22 @@ interface BattleUnit {
   dying: number
   /** 병사들의 병종별 공격 자세: 시작 뒤 흐른 시간(초, 공격 중이 아니면 음수) */
   strikeAge: number
+  /** 이동 속도(임계 감쇠 스프링으로 목표 자리까지: 출발·도착이 부드럽다) */
+  vel: THREE.Vector3
+  /** 걸음 가중치(0 서 있음 ~ 1 걷기·질주): 걷기와 서 있기를 섞어 뚝 바뀌지 않게 */
+  gait: number
+  /** 가속 방향으로 몸이 쏠리는 정도(앞뒤·좌우) */
+  lean: { x: number; z: number }
+  /** 히트스톱 동안 맞은 쪽이 떨리는 남은 시간(실제 초) */
+  shake: number
+  /** 동작이 바뀌는 순간의 자세 차이를 부드럽게 지우는 관성 블렌딩 */
+  blend: PoseBlend
+  /** 쓰러져 땅에 닿을 때 흙먼지를 이미 냈는가 */
+  fallDust: boolean
 }
+
+/** 관성 블렌딩: [z, y, tilt, twist, scale] 차이와 그 속도, 직전 화면 자세 */
+interface PoseBlend { off: number[]; vel: number[]; prev: number[]; prevVel: number[]; motion: Motion | null }
 
 interface ArenaEffect {
   object: THREE.Object3D
@@ -297,7 +313,7 @@ export class Arena {
       const maxTroops = this.troopCapacity(general)
       const status = this.createTroopStatus(jade, general)
       group.add(status.group)
-      const unit: BattleUnit = { group, squad: built.squad.group, model: built.rig.root, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false, ...this.motionFields(built.actor) }
+      const unit: BattleUnit = { group, squad: built.squad.group, model: built.rig.root, general, target: positions[index] ?? positions[0].clone(), troops: maxTroops, maxTroops, attackTimer: 0.45 + index * 0.16, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, motionPhase: index * 0.8, motionPulse: 0.4 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false, ...this.motionFields(built.actor) }
       this.attachRealModels(unit)
       this.playerUnits.push(unit)
       this.scene.add(group)
@@ -458,7 +474,7 @@ export class Arena {
       unit.rig.root.visible = false
       unit.hero = hero
     }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
-    void strikeModelFor(troopModelFor(unit.general.role)).then(model => unit.squadCtl.upgrade(model.geometry, model.materials, model.duration, STRIKE_FRAMES)).catch(() => {})
+    void strikeModelFor(troopModelFor(unit.general.role)).then(model => unit.squadCtl.upgrade(model.geometry, model.materials, model.duration, STRIKE_FRAMES, model.times)).catch(() => {})
   }
 
   private clearUnits(): void {
@@ -708,7 +724,7 @@ export class Arena {
       const status = this.createTroopStatus(ember, general)
       status.group.rotation.y = Math.PI // 적 부대는 반대로 돌아 있으므로 막대가 카메라를 보게 되돌린다
       group.add(status.group)
-      this.enemyUnits.push({ group, squad: built.squad.group, model: built.rig.root, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, hitReact: 0, knockback: new THREE.Vector3(), motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false, ...this.motionFields(built.actor) })
+      this.enemyUnits.push({ group, squad: built.squad.group, model: built.rig.root, general, target: position.clone(), troops: maxTroops, maxTroops, attackTimer: 0, statusGroup: status.group, statusFill: status.fill, hitFlash: 0, motionPhase: index * 0.8 + 1.4, motionPulse: 0.7 + index * 0.25, troopType: this.troopType(general), attackMotion: 0, rig: built.rig, squadCtl: built.squad, skillPulse: 0, hero: null, mounted: false, ...this.motionFields(built.actor) })
       this.attachRealModels(this.enemyUnits[this.enemyUnits.length - 1])
       this.scene.add(group)
     })
@@ -718,8 +734,12 @@ export class Arena {
       unit.troops = coreUnit?.troops ?? unit.troops
       unit.group.visible = true
       unit.dying = 0
+      unit.fallDust = false
       unit.motion = null
       unit.glow = 0
+      unit.vel.set(0, 0, 0)
+      unit.hit.x = 0; unit.hit.v = 0
+      unit.actor.rotation.z = 0
       unit.squad.position.y = 0
       unit.hero?.setFade(0)
       unit.statusFill.scale.x = 1
@@ -842,7 +862,8 @@ export class Arena {
           this.floatText(at.clone().add(new THREE.Vector3(0, 3.4, 0)), '차단!', '#9ff5e2', 1.3)
           this.fx(shockwave(at, 0x9ff5e2, 3, 0.6))
           this.hitStop = Math.max(this.hitStop, 0.08)
-          foe.hitReact = 1
+          this.kick(foe, 1)
+          foe.shake = 0.12
         }
         break
       }
@@ -855,7 +876,7 @@ export class Arena {
         break
       case 'unitDown': {
         const unit = this.unitAt(event.side, event.lane)
-        if (unit) { unit.dying = 1; unit.motion = null; this.addEffect(shockwave(unit.group.position.clone(), 0xb9a17c, 2.2, 0.7)) }
+        if (unit) { unit.dying = 1; unit.fallDust = false; unit.motion = null; this.addEffect(shockwave(unit.group.position.clone(), 0xb9a17c, 2.2, 0.7)) }
         if (unit) this.laneSupport(event.side, event.lane)
         break
       }
@@ -875,8 +896,18 @@ export class Arena {
     }
   }
 
-  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge'> {
-    return { actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0, strikeAge: -1 }
+  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'blend' | 'fallDust'> {
+    return {
+      actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0, strikeAge: -1,
+      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, fallDust: false,
+      blend: { off: [0, 0, 0, 0, 0], vel: [0, 0, 0, 0, 0], prev: [0, 0, 0, 0, 1], prevVel: [0, 0, 0, 0, 0], motion: null },
+    }
+  }
+
+  /** 맞은 순간: 바로 조금 밀리고(즉각 반응) 속도를 받아 더 밀렸다가 되튕긴다 */
+  private kick(unit: BattleUnit, amount: number): void {
+    unit.hit.x = Math.min(1.1, Math.max(0, unit.hit.x) + amount * 0.55)
+    unit.hit.v += amount * 9
   }
 
   private readonly edgeShownAt = new WeakMap<BattleUnit, number>()
@@ -933,13 +964,16 @@ export class Arena {
     if (edge === 'adv' && this.clock.getElapsed() - (this.edgeShownAt.get(unit) ?? -99) > 3.5) {
       this.edgeShownAt.set(unit, this.clock.getElapsed())
       this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 3.1, 0)), edge === 'adv' ? '상성 우위!' : '상성 열세', edge === 'adv' ? '#ffd27a' : '#b9c2c9', edge === 'adv' ? 1.05 : 0.8)
-      if (edge === 'adv') { this.cameraShake = Math.min(0.62, this.cameraShake + 0.08); unit.hitReact = Math.min(1, unit.hitReact + 0.25) }
+      if (edge === 'adv') { this.cameraShake = Math.min(0.62, this.cameraShake + 0.08); this.kick(unit, 0.25) }
     }
     unit.hitFlash = 0.18
-    unit.hitReact = Math.min(1, unit.hitReact + Math.min(0.72, 0.22 + amount / 300))
-    unit.knockback.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.11 : -0.11, 0, side === 'enemy' ? -0.3 : 0.3))
+    this.kick(unit, Math.min(0.72, 0.22 + amount / 300))
+    // 밀려남은 속도로 준다(이동 스프링이 받아 부드럽게 멈춘다)
+    unit.vel.add(new THREE.Vector3(unit.group.position.x > 0 ? 1.2 : -1.2, 0, side === 'enemy' ? -3.3 : 3.3))
     this.cameraShake = Math.min(0.62, this.cameraShake + (amount >= 160 ? 0.18 : 0.06))
-    if (amount >= 160) this.hitStop = Math.max(this.hitStop, 0.06)
+    // 히트스톱은 피해에 비례(격투 게임의 히트랙처럼): 약한 타격은 멈추지 않고, 강타일수록 길게. 멈춘 동안 맞은 쪽이 떨린다
+    const stop = amount >= 160 ? Math.min(0.11, 0.05 + (amount - 160) / 3000) : amount >= 110 ? 0.03 : 0
+    if (stop > 0) { this.hitStop = Math.max(this.hitStop, stop); unit.shake = Math.max(unit.shake, stop + 0.05) }
     if (!this.reducedFx) this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, amount >= 120 ? 1.3 : 0.9))
     if (amount >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember, amount >= Math.max(120, unit.maxTroops * 0.05) || edge === 'adv')
   }
@@ -1004,7 +1038,7 @@ export class Arena {
     losers.forEach((unit, index) => {
       // 뒤로 물러난다(아군은 카메라 쪽, 적은 성채 쪽)
       unit.target.z += unit.group.rotation.y === 0 ? 6 : -6
-      this.addEffect(delayed(1.5 + index * 0.2, () => { if (unit.dying <= 0) unit.dying = 1 }))
+      this.addEffect(delayed(1.5 + index * 0.2, () => { if (unit.dying <= 0) { unit.dying = 1; unit.fallDust = false } }))
     })
     const center = new THREE.Vector3(0, 0, -4)
     this.addEffect(delayed(0.2, () => {
@@ -1155,47 +1189,101 @@ export class Arena {
   }
 
   private updateUnitMotion(unit: BattleUnit, delta: number, elapsed: number, color: number): void {
-    const distance = unit.group.position.distanceTo(unit.target)
-    const moving = this.battleActive && unit.troops > 0 && distance > 0.08
-    unit.group.position.lerp(unit.target, Math.min(delta * (1.15 + unit.general.speed / 75), 1))
-    unit.group.position.addScaledVector(unit.knockback, delta * 7)
-    unit.knockback.multiplyScalar(Math.max(0, 1 - delta * 8))
-    unit.hitReact = Math.max(0, unit.hitReact - delta * 3.8)
+    const dt = Math.min(0.1, delta)
+    const pos = unit.group.position
+    // 이동: 임계 감쇠 스프링(출발할 때 서서히 붙고, 도착할 때 미끄러지듯 멈춘다). 빠른 무장일수록 반감기가 짧다
+    const halflife = Math.LN2 / (1.15 + unit.general.speed / 75) * 0.9
+    const sx = { x: pos.x, v: unit.vel.x }, sz = { x: pos.z, v: unit.vel.z }
+    springTo(sx, unit.target.x, halflife, dt)
+    springTo(sz, unit.target.z, halflife, dt)
+    pos.set(sx.x, 0, sz.x)
+    unit.vel.set(sx.v, 0, sz.v)
+    // 걸음 가중치: 실제 빠르기에서 얻어 부드럽게 바꾼다(걷기 ↔ 서 있기가 뚝 끊기지 않게)
+    const speed = Math.hypot(unit.vel.x, unit.vel.z)
+    unit.gait = damp(unit.gait, this.battleActive && unit.troops > 0 ? clamp01((speed - 0.08) / 1.1) : 0, 0.12, dt)
+    const moving = unit.gait > 0.12
+    // 쏠림: 앞으로 달리면 앞으로, 옆으로 움직이면 그쪽으로 기운다. 조금 늦게 따라와 가속·감속이 느껴진다
+    const facing = unit.group.rotation.y === 0 ? 1 : -1
+    const forward = -unit.vel.z * facing, side = unit.vel.x * facing
+    unit.lean.x = damp(unit.lean.x, -THREE.MathUtils.clamp(forward * 0.05, -0.1, 0.12), 0.16, dt)
+    unit.lean.z = damp(unit.lean.z, -THREE.MathUtils.clamp(side * 0.04, -0.08, 0.08), 0.16, dt)
+    // 피격: 감쇠 진동(밀렸다가 살짝 되튕겨 자리 잡는다)
+    wobble(unit.hit, 0, 2.3, 0.42, dt)
     unit.attackMotion = Math.max(0, unit.attackMotion - delta * 2.6)
     unit.skillPulse = Math.max(0, unit.skillPulse - delta * 1.1)
     unit.hitFlash = Math.max(0, unit.hitFlash - delta)
-    unit.group.position.y = 0
     const actionDelta = this.paused ? 0 : delta * this.speed
     if (unit.strikeAge >= 0) { unit.strikeAge += actionDelta; if (unit.strikeAge > 2.2) unit.strikeAge = -1 }
-    unit.squadCtl.update(elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.hitReact, unit.troops / Math.max(1, unit.maxTroops), unit.strikeAge)
+    const hitAmount = Math.max(0, unit.hit.x)
+    unit.squadCtl.update(elapsed + unit.motionPhase, unit.gait, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, hitAmount, unit.troops / Math.max(1, unit.maxTroops), unit.strikeAge)
     // 몸 전체 동작: 공격 돌진 · 스킬 기 모으기/돌격 · 피격 젖힘
     if (unit.motion) {
       unit.motion.t += actionDelta
       if (unit.motion.t >= unit.motion.dur) unit.motion = null
     }
-    const pose = actorPose(unit.motion, unit.hitReact, unit.pose)
-    unit.actor.position.set(0, pose.y, pose.z)
-    unit.actor.rotation.set(pose.tilt, pose.twist, 0)
-    unit.actor.scale.setScalar(pose.scale)
+    const pose = actorPose(unit.motion, unit.hit.x, unit.pose)
+    // 관성 블렌딩: 동작이 바뀌거나 끊기는 순간 직전 화면 자세와의 차이를 기억했다가 짧게(0.08초 반감) 지운다
+    const blend = unit.blend
+    const raw = [pose.z, pose.y, pose.tilt, pose.twist, pose.scale]
+    if (unit.motion !== blend.motion) {
+      for (let i = 0; i < 5; i += 1) { blend.off[i] = blend.prev[i] - raw[i]; blend.vel[i] = blend.prevVel[i] }
+      blend.motion = unit.motion
+    }
+    for (let i = 0; i < 5; i += 1) {
+      const sp = { x: blend.off[i], v: blend.vel[i] }
+      springTo(sp, 0, 0.08, dt)
+      blend.off[i] = sp.x; blend.vel[i] = sp.v
+      const shown = raw[i] + sp.x
+      if (dt > 0) blend.prevVel[i] = THREE.MathUtils.clamp((shown - blend.prev[i]) / dt, -40, 40)
+      blend.prev[i] = shown
+    }
+    const [pz, py, ptilt, ptwist, pscale] = blend.prev
+    // 히트스톱 동안 맞은 쪽이 좌우로 떨린다(격투 게임의 히트랙 떨림)
+    unit.shake = Math.max(0, unit.shake - this.frameDelta)
+    const jitter = unit.shake > 0 && !this.reducedFx ? Math.sin(this.clock.getElapsed() * 95 + unit.motionPhase) * 0.05 * Math.min(1, unit.shake / 0.06) : 0
+    unit.actor.position.set(jitter, py, pz)
+    unit.actor.rotation.set(ptilt + unit.lean.x, ptwist, unit.lean.z)
+    unit.actor.scale.setScalar(pscale)
     unit.glow = Math.max(0, unit.glow - (unit.motion?.kind === 'skill' ? 0 : delta * 2.2))
     if (unit.dying > 0) {
-      unit.dying = Math.max(0, unit.dying - delta * 1.1)
-      const fall = 1 - unit.dying
-      unit.actor.rotation.x = -Math.min(1.35, fall * 2.2) // 앞으로 고꾸라진다
-      unit.actor.position.y = -fall * 0.5
-      unit.squad.position.y = -fall * 0.7
-      unit.hero?.setFade(Math.max(0, fall * 1.4 - 0.4))
+      unit.dying = Math.max(0, unit.dying - delta * 0.75)
+      this.poseFall(unit, 1 - unit.dying)
       if (unit.dying <= 0) { unit.group.visible = false; unit.squad.position.y = 0 }
     }
     if (unit.hero) {
-      unit.hero.update(actionDelta, moving, unit.mounted)
+      unit.hero.update(actionDelta, unit.gait, unit.mounted)
       unit.hero.setFlash(unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0, unit.glow, unit.glowColor)
     } else animateGeneral(unit.rig, elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.skillPulse, unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0)
     unit.motionPulse -= delta
     if (moving && unit.motionPulse <= 0) {
       unit.motionPulse = 0.72 + (unit.motionPhase % 0.35)
-      this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, unit.group.rotation.y === 0 ? 1.4 : -1.4)), color === ember ? 0xb68f70 : 0xa4a08a)
+      this.spawnDustCloud(pos.clone().add(new THREE.Vector3(0, 0, unit.group.rotation.y === 0 ? 1.4 : -1.4)), color === ember ? 0xb68f70 : 0xa4a08a)
     }
+  }
+
+  /**
+   * 쓰러짐(0 → 1): 맞고 휘청이며 무릎이 꺾이고 → 중력처럼 점점 빨라지며 넘어가 → 땅에 닿아 살짝 튕기고(흙먼지)
+   * → 가라앉으며 흐려진다. 보병은 앞으로 고꾸라지고, 말 탄 무장은 말과 함께 옆으로 쓰러진다.
+   */
+  private poseFall(unit: BattleUnit, fall: number): void {
+    const buckle = easeOut2(clamp01(fall / 0.18))
+    const topple = easeIn2(clamp01((fall - 0.12) / 0.43))
+    const bounce = Math.sin(clamp01((fall - 0.55) / 0.16) * Math.PI) * (1 - clamp01((fall - 0.55) / 0.16)) * 0.9
+    const sink = easeIn2(clamp01((fall - 0.72) / 0.28))
+    const angle = topple - bounce * 0.08
+    const sideways = unit.mounted ? (unit.motionPhase % 1.6 < 0.8 ? 1 : -1) : 0
+    // 휘청: 넘어가기 직전 잠깐 뒤로 젖혀진다
+    const sway = Math.sin(clamp01(fall / 0.2) * Math.PI) * 0.12
+    unit.actor.rotation.x = sideways ? -angle * 0.25 + sway : -angle * 1.38 + sway
+    unit.actor.rotation.z = sideways * angle * 1.25
+    unit.actor.position.y = -buckle * 0.12 - sink * 0.45
+    unit.squad.position.y = -fall * 0.7
+    if (!unit.fallDust && fall >= 0.55) {
+      unit.fallDust = true
+      this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(sideways * 0.9, 0, 0)), 0xb9a17c)
+      this.cameraShake = Math.min(0.62, this.cameraShake + 0.05)
+    }
+    unit.hero?.setFade(clamp01((fall - 0.6) / 0.4))
   }
 
   private troopStatus(): BattleTroopStatus[] {
@@ -1284,8 +1372,12 @@ export class Arena {
     }
   }
 
+  /** 이번 프레임의 실제 시간(히트스톱·슬로모션과 상관없이) */
+  private frameDelta = 0
+
   private update(realDelta: number): void {
     this.watchFrameRate(realDelta)
+    this.frameDelta = realDelta
     // 강타 순간 멈춤(아주 짧게) · 스킬 기 모으기 슬로모션
     const scale = this.hitStop > 0 ? 0.05 : this.slowMo > 0 ? 0.32 : 1
     this.hitStop = Math.max(0, this.hitStop - realDelta)
@@ -1322,7 +1414,11 @@ export class Arena {
     this.cameraShake = Math.max(0, this.cameraShake - delta * 1.8)
     const introOffset = this.cameraIntro > 0 ? (this.cameraIntro / 1.35) * 3.8 : 0
     const victoryOffset = this.cameraVictory > 0 ? (1 - this.cameraVictory / 1.5) * 2.8 : 0
-    const shake = this.cameraShake * (this.reducedFx ? 0.4 : 1)
+    // 흔들림: trauma²(약한 충격은 거의 안 흔들리고 강타만 크게) + 매 프레임 무작위 대신 이어지는 노이즈
+    const trauma = Math.min(1, this.cameraShake / 0.62)
+    const shake = trauma * trauma * 0.62 * (this.reducedFx ? 0.4 : 1)
+    const nt = this.clock.getElapsed() * 21
+    const nx = smoothNoise(nt, 1) * 0.5, ny = smoothNoise(nt, 7) * 0.5
     const living = [...this.playerUnits, ...this.enemyUnits].filter(unit => unit.troops > 0)
     const frontZ = living.length ? living.reduce((sum, unit) => sum + unit.group.position.z, 0) / living.length : this.cameraLookAt.z
     const selected = this.playerUnits[this.selectedUnit]
@@ -1332,11 +1428,12 @@ export class Arena {
     const aspect = this.camera.aspect || 1
     const pull = aspect < 0.8 ? 1.75 : aspect < 1.25 ? 1.3 : 1
     this.camera.position.set(
-      this.cameraLookAt.x + (this.cameraBase.x - this.cameraLookAt.x) * pull + focusX + (Math.random() - 0.5) * shake,
-      this.cameraLookAt.y + (this.cameraBase.y - this.cameraLookAt.y) * pull + (Math.random() - 0.5) * shake * 0.55,
+      this.cameraLookAt.x + (this.cameraBase.x - this.cameraLookAt.x) * pull + focusX + nx * shake,
+      this.cameraLookAt.y + (this.cameraBase.y - this.cameraLookAt.y) * pull + ny * shake * 0.55,
       this.cameraLookAt.z + (this.cameraBase.z - this.cameraLookAt.z) * pull + introOffset + victoryOffset + (this.battleActive ? frontZ * 0.06 : 0),
     )
     this.camera.lookAt(this.cameraLookAt.x + focusX, this.cameraLookAt.y + (this.cameraVictory > 0 ? 1.2 : 0), focusZ)
+    this.camera.rotateZ(smoothNoise(nt, 13) * shake * 0.03)
     // 스킬: 쓰는 무장 쪽으로 카메라를 바짝 당겼다가 돌아온다
     const focus = this.cameraFocus
     if (focus) {
@@ -1348,7 +1445,7 @@ export class Arena {
       const closePos = new THREE.Vector3(focus.target.x * 0.75 + (focus.target.x >= 0 ? -1.6 : 1.6), 2.9 + (aspect < 0.8 ? 1.6 : 0), focus.target.z + back + (aspect < 0.8 ? 3.4 : 0))
       const closeLook = new THREE.Vector3(focus.target.x * 0.85, 1.5, focus.target.z - (focus.side === 'player' ? 2.6 : 0))
       const look = new THREE.Vector3(this.cameraLookAt.x + focusX, this.cameraLookAt.y, focusZ).lerp(closeLook, weight)
-      this.camera.position.lerp(closePos.add(new THREE.Vector3((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake * 0.55, 0)), weight)
+      this.camera.position.lerp(closePos.add(new THREE.Vector3(nx * shake, ny * shake * 0.55, 0)), weight)
       this.camera.lookAt(look)
     }
   }

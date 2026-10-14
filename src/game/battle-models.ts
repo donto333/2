@@ -93,6 +93,7 @@ export class AnimatedHero {
   /** 공격 시작부터 무기가 닿거나 화살이 떠나기까지(초) */
   readonly hitTime: number
   private readonly duration: number
+  private readonly times: number[]
 
   constructor(model: StrikeModel) {
     const materials = model.materials.map(material => material.clone())
@@ -105,6 +106,7 @@ export class AnimatedHero {
     this.root.add(this.mesh)
     this.kind = model.kind
     this.duration = model.duration
+    this.times = model.times
     this.hitTime = model.duration * model.hit
   }
 
@@ -117,22 +119,32 @@ export class AnimatedHero {
     this.strikeAge = 0
   }
 
-  update(delta: number, moving: boolean, mounted: boolean): void {
+  private stride = Math.random() * Math.PI * 2
+
+  /** gait: 0 서 있음 ~ 1 걷기·질주(섞어서 뚝 바뀌지 않게) */
+  update(delta: number, gait: number | boolean, mounted: boolean): void {
     this.time += delta
     if (this.strikeAge >= 0) {
       this.strikeAge += delta
       if (this.strikeAge >= this.duration) this.strikeAge = -1
     }
-    strikeInfluences(this.strikeAge < 0 ? -1 : this.strikeAge / this.duration, this.influences)
-    // 서 있을 때는 숨쉬기, 움직일 때는 걸음(말은 질주)에 맞춰 위아래로
+    strikeInfluences(this.strikeAge < 0 ? -1 : this.strikeAge / this.duration, this.influences, this.times)
+    const g = Math.min(1, Math.max(0, Number(gait)))
     const t = this.time
-    if (moving) {
-      this.mesh.position.y = mounted ? Math.abs(Math.sin(t * 8)) * 0.12 : Math.abs(Math.sin(t * 7)) * 0.06
-      this.mesh.rotation.x = mounted ? Math.sin(t * 8) * 0.035 : 0
-    } else {
-      this.mesh.position.y = Math.sin(t * 1.8) * 0.012
-      this.mesh.rotation.x = 0
-    }
+    // 걸음 위상은 누적한다(빠르기가 바뀌어도 걸음이 튀지 않게)
+    this.stride += delta * (mounted ? 8 : 7) * (0.75 + 0.25 * g)
+    const step = this.stride
+    // 걷기·질주: 발이 닿을 때마다 위아래로. 말은 앞뒤로 흔들리는데 위아래보다 1/4박자 늦다(겹침 동작)
+    const walkY = Math.abs(Math.sin(step)) * (mounted ? 0.12 : 0.06)
+    const walkPitch = mounted ? Math.sin(step * 2 - Math.PI / 2) * 0.04 : Math.sin(step * 2) * 0.01
+    const walkRoll = mounted ? 0 : Math.sin(step) * 0.02
+    // 서 있기: 숨쉬기(살짝 부풀었다 가라앉음) + 아주 느리게 무게를 이쪽저쪽으로 옮긴다
+    const idleY = Math.sin(t * 1.8) * 0.012
+    const idleRoll = Math.sin(t * 0.55 + 1.3) * 0.012
+    this.mesh.position.y = walkY * g + idleY * (1 - g)
+    this.mesh.rotation.x = walkPitch * g
+    this.mesh.rotation.z = walkRoll * g + idleRoll * (1 - g)
+    this.mesh.scale.set(1, 1 + Math.sin(t * 1.8 + 0.5) * 0.006 * (1 - g), 1)
   }
 
   /** 피격 번쩍임(따뜻한 흰빛) + 스킬 기운(무장 색) */
