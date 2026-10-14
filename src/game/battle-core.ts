@@ -3,7 +3,7 @@
 import type { General } from './strategy'
 import { templateGeneral } from './strategy'
 import { BATTLE_EFFECTS, effectValue, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId, type BuffId, type DebuffId, type PlayerDebuffId } from './battle-effects'
-import { SKILL_MORALE_CAP, SKILL_TYPE_META, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type BondDef, type GeneralSkillDef, type SkillFx, type SkillType } from './skills'
+import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, SKILL_MORALE_CAP, SKILL_TYPE_META, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type BondDef, type GeneralSkillDef, type SkillFx, type SkillType } from './skills'
 
 export type BattleMode = 'normal' | 'scenario' | 'siege' | 'duel'
 export type BattleTactic = 'guard' | 'feint' | 'charge'
@@ -11,6 +11,9 @@ export type Side = 'player' | 'enemy'
 
 export const BATTLE_RULES = {
   timeLimit: 90,
+  /** 통솔(아군 강화)형: 버프 지속 +초, 버프 수치는 등급이 높을수록 크게(skills.ts가 원본) */
+  commandBuffSec: COMMAND_BUFF_SEC,
+  commandBuffGrade: COMMAND_BUFF_GRADE,
   /** 전열(가운데 자리): 상대의 일반 공격·단일 스킬이 이 확률로 전열부터 노리고, 전열은 받는 피해가 줄어든다 */
   frontLane: 1,
   frontPull: 0.3,
@@ -725,6 +728,12 @@ export class BattleCore {
     }
     // 아군 버프·적 디버프. 여포의 약점: 책사가 건 버프 효과 −30%
     let buffMult = 1
+    // 아군 공격 강화(통솔형 버프)는 일반 공격뿐 아니라 스킬의 사기 피해에도 붙는다
+    let attackUp = effectValue(this.buffs, 'atk-up')
+    if (this.buffs.some(effect => effect.id === 'hangover' && effect.remaining <= 3)) attackUp -= effectValue(this.buffs, 'hangover')
+    if (unit.general.role === '궁병') attackUp += effectValue(this.buffs, 'archer-focus')
+    if (unit.general.role === '기병') attackUp += effectValue(this.buffs, 'cavalry-surge')
+    if (attackUp > 0) buffMult *= 1 + attackUp
     if (hasBattleEffect(this.buffs, 'dragon-might')) buffMult *= 1.18
     if (hasBattleEffect(this.buffs, 'chain-fury')) buffMult *= 1.1
     if (hasBattleEffect(this.buffs, 'insight')) buffMult *= 1.5
@@ -821,9 +830,14 @@ export class BattleCore {
         this.addEffect('debuff', effect.id, Math.min(10, seconds))
         return [BATTLE_EFFECTS[effect.id].name]
       }
-      case 'buff':
-        this.addEffect('buff', effect.id, Math.min(12, effect.sec + (unit.general.stars >= 4 ? 1 : 0)), effect.value)
+      case 'buff': {
+        // 통솔형은 버프가 더 오래, 등급만큼 더 세게(예전에는 천명 통솔형이 신병과 성적이 같았다)
+        const command = unit.def.type === '통솔'
+        const sec = effect.sec + (unit.general.stars >= 4 ? 1 : 0) + (command ? BATTLE_RULES.commandBuffSec : 0)
+        const value = command && effect.value !== undefined ? effect.value * (BATTLE_RULES.commandBuffGrade[unit.general.grade] ?? 1) : effect.value
+        this.addEffect('buff', effect.id, Math.min(command ? 14 : 12, sec), value)
         return [BATTLE_EFFECTS[effect.id].name]
+      }
       case 'selfDr': unit.selfDr = { value: effect.value, until: this.t + effect.sec }; return [`받는 피해 −${Math.round(effect.value * 100)}%`]
       case 'selfAtk': unit.selfAtk = { value: effect.value, until: this.t + effect.sec }; return [`공격 +${Math.round(effect.value * 100)}%`]
       case 'undying': unit.undyingLeft = Math.max(1, unit.undyingLeft); return ['불굴']

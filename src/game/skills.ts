@@ -10,10 +10,14 @@ export const SKILL_TYPE_META: Record<SkillType, { base: number; cooldown: number
   돌격: { base: 14, cooldown: 10, stat: 'martial', label: '단일 대상 큰 피해' },
   사격: { base: 11, cooldown: 8, stat: 'martial', label: '약한 적 마무리' },
   계략: { base: 8, cooldown: 12, stat: 'stratagem', label: '디버프·지속 피해' },
-  통솔: { base: 5, cooldown: 14, stat: 'leadership', label: '아군 전체 버프' },
+  통솔: { base: 10, cooldown: 11, stat: 'leadership', label: '아군 전체 버프' },
   수호: { base: 3, cooldown: 12, stat: 'leadership', label: '피해 감소·반격' },
   치유: { base: 0, cooldown: 16, stat: 'leadership', label: '회복·상태이상 해제' },
 }
+
+/** 통솔(아군 강화)형: 버프 지속 +초, 버프 수치는 등급이 높을수록 크게(신병 ×1 ~ 천명 ×1.9) */
+export const COMMAND_BUFF_SEC = 2
+export const COMMAND_BUFF_GRADE: Record<number, number> = { 1: 1, 2: 1.15, 3: 1.35, 4: 1.6, 5: 1.9 }
 
 export const SKILL_GRADE_COEF: Record<Grade, number> = { 1: 0.8, 2: 0.88, 3: 1, 4: 1.1, 5: 1.2 }
 export const SKILL_STAR_COEF = [1, 1, 1.08, 1.16, 1.24, 1.32] // index = 성급

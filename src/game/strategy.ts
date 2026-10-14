@@ -1,7 +1,7 @@
 import type { MissionState } from './missions'
 import { createResearch, normalizeResearch, researchMods, researchCostText, startResearch } from './research'
 import cityRoutes from '../../server/city-routes.json'
-import { GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
+import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, GENERAL_SKILLS, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 import { MANUAL_PACKAGE_AMOUNTS } from '../../server/economy.mjs'
 import { locale } from '../i18n/lang'
@@ -1028,7 +1028,7 @@ export function skillDetail(general: General): GeneralSkillDetail {
     trigger: '무장 버튼을 길게 눌러 발동 (무장별 쿨다운)',
     target: TYPE_TARGET[def.type],
     effect: `${activeSkillName(general)} · ${def.active.desc}${SKILL_TYPE_META[def.type].base > 0 ? ` · 적 사기 −${power}` : ''}${awakened && def.awaken ? ` · 각성: ${def.awaken.desc}` : ''}`,
-    duration: `${def.type} 유형 · ${SKILL_TYPE_META[def.type].label}${general.stars >= 4 ? ' · 효과 지속 +1초' : ''}`,
+    duration: `${def.type} 유형 · ${SKILL_TYPE_META[def.type].label}${general.stars >= 4 ? ' · 효과 지속 +1초' : ''}${def.type === '통솔' ? ` · 통솔: 버프 지속 +${COMMAND_BUFF_SEC}초 · 버프 수치 ×${COMMAND_BUFF_GRADE[general.grade] ?? 1}(등급) · 공격 버프는 스킬 사기 피해에도 적용` : ''}`,
     cooldown: `${skillCooldownFor(general, template)}초`,
     passive: def.passive ? `${def.passive.name} — ${def.passive.desc}${unlock && general.stars < unlock ? ' (3성에서 열림)' : ''}` : '',
     awaken: def.awaken ? `${def.awaken.name} — ${def.awaken.desc}${awakened ? '' : ' (5성 각성)'}` : '',
