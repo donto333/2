@@ -35,7 +35,7 @@ import {
   normalizeInitialSeasonTerritories,
   ensureResearchRoster,
   mergeFactionTerritories,
-  migrateLegacyStarterRoster,
+  migrateGeneralGrades, migrateLegacyStarterRoster,
   ensurePrelaunchDailyGold,
   dayKey,
   FACTION_CAPITALS,
@@ -240,8 +240,11 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   // 회원의 일일 금화는 서버가 지급한다(serverGrant('daily')).
   const receivedDailyGold = mode === 'guest' ? ensurePrelaunchDailyGold(state) : false
   const migratedStarter = migrateLegacyStarterRoster(state)
-  if (receivedDailyGold || migratedStarter || normalizedTerritories) persistLocalGame()
-  localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories) && mode === 'guest'
+  // 무장 등급 재설정(2026.10): 보유 무장을 새 등급으로 옮기고 내려간 무장은 옥패로 보상
+  const regraded = migrateGeneralGrades(state).changed > 0
+  if (regraded) { const message = state.lastNotice; window.setTimeout(() => ui.notify(message), 1800) }
+  if (receivedDailyGold || migratedStarter || normalizedTerritories || regraded) persistLocalGame()
+  localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories || regraded) && mode === 'guest'
 }
 
 function resetAccountSavePipeline(): void {
@@ -1407,7 +1410,9 @@ async function refreshAccount(): Promise<void> {
       ensureEquipmentState(state)
       void serverGrant('daily')
       const migratedStarter = migrateLegacyStarterRoster(state)
-      if (migratedStarter) {
+      const regraded = migrateGeneralGrades(state).changed > 0
+      if (regraded) { const message = state.lastNotice; window.setTimeout(() => ui.notify(message), 1800) }
+      if (migratedStarter || regraded) {
         persistLocalGame()
         localSaveDirty = true
       }

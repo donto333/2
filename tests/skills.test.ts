@@ -5,13 +5,13 @@ import { BONDS, GENERAL_SKILLS, SKILL_MORALE_CAP, bondFor, isAwakened, skillCool
 describe('general skill plan', () => {
   const catalog = allGenerals()
 
-  it('defines a skill for all 70 generals, passives for grade 3+ and awakenings for the 13 grade-5 generals', () => {
+  it('defines a skill for all 70 generals, passives for grade 3+ and awakenings for the 16 grade-5 generals (4 per faction)', () => {
     expect(catalog.every(general => GENERAL_SKILLS[general.id])).toBe(true)
     expect(catalog.filter(general => general.grade >= 3).every(general => GENERAL_SKILLS[general.id].passive)).toBe(true)
     expect(catalog.filter(general => general.grade <= 2).every(general => !GENERAL_SKILLS[general.id].passive)).toBe(true)
     const awakened = catalog.filter(general => GENERAL_SKILLS[general.id].awaken).map(general => general.id).sort()
     expect(awakened).toEqual(catalog.filter(general => general.grade === 5).map(general => general.id).sort())
-    expect(awakened).toHaveLength(13)
+    expect(awakened).toHaveLength(16)
   })
 
   it('never lets one skill exceed morale 40, even at Lv60 5 stars', () => {

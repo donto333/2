@@ -574,7 +574,7 @@ const CORE_LIBRARY: General[] = [
     attack: 93, defense: 59, command: 78, leadership: 78, martial: 95, stratagem: 55, speed: 94, skillName: '철기 쇄도', skillDescription: '측면 기동을 선택하면 공격력이 크게 오른다.', skillUnlocked: false, accent: '#e6a1ba', portrait: '마',
   },
   {
-    id: 'zhou-yu', name: '주유', epithet: '공근의 적벽 화계', role: '책사', grade: 4, stars: 1, level: 1,
+    id: 'zhou-yu', name: '주유', epithet: '공근의 적벽 화계', role: '책사', grade: 5, stars: 1, level: 1,
     attack: 69, defense: 55, command: 94, leadership: 94, martial: 70, stratagem: 98, speed: 72, skillName: '적벽 화공', skillDescription: '적 사기를 태워 전장의 흐름을 바꾼다.', skillUnlocked: false, accent: '#ff9c65', portrait: '주', portraitPath: '/assets/generals/zhou-yu.webp',
   },
   {
@@ -582,20 +582,20 @@ const CORE_LIBRARY: General[] = [
     attack: 64, defense: 61, command: 96, leadership: 96, martial: 57, stratagem: 99, speed: 54, skillName: '천변 만기', skillDescription: '적의 다음 명령을 읽고 아군의 방어를 보강한다.', skillUnlocked: false, accent: '#b7b9ff', portrait: '사',
   },
   {
-    id: 'xiahou-dun', name: '하후돈', epithet: '원양의 맹진', role: '보병', grade: 3, stars: 1, level: 1,
-    attack: 76, defense: 78, command: 73, leadership: 73, martial: 80, stratagem: 52, speed: 56, skillName: '맹진 방진', skillDescription: '전열을 고정해 아군이 받는 피해를 줄인다.', skillUnlocked: false, accent: '#9bd4bc', portrait: '하',
+    id: 'xiahou-dun', name: '하후돈', epithet: '원양의 맹진', role: '보병', grade: 5, stars: 1, level: 1,
+    attack: 88, defense: 84, command: 84, leadership: 84, martial: 92, stratagem: 58, speed: 66, skillName: '맹진 방진', skillDescription: '전열을 고정해 아군이 받는 피해를 줄인다.', skillUnlocked: false, accent: '#9bd4bc', portrait: '하',
   },
   {
     id: 'taishi-ci', name: '태사자', epithet: '자의의 신정 궁기', role: '궁병', grade: 3, stars: 1, level: 1,
     attack: 81, defense: 49, command: 75, leadership: 75, martial: 83, stratagem: 61, speed: 79, skillName: '신정 쌍궁', skillDescription: '거리를 유지할수록 궁병의 피해가 증가한다.', skillUnlocked: false, accent: '#8da9ff', portrait: '태',
   },
   {
-    id: 'wei-yan', name: '위연', epithet: '문장의 자오곡 기습', role: '보병', grade: 3, stars: 1, level: 1,
-    attack: 79, defense: 65, command: 70, leadership: 70, martial: 81, stratagem: 57, speed: 72, skillName: '자오곡 기습', skillDescription: '좌측 기동 후 적의 사기를 추가로 깎는다.', skillUnlocked: false, accent: '#a7d88f', portrait: '위',
+    id: 'wei-yan', name: '위연', epithet: '문장의 자오곡 기습', role: '보병', grade: 4, stars: 1, level: 1,
+    attack: 84, defense: 68, command: 76, leadership: 76, martial: 86, stratagem: 60, speed: 74, skillName: '자오곡 기습', skillDescription: '좌측 기동 후 적의 사기를 추가로 깎는다.', skillUnlocked: false, accent: '#a7d88f', portrait: '위',
   },
   {
-    id: 'gao-shun', name: '고순', epithet: '함진영의 불퇴 전열', role: '보병', grade: 2, stars: 1, level: 1,
-    attack: 63, defense: 76, command: 69, leadership: 69, martial: 64, stratagem: 48, speed: 44, skillName: '함진영', skillDescription: '짧은 시간 동안 방어선을 단단히 유지한다.', skillUnlocked: false, accent: '#c59bf5', portrait: '고',
+    id: 'gao-shun', name: '고순', epithet: '함진영의 불퇴 전열', role: '보병', grade: 3, stars: 1, level: 1,
+    attack: 72, defense: 80, command: 72, leadership: 72, martial: 74, stratagem: 50, speed: 50, skillName: '함진영', skillDescription: '짧은 시간 동안 방어선을 단단히 유지한다.', skillUnlocked: false, accent: '#c59bf5', portrait: '고',
   },
   {
     id: 'wen-ping', name: '문빙', epithet: '강하를 지킨 수문장', role: '궁병', grade: 2, stars: 1, level: 1,
@@ -612,15 +612,15 @@ type ExpansionSpec = [string, string, string, Role, Grade, string, string, strin
 const EXPANSION_SPECS: ExpansionSpec[] = [
   ['liu-bei', '유비', '현덕의 인덕과 쌍검', '보병', 5, '인덕의 결집', '아군 전체의 사기를 끌어올리고 전열을 회복한다.', '유'],
   ['cao-cao', '조조', '맹덕의 천하 제패', '기병', 5, '위무의 질주', '적의 약한 측면을 포착해 전군의 공격력을 높인다.', '조'],
-  ['sun-quan', '손권', '중모의 강동 수호', '궁병', 4, '강동의 결의', '아군 궁병의 사거리와 명중률을 강화한다.', '손'],
+  ['sun-quan', '손권', '중모의 강동 수호', '궁병', 5, '강동의 결의', '아군 궁병의 사거리와 명중률을 강화한다.', '손'],
   ['sun-ce', '손책', '백부의 소패왕', '기병', 5, '소패왕 돌격', '중앙의 적을 밀어내고 기동 속도를 크게 높인다.', '손'],
   ['sun-jian', '손견', '문대의 옥새 선봉', '보병', 4, '강동 선봉', '첫 공격에 추가 피해를 더하고 적 사기를 낮춘다.', '손'],
   ['pang-tong', '방통', '사원의 봉추 연환', '책사', 4, '연환계', '적 부대를 묶어 다음 충격파 피해를 증폭한다.', '방'],
   ['xu-shu', '서서', '원직의 단기 유랑', '책사', 3, '단기묘책', '좌우 기동 명령의 재사용 대기시간을 줄인다.', '서'],
   ['fa-zheng', '법정', '효직의 한중 책략', '책사', 4, '한중 반격', '방어 중인 아군이 받는 피해를 반격으로 전환한다.', '법'],
   ['meng-huo', '맹획', '남만왕의 칠종칠금', '보병', 3, '칠종칠금', '쓰러지지 않는 전열을 만들고 방어력을 높인다.', '맹'],
-  ['zhu-rong', '축융', '남만의 비도 여왕', '궁병', 3, '비도 화염', '적 후방에 불꽃을 남겨 지속 피해를 입힌다.', '축'],
-  ['huang-gai', '황개', '공복의 고육지계', '보병', 4, '고육지계', '자신을 희생해 적 진형에 큰 사기 피해를 준다.', '황'],
+  ['zhu-rong', '축융', '남만의 비도 여왕', '궁병', 2, '비도 화염', '적 후방에 불꽃을 남겨 지속 피해를 입힌다.', '축'],
+  ['huang-gai', '황개', '공복의 고육지계', '보병', 3, '고육지계', '자신을 희생해 적 진형에 큰 사기 피해를 준다.', '황'],
   ['gan-ning', '감녕', '흥패의 백기 수적', '기병', 4, '백기 야습', '전투 초반 적의 시야를 흔들고 측면을 급습한다.', '감'],
   ['ling-tong', '능통', '공적의 강동 맹장', '보병', 3, '필사의 연격', '연속 명령 시 두 번째 공격의 위력이 상승한다.', '능'],
   ['lu-su', '노숙', '자경의 동맹 책략', '책사', 4, '강동 동맹', '아군의 명령 자원을 보존하고 사기를 안정시킨다.', '노'],
@@ -630,42 +630,42 @@ const EXPANSION_SPECS: ExpansionSpec[] = [
   ['xu-chu', '허저', '중강의 호치 위력', '보병', 4, '호치 난무', '근접한 적에게 강력한 연속 타격을 가한다.', '허'],
   ['dian-wei', '전위', '악래의 쌍극 수호', '보병', 4, '쌍극 수호', '지정한 장수를 지키며 피해를 대신 받는다.', '전'],
   ['cao-ren', '조인', '자효의 번성 철벽', '보병', 4, '번성 철벽', '거점을 지키는 동안 방어력이 크게 오른다.', '조'],
-  ['cao-hong', '조홍', '자렴의 급행 원군', '기병', 3, '급행 원군', '위험한 아군에게 빠르게 합류해 전열을 보충한다.', '조'],
-  ['guo-jia', '곽가', '봉효의 십승십패', '책사', 5, '십승십패', '적의 약점을 간파해 스킬 피해를 극대화한다.', '곽'],
+  ['cao-hong', '조홍', '자렴의 급행 원군', '기병', 2, '급행 원군', '위험한 아군에게 빠르게 합류해 전열을 보충한다.', '조'],
+  ['guo-jia', '곽가', '봉효의 십승십패', '책사', 4, '십승십패', '적의 약점을 간파해 스킬 피해를 극대화한다.', '곽'],
   ['xun-yu', '순욱', '문약의 왕좌 보좌', '책사', 4, '왕좌의 보좌', '아군 지휘력과 사기를 동시에 높인다.', '순'],
   ['xun-you', '순유', '공달의 기묘한 계책', '책사', 3, '기묘한 계책', '다음 전술 명령을 한 번 더 사용할 기회를 만든다.', '순'],
-  ['jia-xu', '가후', '문화의 독계', '책사', 5, '독계', '적의 분노를 역이용해 스스로 무너지게 한다.', '가'],
+  ['jia-xu', '가후', '문화의 독계', '책사', 4, '독계', '적의 분노를 역이용해 스스로 무너지게 한다.', '가'],
   ['cheng-yu', '정욱', '중덕의 태산 책략', '보병', 3, '태산 책략', '전열이 밀리지 않도록 지휘 방어를 강화한다.', '정'],
-  ['pang-de', '방덕', '영명의 관문 백마', '기병', 4, '백마 관문', '적 기병의 돌격을 정면에서 받아친다.', '방'],
+  ['pang-de', '방덕', '영명의 관문 백마', '기병', 3, '백마 관문', '적 기병의 돌격을 정면에서 받아친다.', '방'],
   ['xu-huang', '서황', '공명의 양양 대승', '보병', 4, '양양 대승', '적의 보급선을 끊어 시간이 지날수록 강해진다.', '서'],
   ['yue-jin', '악진', '문겸의 선등 돌파', '보병', 3, '선등 돌파', '가장 먼저 진입해 아군의 첫 명령을 강화한다.', '악'],
-  ['li-dian', '이전', '만성의 학문 장수', '궁병', 3, '학문 진형', '아군 진형의 빈틈을 메워 모든 능력치를 보정한다.', '이'],
+  ['li-dian', '이전', '만성의 학문 장수', '궁병', 2, '학문 진형', '아군 진형의 빈틈을 메워 모든 능력치를 보정한다.', '이'],
   ['yu-jin', '우금', '문칙의 군율 철벽', '보병', 3, '군율 철벽', '부대의 사기가 낮아질수록 방어력이 증가한다.', '우'],
   ['zhang-he', '장합', '준예의 유연한 기동', '기병', 4, '유연한 기동', '적의 명령을 읽고 반대 측면으로 재배치한다.', '장'],
   ['wen-chou', '문추', '문대의 하북 맹돌', '기병', 3, '하북 맹돌', '전방의 적에게 직선 돌격으로 큰 피해를 준다.', '문'],
   ['yan-liang', '안량', '문추와 나란한 선봉', '기병', 3, '선봉 참격', '적 지휘관을 우선 공격해 사기를 크게 흔든다.', '안'],
-  ['yuan-shao', '원소', '본초의 사세삼공', '궁병', 4, '사세삼공', '대규모 원군을 불러 전장의 수적 우세를 만든다.', '원'],
-  ['yuan-shu', '원술', '공로의 중원 야심', '책사', 2, '중원 야심', '자원을 소모해 단기간에 전투력을 끌어올린다.', '원'],
+  ['yuan-shao', '원소', '본초의 사세삼공', '궁병', 5, '사세삼공', '대규모 원군을 불러 전장의 수적 우세를 만든다.', '원'],
+  ['yuan-shu', '원술', '공로의 중원 야심', '책사', 3, '중원 야심', '자원을 소모해 단기간에 전투력을 끌어올린다.', '원'],
   ['gongsun-zan', '공손찬', '백마의 의종', '기병', 3, '백마의종', '기병 부대의 이동과 측면 공격을 강화한다.', '공'],
   ['chen-gong', '진궁', '공대의 여포 모사', '책사', 3, '계중계', '적이 준비한 전술을 역으로 이용한다.', '진'],
-  ['zhang-lu', '장로', '오두미도의 군량', '책사', 2, '군량 비축', '전투가 길어질수록 아군의 사기를 회복한다.', '장'],
+  ['zhang-lu', '장로', '오두미도의 군량', '책사', 3, '군량 비축', '전투가 길어질수록 아군의 사기를 회복한다.', '장'],
   ['ma-teng', '마등', '수성의 서량 철기', '기병', 3, '서량 철기', '기병의 돌격력과 이동 속도를 높인다.', '마'],
-  ['han-sui', '한수', '문약의 서량 노장', '보병', 2, '서량 연합', '인접한 장수들의 방어를 함께 보강한다.', '한'],
+  ['han-sui', '한수', '문약의 서량 노장', '보병', 3, '서량 연합', '인접한 장수들의 방어를 함께 보강한다.', '한'],
   ['wang-ping', '왕평', '자균의 한중 수비', '궁병', 3, '한중 수비', '고지에서 적의 돌파를 정확히 저격한다.', '왕'],
-  ['guan-ping', '관평', '관문의 청룡 계승', '기병', 3, '청룡 계승', '아군 선봉 장수와 연계해 추가 피해를 준다.', '관'],
-  ['guan-xing', '관흥', '안국의 춘추 계승', '기병', 3, '춘추 계승', '쓰러진 적이 많을수록 공격력이 상승한다.', '관'],
-  ['zhang-bao', '장포', '중진의 장판 유산', '보병', 3, '장판 유산', '보병 진형의 충격 저항을 높인다.', '장'],
+  ['guan-ping', '관평', '관문의 청룡 계승', '기병', 2, '청룡 계승', '아군 선봉 장수와 연계해 추가 피해를 준다.', '관'],
+  ['guan-xing', '관흥', '안국의 춘추 계승', '기병', 2, '춘추 계승', '쓰러진 적이 많을수록 공격력이 상승한다.', '관'],
+  ['zhang-bao', '장포', '중진의 장판 유산', '보병', 2, '장판 유산', '보병 진형의 충격 저항을 높인다.', '장'],
   ['ma-dai', '마대', '금성의 서량 추격', '기병', 2, '서량 추격', '후퇴하는 적에게 추가 피해를 입힌다.', '마'],
-  ['dong-zhuo', '동탁', '중영의 폭정 철기', '보병', 4, '폭정의 압박', '적의 사기를 짓누르지만 아군 속도는 낮아진다.', '동'],
+  ['dong-zhuo', '동탁', '중영의 폭정 철기', '보병', 5, '폭정의 압박', '적의 사기를 짓누르지만 아군 속도는 낮아진다.', '동'],
   ['diao-chan', '초선', '폐월의 연환 미혹', '책사', 4, '연환 미혹', '적 지휘관을 혼란시켜 다음 행동을 지연한다.', '초'],
-  ['cai-wenji', '채문희', '문희의 호가 귀환', '책사', 2, '호가 귀환', '전투 기록을 되살려 아군 사기를 회복한다.', '채'],
-  ['da-qiao', '대교', '강동의 옥련', '궁병', 3, '옥련의 가호', '아군 장수의 스킬 재사용 대기시간을 줄인다.', '대'],
+  ['cai-wenji', '채문희', '문희의 호가 귀환', '책사', 1, '호가 귀환', '전투 기록을 되살려 아군 사기를 회복한다.', '채'],
+  ['da-qiao', '대교', '강동의 옥련', '궁병', 2, '옥련의 가호', '아군 장수의 스킬 재사용 대기시간을 줄인다.', '대'],
   // 황건적 (donto333/1에서 가져옴: 이름·등급·병종·초상화가 같다)
   ['zhang-jiao', '장각', '천공장군의 황천 개벽', '책사', 5, '태평요술', '', '각'],
-  ['zhang-bo', '장보', '지공장군의 부적 계략', '책사', 4, '부적 계략', '', '보'],
-  ['zhang-liang', '장량', '인공장군의 황건 선봉', '보병', 4, '황건 선봉', '', '량'],
-  ['guan-hai', '관해', '황건의 백파 맹장', '보병', 3, '백파 격돌', '', '관'],
-  ['zhou-cang', '주창', '황건을 거친 충직한 장수', '기병', 3, '황건 추격', '', '주'],
+  ['zhang-bo', '장보', '지공장군의 부적 계략', '책사', 2, '부적 계략', '', '보'],
+  ['zhang-liang', '장량', '인공장군의 황건 선봉', '보병', 2, '황건 선봉', '', '량'],
+  ['guan-hai', '관해', '황건의 백파 맹장', '보병', 1, '백파 격돌', '', '관'],
+  ['zhou-cang', '주창', '황건을 거친 충직한 장수', '기병', 2, '황건 추격', '', '주'],
 ]
 
 function makeExpansionGeneral([id, name, epithet, role, grade, skillName, skillDescription, portrait]: ExpansionSpec): General {
@@ -691,6 +691,56 @@ const LIBRARY: General[] = [...CORE_LIBRARY, ...EXPANSION_GENERALS].map(withSkil
 export function templateGeneral(id: string): General | undefined {
   const found = LIBRARY.find(general => general.id === id)
   return found ? { ...found } : undefined
+}
+
+// ── 2026.10 무장 등급 재설정(삼국지 속 역할·비중 기준, 천명은 진영마다 4명) ──
+/** 바뀌기 전 등급 */
+export const PREVIOUS_GRADES: Record<string, Grade> = { 'xiahou-dun': 3, 'sun-quan': 4, 'zhou-yu': 4, 'dong-zhuo': 4, 'yuan-shao': 4, 'wei-yan': 3, 'guo-jia': 5, 'jia-xu': 5, 'pang-de': 4, 'huang-gai': 4, 'gao-shun': 2, 'yuan-shu': 2, 'han-sui': 2, 'zhang-lu': 2, 'guan-ping': 3, 'guan-xing': 3, 'zhang-bao': 3, 'zhou-cang': 3, 'li-dian': 3, 'cao-hong': 3, 'da-qiao': 3, 'zhu-rong': 3, 'zhang-bo': 4, 'zhang-liang': 4, 'guan-hai': 3, 'cai-wenji': 2 }
+/** 손으로 정한 능력치가 함께 바뀐 초기 무장의 예전 원형 능력치 */
+const PREVIOUS_CORE_STATS: Record<string, Pick<General, 'attack' | 'defense' | 'command' | 'leadership' | 'martial' | 'stratagem' | 'speed'>> = {
+  'gao-shun': { attack: 63, defense: 76, command: 69, leadership: 69, martial: 64, stratagem: 48, speed: 44 },
+  'xiahou-dun': { attack: 76, defense: 78, command: 73, leadership: 73, martial: 80, stratagem: 52, speed: 56 },
+  'wei-yan': { attack: 79, defense: 65, command: 70, leadership: 70, martial: 81, stratagem: 57, speed: 72 },
+}
+/** 등급이 한 단계 내려갈 때마다 주는 옥패 보상(위에서 아래로) */
+export const GRADE_DOWN_COMPENSATION: Record<Grade, number> = { 5: 1000, 4: 300, 3: 100, 2: 50, 1: 0 }
+const STAT_KEYS = ['attack', 'defense', 'command', 'leadership', 'martial', 'stratagem', 'speed'] as const
+
+/** 등급 재설정 전 원형(보유 무장의 능력치를 새 원형과의 차이만큼 옮길 때 쓴다) */
+function previousTemplate(id: string): General | undefined {
+  const now = templateGeneral(id)
+  const oldGrade = PREVIOUS_GRADES[id]
+  if (!now || !oldGrade) return undefined
+  const spec = EXPANSION_SPECS.find(item => item[0] === id)
+  if (spec) return makeExpansionGeneral([spec[0], spec[1], spec[2], spec[3], oldGrade, spec[5], spec[6], spec[7]])
+  return { ...now, ...(PREVIOUS_CORE_STATS[id] ?? {}), grade: oldGrade }
+}
+
+/**
+ * 저장된 보유 무장을 새 등급으로 옮긴다: 등급·등급색을 바꾸고 능력치는 새 원형과의 차이만큼 보정한다(레벨·성급 성장분은 유지).
+ * 등급이 내려간 무장은 단계마다 옥패로 보상한다. 이미 옮긴 무장(등급이 새 등급과 같음)은 건드리지 않으므로 여러 번 불러도 안전하다.
+ */
+export function migrateGeneralGrades(state: StrategyState): { changed: number; honor: number; down: string[]; up: string[] } {
+  const result = { changed: 0, honor: 0, down: [] as string[], up: [] as string[] }
+  for (const general of state.generals) {
+    const template = templateGeneral(general.id)
+    const before = previousTemplate(general.id)
+    if (!template || !before || general.grade !== before.grade || template.grade === general.grade) continue
+    for (const key of STAT_KEYS) general[key] = Math.max(1, general[key] + (template[key] - before[key]))
+    if (general.accent === GRADE_META[before.grade].color) general.accent = GRADE_META[template.grade].color
+    if (template.grade < before.grade) {
+      for (let grade = before.grade; grade > template.grade; grade -= 1) result.honor += GRADE_DOWN_COMPENSATION[grade as Grade]
+      result.down.push(general.name)
+    } else result.up.push(general.name)
+    general.grade = template.grade
+    result.changed += 1
+  }
+  if (result.honor > 0) state.honor += result.honor
+  if (result.changed) {
+    const parts = [result.up.length ? `등급 상승 ${result.up.join('·')}` : '', result.down.length ? `등급 조정 ${result.down.join('·')} · 보상 옥패 +${formatNumber(result.honor)}` : ''].filter(Boolean)
+    state.lastNotice = `무장 등급 재설정 · ${parts.join(' / ')}`
+  }
+  return result
 }
 
 /** 적 무장 성장: 아군 강화·성급 상승과 같은 공식으로 능력치를 올린다. */

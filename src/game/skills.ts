@@ -82,19 +82,19 @@ export const GENERAL_SKILLS: Record<string, GeneralSkillDef> = {
   'xu-shu': { faction: '촉', type: '통솔', mult: 1, active: a('단기묘책', '6초 동안 전술 명령 비용 −30% + 질풍보법', { k: 'buff', id: 'tactic-discount', sec: 6, value: 0.3 }, { k: 'buff', id: 'swift-step', sec: 6 }), passive: p('partnerPower', '주마천거', '제갈량과 편성 시 위력 +10%', { partner: 'zhuge-liang', value: 0.1 }) },
   'wei-yan': { faction: '촉', type: '돌격', mult: 1, active: a('자오곡 기습', '사기 피해, 그 전투 첫 스킬이면 ×1.5', { k: 'cond', when: 'firstSkill', mult: 1.5 }), passive: p('flankMorale', '진군', '기동 명령 성공 시 사기 피해 +4', { value: 4 }) },
   'meng-huo': { faction: '촉', type: '수호', mult: 1, active: a('칠종칠금', '불굴 + 받는 피해 −20% 6초', { k: 'undying' }, { k: 'selfDr', value: 0.2, sec: 6 }), passive: p('undyingMorale', '남만왕', '불굴이 발동하면 적 사기 −8', { value: 8 }) },
-  'zhu-rong': { faction: '촉', type: '사격', mult: 1, active: a('비도 화염', '사격 + 화계 5초', { k: 'debuff', id: 'burning', sec: 5 }), passive: p('vsBurning', '화신의 후예', '화계 걸린 적에게 피해 +10%', { value: 0.1 }) },
+  'zhu-rong': { faction: '촉', type: '사격', mult: 1, active: a('비도 화염', '사격 + 화계 5초', { k: 'debuff', id: 'burning', sec: 5 }) },
   'wang-ping': { faction: '촉', type: '사격', mult: 1, active: a('가정 고지', '사격, 적이 중앙 돌파 예고 중이면 ×1.4', { k: 'cond', when: 'centerPattern', mult: 1.4 }), passive: p('crossfireGuard', '고지 수비', '십자 포화 예고의 위협도 상승 −30%', { value: 0.3 }) },
-  'guan-ping': { faction: '촉', type: '돌격', mult: 1, active: a('청룡 계승', '사기 피해, 직전 스킬이 관우면 ×1.3', { k: 'cond', when: 'afterGuanYu', mult: 1.3 }), passive: p('partnerSelfCd', '부자 연계', '관우와 편성 시 쿨다운 −1초', { partner: 'guan-yu', value: 1 }) },
-  'guan-xing': { faction: '촉', type: '돌격', mult: 1, active: a('춘추 계승', '사기 피해, 쓰러뜨린 적 부대 1개당 +15%', { k: 'cond', when: 'perFallenEnemy', mult: 0.15 }), passive: p('atkOnAllyDown', '복수의 칼', '아군이 쓰러지면 공격 +15%', { value: 0.15 }) },
-  'zhang-bao': { faction: '촉', type: '돌격', mult: 1, active: a('장팔사모', '사기 피해 + 공포 3초', { k: 'debuff', id: 'fear', sec: 3 }), passive: p('partnerAtk', '장판 유산', '장비와 편성 시 공격 +10%', { partner: 'zhang-fei', value: 0.1 }) },
+  'guan-ping': { faction: '촉', type: '돌격', mult: 1, active: a('청룡 계승', '사기 피해, 직전 스킬이 관우면 ×1.3', { k: 'cond', when: 'afterGuanYu', mult: 1.3 }) },
+  'guan-xing': { faction: '촉', type: '돌격', mult: 1, active: a('춘추 계승', '사기 피해, 쓰러뜨린 적 부대 1개당 +15%', { k: 'cond', when: 'perFallenEnemy', mult: 0.15 }) },
+  'zhang-bao': { faction: '촉', type: '돌격', mult: 1, active: a('장팔사모', '사기 피해 + 공포 3초', { k: 'debuff', id: 'fear', sec: 3 }) },
   'ma-dai': { faction: '촉', type: '돌격', mult: 1, active: a('서량 추격', '사기 피해, 적 사기 30 이하면 ×1.5', { k: 'cond', when: 'enemyMoraleLow', mult: 1.5 }) },
 
   // ── 위 ──
   'cao-cao': { faction: '위', type: '통솔', mult: 1, active: a('위무의 질주', '아군 전체 공격 +15% 6초 + 사기 피해', { k: 'buff', id: 'atk-up', sec: 6, value: 0.15 }), passive: p('factionPower', '치세의 능신', '편성한 위 무장 1명당 위력 +5%', { value: 0.05 }), awaken: a('천하 쟁패', '버프 지속 +3초 + 적 공포 4초', { k: 'buff', id: 'atk-up', sec: 9, value: 0.15 }, { k: 'debuff', id: 'fear', sec: 4 }), weakness: { id: 'weakToFire', desc: '화계에 받는 피해 +20% (적벽)' } },
   simayi: { faction: '위', type: '계략', mult: 1, active: a('견벽청야', '적 버프 전부 제거 + 침묵 6초', { k: 'strip', n: 99 }, { k: 'debuff', id: 'silence', sec: 6 }), passive: p('lowTroopDr', '낭고', '아군 병력 50% 이하일 때 받는 피해 −15%', { value: 0.15 }), awaken: a('고평릉의 일격', '침묵 걸린 적에게 사기 피해 ×2', { k: 'afterDebuff', sec: 0, value: 2 }) },
   'zhang-liao': { faction: '위', type: '돌격', mult: 1, active: a('합비 질풍', '사기 피해 + 둔화 6초', { k: 'debuff', id: 'slow', sec: 6 }), passive: p('earlyAtk', '요래', '전투 시작 10초 동안 공격 +20%', { value: 0.2 }), awaken: a('팔백 돌격대', '3회 연속 타격(각 ×0.5) + 둔화', { k: 'hits', n: 3, each: 0.5 }) },
-  'guo-jia': { faction: '위', type: '계략', mult: 1, active: a('십승십패', '표적 낙인 7초 + 다음 아군 스킬 피해 ×1.5', { k: 'debuff', id: 'mark', sec: 7 }, { k: 'buff', id: 'insight', sec: 12 }), passive: p('earlyWarning', '귀재', '적 전술 예고를 더 일찍 보여 줌 (대응 시간 +0.5초)', { value: 0.5 }), awaken: a('유계정요동', '쿨다운 −3초, 낙인 지속 +2초', { k: 'debuff', id: 'mark', sec: 9 }), weakness: { id: 'frail15', desc: '최대 병력 −15% (병약)' } },
-  'jia-xu': { faction: '위', type: '계략', mult: 1, active: a('독계', '분노 6초', { k: 'debuff', id: 'rage', sec: 6 }), passive: p('failThreatCut', '난무', '아군 실패 명령의 위협도 상승 −25%', { value: 0.25 }), awaken: a('문화의 난무', '분노한 적의 화계·공포 지속 ×1.5', { k: 'buff', id: 'chaos-craft', sec: 10 }) },
+  'guo-jia': { faction: '위', type: '계략', mult: 1, active: a('십승십패', '표적 낙인 7초 + 다음 아군 스킬 피해 ×1.5', { k: 'debuff', id: 'mark', sec: 7 }, { k: 'buff', id: 'insight', sec: 12 }), passive: p('earlyWarning', '귀재', '적 전술 예고를 더 일찍 보여 줌 (대응 시간 +0.5초)', { value: 0.5 }), weakness: { id: 'frail15', desc: '최대 병력 −15% (병약)' } },
+  'jia-xu': { faction: '위', type: '계략', mult: 1, active: a('독계', '분노 6초', { k: 'debuff', id: 'rage', sec: 6 }), passive: p('failThreatCut', '난무', '아군 실패 명령의 위협도 상승 −25%', { value: 0.25 }) },
   'xu-chu': { faction: '위', type: '수호', mult: 1, active: a('호치 난무', '호위 6초(병력 가장 낮은 아군) + 반격 15%', { k: 'bodyguard', who: 'lowest', sec: 6 }, { k: 'buff', id: 'counter', sec: 6, value: 0.15 }), passive: p('atkHighTroops', '호치', '병력 70% 이상일 때 공격 +10%', { value: 0.1 }) },
   'dian-wei': { faction: '위', type: '수호', mult: 1, active: a('쌍극 수호', '호위 6초(전투력 가장 높은 아군), 자신 피해 −30%', { k: 'bodyguard', who: 'strongest', sec: 6 }, { k: 'selfDr', value: 0.3, sec: 6 }), passive: p('deathRally', '완성의 최후', '병력 0이 되면 아군 전체 공격 +20% 5초', { value: 0.2 }) },
   'cao-ren': { faction: '위', type: '수호', mult: 1, active: a('번성 철벽', '아군 받는 피해 −25% 7초 + 철벽진', { k: 'buff', id: 'dr-up', sec: 7, value: 0.25 }, { k: 'buff', id: 'iron-wall', sec: 7 }), passive: p('defenseBattle', '거점 수비', '도시 방어전에서 위력 +20%', { value: 0.2 }) },
@@ -102,12 +102,12 @@ export const GENERAL_SKILLS: Record<string, GeneralSkillDef> = {
   'pang-de': { faction: '위', type: '수호', mult: 1, active: a('여츤결사', '반격 30% 6초 + 자신 공격 +15%', { k: 'buff', id: 'counter', sec: 6, value: 0.3 }, { k: 'selfAtk', value: 0.15, sec: 6 }), passive: p('vsCavalry', '백마장군', '기병 상대 피해 +10%', { value: 0.1 }) },
   'xu-huang': { faction: '위', type: '돌격', mult: 1, active: a('번성 해위', '사기 피해 + 진형 붕괴 6초', { k: 'debuff', id: 'fracture', sec: 6 }), passive: p('atkRamp', '주아부의 풍모', '7초마다 공격 +2% (최대 +10%)', { value: 0.1 }) },
   'zhang-he': { faction: '위', type: '돌격', mult: 1, active: a('유연한 기동', '사기 피해, 직전 명령이 실패였으면 위협도 −15', { k: 'condThreat', n: -15 }), passive: p('cdOnBreak', '교변', '적 전술 대응 성공 시 쿨다운 −1초', { value: 1 }) },
-  'xiahou-dun': { faction: '위', type: '돌격', mult: 1.3, active: a('발시담목', '자기 병력 5% 소모, 사기 피해 ×1.3', { k: 'selfCost', pct: 5 }), passive: p('lowTroopAtk', '맹진', '병력 50% 이하면 공격 +20%', { value: 0.2 }) },
-  'cao-hong': { faction: '위', type: '치유', mult: 1, active: a('급행 원군', '병력이 가장 낮은 아군 15% 회복', { k: 'heal', pct: 15, target: 'lowest' }), passive: p('partnerDr', '헌마', '조조와 편성 시 조조 받는 피해 −10%', { partner: 'cao-cao', value: 0.1 }) },
+  'xiahou-dun': { faction: '위', type: '돌격', mult: 1.25, active: a('발시담목', '자기 병력 5% 소모, 사기 피해 ×1.25', { k: 'selfCost', pct: 5 }), passive: p('lowTroopAtk', '맹진', '병력 50% 이하면 공격 +20%', { value: 0.2 }), awaken: a('독안의 맹장', '사기 피해 ×1.2 + 아군 받는 피해 −10% 6초', { k: 'power', mult: 1.2 }, { k: 'buff', id: 'dr-up', sec: 6, value: 0.1 }) },
+  'cao-hong': { faction: '위', type: '치유', mult: 1, active: a('급행 원군', '병력이 가장 낮은 아군 15% 회복', { k: 'heal', pct: 15, target: 'lowest' }) },
   'xun-you': { faction: '위', type: '통솔', mult: 1, active: a('기묘한 계책', '다음 전술 명령 1회 비용 0', { k: 'freeTactic' }), passive: p('gaugeOnBreak', '기책 열두 가지', '전술 성공 시 게이지 +3', { value: 3 }) },
   'cheng-yu': { faction: '위', type: '수호', mult: 1, active: a('태산 책략', '아군 받는 피해 −15% + 위협도 −15', { k: 'buff', id: 'dr-up', sec: 6, value: 0.15 }, { k: 'threat', n: -15 }), passive: p('shortDebuff', '강직', '아군 상태이상 지속 −1초', { value: 1 }) },
   'yue-jin': { faction: '위', type: '돌격', mult: 1, active: a('선등 돌파', '사기 피해, 전투 시작 7초 안이면 ×1.4', { k: 'cond', when: 'early', mult: 1.4 }), passive: p('firstStrike', '선등', '첫 자동 공격 피해 +20%', { value: 0.2 }) },
-  'li-dian': { faction: '위', type: '통솔', mult: 1, active: a('학문 진형', '아군 공격·방어 +8% 6초', { k: 'buff', id: 'atk-up', sec: 6, value: 0.08 }, { k: 'buff', id: 'dr-up', sec: 6, value: 0.08 }), passive: p('shortDebuff', '겸양', '아군 상태이상 지속 −1초', { value: 1 }) },
+  'li-dian': { faction: '위', type: '통솔', mult: 1, active: a('학문 진형', '아군 공격·방어 +8% 6초', { k: 'buff', id: 'atk-up', sec: 6, value: 0.08 }, { k: 'buff', id: 'dr-up', sec: 6, value: 0.08 }) },
   'yu-jin': { faction: '위', type: '수호', mult: 1, active: a('군율 철벽', '받는 피해 −20%, 아군 병력이 낮을수록 최대 −30%', { k: 'buff', id: 'dr-up', sec: 6, value: 0.2 }), passive: p('undyingOnce', '엄정', '불굴 1회', { value: 1 }), weakness: { id: 'weakToFlood', desc: '수공에 받는 피해 +30% (번성 항복)' } },
   'wen-ping': { faction: '위', type: '수호', mult: 1, active: a('강하 수비', '위협도 −20 + 봉화 수호', { k: 'threat', n: -20 }, { k: 'buff', id: 'phoenix-guard', sec: 7 }) },
   'cai-wenji': { faction: '위', type: '치유', mult: 1, active: a('호가십팔박', '아군 병력 8% 회복 + 상태이상 1개 해제', { k: 'heal', pct: 8, target: 'all' }, { k: 'cleanse', n: 1 }) },
@@ -115,39 +115,39 @@ export const GENERAL_SKILLS: Record<string, GeneralSkillDef> = {
   // ── 오 ──
   'sun-ce': { faction: '오', type: '돌격', mult: 1.1, active: a('소패왕 돌격', '사기 피해 ×1.1 + 공포 4초', { k: 'debuff', id: 'fear', sec: 4 }), passive: p('resetOnKill', '강동 평정', '적 부대가 쓰러질 때마다 남은 쿨다운 절반', { value: 0.5 }), awaken: a('소패왕의 위세', '사기 피해 ×1.2 + 아군 공격 +10%', { k: 'power', mult: 1.2 }, { k: 'buff', id: 'atk-up', sec: 6, value: 0.1 }), weakness: { id: 'fragile10', desc: '받는 피해 +10% (요절)' } },
   'lu-xun': { faction: '오', type: '계략', mult: 1, active: a('이릉 화진', '적 전체 화계 6초', { k: 'debuff', id: 'burning', sec: 6 }, { k: 'aoe' }), passive: p('finalAct', '서생의 인내', '3막(결전)에서 위력 +25%', { value: 0.25 }), awaken: a('연영 칠백리', '화계 지속 +3초 + 연환 부여', { k: 'debuff', id: 'burning', sec: 9 }, { k: 'debuff', id: 'chain', sec: 6 }) },
-  'sun-quan': { faction: '오', type: '통솔', mult: 1, active: a('강동의 결의', '아군 전체 공격 +8%, 궁병은 +20% 6초', { k: 'buff', id: 'atk-up', sec: 6, value: 0.08 }, { k: 'buff', id: 'archer-focus', sec: 6, value: 0.12 }), passive: p('factionDr', '수성지주', '편성한 오 무장 1명당 받는 피해 −4%', { value: 0.04 }) },
+  'sun-quan': { faction: '오', type: '통솔', mult: 1, active: a('강동의 결의', '아군 전체 공격 +8%, 궁병은 +20% 6초', { k: 'buff', id: 'atk-up', sec: 6, value: 0.08 }, { k: 'buff', id: 'archer-focus', sec: 6, value: 0.12 }), passive: p('factionDr', '수성지주', '편성한 오 무장 1명당 받는 피해 −4%', { value: 0.04 }), awaken: a('강동 대제', '아군 공격 +15% 6초 + 전술 게이지 +10', { k: 'buff', id: 'atk-up', sec: 6, value: 0.15 }, { k: 'gauge', n: 10 }) },
   'sun-jian': { faction: '오', type: '돌격', mult: 1, active: a('강동 선봉', '사기 피해 + 공포 3초', { k: 'debuff', id: 'fear', sec: 3 }), passive: p('vsHighMorale', '강동의 호랑이', '적 사기 70 이상일 때 피해 +15%', { value: 0.15 }) },
-  'zhou-yu': { faction: '오', type: '계략', mult: 1, active: a('적벽 화공', '화계 7초 (연환된 적이면 적 전체로 번짐)', { k: 'debuff', id: 'burning', sec: 7 }), passive: p('vsBurning', '곡유오 주랑고', '화계 피해 +15%', { value: 0.15 }) },
+  'zhou-yu': { faction: '오', type: '계략', mult: 1, active: a('적벽 화공', '화계 7초 (연환된 적이면 적 전체로 번짐)', { k: 'debuff', id: 'burning', sec: 7 }), passive: p('vsBurning', '곡유오 주랑고', '화계 피해 +15%', { value: 0.15 }), awaken: a('적벽 대화', '화계 9초 + 적 공포 3초', { k: 'debuff', id: 'burning', sec: 9 }, { k: 'debuff', id: 'fear', sec: 3 }) },
   'huang-gai': { faction: '오', type: '돌격', mult: 2, active: a('고육지계', '자기 병력 15% 소모, 사기 피해 ×2 + 화계 4초', { k: 'selfCost', pct: 15 }, { k: 'debuff', id: 'burning', sec: 4 }), passive: p('vsBurning', '거짓 항복', '화계 걸린 적에게 피해 +10%', { value: 0.1 }) },
   'gan-ning': { faction: '오', type: '돌격', mult: 1, active: a('백기 야습', '사기 피해 + 시야 차단 5초', { k: 'debuff', id: 'blind', sec: 5 }), passive: p('fastOpener', '금범적', '첫 스킬 쿨다운 −3초', { value: 3 }) },
   'lu-su': { faction: '오', type: '치유', mult: 1, active: a('강동 동맹', '상태이상 전부 해제 + 전술 게이지 +15', { k: 'cleanse', n: 99 }, { k: 'gauge', n: 15 }), passive: p('alliance', '손유동맹', '다른 세력 무장 1명당 위력 +5%', { value: 0.05 }) },
   'lu-meng': { faction: '오', type: '돌격', mult: 1, active: a('백의 도하', '적 버프 1개 제거, 제거했으면 사기 피해 ×1.3', { k: 'strip', n: 1 }, { k: 'cond', when: 'stripped', mult: 1.3 }), passive: p('veteran', '괄목상대', 'Lv30 이상이면 위력 +10%', { value: 0.1 }) },
   'ling-tong': { faction: '오', type: '돌격', mult: 1, active: a('필사의 연격', '2회 타격(각 ×0.6)', { k: 'hits', n: 2, each: 0.6 }), passive: p('partnerAtk', '화해', '감녕과 편성 시 공격 +10%', { partner: 'gan-ning', value: 0.1 }) },
   'taishi-ci': { faction: '오', type: '사격', mult: 1, active: a('북해 구원', '사격 + 시야 차단 5초', { k: 'debuff', id: 'blind', sec: 5 }), passive: p('partnerPower', '신정의 맹약', '손책과 편성 시 위력 +10%', { partner: 'sun-ce', value: 0.1 }) },
-  'da-qiao': { faction: '오', type: '치유', mult: 1, active: a('옥련의 가호', '아군 쿨다운 −2초 + 병력 6% 회복', { k: 'allyCd', sec: 2, scope: 'all' }, { k: 'heal', pct: 6, target: 'all' }), passive: p('healBoost', '강동 이교', '회복량 +10%', { value: 0.1 }) },
+  'da-qiao': { faction: '오', type: '치유', mult: 1, active: a('옥련의 가호', '아군 쿨다운 −2초 + 병력 6% 회복', { k: 'allyCd', sec: 2, scope: 'all' }, { k: 'heal', pct: 6, target: 'all' }) },
 
   // ── 군웅 ──
   'lu-bu': { faction: '군웅', type: '돌격', mult: 1.2, active: a('무쌍 돌격', '사기 피해 ×1.2 + 공포 5초', { k: 'debuff', id: 'fear', sec: 5 }), passive: p('peerless', '인중여포', '속도 +10%, 적 사기 70 이상이면 피해 +20%', { value: 0.2 }), awaken: a('원문사극', '무쌍 돌격이 적 전체에 피해', { k: 'aoe' }), weakness: { id: 'distrust', desc: '책사 버프 효과 −30% (초선·진궁 편성 시 해제)' } },
-  'dong-zhuo': { faction: '군웅', type: '통솔', mult: 1, active: a('폭정의 압박', '적 공포 5초 + 아군 공격 +15%, 아군 속도 −10%', { k: 'debuff', id: 'fear', sec: 5 }, { k: 'buff', id: 'atk-up', sec: 6, value: 0.15 }, { k: 'buff', id: 'heavy-step', sec: 6, value: 0.1 }), passive: p('highTroopDr', '서량 철기', '병력 70% 이상일 때 받는 피해 −10%', { value: 0.1 }) },
+  'dong-zhuo': { faction: '군웅', type: '통솔', mult: 1, active: a('폭정의 압박', '적 공포 5초 + 아군 공격 +15%, 아군 속도 −10%', { k: 'debuff', id: 'fear', sec: 5 }, { k: 'buff', id: 'atk-up', sec: 6, value: 0.15 }, { k: 'buff', id: 'heavy-step', sec: 6, value: 0.1 }), passive: p('highTroopDr', '서량 철기', '병력 70% 이상일 때 받는 피해 −10%', { value: 0.1 }), awaken: a('상국의 위세', '적 공포 7초 + 아군 공격 +15% 6초', { k: 'debuff', id: 'fear', sec: 7 }, { k: 'buff', id: 'atk-up', sec: 6, value: 0.15 }) },
   'diao-chan': { faction: '군웅', type: '계략', mult: 1, active: a('연환 미혹', '혼란 5초 + 연환 5초', { k: 'debuff', id: 'confusion', sec: 5 }, { k: 'debuff', id: 'chain', sec: 5 }), passive: p('calmLuBu', '폐월', '여포와 편성 시 여포 약점 해제', { partner: 'lu-bu' }) },
-  'yuan-shao': { faction: '군웅', type: '통솔', mult: 1, active: a('사세삼공', '아군 전체 공격 +10% + 전술 게이지 +10', { k: 'buff', id: 'atk-up', sec: 6, value: 0.1 }, { k: 'gauge', n: 10 }), passive: p('warlordHost', '하북의 대군', '편성 3명이 모두 군웅이면 위력 +15%', { value: 0.15 }), weakness: { id: 'indecisive', desc: '쿨다운 +2초 (우유부단)' } },
+  'yuan-shao': { faction: '군웅', type: '통솔', mult: 1, active: a('사세삼공', '아군 전체 공격 +10% + 전술 게이지 +10', { k: 'buff', id: 'atk-up', sec: 6, value: 0.1 }, { k: 'gauge', n: 10 }), passive: p('warlordHost', '하북의 대군', '편성 3명이 모두 군웅이면 위력 +15%', { value: 0.15 }), weakness: { id: 'indecisive', desc: '쿨다운 +2초 (우유부단)' }, awaken: a('하북 대군', '아군 공격 +15% 6초 + 전술 게이지 +15', { k: 'buff', id: 'atk-up', sec: 6, value: 0.15 }, { k: 'gauge', n: 15 }) },
   'gongsun-zan': { faction: '군웅', type: '돌격', mult: 1, active: a('백마의종', '사기 피해 + 아군 기병 공격 +10% 6초', { k: 'buff', id: 'cavalry-surge', sec: 6, value: 0.1 }), passive: p('cavalryPair', '백마 기병대', '기병 2명 이상 편성 시 쿨다운 −1초', { value: 1 }) },
   'chen-gong': { faction: '군웅', type: '계략', mult: 1, active: a('계중계', '다음 적 전술 예고를 자동 대응 성공 처리 + 연계 +2', { k: 'autoBreak' }), passive: p('calmLuBu', '여포의 모사', '여포와 편성 시 여포 약점 해제', { partner: 'lu-bu' }) },
   'ma-teng': { faction: '군웅', type: '돌격', mult: 1, active: a('서량 철기 대열', '사기 피해 + 아군 기병 속도 +10% 6초', { k: 'buff', id: 'cavalry-surge', sec: 6, value: 0.1 }), passive: p('partnerCd', '부자 연계', '마초와 편성 시 마초 쿨다운 −1초', { partner: 'ma-chao', value: 1 }) },
   'wen-chou': { faction: '군웅', type: '돌격', mult: 1.2, active: a('하북 맹돌', '사기 피해 ×1.2'), passive: p('partnerAtk', '하북 쌍장', '안량과 편성 시 공격 +10%', { partner: 'yan-liang', value: 0.1 }) },
   'yan-liang': { faction: '군웅', type: '돌격', mult: 1, active: a('선봉 참격', '사기 피해 + 공포 3초', { k: 'debuff', id: 'fear', sec: 3 }), passive: p('partnerAtk', '하북 쌍장', '문추와 편성 시 공격 +10%', { partner: 'wen-chou', value: 0.1 }) },
-  'yuan-shu': { faction: '군웅', type: '통솔', mult: 1, active: a('중원 야심', '아군 공격 +20% 5초, 끝난 뒤 3초 −10%', { k: 'buff', id: 'atk-up', sec: 5, value: 0.2 }, { k: 'buff', id: 'hangover', sec: 8, value: 0.1 }) },
-  'zhang-lu': { faction: '군웅', type: '치유', mult: 1, active: a('오두미도', '6초 동안 매초 아군 병력 1.5% 회복', { k: 'hot', pctPerSec: 1.5, sec: 6 }) },
-  'han-sui': { faction: '군웅', type: '수호', mult: 1, active: a('서량 연합', '아군 받는 피해 −15% 6초', { k: 'buff', id: 'dr-up', sec: 6, value: 0.15 }) },
-  'gao-shun': { faction: '군웅', type: '돌격', mult: 1, active: a('함진영', '사기 피해, 적의 피해 감소 효과 무시', { k: 'ignoreDr' }) },
+  'yuan-shu': { faction: '군웅', type: '통솔', mult: 1, active: a('중원 야심', '아군 공격 +20% 5초, 끝난 뒤 3초 −10%', { k: 'buff', id: 'atk-up', sec: 5, value: 0.2 }, { k: 'buff', id: 'hangover', sec: 8, value: 0.1 }), passive: p('earlyAtk', '사세의 명문', '전투 시작 10초 동안 공격 +15%', { value: 0.15 }) },
+  'zhang-lu': { faction: '군웅', type: '치유', mult: 1, active: a('오두미도', '6초 동안 매초 아군 병력 1.5% 회복', { k: 'hot', pctPerSec: 1.5, sec: 6 }), passive: p('healBoost', '오두미도', '회복량 +10%', { value: 0.1 }) },
+  'han-sui': { faction: '군웅', type: '수호', mult: 1, active: a('서량 연합', '아군 받는 피해 −15% 6초', { k: 'buff', id: 'dr-up', sec: 6, value: 0.15 }), passive: p('lowTroopDr', '구곡황하', '아군 병력 50% 이하일 때 받는 피해 −15%', { value: 0.15 }) },
+  'gao-shun': { faction: '군웅', type: '돌격', mult: 1, active: a('함진영', '사기 피해, 적의 피해 감소 효과 무시', { k: 'ignoreDr' }), passive: p('highTroopDr', '함진영', '병력 70% 이상일 때 받는 피해 −10%', { value: 0.1 }) },
   'song-xian': { faction: '군웅', type: '통솔', mult: 1, active: a('적토 헌상', '아군 기병 1명 쿨다운 −2초', { k: 'allyCd', sec: 2, scope: 'cavalry' }) },
 
   // ── 황건적 ──
   'zhang-jiao': { faction: '군웅', type: '계략', mult: 1, active: a('태평요술', '혼란 5초 + 공포 4초 + 전술 게이지 +15', { k: 'debuff', id: 'confusion', sec: 5 }, { k: 'debuff', id: 'fear', sec: 4 }, { k: 'gauge', n: 15 }), passive: p('yellowSky', '창천이사', '편성한 황건 무장 1명당 위력 +8%', { value: 0.08 }), awaken: a('황천당립', '아군 공격 +15% 6초 + 위협도 −15', { k: 'buff', id: 'atk-up', sec: 6, value: 0.15 }, { k: 'threat', n: -15 }), weakness: { id: 'frail10', desc: '최대 병력 −10% (병사)' } },
-  'zhang-bo': { faction: '군웅', type: '계략', mult: 1, active: a('부적 계략', '혼란 5초 + 표적 낙인 6초', { k: 'debuff', id: 'confusion', sec: 5 }, { k: 'debuff', id: 'mark', sec: 6 }), passive: p('shortDebuff', '부적 수호', '아군 상태이상 지속 −1초', { value: 1 }) },
-  'zhang-liang': { faction: '군웅', type: '수호', mult: 1, active: a('황건 선봉', '아군 받는 피해 −20% 6초 + 위협도 −10', { k: 'buff', id: 'dr-up', sec: 6, value: 0.2 }, { k: 'threat', n: -10 }), passive: p('highTroopDr', '인공장군', '병력 70% 이상일 때 받는 피해 −10%', { value: 0.1 }) },
-  'guan-hai': { faction: '군웅', type: '돌격', mult: 1, active: a('백파 격돌', '사기 피해 + 갑주 균열 4초', { k: 'debuff', id: 'armor-break', sec: 4 }), passive: p('lowTroopAtk', '북해 포위', '병력 50% 이하면 공격 +15%', { value: 0.15 }) },
-  'zhou-cang': { faction: '군웅', type: '돌격', mult: 1, active: a('황건 추격', '사기 피해 + 출혈 5초', { k: 'debuff', id: 'bleed', sec: 5 }), passive: p('partnerAtk', '청룡도 수행', '관우와 편성 시 공격 +15%', { partner: 'guan-yu', value: 0.15 }) },
+  'zhang-bo': { faction: '군웅', type: '계략', mult: 1, active: a('부적 계략', '혼란 5초 + 표적 낙인 6초', { k: 'debuff', id: 'confusion', sec: 5 }, { k: 'debuff', id: 'mark', sec: 6 }) },
+  'zhang-liang': { faction: '군웅', type: '수호', mult: 1, active: a('황건 선봉', '아군 받는 피해 −20% 6초 + 위협도 −10', { k: 'buff', id: 'dr-up', sec: 6, value: 0.2 }, { k: 'threat', n: -10 }) },
+  'guan-hai': { faction: '군웅', type: '돌격', mult: 1, active: a('백파 격돌', '사기 피해 + 갑주 균열 4초', { k: 'debuff', id: 'armor-break', sec: 4 }) },
+  'zhou-cang': { faction: '군웅', type: '돌격', mult: 1, active: a('황건 추격', '사기 피해 + 출혈 5초', { k: 'debuff', id: 'bleed', sec: 5 }) },
 }
 
 /** 인연: 하나만 적용되며 여러 개가 성립하면 위에 있는 것이 우선. */
@@ -203,7 +203,6 @@ export function skillCooldownFor(general: SkillGrowthInput, base?: Pick<SkillGro
   const cut = Math.min(0.15, Math.max(0, (speed - 50) / 400))
   let cooldown = meta.cooldown * (1 - cut) - 0.5 * (starRank(general) - 1)
   if (def.weakness?.id === 'indecisive') cooldown += 2
-  if (general.grade === 5 && starRank(general) >= 5 && general.id === 'guo-jia') cooldown -= 3
   return Math.max(SKILL_MIN_COOLDOWN, Math.round(cooldown * 10) / 10)
 }
 
