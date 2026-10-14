@@ -5,7 +5,7 @@ import { templateGeneral } from './strategy'
 import { BATTLE_EFFECTS, effectValue, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId, type BuffId, type DebuffId, type PlayerDebuffId } from './battle-effects'
 import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, SKILL_MORALE_CAP, SKILL_TYPE_META, baseMoraleDamage, bondFor, mainStatGrowth, isAwakened, skillCooldownFor, skillDefFor, type BondDef, type GeneralSkillDef, type SkillFx, type SkillType } from './skills'
 
-export type BattleMode = 'normal' | 'scenario' | 'siege' | 'duel'
+export type BattleMode = 'normal' | 'scenario' | 'siege' | 'duel' | 'raid'
 export type BattleTactic = 'guard' | 'feint' | 'charge'
 export type Side = 'player' | 'enemy'
 
@@ -66,6 +66,8 @@ export const BATTLE_RULES = {
    * 유저 대련 보정: 상대 덱은 AI가 움직여 예고 대응·연계·전술을 못 쓰므로, 같은 전력이면 내가 거의 늘 이긴다(시뮬레이션: 전력 2배도 대부분 승리).
    * 상대 사기 최대치·피해·스킬 빈도를 올려 같은 전력이면 승률 약 60%가 되게 맞춘다.
    */
+  /** 레이드: 3막 사기를 무너뜨릴 때마다 보스 최대 병력의 이 비율만큼 피해 보너스 */
+  raidBreakBonus: 0.15,
   duelMorale: 1.6,
   duelDamage: 1.7,
   duelSkillCooldown: 0.8,
@@ -139,7 +141,9 @@ export type CoreEvent =
 
 export interface BattleResult {
   won: boolean
-  reason: 'morale' | 'wipe' | 'timeout' | 'troops' | 'collapse' | 'ratio'
+  reason: 'morale' | 'wipe' | 'timeout' | 'troops' | 'collapse' | 'ratio' | 'raid'
+  /** 레이드: 이 전투에서 보스에게 준 누적 피해 */
+  raidDamage?: number
   stars: number
   score: number
   durationMs: number
@@ -212,6 +216,10 @@ export class BattleCore {
   gauge = 0
   guardTimer = 0
   collapses = 0
+  /** 레이드: 보스에게 준 누적 병력 피해(보스 병력은 줄지 않는다) */
+  raidDamage = 0
+  /** 레이드: 사기를 무너뜨린 횟수(무너뜨릴 때마다 보스가 사기를 다시 세운다) */
+  raidBreaks = 0
   active = true
   result: BattleResult | null = null
   pattern: OpenPattern | null = null
@@ -484,7 +492,8 @@ export class BattleCore {
     const front = victim.lane === BATTLE_RULES.frontLane && !opts.ignoreDr ? BATTLE_RULES.frontDr + (this.isFrontTank(victim) ? BATTLE_RULES.frontTankDr : 0) : 0
     const legion = hasGearSet(victim, 'command') ? 1 - BATTLE_RULES.legionGuard : 1
     const amount = Math.max(1, Math.round(raw * (1 - front) * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken) * legion))
-    victim.troops = Math.max(0, victim.troops - amount)
+    if (this.mode === 'raid' && victim.side === 'enemy') this.raidDamage += amount
+    else victim.troops = Math.max(0, victim.troops - amount)
     const edgeValue = attacker ? matchup(attacker.general.role, victim.general.role) : 1
     this.events.push({ kind: 'hit', side: victim.side, lane: victim.lane, amount, source, ...(edgeValue > 1 ? { edge: 'adv' as const } : edgeValue < 1 ? { edge: 'dis' as const } : {}) })
     if (victim.side === 'enemy') this.drainMorale(amount / this.enemyMaxTotal * 100 * BATTLE_RULES.moraleDrainPerTroopPct)
@@ -1019,6 +1028,18 @@ export class BattleCore {
 
   private checkPhase(): void {
     if (this.morale > 0 || !this.active) return
+    if (this.phase >= 2 && this.mode === 'raid') {
+      // 레이드: 3막 사기를 무너뜨리면 보스가 사기를 다시 세우고(+15%씩), 그때마다 피해 보너스
+      this.raidBreaks += 1
+      const bonus = Math.round(this.enemyMaxTotal * BATTLE_RULES.raidBreakBonus)
+      this.raidDamage += bonus
+      this.moraleMax = Math.round((BATTLE_RULES.moraleByPhase[2] * this.moraleScale + this.moraleBonus) * (1 + 0.15 * this.raidBreaks))
+      this.morale = this.moraleMax
+      this.combo = 0
+      this.events.push({ kind: 'phase', phase: this.phase })
+      this.log(`보스 사기 붕괴 ${this.raidBreaks}회 · 피해 보너스 +${bonus.toLocaleString('ko-KR')} · 보스가 다시 전열을 세웁니다 (사기 ${this.moraleMax})`, 'jade')
+      return
+    }
     if (this.phase >= 2) return this.finish(true, 'morale')
     this.phase += 1
     const fracture = hasBattleEffect(this.debuffs, 'fracture') ? 0.85 : 1
@@ -1034,10 +1055,11 @@ export class BattleCore {
     if (!this.active) return
     const playerTroops = this.players.reduce((sum, unit) => sum + unit.troops, 0)
     const enemyTroops = this.enemies.reduce((sum, unit) => sum + unit.troops, 0)
-    if (enemyTroops <= 0) return this.finish(true, 'wipe')
+    if (enemyTroops <= 0 && this.mode !== 'raid') return this.finish(true, 'wipe')
     if (playerTroops <= 0) return this.finish(false, 'troops')
     if (this.collapses >= BATTLE_RULES.collapsesToLose) return this.finish(false, 'collapse')
     if (this.t >= BATTLE_RULES.timeLimit) {
+      if (this.mode === 'raid') return this.finish(true, 'raid')
       if (this.mode === 'duel') {
         const mine = playerTroops / Math.max(1, this.players.reduce((sum, unit) => sum + unit.maxTroops, 0))
         const theirs = enemyTroops / this.enemyMaxTotal
@@ -1058,9 +1080,9 @@ export class BattleCore {
     // 랭킹 점수는 시즌이 바뀔 때까지 기존 공식을 유지한다(병력은 2배가 되었으므로 절반으로 환산).
     const score = Math.max(0, Math.round(4200 + this.maxCombo * 240 + (100 - this.threat) * 18 + playerTroops / BATTLE_RULES.troopScale * 1.4
       + this.players.reduce((sum, unit) => sum + unit.general.level * 41 + unit.general.leadership + unit.general.martial + unit.general.stratagem + unit.general.speed, 0)))
-    this.result = { won, reason, stars, score, durationMs: Math.round(this.t * 1000), breaks: this.breaks, patterns: this.patternsSeen, maxCombo: this.maxCombo, troopRatio, collapses: this.collapses }
+    this.result = { won, reason, stars, score, durationMs: Math.round(this.t * 1000), breaks: this.breaks, patterns: this.patternsSeen, maxCombo: this.maxCombo, troopRatio, collapses: this.collapses, ...(this.mode === 'raid' ? { raidDamage: Math.round(this.raidDamage) } : {}) }
     this.events.push({ kind: 'end', result: this.result })
-    const why = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '제한 시간 종료 · 남은 병력 비율로 판정했습니다' }[reason]
+    const why = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '제한 시간 종료 · 남은 병력 비율로 판정했습니다', raid: `레이드 종료 · 누적 피해 ${Math.round(this.raidDamage).toLocaleString('ko-KR')}` }[reason]
     this.log(`${won ? '전투 승리' : '전투 패배'} · ${why}${won ? ` · 별 ${stars}개` : ''}`, won ? 'jade' : 'ember')
   }
 

@@ -9,7 +9,7 @@ import { REPEAT_BATTLE_DAILY_LIMIT } from '../../server/economy.mjs'
 const STORE_KEY = 'cheonharo.balance.config.v1'
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch))
 const pct = (value: number) => `${Math.round(value * 100)}%`
-const MODE_LABEL = { normal: '일반 전투', scenario: '시나리오', siege: '공성전', duel: '유저 대련' } as const
+const MODE_LABEL = { normal: '일반 전투', scenario: '시나리오', siege: '공성전', duel: '유저 대련', raid: '레이드' } as const
 const REASON_LABEL: Record<string, string> = { morale: '3막 돌파(승)', wipe: '적 전멸(승)', ratio: '병력 비율 판정', timeout: '90초 초과(패)', troops: '아군 전멸(패)', collapse: '전열 붕괴 2회(패)' }
 const ACCURACY = [[0, '무조작'], [0.5, '예고 50% 대응'], [0.7, '예고 70% 대응'], [0.9, '예고 90% 대응'], [1, '예고 100% 대응']] as const
 

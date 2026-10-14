@@ -7,7 +7,7 @@ export type IconName =
   | 'gold' | 'silver' | 'honor' | 'influence' | 'grain' | 'wood' | 'iron' | 'manuals' | 'mythic'
   // 메뉴
   | 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research'
-  | 'battle' | 'duel' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin' | 'balance'
+  | 'battle' | 'duel' | 'raid' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin' | 'balance'
 
 // 메뉴: 한 가지 굵기의 선 그림(금빛 한 색). 재화: 두 가지 색의 평면 그림 + 먹선. 광택·무지개 그라데이션은 쓰지 않는다.
 const LINE = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
@@ -57,6 +57,8 @@ const SYMBOLS: Record<IconName, string> = {
   battle: `<path d="M6 5l14.5 14.5M26 5L11.5 19.5M17.5 22.5l4-4M14.5 22.5l-4-4M21 22l4.5 4.5M11 22l-4.5 4.5" ${LINE}/>`,
   // 유저 대련: 마주 선 두 창
   duel: `<path d="M5 27L22 10M27 27L10 10M22 10l1-5 4-1-1 4zM10 10L9 5 5 4l1 4z" ${LINE}/>`,
+  // 레이드: 뿔 달린 투구(보스)
+  raid: `<path d="M8 15c0-5 3.6-8.5 8-8.5s8 3.5 8 8.5v6c0 3-2 5-4 5h-8c-2 0-4-2-4-5z" ${LINE}/><path d="M8 12L4 5l6 4M24 12l4-7-6 4M12 18h3M17 18h3M14 23h4" ${LINE}/>`,
   // 천하 랭킹: 단상
   rank: `<path d="M4 27h24M6.5 27v-7.5h6.5V27M13 27V13h6v14M19 27v-5.5h6.5V27" ${LINE}/><path d="M16 4.5l1.4 2.9 3.1.4-2.3 2.1.6 3.1L16 11.5 13.2 13l.6-3.1-2.3-2.1 3.1-.4z" ${LINE} stroke-width="1.6"/>`,
   // 진영 게시판: 방(榜)

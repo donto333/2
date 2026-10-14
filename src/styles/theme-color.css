@@ -1828,3 +1828,79 @@ body .duel-opponent { grid-template-columns: 42px 42px 1fr auto auto; }
 .equipment-preset .mini-action { padding: 5px 8px; font-size: 11px; }
 @media (max-width: 620px) { .equipment-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .equipment-preset-grid { grid-template-columns: 1fr; } }
 .equipment-manage { margin: 4px 0 8px; }
+/* 1·2·3군 편성 */
+.squad-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 12px; }
+.squad-tab { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid rgba(224, 177, 82, .28); border-radius: 8px; background: rgba(30, 18, 10, .6); color: var(--muted, #b9a58a); text-align: left; cursor: pointer; }
+.squad-tab strong { color: var(--white, #f6ead2); font-size: 15px; }
+.squad-tab span { font-size: 12px; }
+.squad-tab.is-active { border-color: var(--gold, #f2c46d); background: linear-gradient(120deg, rgba(120, 72, 28, .55), rgba(60, 34, 16, .6)); box-shadow: 0 0 0 1px rgba(242, 196, 109, .35) inset; }
+.squad-tab.is-active strong { color: var(--gold, #f2c46d); }
+.squad-tabs__note { grid-column: 1 / -1; margin: 0; color: var(--muted, #b9a58a); font-size: 12px; }
+.squad-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.squad-slot { display: grid; justify-items: center; gap: 6px; padding: 12px; border: 1px dashed rgba(224, 177, 82, .3); border-radius: 10px; text-align: center; }
+.squad-slot.is-filled { border-style: solid; border-color: var(--accent, rgba(224, 177, 82, .5)); }
+.squad-slot__lane { color: var(--gold, #f2c46d); font-size: 12px; }
+.squad-slot__portrait { width: 84px; height: 84px; }
+.squad-slot__empty { display: grid; place-items: center; width: 84px; height: 84px; border: 1px dashed rgba(224, 177, 82, .3); border-radius: 8px; color: var(--muted, #b9a58a); font-size: 12px; }
+.squad-slot strong { color: var(--white, #f6ead2); }
+.squad-slot small { color: var(--muted, #b9a58a); font-size: 11px; }
+.squad-bench { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.squad-bench-card { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid rgba(224, 177, 82, .2); border-left: 3px solid var(--accent, #c8a060); border-radius: 8px; background: rgba(30, 18, 10, .55); color: inherit; text-align: left; cursor: pointer; }
+.squad-bench-card:hover { border-color: rgba(242, 196, 109, .6); }
+.squad-bench-card__portrait { width: 48px; height: 48px; flex: 0 0 48px; }
+.squad-bench-card span { display: grid; gap: 2px; min-width: 0; }
+.squad-bench-card strong { color: var(--white, #f6ead2); font-size: 13px; }
+.squad-bench-card small { color: var(--muted, #b9a58a); font-size: 11px; }
+.squad-bench-card em { color: #8fd6a4; font-size: 11px; font-style: normal; }
+.squad-bench-card.is-assigned em { color: #f2c46d; }
+@media (max-width: 620px) { .squad-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; } .squad-slot { padding: 8px 4px; } .squad-slot__portrait, .squad-slot__empty { width: 64px; height: 64px; } .squad-tab { padding: 8px; } .squad-tab strong { font-size: 13px; } }
+/* 주간 레이드 */
+.pill--ember { color: #ffb39e; border: 1px solid rgba(255, 128, 102, .5); background: rgba(255, 128, 102, .12); }
+.raid-message { margin: -12px 0 14px; padding: 8px 12px; border: 1px solid rgba(242, 196, 109, .35); border-radius: 6px; color: #f2d9a0; font-size: 13px; }
+.raid-claim { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; padding: 14px 18px; border-color: rgba(242, 196, 109, .55); }
+.raid-claim strong { display: block; margin-top: 4px; color: var(--gold, #f2c46d); font-size: 18px; }
+.raid-claim small { color: var(--muted, #b9a58a); }
+.raid-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 16px; }
+.raid-main, .raid-side { display: grid; gap: 14px; align-content: start; }
+.raid-boss { padding: 18px 20px; border-color: rgba(255, 128, 102, .4); background: linear-gradient(140deg, rgba(70, 26, 18, .85), rgba(34, 16, 10, .78)); }
+.raid-boss__head { display: flex; justify-content: space-between; gap: 12px; }
+.raid-boss__head h2 { margin: 10px 0 4px; color: #ffe6d6; font: 650 26px Pretendard, sans-serif; letter-spacing: -.04em; }
+.raid-boss__head p { margin: 0; color: #d8b9a6; font-size: 13px; }
+.raid-boss__reset { text-align: right; }
+.raid-boss__reset small { display: block; color: var(--muted, #b9a58a); font-size: 12px; }
+.raid-boss__reset strong { color: #ffb39e; font-size: 18px; }
+.raid-boss__units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0 10px; }
+.raid-boss__unit { display: grid; justify-items: center; gap: 3px; padding: 10px 6px; border: 1px solid color-mix(in srgb, var(--accent), transparent 45%); border-radius: 10px; background: rgba(20, 8, 5, .45); text-align: center; }
+.raid-boss__portrait { width: 86px; height: 86px; }
+.raid-boss__unit span { color: #ffb39e; font-size: 11px; }
+.raid-boss__unit strong { color: #fff1e6; }
+.raid-boss__unit small { color: var(--gold, #f2c46d); font-size: 11px; }
+.raid-boss__note { margin: 0; color: #c9a998; font-size: 12px; line-height: 1.6; }
+.raid-start { display: flex; justify-content: space-between; gap: 16px; padding: 16px 20px; }
+.raid-squads { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 4px; }
+.raid-squads li { display: grid; grid-template-columns: 36px 1fr auto; gap: 8px; align-items: center; font-size: 13px; color: #e6d8bf; }
+.raid-squads li b { color: var(--gold, #f2c46d); }
+.raid-squads li em { font-style: normal; color: #8fd6a4; }
+.raid-squads li.is-empty { opacity: .55; }
+.raid-start__cta { display: grid; gap: 6px; justify-items: end; align-content: center; text-align: right; }
+.raid-start__cta strong { color: #fff1e6; font-size: 16px; }
+.raid-start__cta small { color: var(--muted, #b9a58a); font-size: 12px; }
+.raid-go { min-width: 170px; justify-content: center; font-size: 15px; }
+.raid-me { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 14px 18px; }
+.raid-me small { display: block; color: var(--muted, #b9a58a); font-size: 12px; }
+.raid-me strong { display: block; margin-top: 4px; color: var(--gold, #f2c46d); font-size: 18px; }
+.raid-rewards table { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 13px; }
+.raid-rewards td { padding: 6px 4px; border-bottom: 1px solid rgba(224, 177, 82, .14); color: #e6d8bf; }
+.raid-rewards td:first-child { color: var(--gold, #f2c46d); font-weight: 700; }
+.raid-rewards tr.is-me td { background: rgba(82, 224, 196, .1); }
+.raid-ranking { list-style: none; margin: 10px 0 0; padding: 0; max-height: 420px; overflow: auto; }
+.raid-ranking li { display: grid; grid-template-columns: 34px 1fr auto 36px; gap: 8px; align-items: center; padding: 6px 4px; border-bottom: 1px solid rgba(224, 177, 82, .12); font-size: 13px; }
+.raid-ranking li b { color: var(--gold, #f2c46d); }
+.raid-ranking li em { font-style: normal; color: #ffd9b8; font-weight: 700; }
+.raid-ranking li small { color: var(--muted, #b9a58a); text-align: right; }
+.raid-ranking li.is-me { background: rgba(82, 224, 196, .12); }
+.bt-raid-damage { color: #ffb39e; }
+.bt-raid-damage b { color: #ffe0c8; }
+@media (max-width: 900px) { .raid-layout { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .raid-start { flex-direction: column; } .raid-start__cta { justify-items: stretch; text-align: left; } .raid-me { grid-template-columns: repeat(2, minmax(0, 1fr)); } .raid-boss__portrait { width: 64px; height: 64px; } .raid-boss__head { flex-direction: column; } .raid-boss__reset { text-align: left; } }
+.raid-side > .glass-card { padding: 16px 18px; }

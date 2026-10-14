@@ -56,9 +56,12 @@ import {
   type Faction,
 } from './game/strategy'
 import { applyCombo } from './game/formation-advice'
-import { StrategyUI, recordPurchase, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
+import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
+import { raidBossDeck } from './game/raid'
+import { RAID_DAILY_LIMIT, RAID_DEFAULT_LEVEL, raidDayKey, raidResetIn, raidWeekKey } from '../server/raid.mjs'
+import { autoEquipSquad, autoSquad, ensureSquads, packSquads, swapWithFirstSquad, toggleSquadMember } from './game/squads'
 import { applyEquipmentPreset, bulkDismantle, dismantleEquipment, packLoadouts, saveEquipmentPreset, toggleEquipmentLock, unpackLoadouts } from './game/equipment-manage'
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, duelTierFor, pickDuelMatches, type DuelTier } from '../server/duel-match.mjs'
 import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
@@ -150,6 +153,8 @@ function persistLocalGame(): void {
       equipmentInventory: state.equipmentInventory,
       equipmentLoadouts: state.equipmentLoadouts,
       equipmentPresets: state.equipmentPresets,
+      reserveSquads: state.reserveSquads,
+      raidLocal: state.raidLocal,
       selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
       mythicFragments: state.mythicFragments,
       mythicStones: state.mythicStones,
@@ -194,6 +199,8 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       equipmentInventory: saved.equipmentInventory,
       equipmentLoadouts: saved.equipmentLoadouts,
       equipmentPresets: saved.equipmentPresets,
+      reserveSquads: saved.reserveSquads,
+      raidLocal: saved.raidLocal,
       selectedEquipmentGeneralId: saved.selectedEquipmentGeneralId,
       mythicFragments: saved.mythicFragments,
       mythicStones: saved.mythicStones,
@@ -222,6 +229,9 @@ let saveRetryCount = 0
 let saveRevision = 0
 let authGeneration = 0
 let duelActive = false
+/** 진행 중인 레이드 도전: 1군 → 2군 → 3군 순서로 싸우고 피해를 모은다 */
+let raidRun: { token: string | null; weekKey: string; bossLevel: number; squads: string[][]; index: number; damages: number[] } | null = null
+let raidView: RaidView = { loading: false, info: null, ranking: [], message: '' }
 /** 대련 상대별 난이도와 지금 겨루는 상대의 난이도(승리 보상 조각 수) */
 const duelTiers = new Map<string, DuelTier>()
 let duelTier: DuelTier = 'normal'
@@ -246,6 +256,7 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   const normalizedTerritories = normalizeInitialSeasonTerritories(state)
   syncResearchRoster()
   ensureEquipmentState(state)
+  ensureSquads(state)
   // 회원의 일일 금화는 서버가 지급한다(serverGrant('daily')).
   const receivedDailyGold = mode === 'guest' ? ensurePrelaunchDailyGold(state) : false
   const migratedStarter = migrateLegacyStarterRoster(state)
@@ -269,12 +280,12 @@ function resetAccountSavePipeline(): void {
   localSaveDirty = false
 }
 
-function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
+function battleGenerals(ids: string[] = state.formation): NonNullable<ReturnType<typeof findGeneral>>[] {
   const mods = researchMods(state)
   // 전투 규칙에 연구(강병·지략) 보정을 함께 넘긴다
   arena?.setResearch(mods.battle)
   const boost = 1 + mods.formationStats // 천하 인재: 출전 무장 능력치 +3%
-  return state.formation.map(id => {
+  return ids.map(id => {
     const general = findGeneral(state, id)
     if (!general) return null
     const equipped = withEquipmentStats(general, equipmentBonus(state, id), fullEquipmentSets(equipmentSetCounts(state, id)))
@@ -297,6 +308,147 @@ function duelDeckFor(opponent: DuelOpponent): ReturnType<typeof allGenerals> {
   const seed = [...opponent.id].reduce((sum, character) => sum + character.charCodeAt(0), opponent.score)
   const deck = [0, 1, 2].map(index => catalog[(seed + index * 17) % catalog.length])
   return deck.map(general => scaleGeneral({ ...general, level: 1, stars: 1 }, Math.max(1, Math.min(30, Math.round(opponent.score / 1800) + (general.grade - 2))), Math.max(1, Math.min(5, general.stars))))
+}
+
+// ── 주간 레이드 ─────────────────────────────────────────────
+/** 레이드에 나갈 군(비어 있지 않은 1·2·3군) */
+function raidSquads(): string[][] {
+  ensureSquads(state)
+  return [state.formation, ...(state.reserveSquads ?? [])].map(list => list.filter(id => state.generals.some(general => general.id === id))).filter(list => list.length)
+}
+
+function localRaidInfo(): RaidInfoView {
+  const weekKey = raidWeekKey(), today = raidDayKey()
+  const local = state.raidLocal && state.raidLocal.weekKey === weekKey ? state.raidLocal : { dayKey: today, attempts: 0, weekKey, total: 0, best: 0 }
+  const used = local.dayKey === today ? local.attempts : 0
+  return { weekKey, bossLevel: RAID_DEFAULT_LEVEL, registered: 0, participants: 0, attemptsLeft: Math.max(0, RAID_DAILY_LIMIT - used), dailyLimit: RAID_DAILY_LIMIT, totalDamage: local.total, bestDamage: local.best, attempts: 0, rank: 0, lastWeek: null, offline: true, resetIn: raidResetIn() }
+}
+
+async function refreshRaid(): Promise<void> {
+  if (authView.status !== 'authenticated') {
+    raidView = { loading: false, info: localRaidInfo(), ranking: [], message: '게스트는 연습 모드입니다. 로그인하면 순위와 주간 보상이 기록됩니다.' }
+    ui.setRaidView(raidView)
+    return
+  }
+  raidView = { ...raidView, loading: true }
+  ui.setRaidView(raidView)
+  try {
+    const [info, ranking] = await Promise.all([
+      ManusAuth.query('raid.info') as Promise<Omit<RaidInfoView, 'offline' | 'resetIn'>>,
+      ManusAuth.query('raid.ranking', { limit: 100 }) as Promise<{ rows: RaidView['ranking'] }>,
+    ])
+    raidView = { loading: false, info: { ...info, offline: false, resetIn: raidResetIn() }, ranking: ranking.rows, message: '' }
+  } catch {
+    raidView = { loading: false, info: localRaidInfo(), ranking: [], message: '레이드 서버에 연결하지 못해 연습 모드로 보여 줍니다(기록·보상 없음).' }
+  }
+  ui.setRaidView(raidView)
+}
+
+function startRaidBattle(): void {
+  if (!raidRun) return
+  const ids = raidRun.squads[raidRun.index]
+  duelActive = false
+  scenarioActive = false
+  activeScenario = null
+  state.section = 'battle'
+  ui.setBattleAutoAvailable(false)
+  arena.setOpponentDeck(raidBossDeck(raidRun.bossLevel, raidRun.weekKey), 'raid')
+  arena.setGenerals(battleGenerals(ids))
+  arena.startBattle()
+  pendingTicket = null
+  ui.updateBattle(arena.getSnapshot())
+  ui.render(state)
+  ui.updateBattle(arena.getSnapshot())
+  ui.notify(`레이드 · ${['1군', '2군', '3군'][raidRun.index]} 출전 (${raidRun.index + 1}/${raidRun.squads.length}) · 90초 동안 최대한 피해를 주십시오.`)
+}
+
+async function beginRaid(): Promise<void> {
+  if (raidRun) return
+  const squads = raidSquads()
+  if (!squads.length) { ui.notify('출전 편성이 없습니다.', 'ember'); return }
+  const weekKey = raidWeekKey()
+  if (authView.status === 'authenticated' && !raidView.info?.offline) {
+    try {
+      // 서버는 저장된 1·2·3군 전력으로 피해 상한을 잡으므로 먼저 지금 편성을 저장한다
+      persistLocalGame()
+      await ManusAuth.mutate('account.saveGameState', accountStatePayload())
+      const started = await ManusAuth.mutate('raid.start') as { ok: boolean; reason?: string; token?: string; weekKey?: string; bossLevel?: number }
+      if (!started.ok || !started.token) { ui.notify(started.reason ?? '레이드를 시작하지 못했습니다.', 'ember'); void refreshRaid(); return }
+      raidRun = { token: started.token, weekKey: started.weekKey ?? weekKey, bossLevel: started.bossLevel ?? RAID_DEFAULT_LEVEL, squads, index: 0, damages: [] }
+    } catch {
+      ui.notify('레이드 서버에 연결하지 못했습니다. 잠시 뒤 다시 시도하십시오.', 'ember')
+      return
+    }
+  } else {
+    const info = localRaidInfo()
+    if (info.attemptsLeft <= 0) { ui.notify('오늘 레이드 연습을 모두 했습니다(하루 3회).', 'ember'); return }
+    const today = raidDayKey()
+    const local = state.raidLocal && state.raidLocal.weekKey === weekKey ? state.raidLocal : { dayKey: today, attempts: 0, weekKey, total: 0, best: 0 }
+    state.raidLocal = { ...local, dayKey: today, attempts: (local.dayKey === today ? local.attempts : 0) + 1 }
+    persistLocalGame()
+    raidRun = { token: null, weekKey, bossLevel: RAID_DEFAULT_LEVEL, squads, index: 0, damages: [] }
+  }
+  startRaidBattle()
+}
+
+/** 한 군의 전투가 끝났을 때: 다음 군이 있으면 이어서, 없으면 합계를 기록 */
+function onRaidSquadEnd(result: { raidDamage?: number }): void {
+  if (!raidRun) return
+  const damage = Math.max(0, Math.round(result.raidDamage ?? 0))
+  raidRun.damages.push(damage)
+  const label = ['1군', '2군', '3군'][raidRun.index]
+  raidRun.index += 1
+  ui.updateBattle(arena.getSnapshot())
+  if (raidRun.index < raidRun.squads.length) {
+    ui.notify(`${label} 피해 ${damage.toLocaleString('ko-KR')} · 곧 ${['1군', '2군', '3군'][raidRun.index]}이 출전합니다`, 'jade')
+    window.setTimeout(() => startRaidBattle(), 1800)
+    return
+  }
+  void finishRaidRun()
+}
+
+async function finishRaidRun(): Promise<void> {
+  const run = raidRun
+  raidRun = null
+  if (!run) return
+  const total = run.damages.reduce((sum, value) => sum + value, 0)
+  const parts = run.damages.map((value, index) => `${['1군', '2군', '3군'][index]} ${value.toLocaleString('ko-KR')}`).join(' · ')
+  let message = `레이드 종료 · 합계 피해 ${total.toLocaleString('ko-KR')} (${parts})`
+  if (run.token) {
+    try {
+      const submitted = await ManusAuth.mutate('raid.submit', { token: run.token, damages: run.damages }) as { ok: boolean; reason?: string; added?: number; capped?: boolean; totalDamage?: number; rank?: number }
+      message = submitted.ok
+        ? `${message} · 이번 주 누적 ${(submitted.totalDamage ?? 0).toLocaleString('ko-KR')} · ${submitted.rank ?? '-'}위${submitted.capped ? ` · 상한 적용(${(submitted.added ?? 0).toLocaleString('ko-KR')})` : ''}`
+        : `${message} · 기록 실패: ${submitted.reason ?? ''}`
+    } catch {
+      message = `${message} · 서버 기록 실패(연결 끊김)`
+    }
+  } else if (state.raidLocal) {
+    state.raidLocal = { ...state.raidLocal, total: state.raidLocal.total + total, best: Math.max(state.raidLocal.best, total) }
+    persistLocalGame()
+    message = `${message} · 연습 기록(순위·보상 없음)`
+  }
+  mission('battleWin')
+  state.section = 'raid'
+  state.lastNotice = message
+  ui.render(state)
+  ui.notify(message, 'jade')
+  void refreshRaid()
+}
+
+async function claimRaidReward(): Promise<void> {
+  try {
+    const result = await ManusAuth.mutate('raid.claim') as { ok: boolean; reason?: string; rank?: number; gold: number; stones: number }
+    if (!result.ok) { ui.notify(result.reason ?? '받을 보상이 없습니다.', 'ember'); return }
+    state.gold += result.gold
+    state.mythicStones += result.stones
+    queueAccountSave(true)
+    ui.render(state)
+    ui.notify(`지난주 레이드 ${result.rank}위 보상 · 금화 +${result.gold}${result.stones ? ` · 낙양 강화석 +${result.stones}` : ''} (서버 지급)`, 'jade')
+    void refreshRaid()
+  } catch {
+    ui.notify('보상을 받지 못했습니다. 잠시 뒤 다시 시도하십시오.', 'ember')
+  }
 }
 
 function siegeDeckFor(cityId: string): ReturnType<typeof allGenerals> {
@@ -656,6 +808,7 @@ function openSection(section: Section): void {
     installDummyDuelOpponents()
     void refreshDuelOpponents()
   }
+  if (section === 'raid') void refreshRaid()
   if (section === 'board') void refreshBoard()
   if (section === 'territory') void refreshCityDamageRankings(state.selectedCityId)
   ui.render(state)
@@ -767,6 +920,34 @@ const ui = new StrategyUI(root, {
   onEquipmentEquip: (generalId, itemId) => {
     const result = equipEquipment(state, generalId, itemId)
     if (result.ok) queueAccountSave(true)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+  },
+  onRaidStart: () => { void beginRaid() },
+  onRaidRefresh: () => { void refreshRaid() },
+  onRaidClaim: () => { void claimRaidReward() },
+  onSquadToggle: (squad, id) => {
+    const result = toggleSquadMember(state, squad, id)
+    if (result.ok) { arena.setGenerals(battleGenerals()); queueAccountSave() }
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+  },
+  onSquadAuto: (squad, withEquipment) => {
+    const result = autoSquad(state, squad)
+    const equipped = withEquipment && result.ok ? autoEquipSquad(state, squad) : null
+    if (result.ok) queueAccountSave()
+    ui.render(state)
+    ui.notify(equipped?.ok ? `${result.message} · ${equipped.message}` : result.message, result.ok ? 'jade' : 'ember')
+  },
+  onSquadEquip: squad => {
+    const result = autoEquipSquad(state, squad)
+    if (result.ok) queueAccountSave(true)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+  },
+  onSquadSwap: squad => {
+    const result = swapWithFirstSquad(state, squad)
+    if (result.ok) { arena.setGenerals(battleGenerals()); queueAccountSave() }
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
   },
@@ -1091,6 +1272,7 @@ const ui = new StrategyUI(root, {
       ensureCityRoster(state)
       syncResearchRoster()
       ensureEquipmentState(state)
+      ensureSquads(state)
       localSaveDirty = false
       authView = { status: session.status, name: session.user?.name ?? null }
       accountView = null
@@ -1181,6 +1363,7 @@ arena = new Arena(canvas, {
   onEvent: message => { if (window.innerWidth <= 760) ui.notify(message) },
   onSkillCast: info => ui.showSkillCutIn(info),
   onBattleEnd: result => {
+    if (raidRun && result.mode === 'raid') { onRaidSquadEnd(result); return }
     state.battleScore = Math.max(state.battleScore, result.score)
     const siege = pendingSiege
     const wasSiege = Boolean(siege)
@@ -1431,7 +1614,7 @@ async function refreshAccount(): Promise<void> {
   const requestGeneration = authGeneration
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; mythicStones?: number; missions?: StrategyState['missions'] | null; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; mythicStones?: number; missions?: StrategyState['missions'] | null; reserveSquads?: string[][] | null; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null }
     // 계정이 바뀐 동안 도착한 이전 계정 응답은 현재 상태에 적용하지 않는다.
     if (requestGeneration !== authGeneration || authView.status !== 'authenticated') return
     {
@@ -1454,6 +1637,7 @@ async function refreshAccount(): Promise<void> {
       state.luoyangRewardWeekKey = game.luoyangRewardWeekKey ?? undefined
       state.factionWarScore = game.factionWarScore ?? 0
       if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
+      if (Array.isArray(game.reserveSquads)) state.reserveSquads = game.reserveSquads
       if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') {
         // 장비 프리셋은 장착 정보 JSON 안에 함께 저장된다
         const unpacked = unpackLoadouts(game.equipmentLoadouts)
@@ -1540,6 +1724,7 @@ function accountStatePayload() {
     prelaunchGoldDayKey: state.prelaunchGoldDayKey,
     scenarioData: JSON.stringify(state.scenarioCleared),
     missionData: JSON.stringify(ensureMissions(state)),
+    squadData: JSON.stringify(packSquads(state)),
   }
 }
 

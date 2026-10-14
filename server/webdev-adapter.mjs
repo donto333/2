@@ -1,6 +1,8 @@
 import { createRequire as createCityRoutesRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from "./duel-match.mjs";
 import { neutralRaidPower, resolveNeutralRaid } from './neutral-raid.mjs';
+import { RAID_DAILY_LIMIT, RAID_SQUADS, previousRaidWeekKey, raidBossLevel, raidDamageCap, raidDayKey, raidRewardFor, raidWeekKey } from "./raid.mjs";
 const cityRoutes = createCityRoutesRequire(import.meta.url)('./city-routes.json');
 // starters/web-db-user-v1/shared/const.ts
 var COOKIE_NAME = "webdev_app_session";
@@ -86,7 +88,8 @@ var gameAccountStates = mysqlTable("game_account_states", {
   incomeCollectedAt: varchar("incomeCollectedAt", { length: 32 }),
   conquestAt: varchar("conquestAt", { length: 32 }),
   scenarioData: mediumtext("scenarioData"),
-  missionData: mediumtext("missionData")
+  missionData: mediumtext("missionData"),
+  squadData: mediumtext("squadData")
 });
 var factionTerritoryStates = mysqlTable("faction_territory_states", {
   cityId: varchar("cityId", { length: 64 }).primaryKey(),
@@ -124,6 +127,21 @@ var neutralAiBattleLogs = mysqlTable("neutral_ai_battle_logs", {
   damage: int("damage").default(0).notNull(),
   note: text("note").notNull()
 });
+var raidWeeklyScores = mysqlTable("raid_weekly_scores", {
+  weekKey: varchar("weekKey", { length: 16 }).notNull(),
+  userId: int("userId").notNull(),
+  displayName: varchar("displayName", { length: 128 }).default("").notNull(),
+  totalDamage: bigint("totalDamage", { mode: "number" }).default(0).notNull(),
+  bestDamage: bigint("bestDamage", { mode: "number" }).default(0).notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  dayKey: varchar("dayKey", { length: 16 }),
+  dayAttempts: int("dayAttempts").default(0).notNull(),
+  pendingToken: varchar("pendingToken", { length: 64 }),
+  /** 진행 중 도전의 피해 상한(도전 시작 때 저장된 1·2·3군 전력으로 계산) */
+  pendingPower: int("pendingPower").default(0).notNull(),
+  rewardClaimed: int("rewardClaimed").default(0).notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull()
+}, table => ({ pk: primaryKey({ columns: [table.weekKey, table.userId] }) }));
 var luoyangWeeklyResults = mysqlTable("luoyang_weekly_results", {
   weekKey: varchar("weekKey", { length: 16 }).primaryKey(),
   winnerFaction: mysqlEnum("winnerFaction", ["촉한", "위나라", "오나라"]),
@@ -321,7 +339,7 @@ function parseStateJson(value) {
   }
 }
 function gameStateView(row) {
-  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, missionData, grantLedger: _grantLedger, ...base } = row;
+  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, missionData, squadData, grantLedger: _grantLedger, ...base } = row;
   return {
     ...base,
     generals: parseStateJson(generalData),
@@ -332,6 +350,7 @@ function gameStateView(row) {
     equipmentLoadouts: parseStateJson(equipmentLoadoutsData),
     scenarioCleared: parseStateJson(scenarioData),
     missions: parseStateJson(missionData),
+    reserveSquads: parseStateJson(squadData),
     selectedEquipmentGeneralId: row.selectedEquipmentGeneralId ?? null,
     selectedCityId: row.selectedCityId ?? null,
     lastIncomeCollectedAt: row.incomeCollectedAt ? Number(row.incomeCollectedAt) : undefined,
@@ -682,6 +701,121 @@ async function listDuelOpponents(viewerId, limit = 12, power) {
   const registered = decks.length;
   if (registered < DUEL_USER_THRESHOLD) return { mode: "dummy", registered, threshold: DUEL_USER_THRESHOLD, opponents: [] };
   return { mode: "users", registered, threshold: DUEL_USER_THRESHOLD, opponents: pickDuelMatches(others, power, Math.max(1, Math.min(DUEL_MATCH_COUNT, limit))) };
+}
+// ── 주간 레이드 ─────────────────────────────────────────────
+/** 저장된 1·2·3군 덱(서버 저장 능력치 기준) */
+function savedSquadDecks(account) {
+  const generals = parseStateJson(account.generalData);
+  const formation = parseStateJson(account.formationData);
+  const reserves = parseStateJson(account.squadData);
+  if (!Array.isArray(generals)) return [];
+  const byId = new Map(generals.filter(general => general && typeof general.id === "string").map(general => [general.id, general]));
+  const lists = [Array.isArray(formation) ? formation : [], ...(Array.isArray(reserves) ? reserves : [])].slice(0, RAID_SQUADS);
+  const seen = new Set();
+  return lists.map(list => (Array.isArray(list) ? list : []).slice(0, 3).filter(id => typeof id === "string" && !seen.has(id) && seen.add(id)).map(id => byId.get(id)).filter(Boolean));
+}
+let raidLevelCache = { at: 0, weekKey: "", level: 0, registered: 0 };
+/** 보스 레벨: 덱 저장 지휘관 20명 이하면 Lv30, 아니면 전력 상위 300명 1군 평균 레벨(10분 캐시) */
+async function currentRaidBossLevel(now = Date.now()) {
+  const weekKey = raidWeekKey(now);
+  if (raidLevelCache.weekKey === weekKey && now - raidLevelCache.at < 10 * 60 * 1000) return raidLevelCache;
+  const accounts = await listGameStates();
+  const decks = accounts.map(account => savedSquadDecks(account)[0] ?? []).filter(deck => deck.length);
+  const ranked = decks.map(deck => ({ power: duelDeckPower(deck), level: deck.reduce((sum, general) => sum + (Number(general.level) || 1), 0) / deck.length })).sort((left, right) => right.power - left.power);
+  raidLevelCache = { at: now, weekKey, level: raidBossLevel(ranked.map(entry => entry.level)), registered: ranked.length };
+  return raidLevelCache;
+}
+async function raidRow(db, weekKey, userId) {
+  const rows = await db.select().from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${userId}`).limit(1);
+  return rows[0] ?? null;
+}
+async function raidRankOf(db, weekKey, totalDamage) {
+  if (!(totalDamage > 0)) return 0;
+  const rows = await db.select({ count: sql`COUNT(*)` }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > ${totalDamage}`);
+  return Number(rows[0]?.count ?? 0) + 1;
+}
+async function getRaidInfo(userId, now = Date.now()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const weekKey = raidWeekKey(now), lastWeekKey = previousRaidWeekKey(now), today = raidDayKey(now);
+  const boss = await currentRaidBossLevel(now);
+  const mine = await raidRow(db, weekKey, userId);
+  const last = await raidRow(db, lastWeekKey, userId);
+  const lastRank = last ? await raidRankOf(db, lastWeekKey, Number(last.totalDamage)) : 0;
+  const participants = await db.select({ count: sql`COUNT(*)` }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > 0`);
+  const usedToday = mine && mine.dayKey === today ? Number(mine.dayAttempts) || 0 : 0;
+  return {
+    weekKey, bossLevel: boss.level, registered: boss.registered, participants: Number(participants[0]?.count ?? 0),
+    attemptsLeft: Math.max(0, RAID_DAILY_LIMIT - usedToday), dailyLimit: RAID_DAILY_LIMIT,
+    totalDamage: Number(mine?.totalDamage ?? 0), bestDamage: Number(mine?.bestDamage ?? 0), attempts: Number(mine?.attempts ?? 0),
+    rank: mine ? await raidRankOf(db, weekKey, Number(mine.totalDamage)) : 0,
+    lastWeek: last && Number(last.totalDamage) > 0 ? { weekKey: lastWeekKey, totalDamage: Number(last.totalDamage), rank: lastRank, reward: raidRewardFor(lastRank), claimed: Boolean(last.rewardClaimed) } : null,
+  };
+}
+/** 도전 시작: 하루 3회 확인, 도전권 토큰과 피해 상한(1·2·3군 저장 전력) 기록 */
+async function startRaid(user, now = Date.now()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const weekKey = raidWeekKey(now), today = raidDayKey(now);
+  const boss = await currentRaidBossLevel(now);
+  const states = await db.select().from(gameAccountStates).where(eq(gameAccountStates.userId, user.id)).limit(1);
+  const squads = states[0] ? savedSquadDecks(states[0]) : [];
+  const cap = squads.reduce((sum, deck) => sum + raidDamageCap(duelDeckPower(deck)), 0);
+  if (!cap) return { ok: false, reason: "저장된 출전 편성이 없습니다. 편성을 저장한 뒤 다시 도전하십시오." };
+  return db.transaction(async tx => {
+    await tx.insert(raidWeeklyScores).values({ weekKey, userId: user.id, displayName: user.name || `지휘관 ${user.id}` }).onDuplicateKeyUpdate({ set: { displayName: user.name || `지휘관 ${user.id}` } });
+    const rows = await tx.select().from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${user.id}`).limit(1).for("update");
+    const row = rows[0];
+    const used = row.dayKey === today ? Number(row.dayAttempts) || 0 : 0;
+    if (used >= RAID_DAILY_LIMIT) return { ok: false, reason: "오늘 레이드 도전을 모두 사용했습니다(하루 3회)." };
+    const token = randomUUID();
+    await tx.update(raidWeeklyScores).set({ dayKey: today, dayAttempts: used + 1, pendingToken: token, pendingPower: Math.min(2000000000, cap) }).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${user.id}`);
+    return { ok: true, token, weekKey, bossLevel: boss.level, attemptsLeft: RAID_DAILY_LIMIT - used - 1 };
+  });
+}
+/** 결과 제출: 1·2·3군 피해 합계를 상한(A안)으로 자른 뒤 이번 주 누적에 더한다 */
+async function submitRaid(userId, input, now = Date.now()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const weekKey = raidWeekKey(now);
+  const result = await db.transaction(async tx => {
+    const rows = await tx.select().from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${userId}`).limit(1).for("update");
+    const row = rows[0];
+    if (!row || !row.pendingToken || row.pendingToken !== input.token) return { ok: false, reason: "도전 정보가 맞지 않습니다(주차가 바뀌었거나 이미 제출했습니다)." };
+    const claimed = input.damages.slice(0, RAID_SQUADS).reduce((sum, value) => sum + Math.max(0, Math.round(Number(value) || 0)), 0);
+    const cap = Number(row.pendingPower) || 0;
+    const added = Math.min(claimed, cap);
+    const total = Number(row.totalDamage) + added;
+    await tx.update(raidWeeklyScores).set({ totalDamage: total, bestDamage: Math.max(Number(row.bestDamage), added), attempts: Number(row.attempts) + 1, pendingToken: null, pendingPower: 0 }).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${userId}`);
+    if (claimed > cap) console.warn(`[raid] user ${userId} damage ${claimed} capped to ${cap} (${weekKey})`);
+    return { ok: true, added, capped: claimed > cap, totalDamage: total };
+  });
+  if (!result.ok) return result;
+  return { ...result, rank: await raidRankOf(db, weekKey, result.totalDamage) };
+}
+async function getRaidRanking(userId, limit = 100, now = Date.now()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const weekKey = raidWeekKey(now);
+  const rows = await db.select({ userId: raidWeeklyScores.userId, displayName: raidWeeklyScores.displayName, totalDamage: raidWeeklyScores.totalDamage, attempts: raidWeeklyScores.attempts }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > 0`).orderBy(desc(raidWeeklyScores.totalDamage), asc(raidWeeklyScores.updatedAt)).limit(Math.max(1, Math.min(100, limit)));
+  return { weekKey, rows: rows.map((row, index) => ({ rank: index + 1, displayName: row.displayName, totalDamage: Number(row.totalDamage), attempts: Number(row.attempts), isMe: row.userId === userId })) };
+}
+/** 지난주 순위 보상 받기(금화·낙양 강화석은 서버 원장에 바로 더한다) */
+async function claimRaidReward(userId, now = Date.now()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const weekKey = previousRaidWeekKey(now);
+  return db.transaction(async tx => {
+    const rows = await tx.select().from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${userId}`).limit(1).for("update");
+    const row = rows[0];
+    if (!row || !(Number(row.totalDamage) > 0)) return { ok: false, reason: "지난주 레이드 기록이 없습니다.", gold: 0, stones: 0 };
+    if (row.rewardClaimed) return { ok: false, reason: "지난주 레이드 보상을 이미 받았습니다.", gold: 0, stones: 0 };
+    const rank = await raidRankOf(tx, weekKey, Number(row.totalDamage));
+    const reward = raidRewardFor(rank);
+    await tx.update(raidWeeklyScores).set({ rewardClaimed: 1 }).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${userId}`);
+    await tx.update(gameAccountStates).set({ gold: sql`${gameAccountStates.gold} + ${reward.gold}`, mythicStones: sql`${gameAccountStates.mythicStones} + ${reward.stones}` }).where(eq(gameAccountStates.userId, userId));
+    return { ok: true, rank, gold: reward.gold, stones: reward.stones, weekKey };
+  });
 }
 // 금화·신화 조각·낙양 강화석은 서버 원장이 기준이다.
 // 클라이언트 저장은 이 값을 "줄이는" 것(사용)만 할 수 있고, 늘리는 것은 grantCurrency·낙양 보상만 한다.
@@ -1281,6 +1415,11 @@ export {
   getLuoyangHistory,
   grantCurrency,
   listDuelOpponents,
+  getRaidInfo,
+  startRaid,
+  submitRaid,
+  getRaidRanking,
+  claimRaidReward,
   listGameStates,
   listUsers,
   protectedProcedure,

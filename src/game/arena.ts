@@ -59,6 +59,8 @@ export interface BattlePatternStatus {
 export interface BattleSnapshot {
   active: boolean
   mode: BattleMode
+  /** 레이드: 이번 전투 누적 피해 */
+  raidDamage?: number
   elapsed: number
   timeLeft: number
   /** 이번 막 적 사기 % (0~100) */
@@ -1319,7 +1321,7 @@ export class Arena {
   }
 
   private difficultyLabel(): string {
-    return { normal: '일반 전투', scenario: '시나리오', siege: '공성전', duel: '유저 대련' }[this.mode]
+    return { normal: '일반 전투', scenario: '시나리오', siege: '공성전', duel: '유저 대련', raid: '레이드' }[this.mode]
   }
 
   getSnapshot(): BattleSnapshot {
@@ -1348,6 +1350,7 @@ export class Arena {
     const moraleMax = core?.moraleMax ?? BATTLE_RULES.moraleByPhase[0]
     const moraleValue = Math.max(0, core?.morale ?? moraleMax)
     return {
+      raidDamage: Math.round(core?.raidDamage ?? 0),
       active: this.battleActive,
       mode: this.mode,
       elapsed,

@@ -1,4 +1,7 @@
 import { OFFICIAL_LAUNCH } from '../../server/launch.mjs'
+import { SQUAD_LABELS, squadIds, squadOf, squadPower } from '../game/squads'
+import { raidBossDeck, raidBossFor } from '../game/raid'
+import { RAID_REWARDS, raidWeekKey } from '../../server/raid.mjs'
 import { EQUIPMENT_PRESET_SLOTS, EQUIPMENT_STORAGE_WARN, bulkDismantlePreview, dismantlableCount, dismantleYield, equipmentOwners } from '../game/equipment-manage'
 import { TUTORIAL_REWARD, TUTORIAL_STEPS, nextTutorialStep, tutorialFinished, DAILY_BONUS, DAILY_BONUS_ID, MISSIONS, dailyBonusReady, ensureMissions, missionStatus, rewardText, type MissionDef } from '../game/missions'
 import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResource } from '../game/shop'
@@ -162,6 +165,29 @@ export interface CityDamageRanking {
   updatedAt: string | Date
 }
 
+export interface RaidInfoView {
+  weekKey: string
+  bossLevel: number
+  registered: number
+  participants: number
+  attemptsLeft: number
+  dailyLimit: number
+  totalDamage: number
+  bestDamage: number
+  attempts: number
+  rank: number
+  lastWeek: { weekKey: string; totalDamage: number; rank: number; reward: { gold: number; stones: number }; claimed: boolean } | null
+  /** 게스트·서버 연결 실패: 연습 모드 */
+  offline: boolean
+  resetIn: number
+}
+export interface RaidView {
+  loading: boolean
+  info: RaidInfoView | null
+  ranking: Array<{ rank: number; displayName: string; totalDamage: number; attempts: number; isMe: boolean }>
+  message: string
+}
+
 export interface DuelOpponent {
   id: string
   displayName: string
@@ -193,6 +219,13 @@ export interface StrategyUiCallbacks {
   onEquipmentEquip: (generalId: string, itemId: string) => void
   onEquipmentUnequip: (generalId: string, type: EquipmentType) => void
   onEquipmentLock: (id: string) => void
+  onSquadToggle: (squad: number, id: string) => void
+  onRaidStart: () => void
+  onRaidRefresh: () => void
+  onRaidClaim: () => void
+  onSquadAuto: (squad: number, withEquipment: boolean) => void
+  onSquadEquip: (squad: number) => void
+  onSquadSwap: (squad: number) => void
   onEquipmentDismantle: (id: string, count: number) => void
   onEquipmentBulkDismantle: (grade: 'normal' | 'rare' | 'unique') => void
   onEquipmentPreset: (generalId: string, slot: number, mode: 'save' | 'apply') => void
@@ -265,6 +298,7 @@ export class StrategyUI {
   private boardPosts: BoardPost[] = []
   private boardTab: BoardPost['board'] = '전체'
   private duelOpponents: DuelOpponent[] = []
+  private raidView: RaidView = { loading: false, info: null, ranking: [], message: '' }
   private duelMyPower = 0
   private latestBattle: BattleSnapshot | null = null
   private cutInBusyUntil = 0
@@ -293,6 +327,8 @@ export class StrategyUI {
   private codexQuery = ''
   private formationSort: FormationSort = 'power'
   private formationSortDescending = true
+  /** 편성 화면에서 보는 군(0=1군, 1=2군, 2=3군) */
+  private formationSquad = 0
   /** 추천 덱을 볼 무장(없으면 출전 첫 무장) */
   private comboAnchorId: string | null = null
   private comboCache = new Map<string, ComboAdvice[]>()
@@ -601,6 +637,11 @@ export class StrategyUI {
     if (this.renderedState?.section === 'board') this.render(this.renderedState)
   }
 
+  setRaidView(view: RaidView): void {
+    this.raidView = view
+    if (this.renderedState?.section === 'raid') this.render(this.renderedState)
+  }
+
   setDuelOpponents(opponents: DuelOpponent[], myPower = 0): void {
     this.duelOpponents = opponents
     this.duelMyPower = myPower
@@ -722,6 +763,7 @@ export class StrategyUI {
     const width = (selector: string, value: number) => { const node = q(selector); if (node) node.style.width = `${Math.max(0, Math.min(100, value))}%` }
     set('[data-bt-status]', snapshot.status)
     set('[data-bt-time]', snapshot.active || snapshot.result ? `남은 ${Math.ceil(snapshot.timeLeft)}초` : '제한 90초')
+    if (snapshot.mode === 'raid') set('[data-bt-raid]', formatNumber(snapshot.raidDamage ?? 0))
     q('[data-bt-time]')?.classList.toggle('is-urgent', snapshot.active && snapshot.timeLeft <= 20)
     set('[data-bt-phase]', `${snapshot.phaseName}`)
     set('[data-bt-morale-text]', `적 사기 ${snapshot.moraleValue} / ${snapshot.moraleMax}`)
@@ -835,7 +877,7 @@ export class StrategyUI {
 
   showBattleResult(result: BattleResult, notice = '', factors: Array<{ label: string; text: string; tone: 'good' | 'bad' | 'neutral' }> = []): void {
     const stars = [1, 2, 3].map(index => `<i class="${index <= result.stars ? 'is-on' : ''}">★</i>`).join('')
-    const reason = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '남은 병력 비율로 판정했습니다' }[result.reason]
+    const reason = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '남은 병력 비율로 판정했습니다', raid: `레이드 종료 · 누적 피해 ${(result.raidDamage ?? 0).toLocaleString('ko-KR')}` }[result.reason]
     const rows = [
       ['예고 파훼', `${result.breaks} / ${result.patterns}`],
       ['최대 연계', String(result.maxCombo)],
@@ -888,6 +930,7 @@ export class StrategyUI {
           ${this.navGroup('전투')}
           ${this.navButton('battle', icon('battle'), '시나리오', state.section)}
           ${this.navButton('duel', icon('duel'), '유저 대련', state.section, `${duelAttemptsRemaining(state)}/5`)}
+          ${this.navButton('raid', icon('raid'), '주간 레이드', state.section, this.raidView.info ? `${this.raidView.info.attemptsLeft}/${this.raidView.info.dailyLimit}` : '')}
           ${this.navButton('rank', icon('rank'), '천하 랭킹', state.section)}
           ${this.navGroup('소통')}
           ${this.navButton('board', icon('board'), '진영 게시판', state.section)}
@@ -937,6 +980,7 @@ export class StrategyUI {
     if (state.section === 'research') return this.researchSection(state)
     if (state.section === 'battle') return this.battleViewActive ? this.battleSection(state) : this.scenarioSection(state)
     if (state.section === 'duel') return this.duelSection(state)
+    if (state.section === 'raid') return this.raidSection(state)
     if (state.section === 'shop') return this.shopSection(state)
     if (state.section === 'rank') return this.rankSection(state)
     if (state.section === 'board') return this.boardSection(state)
@@ -1114,10 +1158,36 @@ export class StrategyUI {
   }
 
 
+  /** 1·2·3군 탭 */
+  private squadTabs(state: StrategyState): string {
+    return `<div class="squad-tabs" role="tablist">${SQUAD_LABELS.map((label, index) => { const count = squadIds(state, index).length; return `<button class="squad-tab ${this.formationSquad === index ? 'is-active' : ''}" role="tab" aria-selected="${this.formationSquad === index}" data-action="squad-tab" data-squad="${index}"><strong>${label}</strong><span>${count}/3 · ${formatNumber(squadPower(state, index))}</span></button>` }).join('')}<p class="squad-tabs__note">2군·3군은 레이드에서 1군 다음으로 이어 싸웁니다. 한 무장은 한 군에만 설 수 있습니다.</p></div>`
+  }
+
+  /** 2군·3군 편성 화면 */
+  private reserveSquadSection(state: StrategyState, squad: number): string {
+    const ids = squadIds(state, squad)
+    const label = SQUAD_LABELS[squad]
+    const power = (general: General) => combatPower(general) + equipmentPowerForUi(state, general.id)
+    const slots = [0, 1, 2].map(index => {
+      const general = ids[index] ? state.generals.find(item => item.id === ids[index]) : undefined
+      const lane = ['↙ 좌측', '↑ 중앙 · 전열', '↘ 우측'][index]
+      return general
+        ? `<div class="squad-slot is-filled" style="--accent:${gradeColor(general)}"><span class="squad-slot__lane">${lane}</span>${this.portrait(general, 'squad-slot__portrait')}<strong>${escapeHtml(general.name)}</strong><small>${general.role} · Lv.${general.level} · ${formatNumber(power(general))}</small><button class="mini-action mini-action--ghost" data-action="squad-toggle" data-squad="${squad}" data-id="${general.id}">빼기</button></div>`
+        : `<div class="squad-slot"><span class="squad-slot__lane">${lane}</span><div class="squad-slot__empty">빈 자리</div><small>아래 무장에서 넣기</small></div>`
+    }).join('')
+    const bench = [...state.generals].filter(general => !ids.includes(general.id)).sort((left, right) => power(right) - power(left))
+    const benchCards = bench.map(general => {
+      const where = squadOf(state, general.id)
+      return `<button class="squad-bench-card ${where >= 0 ? 'is-assigned' : ''}" data-action="squad-toggle" data-squad="${squad}" data-id="${general.id}" style="--accent:${gradeColor(general)}">${this.portrait(general, 'squad-bench-card__portrait')}<span><strong>${escapeHtml(general.name)}</strong><small>${general.role} · Lv.${general.level} · ${formatNumber(power(general))}</small>${where >= 0 ? `<em>${SQUAD_LABELS[where]}에서 옮기기</em>` : '<em>넣기</em>'}</span></button>`
+    }).join('')
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">${label}은 레이드에서 1군 다음으로 출전합니다. 1군에 넣은 무장은 ${label}에서 자동으로 빠집니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="squad-auto" data-squad="${squad}" data-with-equipment="1">${label} 자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="squad-auto" data-squad="${squad}">자동 편성</button><button class="action-button action-button--outline" data-action="squad-equip" data-squad="${squad}">자동 장착</button><button class="action-button action-button--outline" data-action="squad-swap" data-squad="${squad}">1군과 바꾸기</button></div></div><div class="section-counter"><span>${label} 전투력</span><strong>${formatNumber(squadPower(state, squad))}</strong></div></div>${this.squadTabs(state)}<div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">${label}</span><h3>${label} 진형 · ${ids.length}/3</h3><p>자동 장착은 다른 군 무장이 낀 장비를 건드리지 않습니다.</p></div><span class="formation-readiness">${ids.length >= 3 ? '출정 준비 완료' : ids.length ? '빈 자리가 있습니다' : '비어 있음 · 레이드에서 건너뜁니다'}</span></div><div class="squad-slots">${slots}</div></div><div class="formation-bench-head"><div><span class="eyebrow">무장</span><h3>${label}에 넣을 무장</h3></div><span class="rate-note">전투력 높은 순 · 다른 군 무장은 옮겨 옵니다</span></div><div class="squad-bench">${benchCards || '<div class="roster-empty">더 넣을 무장이 없습니다.</div>'}</div></section>`
+  }
+
   private formationSection(state: StrategyState): string {
+    if (this.formationSquad > 0) return this.reserveSquadSection(state, this.formationSquad)
     const bench = this.sortedFormationBench(state)
     const sortOptions: Array<[FormationSort, string]> = [['power', '전투력'], ['grade', '등급']]
-    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리하고, 가운데(전열)에는 수호형이나 단단한 무장을 세우면 좌우 공격수가 오래 살아남습니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div>${this.comboAdvice(state)}<div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
+    return `<section class="page-section page-section--formation"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>출전 편성</h1><p class="heading-copy">좌·중·우 세 자리에 무장을 배치하십시오. 같은 자리의 적장과 병종 상성이 맞으면 유리하고, 가운데(전열)에는 수호형이나 단단한 무장을 세우면 좌우 공격수가 오래 살아남습니다.</p><div class="auto-actions"><button class="action-button action-button--primary" data-action="auto-formation" data-with-equipment="1">자동 편성 + 장착 <span>✦</span></button><button class="action-button action-button--outline" data-action="auto-formation">자동 편성</button><button class="action-button action-button--outline" data-action="auto-equip">자동 장착</button></div></div><div class="section-counter"><span>현재 편성 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div>${this.squadTabs(state)}<div class="formation-screen glass-card"><div class="formation-screen-head"><div><span class="eyebrow">1군 · 출전 중</span><h3>출전 진형 · ${state.formation.length}/3</h3><p>${this.formationEnemyNote(state)}</p></div><span class="formation-readiness">${state.formation.length >= 3 ? '출정 준비 완료' : '빈 자리가 있습니다'}</span></div><div class="formation-slots">${[0, 1, 2].map(index => this.formationSlot(state, index)).join('')}</div></div>${this.comboAdvice(state)}<div class="formation-bench-head"><div><span class="eyebrow">대기 무장</span><h3>대기 중인 보유 무장</h3></div><div class="roster-sort-controls formation-sort-controls"><label>정렬 <select data-action="formation-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.formationSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="formation-sort-direction" title="정렬 방향">${this.formationSortDescending ? '↓' : '↑'}</button></div></div><div class="formation-bench">${bench.length ? bench.map(general => this.formationBenchCard(general)).join('') : '<div class="formation-empty glass-card">모든 보유 무장이 편성되었습니다.</div>'}</div></section>`
   }
 
   private equipmentSection(state: StrategyState): string {
@@ -1718,11 +1788,11 @@ export class StrategyUI {
       const detail = skillDetail(general)
       return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${gradeColor(general)}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span><span class="bt-unit-edge" data-bt-unit-edge hidden></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
     }).join('')
-    const modeLabel = battle?.mode === 'scenario' ? '시나리오 전투' : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : '일반 전투'
+    const modeLabel = battle?.mode === 'scenario' ? '시나리오 전투' : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : battle?.mode === 'raid' ? '주간 레이드' : '일반 전투'
     const tactic = (id: 'guard' | 'feint' | 'charge', icon: string, label: string, note: string) => `<button class="bt-tactic bt-tactic--${id}" title="${label} · ${note}" data-action="battle-tactic" data-tactic="${id}" ${id === 'guard' ? 'data-bt-guard' : ''} disabled><span>${icon}</span><strong>${label}</strong><small>${note}</small><em>${battle?.tacticCosts[id] ?? { guard: 35, feint: 50, charge: 65 }[id]}</em></button>`
     return `<section class="page-section page-section--battle">
 <div class="bt-top">
-<div class="bt-hud glass-card"><div class="bt-hud-row"><span class="bt-phase" data-bt-phase>${battle?.phaseName ?? '1막 · 서전'}</span><b data-bt-morale-text>적 사기 ${battle?.moraleValue ?? 80} / ${battle?.moraleMax ?? 80}</b></div><div class="bt-bar bt-bar--morale"><i data-bt-morale style="width:${battle?.morale ?? 100}%"></i></div><div class="bt-hud-row bt-hud-row--threat"><span>위협도 <b data-bt-threat-text>${battle?.threat ?? 0}</b></span><div class="bt-bar bt-bar--threat"><i data-bt-threat style="width:${battle?.threat ?? 0}%"></i></div><b class="bt-collapse" data-bt-collapse>붕괴 ${battle?.collapses ?? 0}/2</b></div><div class="bt-hud-meta"><span class="bt-mode">${modeLabel}</span><span data-bt-status>${battle?.status ?? '대기 중'}</span><span class="bt-time" data-bt-time>제한 90초</span><span data-bt-combo>연계 ${battle?.combo ?? 0}</span><span data-bt-pressure>적 압박 ×1.00</span><span data-bt-bond>${escapeHtml(battle?.bond ? `인연 · ${battle.bond}` : '인연 없음')}</span></div></div>
+<div class="bt-hud glass-card"><div class="bt-hud-row"><span class="bt-phase" data-bt-phase>${battle?.phaseName ?? '1막 · 서전'}</span><b data-bt-morale-text>적 사기 ${battle?.moraleValue ?? 80} / ${battle?.moraleMax ?? 80}</b></div><div class="bt-bar bt-bar--morale"><i data-bt-morale style="width:${battle?.morale ?? 100}%"></i></div><div class="bt-hud-row bt-hud-row--threat"><span>위협도 <b data-bt-threat-text>${battle?.threat ?? 0}</b></span><div class="bt-bar bt-bar--threat"><i data-bt-threat style="width:${battle?.threat ?? 0}%"></i></div><b class="bt-collapse" data-bt-collapse>붕괴 ${battle?.collapses ?? 0}/2</b></div><div class="bt-hud-meta"><span class="bt-mode">${modeLabel}</span>${battle?.mode === 'raid' ? `<span class="bt-raid-damage">누적 피해 <b data-bt-raid>${formatNumber(battle?.raidDamage ?? 0)}</b></span>` : ''}<span data-bt-status>${battle?.status ?? '대기 중'}</span><span class="bt-time" data-bt-time>제한 90초</span><span data-bt-combo>연계 ${battle?.combo ?? 0}</span><span data-bt-pressure>적 압박 ×1.00</span><span data-bt-bond>${escapeHtml(battle?.bond ? `인연 · ${battle.bond}` : '인연 없음')}</span></div></div>
 <div class="bt-enemies glass-card"><span class="bt-enemies-label">상대 무장</span><div class="bt-enemy-row" data-bt-enemies>${this.enemyHudMarkup(battle?.opponentDeck)}</div></div>
 </div>
 <div class="bt-stage"><div class="bt-paused" data-bt-paused hidden><strong>일시 정지</strong><small>전투 시간과 적의 행동이 멈췄습니다.</small><button class="action-button action-button--primary" data-action="battle-pause">▶ 계속하기</button></div><div class="bt-callout" data-bt-callout><span class="eyebrow">적 전술 예고</span><strong data-bt-pattern>${active ? '다음 예고 대기' : '전투 시작 전'}</strong><p data-bt-warning>적 전술 예고가 뜨면 같은 레인의 무장 버튼을 누르십시오.</p><div class="bt-lanes"><span data-bt-lane="0">↙ 좌</span><span data-bt-lane="1">↑ 중</span><span data-bt-lane="2">↘ 우</span></div><div class="bt-bar bt-bar--window"><i data-bt-window style="width:0%"></i></div></div><div class="bt-enemy-warn" data-bt-enemy-warn hidden></div><div class="bt-feed"><ul class="bt-log" data-bt-log><li>전투 기록이 여기에 표시됩니다.</li></ul><button class="bt-log-toggle" data-action="battle-log">${this.battleLogOpen ? '접기' : '더 보기'}</button><div class="battle-effects" data-battle-effects>${this.battleEffectsMarkup(battle?.activeEffects)}</div></div></div>
@@ -1881,6 +1951,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '1·2·3군 편성 · 주간 레이드', '출전 편성에 1군·2군·3군 탭이 생겼습니다. 한 무장은 한 군에만 설 수 있고, 2·3군도 자동 편성·자동 장착(다른 군 장비는 건드리지 않음)·1군과 바꾸기를 할 수 있습니다. 새 콘텐츠 「주간 레이드」: 병력이 줄지 않는 보스 군단에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화, 하루 3회. 보스 레벨은 덱을 저장한 지휘관이 20명 이하면 Lv30, 그보다 많으면 전력 상위 300명의 평균 레벨입니다. 3막 사기를 무너뜨릴 때마다 큰 피해 보너스가 붙습니다. 순위 보상(다음 주에 받기): 1위 금화 200·낙양 강화석 2 · 2위 금화 200·강화석 1 · 3위 금화 100·강화석 1 · 4~10위 금화 100 · 11~50위 80 · 51~100위 60 · 101~200위 40 · 201~300위 20 · 301위부터 10. 군 전력으로 낼 수 없는 피해 기록은 서버가 잘라 냅니다. 게스트는 연습 모드(기록·보상 없음)입니다.', '완료', 'jade'],
       ['2026.10.14', '장비 보관·관리', '장비 관리에 보관함 필터(부위·세트·등급·장착 중/미장착/잠금)와 장착 무장 표시(예: 관우 장착)를 넣었습니다. 장비마다 잠금을 걸 수 있고 신화장비는 처음부터 잠겨 있습니다. 남는 장비는 분해해 옥패·철을 돌려받습니다(노멀 6·30 · 레어 15·60 · 유니크 40·120 · 전설 100·250, 강화한 장비는 강화 비용의 50%도 환급). 노멀·레어 이하 일괄 분해는 잠금·장착·강화한 장비와 신화장비를 남깁니다. 무장마다 장비 프리셋 3개를 저장해 시나리오·대련·공성용 조합을 한 번에 바꿀 수 있습니다. 보관 장비가 300줄을 넘으면 정리를 안내합니다.', '완료', 'jade'],
       ['2026.10.14', '신화장비 조각 개편', '신화장비 1개에 필요한 조각이 20개에서 100개로 늘었습니다. 대신 대련 승리 보상이 난이도에 따라 달라집니다: 쉬움 1개 · 보통 2개 · 어려움 3개(하루 5회). 실제 유저 상대는 내 덱보다 전력이 8% 이상 세면 어려움, 8% 이상 약하면 쉬움, 그 사이는 보통입니다. 상대 카드마다 난이도와 보상 조각이 표시됩니다. 난이도(승률)는 그대로입니다.', '완료', 'jade'],
       ['2026.10.14', '유저 대련 난이도', '대련 상대 덱은 AI가 움직여 예고 대응·연계·전술을 쓰지 못해, 전력이 2배인 상대에게도 대부분 이기던 문제를 고쳤습니다. 대련에서만 상대의 사기 최대치 ×1.6, 주는 피해 ×1.7, 스킬 쿨다운 ×0.8로 보정합니다. 훈련 상대는 쉬움 85% · 보통 100% · 어려움 115% 전력이며, 예고 대응을 70% 맞히는 지휘관 기준 승률은 약 80% · 60% · 35%입니다(대응을 잘할수록 더 이깁니다).', '완료', 'jade'],
@@ -1987,6 +2058,36 @@ export class StrategyUI {
     const formatDate = (value: string | Date) => new Intl.DateTimeFormat(locale(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
     return `<section class="page-section page-section--board"><div class="section-heading section-heading--compact"><div><span class="eyebrow">소통</span><h1>진영 게시판</h1><p class="heading-copy">전체 지휘관과 ${escapeHtml(state.faction)} 진영 동료에게 작전 소식을 전하십시오.</p></div><button class="ghost-button" data-action="board-refresh">게시글 새로고침 ↻</button></div><div class="board-tabs">${tabs.map(tab => `<button class="filter-tab ${this.boardTab === tab ? 'is-active' : ''}" data-action="board-tab" data-board="${tab}">${tab} 게시판</button>`).join('')}</div><div class="board-layout"><div class="glass-card board-list"><div class="card-header"><div><span class="eyebrow">${this.boardTab} 게시판</span><h2>최근 게시글</h2></div><span class="sync-label">최대 100건</span></div>${posts.length ? posts.map(post => `<article class="board-post"><div class="board-post__meta"><span class="pill pill--jade">${escapeHtml(post.authorFaction)}</span><strong>${ugc(post.authorName)}</strong><time>${formatDate(post.createdAt)}</time></div><h3>${ugc(post.title)}</h3><p>${ugc(post.content).replace(/\n/g, '<br>')}</p>${post.canDelete ? `<form class="board-delete-form" data-board-delete-form><input type="hidden" name="postId" value="${post.id}"><input name="password" type="password" minlength="4" maxlength="64" placeholder="삭제 비밀번호" required><button class="text-button" type="submit">내 글 삭제</button></form>` : ''}</article>`).join('') : '<div class="board-empty">아직 게시글이 없습니다.<br><small>오른쪽 「새 글 쓰기」로 첫 소식을 남겨 보십시오.</small></div>'}</div><div class="glass-card board-compose ${this.boardComposeOpen ? 'is-open' : ''}"><div class="card-header"><div><span class="eyebrow">글쓰기</span><h2>새 글 작성</h2></div><button class="text-button board-compose-toggle" data-action="board-compose">${this.boardComposeOpen ? '접기' : '새 글 쓰기 ✎'}</button></div><form data-board-form><label>게시판<select name="board">${tabs.map(tab => `<option value="${tab}" ${this.boardTab === tab ? 'selected' : ''}>${tab} 게시판</option>`).join('')}</select></label><label>제목<input name="title" maxlength="120" placeholder="작전 제목을 입력하세요" required></label><label>내용<textarea name="content" rows="7" maxlength="4000" placeholder="진영에 전할 내용을 작성하세요" required></textarea></label><label>삭제 비밀번호<input name="password" type="password" minlength="4" maxlength="64" placeholder="4자 이상 · 삭제할 때 필요" required></label><button class="action-button action-button--primary" type="submit">게시글 올리기 <span>→</span></button></form><p class="board-note">삭제 비밀번호를 알아야만 글을 지울 수 있습니다.</p></div></div></section>`
   }
+  private raidSection(state: StrategyState): string {
+    const view = this.raidView
+    const info = view.info
+    const weekKey = info?.weekKey ?? raidWeekKey()
+    const boss = raidBossFor(weekKey)
+    const level = info?.bossLevel ?? 30
+    const bossDeck = raidBossDeck(level, weekKey)
+    const squads = [0, 1, 2].map(index => ({ index, ids: squadIds(state, index), power: squadPower(state, index) }))
+    const ready = squads.filter(squad => squad.ids.length)
+    const days = info ? Math.floor(info.resetIn / 86400000) : 0, hours = info ? Math.floor(info.resetIn / 3600000) % 24 : 0
+    const left = info?.attemptsLeft ?? 0
+    const fmt = (n: number) => formatNumber(Math.round(n))
+    const bossCards = bossDeck.map((general, lane) => `<div class="raid-boss__unit" style="--accent:${gradeColor(general)}">${this.portrait(general, 'raid-boss__portrait')}<span>${['좌측', '중앙 · 전열', '우측'][lane]}</span><strong>${escapeHtml(general.name)}</strong><small>Lv.${general.level} · ${'★'.repeat(general.stars)}</small></div>`).join('')
+    const squadRows = squads.map(squad => `<li class="${squad.ids.length ? '' : 'is-empty'}"><b>${SQUAD_LABELS[squad.index]}</b><span>${squad.ids.length ? squad.ids.map(id => escapeHtml(state.generals.find(general => general.id === id)?.name ?? '')).join(' · ') : '비어 있음 · 건너뜀'}</span><em>${squad.ids.length ? fmt(squad.power) : '-'}</em></li>`).join('')
+    const rewardRows = RAID_REWARDS.map(row => `<tr class="${info && !info.offline && info.rank && info.rank >= row.from && info.rank <= row.to ? 'is-me' : ''}"><td>${row.from === row.to ? `${row.from}위` : row.to === Infinity ? `${row.from}위~` : `${row.from}~${row.to}위`}</td><td>금화 ${row.gold}</td><td>${row.stones ? `낙양 강화석 ${row.stones}` : '-'}</td></tr>`).join('')
+    const ranking = info?.offline ? '<div class="rank-empty">연습 모드에서는 순위가 기록되지 않습니다.</div>' : view.ranking.length ? `<ol class="raid-ranking">${view.ranking.map(row => `<li class="${row.isMe ? 'is-me' : ''}"><b>${row.rank}</b><span>${ugc(row.displayName)}</span><em>${fmt(row.totalDamage)}</em><small>${row.attempts}회</small></li>`).join('')}</ol>` : '<div class="rank-empty">이번 주 기록이 아직 없습니다. 첫 기록의 주인공이 되십시오.</div>'
+    const last = info?.lastWeek
+    const claim = last ? `<div class="raid-claim glass-card"><div><span class="eyebrow">지난주 결과</span><strong>${last.rank}위 · 피해 ${fmt(last.totalDamage)}</strong><small>보상 · 금화 ${last.reward.gold}${last.reward.stones ? ` · 낙양 강화석 ${last.reward.stones}` : ''}</small></div><button class="action-button action-button--primary" data-action="raid-claim" ${last.claimed ? 'disabled' : ''}>${last.claimed ? '받음' : '보상 받기'}</button></div>` : ''
+    return `<section class="page-section page-section--raid"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>주간 레이드</h1><p class="heading-copy">끝없는 병력의 보스에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화 · 하루 ${info?.dailyLimit ?? 3}회.</p></div><button class="ghost-button" data-action="raid-refresh">새로고침 ↻</button></div>
+      ${view.message ? `<p class="raid-message">${escapeHtml(view.message)}</p>` : ''}${claim}
+      <div class="raid-layout"><div class="raid-main">
+        <div class="raid-boss glass-card"><div class="raid-boss__head"><div><span class="pill pill--ember">이번 주 보스 · 무한 병력</span><h2>${escapeHtml(boss.name)}</h2><p>${escapeHtml(boss.desc)} · 보스 Lv.${level}${info && !info.offline ? (info.registered > 20 ? ` (상위 지휘관 평균)` : ' (기본 레벨)') : ''}</p></div><div class="raid-boss__reset"><small>초기화까지</small><strong>${days}일 ${hours}시간</strong></div></div><div class="raid-boss__units">${bossCards}</div><p class="raid-boss__note">보스의 병력은 줄지 않습니다. 3막 사기를 무너뜨릴 때마다 큰 피해 보너스가 붙고 보스가 사기를 다시 세웁니다. 아군이 전멸하거나 전열이 두 번 무너지면 그 군의 전투가 끝납니다.</p></div>
+        <div class="raid-start glass-card"><div><span class="eyebrow">출전 군</span><ul class="raid-squads">${squadRows}</ul><button class="text-button" data-action="section" data-section="formation">2군·3군 편성하기 →</button></div><div class="raid-start__cta"><strong>오늘 남은 도전 ${left}/${info?.dailyLimit ?? 3}</strong><small>도전을 시작하면 1회가 차감됩니다</small><button class="action-button action-button--primary raid-go" data-action="raid-start" ${left > 0 && ready.length && !view.loading ? '' : 'disabled'}>${ready.length}개 군 출전 <span>⚔</span></button></div></div>
+        <div class="raid-me glass-card"><div><small>이번 주 누적 피해</small><strong>${fmt(info?.totalDamage ?? 0)}</strong></div><div><small>${info?.offline ? '연습 최고 기록' : '1회 최고'}</small><strong>${fmt(info?.bestDamage ?? 0)}</strong></div><div><small>내 순위</small><strong>${info?.offline ? '-' : info?.rank ? `${info.rank}위` : '기록 없음'}</strong></div><div><small>참여 지휘관</small><strong>${info?.offline ? '-' : fmt(info?.participants ?? 0)}</strong></div></div>
+      </div><div class="raid-side">
+        <div class="glass-card raid-rewards"><div class="card-header"><div><span class="eyebrow">주간 보상</span><h3>순위 보상</h3></div><span class="rate-note">월요일 0시 정산 · 다음 주에 받기</span></div><table><tbody>${rewardRows}</tbody></table></div>
+        <div class="glass-card"><div class="card-header"><div><span class="eyebrow">이번 주</span><h3>누적 피해 순위</h3></div><span class="rate-note">상위 100명</span></div>${view.loading ? '<div class="rank-empty">불러오는 중…</div>' : ranking}</div>
+      </div></div></section>`
+  }
+
   private duelSection(state: StrategyState): string {
     const formationReady = state.formation.length >= 3
     const opponents = this.duelOpponents
@@ -2051,6 +2152,14 @@ export class StrategyUI {
     else if (action === 'equipment-equip') this.callbacks.onEquipmentEquip(button.dataset.generalId ?? '', button.dataset.equipmentId ?? '')
     else if (action === 'equipment-unequip') this.callbacks.onEquipmentUnequip(button.dataset.generalId ?? '', (button.dataset.equipmentType ?? 'weapon') as EquipmentType)
     else if (action === 'equipment-lock') this.callbacks.onEquipmentLock(button.dataset.equipmentId ?? '')
+    else if (action === 'raid-start') this.callbacks.onRaidStart()
+    else if (action === 'raid-refresh') this.callbacks.onRaidRefresh()
+    else if (action === 'raid-claim') this.callbacks.onRaidClaim()
+    else if (action === 'squad-tab') { this.formationSquad = Math.max(0, Math.min(2, Number(button.dataset.squad ?? 0))); if (this.renderedState) this.render(this.renderedState) }
+    else if (action === 'squad-toggle') this.callbacks.onSquadToggle(Number(button.dataset.squad ?? 1), button.dataset.id ?? '')
+    else if (action === 'squad-auto') this.callbacks.onSquadAuto(Number(button.dataset.squad ?? 1), button.dataset.withEquipment === '1')
+    else if (action === 'squad-equip') this.callbacks.onSquadEquip(Number(button.dataset.squad ?? 1))
+    else if (action === 'squad-swap') this.callbacks.onSquadSwap(Number(button.dataset.squad ?? 1))
     else if (action === 'equipment-preset') this.callbacks.onEquipmentPreset(button.dataset.generalId ?? '', Number(button.dataset.slot ?? 0), button.dataset.mode === 'save' ? 'save' : 'apply')
     else if (action === 'equipment-dismantle') {
       const state = this.renderedState

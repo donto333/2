@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, getRaidInfo, startRaid, submitRaid, getRaidRanking, claimRaidReward, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -45,6 +45,17 @@ export const gameRouter = router({
   duel: router({
     // power(내 덱 전력)를 보내면 비슷한 실력의 유저를 고르고, 덱을 저장한 지휘관이 20명 미만이면 훈련 상대 모드를 알려 준다
     listOpponents: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(12), power: z.number().min(0).max(10_000_000).optional() }).strict()).query(({ ctx, input }) => listDuelOpponents(ctx.user.id, input.limit, input.power)),
+  }),
+  // 주간 레이드: 월요일 0시(KST) 초기화 · 하루 3회 · 1·2·3군 피해 합계로 순위
+  raid: router({
+    info: protectedProcedure.query(({ ctx }) => getRaidInfo(ctx.user.id)),
+    ranking: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(100).default(100) }).strict()).query(({ ctx, input }) => getRaidRanking(ctx.user.id, input.limit)),
+    start: protectedProcedure.mutation(({ ctx }) => {
+      if (ctx.user.isCron) throw new Error('예약 실행 계정은 레이드에 도전할 수 없습니다.')
+      return startRaid(ctx.user)
+    }),
+    submit: protectedProcedure.input(z.object({ token: z.string().min(8).max(64), damages: z.array(z.number().min(0).max(1_000_000_000)).min(1).max(3) }).strict()).mutation(({ ctx, input }) => submitRaid(ctx.user.id, input)),
+    claim: protectedProcedure.mutation(({ ctx }) => claimRaidReward(ctx.user.id)),
   }),
   territory: router({
     list: protectedProcedure.query(({ ctx }) => getFactionTerritories(ctx.user.id)),
@@ -128,6 +139,7 @@ export const gameRouter = router({
       conquestAt: z.string().max(32).nullable().optional(),
       scenarioData: z.string().max(100000).optional(),
       missionData: z.string().max(20000).optional(),
+      squadData: z.string().max(4000).optional(),
     })).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 게임 상태를 저장할 수 없습니다.')
       return updateGameState(ctx.user.id, input)

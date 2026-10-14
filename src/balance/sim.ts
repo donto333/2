@@ -43,7 +43,7 @@ export function sanitizeConfig(raw: unknown): BalanceConfig {
     return { id: typeof s.id === 'string' && ids.has(s.id) ? s.id : fallback.id, level: clampInt(s.level, 1, 60, fallback.level), stars: clampInt(s.stars, 1, 5, fallback.stars), skill: s.skill === undefined ? fallback.skill : Boolean(s.skill), gear }
   }
   const settings = (input.settings ?? {}) as Partial<SimSettings>
-  const modes = new Set(['normal', 'scenario', 'siege', 'duel'])
+  const modes = new Set(['normal', 'scenario', 'siege', 'duel', 'raid'])
   return {
     ally: base.ally.map((fallback, index) => slot(input.ally?.[index], fallback)),
     enemy: base.enemy.map((fallback, index) => slot(input.enemy?.[index], fallback)),

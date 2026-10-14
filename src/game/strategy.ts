@@ -5,7 +5,7 @@ import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, GENERAL_SKILLS, GROWTH_OWN_SHARE,
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 import { MANUAL_PACKAGE_AMOUNTS } from '../../server/economy.mjs'
 import { locale } from '../i18n/lang'
-export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin'
+export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'raid' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
 export type ResourceKey = 'grain' | 'silver' | 'wood' | 'iron' | 'influence'
@@ -227,6 +227,10 @@ export interface StrategyState {
   equipmentLoadouts: Record<string, Partial<Record<EquipmentType, string>>>
   /** 무장별 장비 프리셋(최대 3개) */
   equipmentPresets?: Record<string, Array<Partial<Record<EquipmentType, string>> | null>>
+  /** 2군·3군(1군은 formation) */
+  reserveSquads?: string[][]
+  /** 게스트 레이드 연습 기록(하루 3회) */
+  raidLocal?: { dayKey: string; attempts: number; weekKey: string; total: number; best: number }
   selectedEquipmentGeneralId: string
   lastEquipmentDraw: Equipment[]
   mythicFragments: number
@@ -1935,7 +1939,7 @@ export interface AutoResult extends UpgradeResult { changed: number }
  * 자동 장착: 출전 무장(전투력 높은 순)부터 슬롯별 후보 상위 6개를 모두 조합해 가장 좋은 묶음을 고른다.
  * 출전하지 않은 무장이 끼고 있던 장비도 가져올 수 있다. 한 장비는 한 무장만 낀다.
  */
-export function autoEquip(state: StrategyState, generalIds: string[] = state.formation): AutoResult {
+export function autoEquip(state: StrategyState, generalIds: string[] = state.formation, protectedIds: Set<string> = new Set()): AutoResult {
   ensureEquipmentState(state)
   const targets = generalIds.map(id => findGeneral(state, id)).filter((general): general is General => Boolean(general))
     .sort((left, right) => combatPower(right) - combatPower(left))
@@ -1943,7 +1947,9 @@ export function autoEquip(state: StrategyState, generalIds: string[] = state.for
   if (!state.equipmentInventory.length) return { ok: false, message: '보유한 장비가 없습니다. 모집·장비에서 장비를 얻으십시오.', changed: 0 }
   const targetIds = new Set(targets.map(general => general.id))
   // 다른 무장(비출전)이 낀 장비는 후보에 넣되, 출전 무장끼리는 이번 계산 결과로 다시 나눈다.
-  const used = new Set<string>()
+  // 다른 군 무장(protectedIds)이 낀 장비는 후보에서 뺀다
+  const used = new Set<string>(Object.entries(state.equipmentLoadouts).filter(([ownerId]) => protectedIds.has(ownerId) && !generalIds.includes(ownerId)).flatMap(([, loadout]) => Object.values(loadout ?? {}).filter((id): id is string => Boolean(id))))
+  const reserved = new Set(used)
   let changed = 0
   const before = JSON.stringify(targets.map(general => state.equipmentLoadouts[general.id] ?? {}))
   targets.forEach(general => {
@@ -1960,13 +1966,13 @@ export function autoEquip(state: StrategyState, generalIds: string[] = state.for
     }
     const loadout: Partial<Record<EquipmentType, string>> = {}
     best.forEach((item, index) => {
-      if (!item) return
+      if (!item || reserved.has(item.id)) return
       used.add(item.id)
       loadout[EQUIPMENT_TYPES[index]] = item.id
     })
     // 이 장비를 끼고 있던 비출전 무장에게서는 뺀다.
     Object.entries(state.equipmentLoadouts).forEach(([ownerId, owned]) => {
-      if (targetIds.has(ownerId)) return
+      if (targetIds.has(ownerId) || protectedIds.has(ownerId)) return
       EQUIPMENT_TYPES.forEach(type => { if (owned[type] && used.has(owned[type]!)) delete owned[type] })
     })
     state.equipmentLoadouts[general.id] = loadout
