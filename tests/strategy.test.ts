@@ -325,9 +325,9 @@ describe('commander attributes', () => {
     expect(duelAttemptsRemaining(state, new Date('2026-10-05T09:00:00').getTime())).toBe(5)
   })
 
-  it('awards and spends twenty mythic fragments on each shop item', () => {
+  it('awards and spends 100 mythic fragments on each shop item', () => {
     const state = createInitialState()
-    state.mythicFragments = 20
+    state.mythicFragments = 100
     const result = purchaseMythicEquipment(state, 'armor')
     expect(result.ok).toBe(true)
     expect(state.mythicFragments).toBe(0)
@@ -341,7 +341,7 @@ describe('commander attributes', () => {
     for (const type of ['weapon', 'armor', 'accessory'] as const) {
       expect(MYTHIC_SHOP_EQUIPMENT.filter(item => item.type === type)).toHaveLength(4)
     }
-    state.mythicFragments = 20
+    state.mythicFragments = 100
     expect(purchaseMythicEquipment(state, 'shop-mythic-speed-accessory').ok).toBe(true)
     expect(state.equipmentInventory.some(item => item.id.startsWith('shop-mythic-speed-accessory-'))).toBe(true)
     expect(purchaseMythicEquipment(state, 'weapon').ok).toBe(false)

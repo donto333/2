@@ -38,3 +38,12 @@ export function pickDuelMatches(candidates, myPower, count = DUEL_MATCH_COUNT) {
     .map(entry => entry.candidate)
     .sort((left, right) => num(left.power) - num(right.power))
 }
+
+/** 대련 난이도별 승리 보상(신화장비 조각): 쉬움 1 · 보통 2 · 어려움 3 */
+export const DUEL_TIER_FRAGMENTS = { easy: 1, normal: 2, hard: 3 }
+
+/** 실제 유저 상대의 난이도: 상대 덱 전력이 내 덱보다 8% 이상 세면 어려움, 8% 이상 약하면 쉬움, 그 사이는 보통 */
+export function duelTierFor(opponentPower, myPower) {
+  const ratio = num(opponentPower) / Math.max(1, num(myPower, 1))
+  return ratio >= 1.08 ? 'hard' : ratio <= 0.92 ? 'easy' : 'normal'
+}

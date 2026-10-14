@@ -1,14 +1,14 @@
 // 유저 대련 훈련 상대(더미 덱): 덱을 저장한 지휘관이 적을 때 내 덱 전력에 맞춘 상대 3팀을 만든다.
 // 전력은 서버와 같은 공식(server/duel-match.mjs)으로 재서 실제 유저 매칭과 같은 기준이 된다.
-import { duelDeckPower } from '../../server/duel-match.mjs'
+import { duelDeckPower, type DuelTier } from '../../server/duel-match.mjs'
 import { GENERAL_SKILLS } from './skills'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
 
-export interface DummyTier { id: string; name: string; label: string; ratio: number }
+export interface DummyTier { id: string; name: string; label: string; ratio: number; tier: DuelTier }
 export const DUMMY_TIERS: DummyTier[] = [
-  { id: 'dummy-iron-gate', name: '철벽 관문 수비대', label: '쉬움', ratio: 0.85 },
-  { id: 'dummy-jade-banner', name: '청람 진형 부대', label: '보통', ratio: 1 },
-  { id: 'dummy-wind-tactician', name: '질풍 책사단', label: '어려움', ratio: 1.15 },
+  { id: 'dummy-iron-gate', name: '철벽 관문 수비대', label: '쉬움', ratio: 0.85, tier: 'easy' },
+  { id: 'dummy-jade-banner', name: '청람 진형 부대', label: '보통', ratio: 1, tier: 'normal' },
+  { id: 'dummy-wind-tactician', name: '질풍 책사단', label: '어려움', ratio: 1.15, tier: 'hard' },
 ]
 
 const hash = (text: string) => [...text].reduce((sum, character) => (sum * 31 + character.charCodeAt(0)) >>> 0, 7)
@@ -42,7 +42,7 @@ function fitDeck(trio: General[], target: number, stars: number): { deck: Genera
   return best
 }
 
-export interface DummyOpponent { id: string; displayName: string; note: string; power: number; deck: General[] }
+export interface DummyOpponent { id: string; displayName: string; note: string; power: number; tier: DuelTier; deck: General[] }
 
 /**
  * 내 덱 전력에 맞춘 훈련 상대 3팀(쉬움 85% · 보통 100% · 어려움 115%).
@@ -60,6 +60,6 @@ export function dummyDuelDecks(myDeck: General[], dayKey = ''): DummyOpponent[] 
       const next = fitDeck(pickTrio(`${tier.id}:${dayKey}`, lower), target, stars)
       if (Math.abs(next.power - target) < Math.abs(fit.power - target)) fit = next
     }
-    return { id: tier.id, displayName: tier.name, note: `${tier.label} · 평균 Lv.${fit.level} · 전력 ${fit.power.toLocaleString('ko-KR')}`, power: fit.power, deck: fit.deck }
+    return { id: tier.id, displayName: tier.name, note: `${tier.label} · 평균 Lv.${fit.level} · 전력 ${fit.power.toLocaleString('ko-KR')}`, power: fit.power, tier: tier.tier, deck: fit.deck }
   })
 }

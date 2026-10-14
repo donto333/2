@@ -241,7 +241,7 @@ export const CONQUEST_COOLDOWN_MS = 8 * 1000
 export const DEFENSE_COOLDOWN_MS = 10 * 1000
 export const FACTION_BATTLE_COOLDOWN_MS = 12 * 1000
 export const DUEL_DAILY_LIMIT = 5
-export const MYTHIC_FRAGMENT_COST = 20
+export const MYTHIC_FRAGMENT_COST = 100
 
 export interface GoldPackage {
   id: string

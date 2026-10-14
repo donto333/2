@@ -1,5 +1,5 @@
 import { createRequire as createCityRoutesRequire } from 'node:module';
-import { DUEL_MATCH_COUNT, DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from "./duel-match.mjs";
+import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from "./duel-match.mjs";
 import { neutralRaidPower, resolveNeutralRaid } from './neutral-raid.mjs';
 const cityRoutes = createCityRoutesRequire(import.meta.url)('./city-routes.json');
 // starters/web-db-user-v1/shared/const.ts
@@ -715,7 +715,7 @@ function seoulDayKey(now = Date.now()) {
  *  - daily: 정식 출시 전 매일 금화(한국 날짜 기준 하루 1회)
  *  - scenario: 시나리오 최초 클리어 금화(시나리오마다 1회, 금액은 시나리오 번호로 서버가 계산)
  *  - faction: 세력전 승리 금화(서버가 점령을 기록할 때 적립해 둔 만큼만)
- *  - duel: 유저 대련 승리 신화 조각(하루 5회)
+ *  - duel: 유저 대련 승리 신화 조각(하루 5회 · 쉬움 1 · 보통 2 · 어려움 3)
  */
 async function grantCurrency(userId, input) {
   const db = await getDb();
@@ -748,7 +748,8 @@ async function grantCurrency(userId, input) {
     } else if (input.kind === "duel") {
       const count = ledger.duelDay === today ? Number(ledger.duelCount) || 0 : 0;
       if (count >= DUEL_DAILY_LIMIT) reason = "오늘 받을 수 있는 대련 보상을 모두 받았습니다.";
-      else { fragments = 1; ledger.duelDay = today; ledger.duelCount = count + 1; }
+      // 난이도별 조각: key "duel-easy|normal|hard" (옛 게임은 key 없이 보낸다 → 1개)
+      else { const tier = String(input.key ?? "").replace(/^duel-/, ""); fragments = DUEL_TIER_FRAGMENTS[tier] ?? 1; ledger.duelDay = today; ledger.duelCount = count + 1; }
     }
     if (gold || fragments) {
       await tx.update(gameAccountStates).set({ gold: sql`${gameAccountStates.gold} + ${gold}`, mythicFragments: sql`${gameAccountStates.mythicFragments} + ${fragments}`, grantLedger: JSON.stringify(ledger) }).where(eq(gameAccountStates.userId, userId));

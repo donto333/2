@@ -59,7 +59,7 @@ import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
-import { DUEL_MATCH_COUNT, DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from '../server/duel-match.mjs'
+import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, duelTierFor, pickDuelMatches, type DuelTier } from '../server/duel-match.mjs'
 import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 import { locale } from './i18n/lang'
 import { startDomTranslation, tr } from './i18n/translate'
@@ -219,6 +219,9 @@ let saveRetryCount = 0
 let saveRevision = 0
 let authGeneration = 0
 let duelActive = false
+/** 대련 상대별 난이도와 지금 겨루는 상대의 난이도(승리 보상 조각 수) */
+const duelTiers = new Map<string, DuelTier>()
+let duelTier: DuelTier = 'normal'
 let scenarioActive = false
 let activeScenario: ScenarioDefinition | null = null
 /** 회원 진행(서버)을 불러왔는가: 튜토리얼은 이것을 기다린다 */
@@ -314,7 +317,7 @@ function siegeMoraleBonus(cityId: string): number {
 
 /** 덱을 저장한 지휘관이 적을 때: 내 덱 전력(장비 포함)에 맞춘 훈련 상대 3팀(쉬움 90% · 보통 100% · 어려움 110%) */
 function dummyDuelOpponents(): DuelOpponent[] {
-  return dummyDuelDecks(battleGenerals(), dayKey()).map(dummy => ({ id: dummy.id, displayName: dummy.displayName, score: 0, power: dummy.power, isDummy: true, note: dummy.note, deck: dummy.deck }))
+  return dummyDuelDecks(battleGenerals(), dayKey()).map(dummy => ({ id: dummy.id, displayName: dummy.displayName, score: 0, power: dummy.power, tier: dummy.tier, isDummy: true, note: dummy.note, deck: dummy.deck }))
 }
 
 function installDummyDuelOpponents(): void {
@@ -322,6 +325,11 @@ function installDummyDuelOpponents(): void {
 }
 
 function installDuelOpponents(opponents: DuelOpponent[]): void {
+  const myPower = duelDeckPower(battleGenerals())
+  // 실제 유저 상대는 내 덱과의 전력 차이로 난이도(보상)를 정한다
+  opponents = opponents.map(opponent => ({ ...opponent, tier: opponent.tier ?? duelTierFor(opponent.power ?? duelDeckPower(opponent.deck ?? []), myPower) }))
+  duelTiers.clear()
+  opponents.forEach(opponent => duelTiers.set(opponent.id, opponent.tier ?? 'normal'))
   duelDecks.clear()
   opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
   ui.setDuelOpponents(opponents, duelDeckPower(battleGenerals()))
@@ -1016,6 +1024,7 @@ const ui = new StrategyUI(root, {
       duelDecks.set(opponentId || fallback.id, deck)
     }
     duelActive = true
+    duelTier = duelTiers.get(opponentId) ?? 'normal'
     state.section = 'battle'
     ui.setBattleAutoAvailable(false)
     arena.setOpponentDeck(deck, 'duel')
@@ -1184,8 +1193,8 @@ arena = new Arena(canvas, {
         state.resources.silver = state.silver
       }
       if (wasDuel) {
-        if (isMember()) void serverGrant('duel')
-        else state.mythicFragments += 1
+        if (isMember()) void serverGrant('duel', `duel-${duelTier}`)
+        else state.mythicFragments += DUEL_TIER_FRAGMENTS[duelTier]
       }
       if (scenarioActive && activeScenario) {
         const improved = recordScenarioStars(state.scenarioCleared, activeScenario.id, result.stars)

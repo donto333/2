@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from '../server/duel-match.mjs'
+import { DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, duelTierFor, pickDuelMatches } from '../server/duel-match.mjs'
+import { MYTHIC_FRAGMENT_COST } from '../src/game/strategy'
 import { dummyDuelDecks } from '../src/game/duel'
 import { GENERAL_SKILLS } from '../src/game/skills'
 import { scaleGeneral, templateGeneral } from '../src/game/strategy'
@@ -30,5 +31,14 @@ describe('유저 대련 매칭', () => {
     const mine = [grown('guan-yu', 20), grown('cao-ren', 20), grown('zhuge-liang', 20)]
     const ids = (day: string) => dummyDuelDecks(mine, day).map(dummy => dummy.deck.map(general => general.id).join()).join('|')
     expect(ids('2026-10-14')).not.toBe(ids('2026-10-15'))
+  })
+  it('승리 보상은 쉬움 1 · 보통 2 · 어려움 3조각, 신화장비 1개는 100조각', () => {
+    expect(DUEL_TIER_FRAGMENTS).toEqual({ easy: 1, normal: 2, hard: 3 })
+    expect(MYTHIC_FRAGMENT_COST).toBe(100)
+    const mine = [grown('guan-yu', 20), grown('cao-ren', 20), grown('zhuge-liang', 20)]
+    expect(dummyDuelDecks(mine, 'x').map(dummy => dummy.tier)).toEqual(['easy', 'normal', 'hard'])
+    expect(duelTierFor(1150, 1000)).toBe('hard')
+    expect(duelTierFor(1000, 1000)).toBe('normal')
+    expect(duelTierFor(850, 1000)).toBe('easy')
   })
 })

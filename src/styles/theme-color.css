@@ -1797,3 +1797,10 @@ body .combo-member.is-unowned .general-portrait { filter: grayscale(.7) brightne
 body .combo-missing { padding: 6px 10px; border-radius: 6px; background: rgba(160, 160, 160, .12); color: #a9a196; font-size: 12px; white-space: nowrap; }
 body .combo-tags { max-width: 260px; }
 @media (max-width: 900px) { body .combo-row { grid-template-columns: minmax(0, 1fr); } body .combo-type { grid-auto-flow: column; justify-content: start; align-items: baseline; gap: 8px; } }
+/* 대련 난이도·보상 표시 */
+.duel-reward { flex: 0 0 auto; margin-right: 12px; padding: 4px 10px; border-radius: 999px; font-size: 0.82rem; font-weight: 700; border: 1px solid currentColor; white-space: nowrap; }
+.duel-reward--easy { color: #8fd6a4; }
+.duel-reward--normal { color: #f2c46d; }
+.duel-reward--hard { color: #ff8a6b; }
+body .duel-opponent { grid-template-columns: 42px 42px 1fr auto auto; }
+@media (max-width: 620px) { body .duel-opponent { grid-template-columns: 30px 38px 1fr; } body .duel-opponent .duel-reward { grid-column: 3; justify-self: start; margin: 0; } }
