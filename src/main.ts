@@ -81,6 +81,15 @@ const LOCAL_GAME_SAVE_KEY = 'cheonharo.strategy.save.member.v2'
 const GUEST_GAME_SAVE_KEY = 'cheonharo.strategy.save.guest.v2'
 const GUEST_ACCESS_KEY = 'cheonharo.access.guest.v1'
 const PENDING_TERRITORY_BATTLES_KEY = 'cheonharo.territory.pending-battles.v1'
+// 모바일 브라우저·앱 안 웹뷰는 100vh가 주소창·상단 바까지 포함해 화면 아래가 잘린다: 실제 보이는 높이를 CSS 변수로 넘긴다
+function syncAppHeight(): void {
+  document.documentElement.style.setProperty('--app-h', `${Math.round(window.innerHeight)}px`)
+}
+syncAppHeight()
+window.addEventListener('resize', syncAppHeight)
+window.addEventListener('orientationchange', () => window.setTimeout(syncAppHeight, 250))
+window.visualViewport?.addEventListener('resize', syncAppHeight)
+
 const state: StrategyState = createInitialState()
 
 // Steam 데스크톱 버전: 진행도에 따라 업적을 해금한다 (웹에서는 아무 일도 하지 않음).

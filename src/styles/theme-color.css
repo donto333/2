@@ -393,8 +393,8 @@ body .app-shell--battle .sidebar { display: none; }
 body .app-shell--battle .topbar { height: 52px; padding: 0 18px; background: linear-gradient(180deg, rgba(40, 16, 8, .82), rgba(40, 16, 8, .42)); }
 body .app-shell--battle .topbar-center, body .app-shell--battle .topbar-actions, body .app-shell--battle .brand-subtitle { display: none; }
 body .app-shell--battle .brand-seal { width: 30px; height: 30px; }
-body .app-shell--battle .main-content { margin-left: 0; height: 100vh; min-height: 0; padding: 60px 18px 12px; overflow: hidden; }
-body .app-shell--battle .page-section--battle { max-width: 1280px; margin: 0 auto; height: calc(100vh - 72px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; animation: none; }
+body .app-shell--battle .main-content { margin-left: 0; height: var(--app-h, 100vh); min-height: 0; padding: 60px 18px 12px; overflow: hidden; }
+body .app-shell--battle .page-section--battle { max-width: 1280px; margin: 0 auto; height: calc(var(--app-h, 100vh) - 72px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; animation: none; }
 body .bt-top { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 10px; }
 body .bt-hud { position: relative; }
 body .bt-hud-meta { gap: 4px 12px; }
@@ -429,7 +429,7 @@ body .app-shell--battle .bt-tactic-row { margin-top: 8px; }
 @media (max-width: 760px) {
   body .app-shell--battle .topbar { height: 46px; padding: 0 12px; }
   body .app-shell--battle .main-content { padding: 52px 8px 8px; }
-  body .app-shell--battle .page-section--battle { height: calc(100vh - 60px); gap: 6px; }
+  body .app-shell--battle .page-section--battle { height: calc(var(--app-h, 100vh) - 60px); gap: 6px; }
   body .bt-top { gap: 6px; }
   body .bt-hud { padding: 9px 10px; }
   body .bt-hud .bt-hud-row:first-child { padding-right: 0; }
@@ -1600,7 +1600,7 @@ body .access-gate__backdrop { background-image: radial-gradient(ellipse at 50% 4
   html body .app-shell .sidebar .nav-button .nav-label, html body .app-shell .sidebar .nav-button b, html body .app-shell .sidebar .nav-button.is-active::after { display: none; }
   html body .app-shell .sidebar .nav-button .nav-short { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 700; }
   html body .app-shell .sidebar .nav-button .nav-icon, html body .app-shell .sidebar .nav-button .nav-icon .gi { width: 21px; height: 21px; }
-  html body .app-shell .main-content { margin-left: calc(66px + env(safe-area-inset-left, 0px)); padding: 58px calc(14px + env(safe-area-inset-right, 0px)) 18px 16px; height: 100vh; }
+  html body .app-shell .main-content { margin-left: calc(66px + env(safe-area-inset-left, 0px)); padding: 58px calc(14px + env(safe-area-inset-right, 0px)) 18px 16px; height: var(--app-h, 100vh); }
   html body .app-shell .section-heading { margin-bottom: 12px; }
   html body .app-shell .section-heading h1 { font-size: 24px; }
   html body .app-shell .heading-copy { display: none; }
@@ -1608,7 +1608,7 @@ body .access-gate__backdrop { background-image: radial-gradient(ellipse at 50% 4
   /* 2. 전투: 왼쪽 아군 · 가운데 전장 · 오른쪽 상대 */
   html body .app-shell--battle .main-content { margin-left: 0; padding: 50px calc(8px + env(safe-area-inset-right, 0px)) 6px calc(8px + env(safe-area-inset-left, 0px)); }
   html body .app-shell--battle .sidebar { display: none; }
-  html body .app-shell--battle .page-section--battle { max-width: none; height: calc(100vh - 56px); display: grid; grid-template-columns: clamp(178px, 25vw, 224px) minmax(0, 1fr) clamp(130px, 18vw, 170px); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "ctl hud foe" "ctl stage foe"; gap: 6px; }
+  html body .app-shell--battle .page-section--battle { max-width: none; height: calc(var(--app-h, 100vh) - 56px); display: grid; grid-template-columns: clamp(178px, 25vw, 224px) minmax(0, 1fr) clamp(130px, 18vw, 170px); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "ctl hud foe" "ctl stage foe"; gap: 6px; }
   html body .app-shell--battle .bt-top { display: contents; }
   html body .app-shell--battle .bt-hud { grid-area: hud; padding: 6px 10px; align-self: start; }
   html body .app-shell--battle .bt-hud .bt-hud-meta { display: none; }
@@ -1658,7 +1658,7 @@ body .access-gate__backdrop { background-image: radial-gradient(ellipse at 50% 4
 
   /* 3. 로그인: 그림 왼쪽, 고르기 오른쪽 */
   html body .access-gate { padding: 8px calc(8px + env(safe-area-inset-right, 0px)) 8px calc(8px + env(safe-area-inset-left, 0px)); }
-  html body .access-gate__panel { width: min(860px, 100%); max-height: calc(100vh - 16px); overflow-y: auto; display: grid; grid-template-columns: 42% minmax(0, 1fr); column-gap: 22px; align-content: center; padding: 14px 20px 14px 0; text-align: center; }
+  html body .access-gate__panel { width: min(860px, 100%); max-height: calc(var(--app-h, 100vh) - 16px); overflow-y: auto; display: grid; grid-template-columns: 42% minmax(0, 1fr); column-gap: 22px; align-content: center; padding: 14px 20px 14px 0; text-align: center; }
   html body .access-gate__panel > * { grid-column: 2; }
   html body .access-gate__art { grid-column: 1; grid-row: 1 / span 9; margin: -14px 0 -14px 0; aspect-ratio: auto; height: auto; min-height: 100%; background-position: 50% 20%; -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent); mask-image: linear-gradient(90deg, #000 78%, transparent); }
   html body .access-gate__art + .access-gate__seal { display: none; }
@@ -1911,3 +1911,9 @@ body .duel-opponent { grid-template-columns: 42px 42px 1fr auto auto; }
 .raid-step [data-raid-go] { width: 100%; justify-content: center; }
 .raid-step [data-raid-go] b { margin-left: 6px; opacity: .7; }
 .raid-ask { flex-wrap: wrap; }
+
+/* 모바일 화면 높이: 주소창·앱 상단 바를 뺀 실제 보이는 높이(--app-h, main.ts가 맞춘다)
+   팝업·결과 창은 아래 메뉴(z 30)보다 위에 띄워 아래 버튼이 가려지지 않게 한다 */
+.recruit-results, .result-modal, .summon-ritual { z-index: 40; }
+body .slot-picker { z-index: 40; }
+.recruit-results-panel { padding-bottom: calc(19px + env(safe-area-inset-bottom, 0px)); }

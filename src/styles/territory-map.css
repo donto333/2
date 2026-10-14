@@ -28,7 +28,7 @@ body .map-viewport {
 }
 /* PC: 정사각형이 화면 높이를 넘지 않게 */
 @media (min-width: 761px) {
-  body .territory-map:not(.is-fullscreen) .map-viewport { max-width: min(100%, calc(100vh - 200px)); margin-left: auto; margin-right: auto; }
+  body .territory-map:not(.is-fullscreen) .map-viewport { max-width: min(100%, calc(var(--app-h, 100vh) - 200px)); margin-left: auto; margin-right: auto; }
 }
 body .map-viewport:active { cursor: grabbing; }
 
