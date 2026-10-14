@@ -187,6 +187,8 @@ export interface General {
   skillUnlocked: boolean
   skillRank?: number
   skillPower?: number
+  /** 3부위를 모두 갖춘 장비 세트(전투에서 세트 효과가 켜진다) */
+  gearSets?: EquipmentSet[]
   accent: string
   portrait: string
   portraitPath?: string
@@ -882,10 +884,10 @@ function mythicSpecialty(type: EquipmentType, set: EquipmentSet): EquipmentSpeci
 }
 
 export const EQUIPMENT_SET_META: Record<EquipmentSet, { label: string; stat: EquipmentStat; skillName: string; skillDescription: string; twoPiece: string; threePiece: string }> = {
-  command: { label: '천군 세트', stat: 'leadership', skillName: '군령의 깃발', skillDescription: '통솔 기반 편성 전투력 보정', twoPiece: '통솔 +10', threePiece: '전투 시작 시 아군 방어 +8%' },
-  martial: { label: '패왕 세트', stat: 'martial', skillName: '파천의 일격', skillDescription: '무력 기반 공격 효율 보정', twoPiece: '무력 +10', threePiece: '전투 시작 시 공격 피해 +8%' },
-  stratagem: { label: '천책 세트', stat: 'stratagem', skillName: '귀모의 진', skillDescription: '모략 기반 전술 게이지 보정', twoPiece: '모략 +10', threePiece: '전술 게이지 충전 +12%' },
-  speed: { label: '질풍 세트', stat: 'speed', skillName: '유성 보법', skillDescription: '속도 기반 행동 순환 보정', twoPiece: '속도 +10', threePiece: '행동 순환 속도 +8%' },
+  command: { label: '천군 세트', stat: 'leadership', skillName: '군령의 깃발', skillDescription: '통솔 기반 편성 전투력 보정', twoPiece: '통솔 +10', threePiece: '통솔 +8 · 착용 무장 받는 피해 −8%' },
+  martial: { label: '패왕 세트', stat: 'martial', skillName: '파천의 일격', skillDescription: '무력 기반 공격 효율 보정', twoPiece: '무력 +10', threePiece: '무력 +8 · 착용 무장 공격·스킬 피해 +10%' },
+  stratagem: { label: '천책 세트', stat: 'stratagem', skillName: '귀모의 진', skillDescription: '모략 기반 전술 게이지 보정', twoPiece: '모략 +10', threePiece: '모략 +8 · 전술 게이지 충전 +12% · 착용 무장 디버프 지속 +30%' },
+  speed: { label: '질풍 세트', stat: 'speed', skillName: '유성 보법', skillDescription: '속도 기반 행동 순환 보정', twoPiece: '속도 +10', threePiece: '속도 +8 · 첫 스킬 2초 빨리 · 스킬 쿨다운 −8%' },
 }
 
 function starterEquipment(): Equipment[] {
@@ -1166,9 +1168,15 @@ export function equipmentBonus(state: StrategyState, generalId: string): Record<
 }
 
 /** 전투에 들어가는 무장 능력치: 장비 보너스를 더하고 공격·방어에도 일부 반영한다. */
-export function withEquipmentStats(general: General, bonus: Record<EquipmentStat, number>): General {
+/** 3부위를 모두 맞춘 세트 */
+export function fullEquipmentSets(counts: Partial<Record<EquipmentSet, number>>): EquipmentSet[] {
+  return (Object.entries(counts) as Array<[EquipmentSet, number]>).filter(([, count]) => count >= 3).map(([set]) => set)
+}
+
+export function withEquipmentStats(general: General, bonus: Record<EquipmentStat, number>, sets: EquipmentSet[] = []): General {
   return {
     ...general,
+    ...(sets.length ? { gearSets: sets } : {}),
     leadership: general.leadership + bonus.leadership,
     martial: general.martial + bonus.martial,
     stratagem: general.stratagem + bonus.stratagem,

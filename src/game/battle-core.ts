@@ -46,6 +46,18 @@ export const BATTLE_RULES = {
   collapseThreatReset: 50,
   collapsesToLose: 2,
   gaugeRegen: 1.0,
+  /** 일반 공격 간격 곡선: 기본 × 절반속도 / (절반속도 + 속도) */
+  attackIntervalBase: 2.0,
+  attackIntervalHalf: 129,
+  /** 첫 스킬 순서: (평균 속도 / 내 속도)^이 값만큼 첫 대기가 늘거나 준다 */
+  speedOpenerPower: 0.8,
+  /** 장비 세트 3부위 효과: 질풍(첫 스킬 −초, 쿨다운 −%) · 패왕(피해 +%) · 천군(받는 피해 −%) · 천책(게이지 충전 +%) */
+  galeOpenerSec: 2,
+  galeCooldownCut: 0.08,
+  overlordDamage: 0.1,
+  legionGuard: 0.08,
+  sageGauge: 0.12,
+  sageDebuff: 0.3,
   gaugeOnBreak: 20,
   tacticCost: { guard: 35, feint: 50, charge: 65 } as Record<BattleTactic, number>,
   guardDuration: 4.5,
@@ -172,6 +184,11 @@ export function troopCapacity(general: General): number {
   return Math.round((620 + general.leadership * 6 + general.defense * 3 + general.level * 24 + general.grade * 70) * BATTLE_RULES.troopScale * cut)
 }
 
+/** 이 무장이 장비 세트 3부위를 갖췄는가 */
+function hasGearSet(unit: CoreUnit, set: 'command' | 'martial' | 'stratagem' | 'speed'): boolean {
+  return unit.general.gearSets?.includes(set) ?? false
+}
+
 export class BattleCore {
   readonly mode: BattleMode
   readonly players: CoreUnit[]
@@ -234,8 +251,19 @@ export class BattleCore {
     if (this.research.troops) this.players.forEach(unit => { unit.maxTroops = Math.round(unit.maxTroops * (1 + this.research.troops!)); unit.troops = unit.maxTroops })
     this.enemies = enemies.slice(0, 3).map((general, lane) => this.makeUnit(general, 'enemy', lane))
     this.bond = bondFor(this.players.map(unit => unit.general.id))
-    this.players.forEach(unit => { unit.cdMax = this.cooldownFor(unit) * (this.research.strategistCd && (unit.def.type === '계략' || unit.def.type === '통솔') ? 1 - this.research.strategistCd : 1); unit.cd = Math.max(0, unit.cdMax * 0.4 - (this.passive(unit) === 'fastOpener' ? (unit.def.passive?.value ?? 0) : 0)) })
-    this.enemies.forEach(unit => { unit.cdMax = skillCooldownFor(this.growth(unit), unit.base) * (this.mode === 'duel' ? 1 : BATTLE_RULES.enemySkillCooldownMult); unit.cd = unit.cdMax * 0.6 })
+    // 첫 스킬 순서: 전장의 평균 속도보다 빠른 무장일수록 첫 스킬 대기가 짧다(가장 빠른 무장이 먼저 버프·디버프를 건다)
+    const allUnits = [...this.players, ...this.enemies]
+    const avgSpeed = Math.max(1, allUnits.reduce((sum, unit) => sum + unit.general.speed, 0) / Math.max(1, allUnits.length))
+    const opener = (unit: CoreUnit) => clamp(Math.pow(avgSpeed / Math.max(1, unit.general.speed), BATTLE_RULES.speedOpenerPower), 0.4, 1.6)
+    this.players.forEach(unit => {
+      unit.cdMax = this.cooldownFor(unit) * (this.research.strategistCd && (unit.def.type === '계략' || unit.def.type === '통솔') ? 1 - this.research.strategistCd : 1)
+      const head = (this.passive(unit) === 'fastOpener' ? (unit.def.passive?.value ?? 0) : 0) + (hasGearSet(unit, 'speed') ? BATTLE_RULES.galeOpenerSec : 0)
+      unit.cd = Math.max(0, unit.cdMax * 0.4 * opener(unit) - head)
+    })
+    this.enemies.forEach(unit => {
+      unit.cdMax = skillCooldownFor(this.growth(unit), unit.base) * (this.mode === 'duel' ? 1 : BATTLE_RULES.enemySkillCooldownMult) * (hasGearSet(unit, 'speed') ? 1 - BATTLE_RULES.galeCooldownCut : 1)
+      unit.cd = Math.max(0, unit.cdMax * 0.6 * opener(unit) - (hasGearSet(unit, 'speed') ? BATTLE_RULES.galeOpenerSec : 0))
+    })
     this.enemyMaxTotal = Math.max(1, this.enemies.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const enemyLevel = this.enemies.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.enemies.length)
     this.moraleScale = Math.min(BATTLE_RULES.moraleScaleCap, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1)) * (this.easy ? 0.35 : 1)
@@ -285,7 +313,7 @@ export class BattleCore {
   }
 
   private cooldownFor(unit: CoreUnit): number {
-    let cooldown = skillCooldownFor(this.growth(unit), unit.base)
+    let cooldown = skillCooldownFor(this.growth(unit), unit.base) * (hasGearSet(unit, 'speed') ? 1 - BATTLE_RULES.galeCooldownCut : 1)
     const id = this.passive(unit)
     if (id === 'partnerSelfCd' && this.hasPlayer(unit.def.passive?.partner ?? '')) cooldown -= unit.def.passive?.value ?? 0
     if (id === 'cavalryPair' && this.players.filter(other => other.general.role === '기병').length >= 2) cooldown -= unit.def.passive?.value ?? 0
@@ -343,7 +371,7 @@ export class BattleCore {
 
   // ── 병력 피해 ────────────────────────────────────
   private attackBonus(unit: CoreUnit): number {
-    if (unit.side === 'enemy') return 0
+    if (unit.side === 'enemy') return hasGearSet(unit, 'martial') ? BATTLE_RULES.overlordDamage : 0
     let bonus = effectValue(this.buffs, 'atk-up')
     if (this.buffs.some(effect => effect.id === 'hangover' && effect.remaining <= 3)) bonus -= effectValue(this.buffs, 'hangover')
     if (unit.selfAtk.until > this.t) bonus += unit.selfAtk.value
@@ -447,7 +475,8 @@ export class BattleCore {
     const { dr, taken } = this.damageReduction(victim, attacker)
     // 전열: 가운데 자리는 받는 피해가 줄어든다(수호형이면 더). 함진영 같은 피해 감소 무시 효과에는 적용되지 않는다
     const front = victim.lane === BATTLE_RULES.frontLane && !opts.ignoreDr ? BATTLE_RULES.frontDr + (this.isFrontTank(victim) ? BATTLE_RULES.frontTankDr : 0) : 0
-    const amount = Math.max(1, Math.round(raw * (1 - front) * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken)))
+    const legion = hasGearSet(victim, 'command') ? 1 - BATTLE_RULES.legionGuard : 1
+    const amount = Math.max(1, Math.round(raw * (1 - front) * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken) * legion))
     victim.troops = Math.max(0, victim.troops - amount)
     const edgeValue = attacker ? matchup(attacker.general.role, victim.general.role) : 1
     this.events.push({ kind: 'hit', side: victim.side, lane: victim.lane, amount, source, ...(edgeValue > 1 ? { edge: 'adv' as const } : edgeValue < 1 ? { edge: 'dis' as const } : {}) })
@@ -488,7 +517,8 @@ export class BattleCore {
       const target = this.targetFor(defenders, attacker.lane)
       if (!target) return
       const g = attacker.general
-      let interval = Math.max(0.72, 1.85 - g.speed * 0.008)
+      // 공격 간격: 빠를수록 짧아지되 갑자기 멈추지 않고 서서히 덜 줄어든다(속도 66 ≈ 1.32초, 200 ≈ 0.78초, 400 ≈ 0.49초)
+      let interval = BATTLE_RULES.attackIntervalBase * BATTLE_RULES.attackIntervalHalf / (BATTLE_RULES.attackIntervalHalf + Math.max(0, g.speed))
       if (attacker.side === 'player') {
         if (this.passive(attacker) === 'peerless') interval /= 1.1
         if (g.role === '기병' && hasBattleEffect(this.buffs, 'cavalry-surge')) interval /= 1.1
@@ -754,7 +784,7 @@ export class BattleCore {
     for (const effect of fx) if (effect.k === 'afterDebuff' && hasBattleEffect(this.debuffs, 'silence')) debuffMult *= effect.value
     const combo = 1 + Math.min(this.combo, 8) * (hasBattleEffect(this.buffs, 'chain-fury') ? 0.055 : 0.05) * (1 + (this.research.combo ?? 0))
     const flat = hasBattleEffect(this.buffs, 'hawk-eye') ? 4 : 0
-    power = (power * mult + flat) * buffMult * debuffMult * combo
+    power = (power * mult + flat) * buffMult * debuffMult * combo * (hasGearSet(unit, 'martial') ? 1 + BATTLE_RULES.overlordDamage : 1)
     const hits = fx.find((effect): effect is Extract<SkillFx, { k: 'hits' }> => effect.k === 'hits')
     if (hits) power *= hits.n * hits.each
     return Math.round(Math.min(SKILL_MORALE_CAP + (this.research.capBonus ?? 0), power) * 10) / 10
@@ -836,7 +866,9 @@ export class BattleCore {
         }
         if ((effect.id === 'burning' || effect.id === 'fear') && hasBattleEffect(this.buffs, 'chaos-craft') && hasBattleEffect(this.debuffs, 'rage')) seconds *= 1.5
         if (unit.general.stars >= 4 && unit.def.type !== '돌격') seconds += 1
-        this.addEffect('debuff', effect.id, Math.min(10, seconds))
+        // 천책 세트: 착용 무장이 거는 디버프가 더 오래 간다
+        if (hasGearSet(unit, 'stratagem')) seconds *= 1 + BATTLE_RULES.sageDebuff
+        this.addEffect('debuff', effect.id, Math.min(hasGearSet(unit, 'stratagem') ? 12 : 10, seconds))
         return [BATTLE_EFFECTS[effect.id].name]
       }
       case 'buff': {
@@ -949,7 +981,7 @@ export class BattleCore {
     this.t += dt
     this.tickEffects(dt)
     this.guardTimer = Math.max(0, this.guardTimer - dt)
-    this.gauge = Math.min(100, this.gauge + dt * BATTLE_RULES.gaugeRegen)
+    this.gauge = Math.min(100, this.gauge + dt * BATTLE_RULES.gaugeRegen * (this.players.some(unit => unit.troops > 0 && hasGearSet(unit, 'stratagem')) ? 1 + BATTLE_RULES.sageGauge : 1))
     this.threat = Math.max(0, this.threat - dt * (BATTLE_RULES.threatDecay + (hasBattleEffect(this.buffs, 'iron-wall') ? 4 : 0)))
     const cdRate = hasBattleEffect(this.buffs, 'swift-step') ? 1.25 : 1
     this.players.forEach(unit => { if (unit.troops > 0 && unit.skillOn) unit.cd = Math.max(0, unit.cd - dt * cdRate) })

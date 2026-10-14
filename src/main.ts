@@ -58,7 +58,7 @@ import {
 import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
-import { autoEquip, autoFormation, withEquipmentStats, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
+import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 import { locale } from './i18n/lang'
 import { startDomTranslation, tr } from './i18n/translate'
 import { BattleCoach, Coach, markMenusSeen, maybeMenuTour, openBattleGuide, resetCoaching } from './ui/coach'
@@ -269,7 +269,7 @@ function battleGenerals(): NonNullable<ReturnType<typeof findGeneral>>[] {
   return state.formation.map(id => {
     const general = findGeneral(state, id)
     if (!general) return null
-    const equipped = withEquipmentStats(general, equipmentBonus(state, id))
+    const equipped = withEquipmentStats(general, equipmentBonus(state, id), fullEquipmentSets(equipmentSetCounts(state, id)))
     if (boost === 1) return equipped
     return { ...equipped, leadership: Math.round(equipped.leadership * boost), martial: Math.round(equipped.martial * boost), stratagem: Math.round(equipped.stratagem * boost), speed: Math.round(equipped.speed * boost), attack: Math.round(equipped.attack * boost), defense: Math.round(equipped.defense * boost) }
   }).filter((general): general is NonNullable<typeof general> => Boolean(general))

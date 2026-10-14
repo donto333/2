@@ -1,6 +1,6 @@
 // 밸런스 테스트 계산 — 게임과 같은 전투 규칙(battle-core)·스킬(skills)·장비 공식을 그대로 쓴다.
 import { BattleCore, BATTLE_RULES, type BattleMode, type BattleResult } from '../game/battle-core'
-import { allGenerals, combatPower, equipmentBonusFromItems, makeEquipment, scaleGeneral, skillPower, skillUnlockLevel, templateGeneral, withEquipmentStats, type Equipment, type EquipmentGrade, type EquipmentSet, type EquipmentType, type General } from '../game/strategy'
+import { allGenerals, combatPower, equipmentBonusFromItems, fullEquipmentSets, makeEquipment, scaleGeneral, skillPower, skillUnlockLevel, templateGeneral, withEquipmentStats, type Equipment, type EquipmentGrade, type EquipmentSet, type EquipmentType, type General } from '../game/strategy'
 import { bondFor, skillCooldownFor, skillDefFor } from '../game/skills'
 
 export const GEAR_TYPES: EquipmentType[] = ['weapon', 'armor', 'accessory']
@@ -64,7 +64,10 @@ export function slotItems(slot: SlotConfig): Equipment[] {
 export function buildGeneral(slot: SlotConfig): General {
   const template = templateGeneral(slot.id) ?? allGenerals()[0]
   const grown = scaleGeneral({ ...template, level: 1, stars: 1 }, slot.level, slot.stars)
-  return withEquipmentStats({ ...grown, skillUnlocked: slot.skill }, equipmentBonusFromItems(slotItems(slot)))
+  const items = slotItems(slot)
+  const counts: Partial<Record<EquipmentSet, number>> = {}
+  items.forEach(item => { counts[item.set] = (counts[item.set] ?? 0) + 1 })
+  return withEquipmentStats({ ...grown, skillUnlocked: slot.skill }, equipmentBonusFromItems(items), fullEquipmentSets(counts))
 }
 
 export interface SlotPreview { general: General; power: number; skillName: string; skillType: string; morale: number; cooldown: number; passive: string; passiveOn: boolean; unlockLevel: number }

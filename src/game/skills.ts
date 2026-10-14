@@ -9,7 +9,7 @@ type Grade = 1 | 2 | 3 | 4 | 5
 export const SKILL_TYPE_META: Record<SkillType, { base: number; cooldown: number; stat: 'martial' | 'stratagem' | 'leadership'; label: string }> = {
   돌격: { base: 14, cooldown: 10, stat: 'martial', label: '단일 대상 큰 피해' },
   사격: { base: 11, cooldown: 8, stat: 'martial', label: '약한 적 마무리' },
-  계략: { base: 11, cooldown: 12, stat: 'stratagem', label: '디버프·지속 피해' },
+  계략: { base: 11, cooldown: 11, stat: 'stratagem', label: '디버프·지속 피해' },
   통솔: { base: 10, cooldown: 11, stat: 'leadership', label: '아군 전체 버프' },
   수호: { base: 3, cooldown: 12, stat: 'leadership', label: '피해 감소·반격' },
   치유: { base: 0, cooldown: 16, stat: 'leadership', label: '회복·상태이상 해제' },
@@ -230,11 +230,17 @@ export function mainStatGrowth(general: SkillGrowthInput, base: Pick<SkillGrowth
   return Math.min(1.45, Math.max(1, 1 + 0.3 * (general[key] - base[key]) / expected))
 }
 
+/** 속도 쿨다운 단축 곡선: 최대치와 그 절반에 닿는 속도(30 초과분) */
+export const SPEED_CD_MAX = 0.3
+export const SPEED_CD_HALF = 240
+
 export function skillCooldownFor(general: SkillGrowthInput, base?: Pick<SkillGrowthInput, 'speed'>): number {
   const def = skillDefFor(general.id, general.role)
   const meta = SKILL_TYPE_META[def.type]
-  const speed = (base ?? general).speed
-  const cut = Math.min(0.15, Math.max(0, (speed - 50) / 400))
+  // 현재 속도(레벨업·장비 포함)로 줄인다. 빠를수록 덜 줄어들며 최대 30%에 다가간다(속도 66 ≈ −4%, 200 ≈ −13%, 400 ≈ −18%)
+  void base
+  const over = Math.max(0, general.speed - 30)
+  const cut = SPEED_CD_MAX * over / (over + SPEED_CD_HALF)
   let cooldown = meta.cooldown * (1 - cut) - 0.5 * (starRank(general) - 1)
   if (def.weakness?.id === 'indecisive') cooldown += 2
   return Math.max(SKILL_MIN_COOLDOWN, Math.round(cooldown * 10) / 10)
