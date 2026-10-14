@@ -1454,3 +1454,85 @@ body .is-flash { animation: claim-flash .9s ease-in-out 3; }
 }
 body .mission-card { scroll-margin-top: 96px; }
 @media (max-width: 760px) { body .mission-card { scroll-margin-top: calc(var(--mobile-top, 92px) + 12px); } }
+
+/* ══ 모집·장비 뽑기 연출 ═══════════════════════════════════════════ */
+.summon-ceremony, .heaven-descends { position: fixed; inset: 0; z-index: 9500; display: grid; place-items: center; overflow: hidden; opacity: 0; transition: opacity .25s; cursor: pointer; --glow: #f6c56d; }
+.summon-ceremony.is-on, .heaven-descends.is-on { opacity: 1; }
+.summon-ceremony.is-out, .heaven-descends.is-out { opacity: 0; }
+.sc-bg { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--glow) 18%, #1a0c05) 0%, #0b0502 60%, #000 100%); }
+.sc-rays { position: absolute; width: 160vmax; height: 160vmax; left: 50%; top: 50%; transform: translate(-50%, -50%); background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--glow) 22%, transparent) 0 4deg, transparent 4deg 18deg); opacity: 0; animation: sc-spin 9s linear infinite; mask-image: radial-gradient(circle, #000 0%, transparent 55%); -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 55%); transition: opacity .6s; }
+.summon-ceremony.is-charge .sc-rays, .summon-ceremony.is-crack .sc-rays { opacity: .9; }
+.sc-ring { position: absolute; width: min(78vmin, 520px); height: min(78vmin, 520px); color: var(--glow); opacity: .75; filter: drop-shadow(0 0 8px var(--glow)); }
+.sc-ring--outer { animation: sc-rot 14s linear infinite; }
+.sc-ring--inner { width: min(56vmin, 380px); height: min(56vmin, 380px); animation: sc-rot 9s linear infinite reverse; }
+.summon-ceremony.is-charge .sc-ring--outer { animation-duration: 3s; }
+.summon-ceremony.is-crack .sc-ring--inner { animation-duration: 1.2s; opacity: 1; }
+.sc-beam { position: absolute; left: 50%; bottom: 50%; width: 6px; height: 0; transform: translateX(-50%); background: linear-gradient(0deg, var(--glow), transparent); box-shadow: 0 0 24px 8px color-mix(in srgb, var(--glow) 60%, transparent); transition: height .7s ease-in, width .5s; }
+.summon-ceremony.is-charge .sc-beam { height: 50vh; }
+.summon-ceremony.is-crack .sc-beam { height: 50vh; width: 18px; }
+.sc-token { position: relative; width: min(34vmin, 220px); height: auto; filter: drop-shadow(0 0 18px color-mix(in srgb, var(--glow) 70%, transparent)); animation: sc-float 2.4s ease-in-out infinite; }
+.summon-ceremony.is-charge .sc-token { animation: sc-float 2.4s ease-in-out infinite, sc-shake .18s linear infinite; filter: drop-shadow(0 0 30px var(--glow)) brightness(1.15); }
+.summon-ceremony.is-crack .sc-token { animation: sc-shake .08s linear infinite; filter: drop-shadow(0 0 50px var(--glow)) brightness(1.5); transform: scale(1.12); transition: transform .5s; }
+.sc-cracks { position: absolute; width: min(40vmin, 260px); height: min(40vmin, 260px); opacity: 0; background:
+  linear-gradient(62deg, transparent 48%, #fff 49%, #fff 50%, transparent 51%),
+  linear-gradient(-30deg, transparent 48.5%, #fff 49.5%, transparent 50.5%),
+  linear-gradient(115deg, transparent 49%, #fff 49.6%, transparent 50.4%);
+  filter: drop-shadow(0 0 6px var(--glow)); mix-blend-mode: screen; transition: opacity .2s; }
+.summon-ceremony.is-crack .sc-cracks { opacity: .9; }
+.sc-flash { position: absolute; inset: 0; background: radial-gradient(circle, #fff 0%, color-mix(in srgb, var(--glow) 70%, #fff) 30%, transparent 70%); opacity: 0; pointer-events: none; }
+.summon-ceremony.is-flash .sc-flash { animation: sc-flash .45s ease-out forwards; }
+.sc-particles, .hd-sparks { position: absolute; inset: 0; pointer-events: none; }
+.sc-particles i, .hd-sparks i { position: absolute; bottom: -10px; width: var(--z); height: var(--z); border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); opacity: 0; animation: sc-rise var(--s) var(--d) linear infinite; }
+.sc-hint { position: absolute; bottom: 7vh; margin: 0; color: rgba(255, 240, 210, .55); font-size: 13px; letter-spacing: .1em; }
+.summon-ceremony--g5 { --glow: #ffd36a; }
+.summon-ceremony--g5.is-crack .sc-bg { animation: sc-quake .12s linear infinite; }
+.summon-ceremony--forge .sc-bg { background: radial-gradient(circle at 50% 60%, color-mix(in srgb, var(--glow) 20%, #2a0e04) 0%, #0d0502 60%, #000 100%); }
+.summon-ceremony--forge .sc-token { width: min(30vmin, 180px); border-radius: 8px; }
+.summon-ceremony--forge .sc-particles i { background: #ff9a3c; box-shadow: 0 0 10px #ff7a1a; border-radius: 1px; }
+
+/* 천명 강림 · 전설 장비 */
+.heaven-descends { --hd: #ffd98a; }
+.hd-bg { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--hd) 35%, #2a1505) 0%, #120802 55%, #000 100%); }
+.hd-rays { position: absolute; width: 180vmax; height: 180vmax; left: 50%; top: 42%; transform: translate(-50%, -50%); background: repeating-conic-gradient(color-mix(in srgb, var(--hd) 40%, transparent) 0 3deg, transparent 3deg 12deg); mask-image: radial-gradient(circle, #000 0%, transparent 60%); -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 60%); animation: sc-spin 18s linear infinite; }
+.hd-pillars { position: absolute; inset: 0; display: flex; justify-content: space-around; pointer-events: none; }
+.hd-pillars i { width: 6vw; max-width: 70px; height: 100%; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--hd) 55%, transparent) 30%, color-mix(in srgb, var(--hd) 35%, transparent) 70%, transparent); filter: blur(6px); transform: scaleY(0); transform-origin: bottom; animation: hd-pillar 1s calc(var(--i) * .08s) cubic-bezier(.2, .8, .2, 1) forwards; }
+.hd-portrait { position: absolute; right: 0; bottom: 0; width: min(62vw, 720px); height: 100%; background: var(--portrait) center 15% / cover no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent, #000 30%); mask-image: linear-gradient(90deg, transparent, #000 30%); opacity: 0; transform: translateX(14%) scale(1.08); filter: brightness(1.2) contrast(1.06) drop-shadow(0 0 40px var(--hd)); animation: hd-slide 1.1s .25s cubic-bezier(.16, 1, .3, 1) forwards; }
+.hd-item { position: absolute; right: 12vw; top: 50%; width: min(36vmin, 300px); aspect-ratio: 1; transform: translateY(-50%) scale(.4) rotate(-20deg); opacity: 0; animation: hd-item 1s .3s cubic-bezier(.16, 1, .3, 1) forwards; }
+.hd-item img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 30px var(--hd)) brightness(1.15); }
+.hd-copy { position: relative; z-index: 2; justify-self: start; margin-left: 8vw; max-width: 520px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; opacity: 0; animation: hd-copy .7s .7s ease-out forwards; }
+.hd-stamp { width: 92px; height: 92px; display: grid; place-items: center; border: 4px solid #c8281c; border-radius: 10px; color: #c8281c; background: rgba(255, 236, 210, .92); font: 900 30px/1 'Gowun Batang', serif; transform: rotate(-8deg) scale(3); opacity: 0; animation: hd-stamp .45s .95s cubic-bezier(.3, 1.6, .5, 1) forwards; box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
+.hd-grade { margin: 6px 0 0; color: var(--hd); font: 800 15px/1.3 Pretendard, sans-serif; letter-spacing: .2em; text-shadow: 0 0 12px var(--hd); }
+.hd-copy h2 { margin: 0; font: 900 clamp(44px, 8vw, 84px)/1.05 Pretendard, sans-serif; color: #fff6dc; text-shadow: 0 0 24px var(--hd), 0 4px 0 rgba(0, 0, 0, .6); letter-spacing: -.02em; }
+.hd-epithet { margin: 0; color: #f2dcb0; font-size: 17px; font-weight: 600; }
+.hd-skill { margin: 0; color: #ffd98a; font-size: 14px; }
+.hd-continue { margin-top: 14px; min-width: 160px; height: 48px; justify-content: center; font-size: 17px; }
+.heaven-descends.is-on .hd-bg { animation: sc-quake .1s linear 6; }
+@media (max-width: 760px) {
+  .hd-portrait { width: 100vw; opacity: 0; -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 92%); mask-image: linear-gradient(180deg, #000 55%, transparent 92%); }
+  .hd-item { right: 50%; top: 32%; transform: translate(50%, -50%) scale(.4); }
+  .hd-copy { align-self: end; margin: 0 0 9vh 6vw; }
+  .hd-stamp { width: 70px; height: 70px; font-size: 24px; }
+}
+
+/* 10회 결과: 카드가 뒤집히며 등장, 5등급·전설 이상은 금빛 오라 */
+.recruit-results.is-visible .recruit-result-card { animation: rc-flip .6s var(--reveal-delay, 0ms) cubic-bezier(.2, .8, .2, 1) both; }
+.recruit-result-card--five-star, .equipment-result-card--legendary, .equipment-result-card--mythic { position: relative; isolation: isolate; }
+.recruit-result-card--five-star::after, .equipment-result-card--legendary::after, .equipment-result-card--mythic::after { content: ''; position: absolute; inset: -3px; z-index: -1; border-radius: inherit; background: conic-gradient(from var(--rc-a, 0deg), #ffd98a, #b8741c, #fff3c4, #b8741c, #ffd98a); animation: rc-aura 2.4s linear infinite; filter: blur(3px); }
+
+@keyframes sc-spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.sc-ring--outer, .sc-ring--inner { left: 50%; top: 50%; translate: -50% -50%; }
+@keyframes sc-rot { to { transform: rotate(360deg); } }
+@keyframes sc-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -10px; } }
+@keyframes sc-shake { 0% { translate: 2px 0; } 25% { translate: -2px 1px; } 50% { translate: 1px -2px; } 75% { translate: -1px 2px; } 100% { translate: 2px 0; } }
+@keyframes sc-quake { 0% { transform: translate(3px, 1px); } 50% { transform: translate(-3px, -2px); } 100% { transform: translate(2px, 2px); } }
+@keyframes sc-flash { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes sc-rise { 0% { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } 100% { transform: translateY(-105vh); opacity: 0; } }
+@keyframes hd-pillar { to { transform: scaleY(1); } }
+@keyframes hd-slide { to { opacity: 1; transform: none; } }
+@keyframes hd-item { to { opacity: 1; transform: translateY(-50%) scale(1) rotate(0); } }
+@keyframes hd-copy { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes hd-stamp { to { opacity: 1; transform: rotate(-8deg) scale(1); } }
+@keyframes rc-flip { from { opacity: 0; transform: perspective(600px) rotateY(100deg) scale(.85); } to { opacity: 1; transform: none; } }
+@property --rc-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes rc-aura { to { --rc-a: 360deg; } }
+@media (max-width: 760px) { @keyframes hd-item { to { opacity: 1; transform: translate(50%, -50%) scale(1) rotate(0); } } }

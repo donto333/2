@@ -649,9 +649,12 @@ const ui = new StrategyUI(root, {
     if (result.ok) syncSteam()
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) queueAccountSave()
-    if (result.ok && count === 10) ui.showRecruitResults(result.rewards)
+    // 연출(옥패 의식 → 5등급 천명 강림) 뒤에 결과를 보여 준다
+    if (result.ok) void ui.celebrateRecruit(result.rewards).then(() => {
+      if (count === 10) ui.showRecruitResults(result.rewards)
+      else if (result.general) void ui.playRecruitAnimation(result.general, count, true)
+    })
     if (result.ok && count === 10) onboarding.event('recruit10')
-    else if (result.ok && result.general) void ui.playRecruitAnimation(result.general, count)
   },
   onUpgrade: id => {
     const result = upgrade(state, id)
@@ -695,7 +698,7 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) {
-      ui.showEquipmentResults(result.rewards)
+      void ui.celebrateDraw(result.rewards).then(() => ui.showEquipmentResults(result.rewards))
       if (count === 10) onboarding.event('gear10')
     }
   },
@@ -1238,7 +1241,7 @@ const battleCoach = new BattleCoach(coach, { pause: on => { arena.setPaused(on);
 let tourSection = ''
 let tourSince = 0
 /** 다른 창(소개·알림·결과·모집 결과·진영 선택)이 떠 있으면 짚어 주기를 미룬다 */
-const overlayOpen = () => Boolean(document.querySelector('.game-intro, .notice-popup, .result-modal, .recruit-results, .battle-guide, .access-gate, .faction-selection, .slot-picker'))
+const overlayOpen = () => Boolean(document.querySelector('.game-intro, .notice-popup, .result-modal, .recruit-results, .summon-ritual, .summon-ceremony, .heaven-descends, .battle-guide, .access-gate, .faction-selection, .slot-picker'))
 // 첫 입장 튜토리얼(건너뛸 수 없음). 회원은 서버 진행을 불러온 뒤에 시작한다.
 const onboarding = new Onboarding({
   state,

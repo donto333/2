@@ -8,6 +8,7 @@ import type { BattleOpponent, BattleSnapshot } from '../game/arena'
 import { SCENARIOS, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
 import { ensureIconSprite, icon, type IconName } from './icons'
+import { playForgeCeremony, playSummonCeremony } from './summon-ceremony'
 
 const POWER_MARK_KEY = 'cheonharo.powerMark'
 import { TerritoryMapController, type MapCity } from './territory-map'
@@ -591,7 +592,17 @@ export class StrategyUI {
     window.setTimeout(() => toast.classList.remove('is-visible'), 3300)
   }
 
-  playRecruitAnimation(general: General, count: number): Promise<void> {
+  /** 무장 모집 연출(옥패 의식 → 5등급이면 천명 강림) */
+  celebrateRecruit(rewards: General[]): Promise<void> {
+    return playSummonCeremony(rewards, general => this.portraitAsset(general))
+  }
+
+  /** 장비 뽑기 연출(대장간 불꽃 → 전설·신화면 등장) */
+  celebrateDraw(items: Equipment[]): Promise<void> {
+    return playForgeCeremony(items, item => equipmentImage(item.type), item => ({ type: EQUIPMENT_TYPE_META[item.type].label, set: EQUIPMENT_SET_META[item.set].label }))
+  }
+
+  playRecruitAnimation(general: General, count: number, revealNow = false): Promise<void> {
     if (this.recruitAnimationActive) return Promise.resolve()
     this.recruitAnimationActive = true
     const meta = GRADE_META[general.grade]
@@ -614,7 +625,7 @@ export class StrategyUI {
       }
       overlay.querySelector('[data-action="close-summon"]')?.addEventListener('click', finish, { once: true })
       requestAnimationFrame(() => overlay.classList.add('is-visible'))
-      window.setTimeout(() => overlay.classList.add('is-revealed'), 980)
+      window.setTimeout(() => overlay.classList.add('is-revealed'), revealNow ? 60 : 980)
       window.setTimeout(finish, 5200)
     })
   }
@@ -1760,6 +1771,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '무장 모집 · 장비 뽑기 연출', '무장 모집과 장비 뽑기에 연출을 더했습니다. 옥패(장비는 대장간 불꽃)에 기가 모이고 금이 간 뒤 섬광과 징 소리가 울리며, 최고 등급에 따라 빛의 색이 달라집니다. 5등급 무장이 나오면 빛기둥과 함께 무장 그림이 들어오는 「천명 강림」, 전설·신화 장비가 나오면 「장비 출현」 장면이 이어집니다. 10회 결과 카드는 한 장씩 뒤집히고, 최고 등급 카드는 금빛 테두리가 돕니다. 화면을 누르면 건너뛸 수 있습니다.', '완료', 'gold'],
       ['2026.10.14', '처음 시작 안내 마지막 단계 수정', '「임무 보상 받기」의 바로 가기를 누르면 본영의 임무 칸으로 내려가 받을 수 있는 보상이 깜빡입니다. 이미 오늘·이번 주 임무 보상을 받은 계정은 이 단계가 바로 완료 처리됩니다.', '완료', 'jade'],
       ['2026.10.14', '버튼을 눌러도 화면 고정', '강화·장착·구매처럼 같은 메뉴 안에서 버튼을 누르면 화면이 맨 위로 튀어 오르던 문제를 고쳤습니다. 보던 위치와 펼쳐 둔 칸(스킬 자세히 등)이 그대로 유지됩니다.', '완료', 'jade'],
       ['2026.10.13', '재화 그림', '금화(놋쇠 엽전)·은전(말굽은)·옥패(비취 패와 붉은 끈)·영향력(인장)·식량(이삭 다발)·목재(통나무)·철(덩이쇠)·병서(죽간)·신화 조각(자수정)을 질감과 빛이 있는 사실적인 그림으로 바꿨습니다.', '완료', 'jade'],
