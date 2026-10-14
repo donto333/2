@@ -1547,3 +1547,13 @@ body .gear-draw-recent h3 { margin: 0; }
 body .gear-draw-recent p { margin: 4px 0 2px; color: #e3c48a; font-size: 13px; }
 body .gear-draw-recent .equipment-mini-row { margin-top: 12px; }
 body .gear-draw-manage { width: 100%; justify-content: center; margin-top: 12px; }
+
+/* 로그인 화면 그림: 패널 위쪽에 다섯 무장 대표 그림, 화면 뒤에는 황혼의 관문 */
+body .access-gate__backdrop { background-image: radial-gradient(ellipse at 50% 40%, rgba(20, 11, 6, .2), rgba(20, 11, 6, .74) 75%), linear-gradient(180deg, rgba(20, 11, 6, .25), rgba(20, 11, 6, .7)), url('/assets/login/gate-backdrop.webp'); background-size: cover; background-position: center; }
+.access-gate__panel { overflow: hidden; }
+.access-gate__art { position: relative; margin: -48px -52px 0; aspect-ratio: 1440 / 560; background: url('/assets/login/keyart.webp') center top / cover no-repeat; animation: gate-art-in 1.2s ease-out both; }
+.access-gate__art::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 1px rgba(231, 207, 158, .12); pointer-events: none; }
+.access-gate__art + .access-gate__seal { position: relative; margin-top: -38px; box-shadow: 0 0 40px rgba(224, 177, 82, .3), 0 6px 18px rgba(0, 0, 0, .5); }
+@keyframes gate-art-in { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .access-gate__art { animation: none; } }
+@media (max-width: 700px) { .access-gate__art { margin: -36px -22px 0; } .access-gate__art + .access-gate__seal { margin-top: -32px; } }
