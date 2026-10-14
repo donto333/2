@@ -1804,3 +1804,27 @@ body .combo-tags { max-width: 260px; }
 .duel-reward--hard { color: #ff8a6b; }
 body .duel-opponent { grid-template-columns: 42px 42px 1fr auto auto; }
 @media (max-width: 620px) { body .duel-opponent { grid-template-columns: 30px 38px 1fr; } body .duel-opponent .duel-reward { grid-column: 3; justify-self: start; margin: 0; } }
+/* 장비 보관·관리: 필터 · 일괄 분해 · 잠금 · 장착 표시 · 프리셋 */
+.equipment-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 8px 0 6px; }
+.equipment-filters select { min-width: 0; padding: 6px 8px; font-size: 12px; background: rgba(20, 12, 7, .72); color: var(--white, #f6ead2); border: 1px solid rgba(224, 177, 82, .3); border-radius: 6px; }
+.equipment-bulk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.equipment-bulk-row small { color: var(--muted, #b9a58a); font-size: 11px; }
+.equipment-bulk span { margin-left: 4px; opacity: .8; }
+.equipment-storage-warn { margin: 0 0 8px; padding: 6px 10px; border: 1px solid rgba(255, 138, 107, .5); border-radius: 6px; color: #ffb39e; font-size: 12px; }
+.equipment-card { position: relative; }
+.equipment-lock { margin-left: auto; padding: 0 4px; border: 0; background: none; cursor: pointer; font-size: 14px; line-height: 1; opacity: .55; }
+.equipment-lock.is-locked { opacity: 1; }
+.equipment-card-top { display: flex; align-items: center; gap: 6px; }
+.equipment-owner { position: absolute; top: 34px; right: 10px; padding: 2px 7px; border-radius: 999px; background: rgba(82, 224, 196, .16); border: 1px solid rgba(82, 224, 196, .5); color: #8fe8d2; font-size: 11px; font-weight: 700; }
+.mini-action--ghost { background: transparent !important; border: 1px solid rgba(224, 177, 82, .35) !important; }
+.equipment-empty { padding: 24px; text-align: center; }
+.equipment-presets { margin-top: 12px; padding: 14px; }
+.equipment-preset-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.equipment-preset { display: grid; gap: 4px; padding: 10px; border: 1px dashed rgba(224, 177, 82, .3); border-radius: 8px; }
+.equipment-preset.is-filled { border-style: solid; border-color: rgba(224, 177, 82, .55); }
+.equipment-preset strong { color: var(--gold, #f2c46d); font-size: 13px; }
+.equipment-preset small { color: var(--muted, #b9a58a); font-size: 11px; min-height: 2.4em; }
+.equipment-preset div { display: flex; gap: 4px; flex-wrap: wrap; }
+.equipment-preset .mini-action { padding: 5px 8px; font-size: 11px; }
+@media (max-width: 620px) { .equipment-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .equipment-preset-grid { grid-template-columns: 1fr; } }
+.equipment-manage { margin: 4px 0 8px; }

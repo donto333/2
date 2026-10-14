@@ -165,6 +165,8 @@ export interface Equipment {
   skillDescription: string
   mythicEventOnly?: boolean
   specialty?: EquipmentSpecialtyId
+  /** 잠금: 분해되지 않는다 */
+  locked?: boolean
 }
 
 export interface General {
@@ -223,6 +225,8 @@ export interface StrategyState {
   factionWarScore: number
   equipmentInventory: Equipment[]
   equipmentLoadouts: Record<string, Partial<Record<EquipmentType, string>>>
+  /** 무장별 장비 프리셋(최대 3개) */
+  equipmentPresets?: Record<string, Array<Partial<Record<EquipmentType, string>> | null>>
   selectedEquipmentGeneralId: string
   lastEquipmentDraw: Equipment[]
   mythicFragments: number
@@ -1083,6 +1087,7 @@ export function ensureEquipmentState(state: StrategyState): void {
   state.equipmentInventory.forEach(item => {
     item.quantity = Math.max(1, Math.trunc(item.quantity ?? 1))
     if (item.grade === 'mythic' && !item.specialty) item.specialty = mythicSpecialty(item.type, item.set)
+    if (item.grade === 'mythic' && item.locked === undefined) item.locked = true
   })
   mergeEquipmentStacks(state)
   if (!state.equipmentLoadouts || typeof state.equipmentLoadouts !== 'object') state.equipmentLoadouts = {}
@@ -1109,10 +1114,12 @@ function mergeEquipmentStacks(state: StrategyState): void {
       return
     }
     existing.quantity = (existing.quantity ?? 1) + (item.quantity ?? 1)
+    if (item.locked) existing.locked = true
     redirects.set(item.id, existing.id)
   })
   if (redirects.size) {
-    Object.values(state.equipmentLoadouts ?? {}).forEach(loadout => {
+    const presetLoadouts = Object.values(state.equipmentPresets ?? {}).flatMap(list => (list ?? []).filter((entry): entry is Partial<Record<EquipmentType, string>> => Boolean(entry)))
+    ;[...Object.values(state.equipmentLoadouts ?? {}), ...presetLoadouts].forEach(loadout => {
       ;(Object.keys(loadout) as EquipmentType[]).forEach(type => {
         const itemId = loadout[type]
         const redirected = itemId ? redirects.get(itemId) : undefined

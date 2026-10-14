@@ -59,6 +59,7 @@ import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
 import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
+import { applyEquipmentPreset, bulkDismantle, dismantleEquipment, packLoadouts, saveEquipmentPreset, toggleEquipmentLock, unpackLoadouts } from './game/equipment-manage'
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, duelTierFor, pickDuelMatches, type DuelTier } from '../server/duel-match.mjs'
 import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
 import { locale } from './i18n/lang'
@@ -148,6 +149,7 @@ function persistLocalGame(): void {
       factionWarScore: state.factionWarScore,
       equipmentInventory: state.equipmentInventory,
       equipmentLoadouts: state.equipmentLoadouts,
+      equipmentPresets: state.equipmentPresets,
       selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
       mythicFragments: state.mythicFragments,
       mythicStones: state.mythicStones,
@@ -191,6 +193,7 @@ function restoreLocalGame(saveKey = LOCAL_GAME_SAVE_KEY): void {
       factionWarScore: saved.factionWarScore,
       equipmentInventory: saved.equipmentInventory,
       equipmentLoadouts: saved.equipmentLoadouts,
+      equipmentPresets: saved.equipmentPresets,
       selectedEquipmentGeneralId: saved.selectedEquipmentGeneralId,
       mythicFragments: saved.mythicFragments,
       mythicStones: saved.mythicStones,
@@ -764,6 +767,30 @@ const ui = new StrategyUI(root, {
   onEquipmentEquip: (generalId, itemId) => {
     const result = equipEquipment(state, generalId, itemId)
     if (result.ok) queueAccountSave(true)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+  },
+  onEquipmentLock: id => {
+    const result = toggleEquipmentLock(state, id)
+    if (result.ok) queueAccountSave(true)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+  },
+  onEquipmentDismantle: (id, count) => {
+    const result = dismantleEquipment(state, id, count)
+    if (result.ok) queueAccountSave(true)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+  },
+  onEquipmentBulkDismantle: grade => {
+    const result = bulkDismantle(state, grade)
+    if (result.ok) queueAccountSave(true)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+  },
+  onEquipmentPreset: (generalId, slot, mode) => {
+    const result = mode === 'save' ? saveEquipmentPreset(state, generalId, slot) : applyEquipmentPreset(state, generalId, slot)
+    if (result.ok) { queueAccountSave(true); arena.setGenerals(battleGenerals()) }
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
   },
@@ -1427,7 +1454,12 @@ async function refreshAccount(): Promise<void> {
       state.luoyangRewardWeekKey = game.luoyangRewardWeekKey ?? undefined
       state.factionWarScore = game.factionWarScore ?? 0
       if (Array.isArray(game.equipmentInventory)) state.equipmentInventory = game.equipmentInventory
-      if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') state.equipmentLoadouts = game.equipmentLoadouts
+      if (game.equipmentLoadouts && typeof game.equipmentLoadouts === 'object') {
+        // 장비 프리셋은 장착 정보 JSON 안에 함께 저장된다
+        const unpacked = unpackLoadouts(game.equipmentLoadouts)
+        state.equipmentLoadouts = unpacked.loadouts
+        if (unpacked.presets) state.equipmentPresets = unpacked.presets
+      }
       if (typeof game.selectedEquipmentGeneralId === 'string') state.selectedEquipmentGeneralId = game.selectedEquipmentGeneralId
       state.mythicFragments = Math.max(0, Math.trunc(game.mythicFragments ?? 0))
       state.mythicStones = Math.max(0, Math.trunc(game.mythicStones ?? 0))
@@ -1499,7 +1531,7 @@ function accountStatePayload() {
     luoyangRewardWeekKey: state.luoyangRewardWeekKey ?? null,
     factionWarScore: saveInt(state.factionWarScore),
     equipmentData: JSON.stringify(state.equipmentInventory),
-    equipmentLoadoutsData: JSON.stringify(state.equipmentLoadouts),
+    equipmentLoadoutsData: JSON.stringify(packLoadouts(state)),
     selectedEquipmentGeneralId: state.selectedEquipmentGeneralId,
     mythicFragments: saveInt(state.mythicFragments),
     mythicStones: saveInt(state.mythicStones),

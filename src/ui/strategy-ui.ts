@@ -1,4 +1,5 @@
 import { OFFICIAL_LAUNCH } from '../../server/launch.mjs'
+import { EQUIPMENT_PRESET_SLOTS, EQUIPMENT_STORAGE_WARN, bulkDismantlePreview, dismantlableCount, dismantleYield, equipmentOwners } from '../game/equipment-manage'
 import { TUTORIAL_REWARD, TUTORIAL_STEPS, nextTutorialStep, tutorialFinished, DAILY_BONUS, DAILY_BONUS_ID, MISSIONS, dailyBonusReady, ensureMissions, missionStatus, rewardText, type MissionDef } from '../game/missions'
 import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResource } from '../game/shop'
 import { effectsSetting, qualitySetting, setEffectsSetting, setQualitySetting, type EffectsSetting, type QualitySetting } from '../game/settings'
@@ -191,6 +192,10 @@ export interface StrategyUiCallbacks {
   onEquipmentEnhance: (id: string) => void
   onEquipmentEquip: (generalId: string, itemId: string) => void
   onEquipmentUnequip: (generalId: string, type: EquipmentType) => void
+  onEquipmentLock: (id: string) => void
+  onEquipmentDismantle: (id: string, count: number) => void
+  onEquipmentBulkDismantle: (grade: 'normal' | 'rare' | 'unique') => void
+  onEquipmentPreset: (generalId: string, slot: number, mode: 'save' | 'apply') => void
   onEquipmentSelectGeneral: (id: string) => void
   onCitySelect: (id: string) => void
   onCityDamageRankingRefresh: (cityId: string) => void
@@ -295,6 +300,8 @@ export class StrategyUI {
   private summonTab: 'generals' | 'equipment' = 'generals'
   private equipmentSort: EquipmentSort = 'grade'
   private equipmentSortDescending = true
+  /** 보관함 필터: 부위 · 세트 · 등급 · 장착 여부 */
+  private equipmentFilter: { type: string; set: string; grade: string; owner: string } = { type: 'all', set: 'all', grade: 'all', owner: 'all' }
   private equipmentScrollTop = 0
   private equipmentScrollFrame: number | null = null
   private equipmentIndexSource: Equipment[] | null = null
@@ -1124,7 +1131,7 @@ export class StrategyUI {
     const recent = !managementOnly && state.lastEquipmentDraw.length ? `<div class="equipment-draw-results glass-card"><div class="card-header"><div><span class="eyebrow">최근 획득</span><h3>이번 뽑기 결과</h3></div><span class="rate-note">${state.lastEquipmentDraw.length}개 획득</span></div><div class="equipment-mini-row">${state.lastEquipmentDraw.map(item => this.equipmentMiniCard(item)).join('')}</div><div class="equipment-extra-draw"><span>더 뽑으시겠습니까?</span><button class="mini-action" data-action="equipment-draw" data-count="1">1회 추가 뽑기 <span class="cost">${icon('honor', 'gi--cost')}240</span></button><button class="mini-action" data-action="equipment-draw" data-count="10">10회 추가 뽑기 <span class="cost">${icon('honor', 'gi--cost')}2,200</span></button></div></div>` : ''
     const setBonusPanel = `<div class="equipment-set-bonuses glass-card"><div class="card-header"><div><span class="eyebrow">세트 효과</span><h3>종류별 세트 능력</h3></div><span class="rate-note">${selected?.name ?? '무장'} 기준</span></div><div class="set-bonus-grid">${(Object.keys(EQUIPMENT_SET_META) as Array<keyof typeof EQUIPMENT_SET_META>).map(set => { const count = setCounts[set] ?? 0; const meta = EQUIPMENT_SET_META[set]; return `<div class="set-bonus-card ${count >= 2 ? 'is-active' : ''}" style="--set-color:${EQUIPMENT_GRADE_META.legendary.color}"><strong>${meta.label}</strong><span>${count}/3 장착</span><small>2세트 · ${meta.twoPiece}</small><small>3세트 · ${meta.threePiece}</small></div>` }).join('')}</div>${activeSets.length ? `<p class="set-active-note">활성 세트: ${activeSets.map(set => EQUIPMENT_SET_META[set].label).join(' · ')}</p>` : '<p class="set-active-note is-muted">같은 세트 장비를 2개 이상 장착하면 세트 능력이 활성화됩니다.</p>'}</div>`
     const equipmentHero = managementOnly ? `<div class="equipment-hero glass-card equipment-management-hero"><div class="equip-overview"><div class="equip-overview__head"><h2>출전 무장 장비 현황</h2><span class="mythic-stone-note">낙양 강화석 <b>${state.mythicStones}</b>개 · 신화장비 강화 1회에 1개</span></div><div class="equip-overview__rows">${state.formation.map((id, index) => { const general = state.generals.find(item => item.id === id); if (!general) return ''; const filled = Object.values(state.equipmentLoadouts[id] ?? {}).filter(Boolean).length; const sets = Object.entries(equipmentSetCounts(state, id)).filter(([, count]) => (count ?? 0) >= 2).map(([set, count]) => `${EQUIPMENT_SET_META[set as keyof typeof EQUIPMENT_SET_META].label} ${count}`).join(' · '); return `<button class="equip-overview__row ${general.id === selected?.id ? 'is-active' : ''} ${filled < 3 ? 'is-missing' : ''}" data-action="equip-general" data-id="${general.id}"><span>${['좌측', '중앙', '우측'][index]}</span><strong>${general.name}</strong><em>장비 ${filled}/3</em><small>${sets || '세트 효과 없음'}</small></button>` }).join('')}</div></div></div>` : `<div class="equipment-hero glass-card"><div><span class="pill pill--gold">장비 뽑기</span><h2>천하의 병장기</h2><p>노멀부터 전설까지 획득할 수 있습니다. 신화 장비는 추후 이벤트로만 지급됩니다.</p></div><div class="equipment-draw-actions"><button class="action-button action-button--primary" data-action="equipment-draw" data-count="1"><span>1회 뽑기</span><b class="cost">${icon('honor', 'gi--cost')}240</b></button><button class="action-button action-button--outline" data-action="equipment-draw" data-count="10"><span>10회 연속</span><b class="cost">${icon('honor', 'gi--cost')}2,200</b></button></div></div>`
-    return `<section class="page-section page-section--equipment"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>장비 관리</h1><p class="heading-copy">무기·갑옷·장신구를 장착하고 강화해 무장의 네 가지 전투 능력과 세트 능력을 끌어올리십시오.</p></div><div class="section-counter"><span>보유 장비</span><strong>${equipmentInventoryCount(state)}</strong></div></div>${equipmentHero}<div class="equipment-layout"><div><div class="equipment-toolbar glass-card"><div><span class="eyebrow">장착 무장</span><h3>장착 무장</h3><small>장비 반영 전투력 높은 순</small></div><button class="mini-action mini-action--deploy equipment-auto" data-action="auto-equip" title="출전 무장 3명에게 가장 좋은 장비 조합을 장착">출전 무장 자동 장착</button><select data-action="equipment-general">${selectableGenerals.map(general => `<option value="${general.id}" ${general.id === selected?.id ? 'selected' : ''}>${general.name} · ${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</option>`).join('')}</select></div><div class="equipment-slots glass-card">${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => this.equipmentSlot(type, loadout[type], state, selected?.id ?? '')).join('')}</div>${setBonusPanel}${recent}</div><div><div class="equipment-inventory"><div class="equipment-inventory-toolbar"><div class="card-header"><div><span class="eyebrow">보관 장비</span><h3>보유 장비</h3></div><span class="rate-note">${state.equipmentInventory.length}개</span></div><div class="equipment-sort-controls"><label>정렬 <select data-action="equipment-sort"><option value="grade" ${this.equipmentSort === 'grade' ? 'selected' : ''}>등급</option><option value="level" ${this.equipmentSort === 'level' ? 'selected' : ''}>강화 레벨</option><option value="name" ${this.equipmentSort === 'name' ? 'selected' : ''}>이름</option></select></label><button class="sort-direction" data-action="equipment-sort-direction">${this.equipmentSortDescending ? '↓' : '↑'}</button></div></div>${this.equipmentVirtualList(state, selected?.id ?? '', equipped)}</div></div></div></section>`
+    return `<section class="page-section page-section--equipment"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>장비 관리</h1><p class="heading-copy">무기·갑옷·장신구를 장착하고 강화해 무장의 네 가지 전투 능력과 세트 능력을 끌어올리십시오.</p></div><div class="section-counter"><span>보유 장비</span><strong>${equipmentInventoryCount(state)}</strong></div></div>${equipmentHero}<div class="equipment-layout"><div><div class="equipment-toolbar glass-card"><div><span class="eyebrow">장착 무장</span><h3>장착 무장</h3><small>장비 반영 전투력 높은 순</small></div><button class="mini-action mini-action--deploy equipment-auto" data-action="auto-equip" title="출전 무장 3명에게 가장 좋은 장비 조합을 장착">출전 무장 자동 장착</button><select data-action="equipment-general">${selectableGenerals.map(general => `<option value="${general.id}" ${general.id === selected?.id ? 'selected' : ''}>${general.name} · ${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</option>`).join('')}</select></div><div class="equipment-slots glass-card">${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => this.equipmentSlot(type, loadout[type], state, selected?.id ?? '')).join('')}</div>${selected ? this.equipmentPresetBar(state, selected.id) : ''}${setBonusPanel}${recent}</div><div><div class="equipment-inventory"><div class="equipment-inventory-toolbar"><div class="card-header"><div><span class="eyebrow">보관 장비</span><h3>보유 장비</h3></div><span class="rate-note">${state.equipmentInventory.length}줄 · ${formatNumber(equipmentInventoryCount(state))}개</span></div><div class="equipment-sort-controls"><label>정렬 <select data-action="equipment-sort"><option value="grade" ${this.equipmentSort === 'grade' ? 'selected' : ''}>등급</option><option value="level" ${this.equipmentSort === 'level' ? 'selected' : ''}>강화 레벨</option><option value="name" ${this.equipmentSort === 'name' ? 'selected' : ''}>이름</option></select></label><button class="sort-direction" data-action="equipment-sort-direction">${this.equipmentSortDescending ? '↓' : '↑'}</button></div></div><div class="equipment-manage">${this.equipmentManageBar(state)}</div>${this.equipmentVirtualList(state, selected?.id ?? '', equipped)}</div></div></div></section>`
   }
 
   /** 모집 · 장비 > 장비 뽑기: 뽑기만(장착·강화·보유 목록은 「장비 관리」에서). 무장 모집과 같은 짜임 */
@@ -1140,7 +1147,13 @@ export class StrategyUI {
     // 이 무장이 낀 장비 → 아무도 안 낀 장비 → 다른 무장이 낀 장비 순
     const others = new Set(Object.entries(state.equipmentLoadouts ?? {}).filter(([owner]) => owner !== generalId).flatMap(([, loadout]) => Object.values(loadout ?? {})))
     const rank = (item: Equipment) => equipped.has(item.id) ? 0 : others.has(item.id) ? 2 : 1
-    const items = this.sortedEquipment(state).map((item, index) => ({ item, index })).sort((a, b) => rank(a.item) - rank(b.item) || a.index - b.index).map(entry => entry.item)
+    const owners = equipmentOwners(state)
+    const f = this.equipmentFilter
+    const items = this.sortedEquipment(state)
+      .filter(item => (f.type === 'all' || item.type === f.type) && (f.set === 'all' || item.set === f.set) && (f.grade === 'all' || item.grade === f.grade) && (f.owner === 'all' || (f.owner === 'equipped' ? owners.has(item.id) : f.owner === 'locked' ? Boolean(item.locked) : !owners.has(item.id))))
+      .map((item, index) => ({ item, index })).sort((a, b) => rank(a.item) - rank(b.item) || a.index - b.index).map(entry => entry.item)
+    this.equipmentOwnerNames = new Map([...owners].map(([itemId, generalId]) => [itemId, state.generals.find(general => general.id === generalId)?.name ?? '']))
+    if (!items.length) return '<div class="rank-empty equipment-empty">조건에 맞는 장비가 없습니다. 필터를 바꿔 보십시오.</div>'
     const start = Math.max(0, Math.floor(this.equipmentScrollTop / this.equipmentRowHeight) - 3)
     const count = Math.ceil(720 / this.equipmentRowHeight) + 6
     const visible = items.slice(start, start + count)
@@ -1158,7 +1171,37 @@ export class StrategyUI {
     const grade = EQUIPMENT_GRADE_META[item.grade]
     const set = EQUIPMENT_SET_META[item.set]
     const specialty = equipmentSpecialty(item)
-    return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}" style="--grade:${grade.color}"><div class="equipment-card-top"><span class="equipment-type"><img loading="lazy" decoding="async" width="21" height="21" src="${equipmentImage(item.type)}" alt="" /> ${EQUIPMENT_TYPE_META[item.type].label}</span><span class="equipment-grade">${grade.label}${(item.quantity ?? 1) > 1 ? ` · x${item.quantity}` : ''}</span></div><img loading="lazy" decoding="async" width="72" height="72" class="equipment-image ${item.grade === 'mythic' ? 'equipment-image--mythic' : ''}" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /><h4>${item.name}</h4><p>${set.label} · ${item.skillName}</p><div class="equipment-stat"><b>${STAT_LABEL[item.mainStat] ?? item.mainStat}</b><strong>+${equipmentValue(item)}</strong><span>Lv.${item.level}/20</span></div><small>${item.skillDescription}</small>${specialty ? `<div class="equipment-specialty"><b>특기 · ${escapeHtml(specialty.label)}</b><span>${escapeHtml(specialty.description)}</span></div>` : ''}<div class="equipment-card-actions">${item.grade === 'mythic' ? `<div class="mythic-preview">${item.level >= 20 ? `최고 단계 · ${STAT_LABEL[item.mainStat] ?? item.mainStat} +${equipmentValue(item)}` : `강화 시 ${STAT_LABEL[item.mainStat] ?? item.mainStat} +${equipmentValue(item)} → <b>+${equipmentValue({ ...item, level: item.level + 1 })}</b> · 최대(Lv.20) +${equipmentValue({ ...item, level: 20 })}`}</div><button class="mini-action mini-action--mythic" data-action="equipment-enhance" data-equipment-id="${item.id}" title="신화장비는 낙양 강화석으로만 강화합니다(낙양 점령 1회당 1개)" ${item.level >= 20 || (this.renderedState?.mythicStones ?? 0) < 1 ? 'disabled' : ''}>${item.level >= 20 ? '최고 단계' : `강화 · 낙양 강화석 1 (보유 ${this.renderedState?.mythicStones ?? 0})`}</button>` : `<button class="mini-action" data-action="equipment-enhance" data-equipment-id="${item.id}">강화 <span class="cost">${icon('silver', 'gi--cost')}${compactNumber(equipmentCost(item, this.renderedState ?? undefined).silver ?? 0)}</span><span class="cost">${icon('iron', 'gi--cost')}${compactNumber(equipmentCost(item, this.renderedState ?? undefined).iron ?? 0)}</span></button>`}${equipped ? `<button class="mini-action" data-action="equipment-unequip" data-equipment-type="${item.type}" data-general-id="${generalId}">장착 해제</button>` : `<button class="mini-action" data-action="equipment-equip" data-equipment-id="${item.id}" data-general-id="${generalId}">장착</button>`}</div></article>`
+    return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}" style="--grade:${grade.color}"><div class="equipment-card-top"><span class="equipment-type"><img loading="lazy" decoding="async" width="21" height="21" src="${equipmentImage(item.type)}" alt="" /> ${EQUIPMENT_TYPE_META[item.type].label}</span><span class="equipment-grade">${grade.label}${(item.quantity ?? 1) > 1 ? ` · ×${item.quantity}` : ''}</span><button class="equipment-lock ${item.locked ? 'is-locked' : ''}" data-action="equipment-lock" data-equipment-id="${item.id}" title="${item.locked ? '잠금 해제' : '잠그면 분해되지 않습니다'}" aria-label="${item.locked ? '잠금 해제' : '잠금'}">${item.locked ? '🔒' : '🔓'}</button></div>${this.equipmentOwnerNames.get(item.id) ? `<span class="equipment-owner">${escapeHtml(this.equipmentOwnerNames.get(item.id) ?? '')} 장착</span>` : ''}<img loading="lazy" decoding="async" width="72" height="72" class="equipment-image ${item.grade === 'mythic' ? 'equipment-image--mythic' : ''}" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /><h4>${item.name}</h4><p>${set.label} · ${item.skillName}</p><div class="equipment-stat"><b>${STAT_LABEL[item.mainStat] ?? item.mainStat}</b><strong>+${equipmentValue(item)}</strong><span>Lv.${item.level}/20</span></div><small>${item.skillDescription}</small>${specialty ? `<div class="equipment-specialty"><b>특기 · ${escapeHtml(specialty.label)}</b><span>${escapeHtml(specialty.description)}</span></div>` : ''}<div class="equipment-card-actions">${item.grade === 'mythic' ? `<div class="mythic-preview">${item.level >= 20 ? `최고 단계 · ${STAT_LABEL[item.mainStat] ?? item.mainStat} +${equipmentValue(item)}` : `강화 시 ${STAT_LABEL[item.mainStat] ?? item.mainStat} +${equipmentValue(item)} → <b>+${equipmentValue({ ...item, level: item.level + 1 })}</b> · 최대(Lv.20) +${equipmentValue({ ...item, level: 20 })}`}</div><button class="mini-action mini-action--mythic" data-action="equipment-enhance" data-equipment-id="${item.id}" title="신화장비는 낙양 강화석으로만 강화합니다(낙양 점령 1회당 1개)" ${item.level >= 20 || (this.renderedState?.mythicStones ?? 0) < 1 ? 'disabled' : ''}>${item.level >= 20 ? '최고 단계' : `강화 · 낙양 강화석 1 (보유 ${this.renderedState?.mythicStones ?? 0})`}</button>` : `<button class="mini-action" data-action="equipment-enhance" data-equipment-id="${item.id}">강화 <span class="cost">${icon('silver', 'gi--cost')}${compactNumber(equipmentCost(item, this.renderedState ?? undefined).silver ?? 0)}</span><span class="cost">${icon('iron', 'gi--cost')}${compactNumber(equipmentCost(item, this.renderedState ?? undefined).iron ?? 0)}</span></button>`}${equipped ? `<button class="mini-action" data-action="equipment-unequip" data-equipment-type="${item.type}" data-general-id="${generalId}">장착 해제</button>` : `<button class="mini-action" data-action="equipment-equip" data-equipment-id="${item.id}" data-general-id="${generalId}">장착</button>`}${item.grade !== 'mythic' && !item.locked && (item.quantity ?? 1) - (this.equipmentOwnerNames.has(item.id) ? 1 : 0) > 0 ? `<button class="mini-action mini-action--ghost" data-action="equipment-dismantle" data-equipment-id="${item.id}">분해</button>` : ''}</div></article>`
+  }
+
+  private equipmentOwnerNames = new Map<string, string>()
+
+  /** 보관함 필터·일괄 분해·보관 경고 */
+  private equipmentManageBar(state: StrategyState): string {
+    const f = this.equipmentFilter
+    const opt = (key: keyof typeof f, value: string, label: string) => `<option value="${value}" ${f[key] === value ? 'selected' : ''}>${label}</option>`
+    const filters = `<div class="equipment-filters">
+      <select data-action="equipment-filter" data-key="type" aria-label="부위">${opt('type', 'all', '부위 전체')}${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => opt('type', type, EQUIPMENT_TYPE_META[type].label)).join('')}</select>
+      <select data-action="equipment-filter" data-key="set" aria-label="세트">${opt('set', 'all', '세트 전체')}${(Object.keys(EQUIPMENT_SET_META) as Array<keyof typeof EQUIPMENT_SET_META>).map(set => opt('set', set, EQUIPMENT_SET_META[set].label)).join('')}</select>
+      <select data-action="equipment-filter" data-key="grade" aria-label="등급">${opt('grade', 'all', '등급 전체')}${(['mythic', 'legendary', 'unique', 'rare', 'normal'] as EquipmentGrade[]).map(grade => opt('grade', grade, EQUIPMENT_GRADE_META[grade].label)).join('')}</select>
+      <select data-action="equipment-filter" data-key="owner" aria-label="장착">${opt('owner', 'all', '장착 전체')}${opt('owner', 'equipped', '장착 중')}${opt('owner', 'free', '미장착')}${opt('owner', 'locked', '잠금')}</select>
+    </div>`
+    const bulk = (['normal', 'rare'] as const).map(grade => { const preview = bulkDismantlePreview(state, grade); return `<button class="mini-action equipment-bulk" data-action="equipment-bulk-dismantle" data-grade="${grade}" ${preview.count ? '' : 'disabled'}>${EQUIPMENT_GRADE_META[grade].label}${grade === 'normal' ? '' : ' 이하'} 일괄 분해 <span>${formatNumber(preview.count)}개</span></button>` }).join('')
+    const warn = state.equipmentInventory.length > EQUIPMENT_STORAGE_WARN ? `<p class="equipment-storage-warn">보관 장비가 ${formatNumber(state.equipmentInventory.length)}줄로 많습니다. 일괄 분해로 정리하면 옥패·철을 돌려받습니다.</p>` : ''
+    return `${filters}<div class="equipment-bulk-row">${bulk}<small>잠금·장착·강화한 장비와 신화장비는 빠집니다</small></div>${warn}`
+  }
+
+  /** 선택한 무장의 장비 프리셋 3칸(저장 · 장착) */
+  private equipmentPresetBar(state: StrategyState, generalId: string): string {
+    const list = state.equipmentPresets?.[generalId] ?? []
+    const names = this.equipmentById(state)
+    const slots = Array.from({ length: EQUIPMENT_PRESET_SLOTS }, (_, slot) => {
+      const preset = list[slot]
+      const items = preset ? Object.values(preset).map(id => names.get(id ?? '')).filter((item): item is Equipment => Boolean(item)) : []
+      const summary = preset ? (items.length ? items.map(item => `${EQUIPMENT_TYPE_META[item.type].label} ${EQUIPMENT_GRADE_META[item.grade].label}`).join(' · ') : '장비 없음') : '비어 있음'
+      return `<div class="equipment-preset ${preset ? 'is-filled' : ''}"><strong>프리셋 ${slot + 1}</strong><small>${escapeHtml(summary)}</small><div><button class="mini-action" data-action="equipment-preset" data-mode="apply" data-slot="${slot}" data-general-id="${generalId}" ${preset ? '' : 'disabled'}>장착</button><button class="mini-action mini-action--ghost" data-action="equipment-preset" data-mode="save" data-slot="${slot}" data-general-id="${generalId}">지금 장비 저장</button></div></div>`
+    }).join('')
+    return `<div class="equipment-presets glass-card"><div class="card-header"><div><span class="eyebrow">장비 프리셋</span><h3>상황별 장비 조합</h3></div><span class="rate-note">시나리오·대련·공성용으로 저장해 두고 한 번에 바꿉니다</span></div><div class="equipment-preset-grid">${slots}</div></div>`
   }
 
   private equipmentMiniCard(item: Equipment): string {
@@ -1824,11 +1867,11 @@ export class StrategyUI {
   }
 
   /** 구매 확인 창(금화 20개 이상 · 신화 조각 교환) */
-  private confirmPurchase(title: string, detail: string, onOk: () => void): void {
+  private confirmPurchase(title: string, detail: string, onOk: () => void, labels: { eyebrow?: string; ok?: string } = {}): void {
     document.querySelector('.shop-confirm')?.remove()
     const modal = document.createElement('div')
     modal.className = 'shop-confirm'
-    modal.innerHTML = `<div class="shop-confirm__card"><span class="eyebrow">구매 확인</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(detail)}</p><div class="shop-confirm__actions"><button class="action-button action-button--outline" data-confirm-no>취소</button><button class="action-button action-button--primary" data-confirm-yes>구매</button></div></div>`
+    modal.innerHTML = `<div class="shop-confirm__card"><span class="eyebrow">${escapeHtml(labels.eyebrow ?? '구매 확인')}</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(detail)}</p><div class="shop-confirm__actions"><button class="action-button action-button--outline" data-confirm-no>취소</button><button class="action-button action-button--primary" data-confirm-yes>${escapeHtml(labels.ok ?? '구매')}</button></div></div>`
     const close = () => modal.remove()
     modal.addEventListener('click', event => { if (event.target === modal) close() })
     modal.querySelector('[data-confirm-no]')?.addEventListener('click', close)
@@ -1838,6 +1881,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.14', '장비 보관·관리', '장비 관리에 보관함 필터(부위·세트·등급·장착 중/미장착/잠금)와 장착 무장 표시(예: 관우 장착)를 넣었습니다. 장비마다 잠금을 걸 수 있고 신화장비는 처음부터 잠겨 있습니다. 남는 장비는 분해해 옥패·철을 돌려받습니다(노멀 6·30 · 레어 15·60 · 유니크 40·120 · 전설 100·250, 강화한 장비는 강화 비용의 50%도 환급). 노멀·레어 이하 일괄 분해는 잠금·장착·강화한 장비와 신화장비를 남깁니다. 무장마다 장비 프리셋 3개를 저장해 시나리오·대련·공성용 조합을 한 번에 바꿀 수 있습니다. 보관 장비가 300줄을 넘으면 정리를 안내합니다.', '완료', 'jade'],
       ['2026.10.14', '신화장비 조각 개편', '신화장비 1개에 필요한 조각이 20개에서 100개로 늘었습니다. 대신 대련 승리 보상이 난이도에 따라 달라집니다: 쉬움 1개 · 보통 2개 · 어려움 3개(하루 5회). 실제 유저 상대는 내 덱보다 전력이 8% 이상 세면 어려움, 8% 이상 약하면 쉬움, 그 사이는 보통입니다. 상대 카드마다 난이도와 보상 조각이 표시됩니다. 난이도(승률)는 그대로입니다.', '완료', 'jade'],
       ['2026.10.14', '유저 대련 난이도', '대련 상대 덱은 AI가 움직여 예고 대응·연계·전술을 쓰지 못해, 전력이 2배인 상대에게도 대부분 이기던 문제를 고쳤습니다. 대련에서만 상대의 사기 최대치 ×1.6, 주는 피해 ×1.7, 스킬 쿨다운 ×0.8로 보정합니다. 훈련 상대는 쉬움 85% · 보통 100% · 어려움 115% 전력이며, 예고 대응을 70% 맞히는 지휘관 기준 승률은 약 80% · 60% · 35%입니다(대응을 잘할수록 더 이깁니다).', '완료', 'jade'],
       ['2026.10.14', '유저 대련 매칭', '덱을 저장한 지휘관이 20명 이상이면 내 덱 전력과 가장 비슷한 실제 유저 덱 6개가 상대로 나옵니다(상대 카드에 전력과 내 덱 대비 차이 표시). 20명 미만이면 내 덱 전력(장비 포함)에 맞춘 훈련 상대 3팀이 나옵니다: 쉬움 85% · 보통 100% · 어려움 115%. 훈련 상대는 가운데에 수호형을 세운 균형 잡힌 덱이고 내 덱 등급·성급에 맞추며, 날마다 무장 구성이 바뀝니다.', '완료', 'jade'],
@@ -2006,6 +2050,26 @@ export class StrategyUI {
     else if (action === 'equipment-enhance') this.callbacks.onEquipmentEnhance(button.dataset.equipmentId ?? '')
     else if (action === 'equipment-equip') this.callbacks.onEquipmentEquip(button.dataset.generalId ?? '', button.dataset.equipmentId ?? '')
     else if (action === 'equipment-unequip') this.callbacks.onEquipmentUnequip(button.dataset.generalId ?? '', (button.dataset.equipmentType ?? 'weapon') as EquipmentType)
+    else if (action === 'equipment-lock') this.callbacks.onEquipmentLock(button.dataset.equipmentId ?? '')
+    else if (action === 'equipment-preset') this.callbacks.onEquipmentPreset(button.dataset.generalId ?? '', Number(button.dataset.slot ?? 0), button.dataset.mode === 'save' ? 'save' : 'apply')
+    else if (action === 'equipment-dismantle') {
+      const state = this.renderedState
+      const item = state?.equipmentInventory.find(candidate => candidate.id === button.dataset.equipmentId)
+      if (state && item) {
+        const free = dismantlableCount(state, item)
+        const gain = dismantleYield(item)
+        const count = free
+        this.confirmPurchase(`${EQUIPMENT_GRADE_META[item.grade].label} ${item.name}${count > 1 ? ` ${count}개` : ''} 분해`, `옥패 +${formatNumber(gain.honor * count)} · 철 +${formatNumber(gain.iron * count)}${gain.silver ? ` · 은전 +${formatNumber(gain.silver * count)}` : ''}${item.level > 1 ? ` · 강화 Lv.${item.level} (강화 비용의 50% 환급)` : ''} · 되돌릴 수 없습니다`, () => this.callbacks.onEquipmentDismantle(item.id, count), { eyebrow: '분해 확인', ok: '분해' })
+      }
+    }
+    else if (action === 'equipment-bulk-dismantle') {
+      const state = this.renderedState
+      const grade = (button.dataset.grade === 'rare' ? 'rare' : 'normal') as 'normal' | 'rare'
+      if (state) {
+        const preview = bulkDismantlePreview(state, grade)
+        this.confirmPurchase(`${EQUIPMENT_GRADE_META[grade].label}${grade === 'normal' ? '' : ' 이하'} 장비 ${formatNumber(preview.count)}개 일괄 분해`, `옥패 +${formatNumber(preview.honor)} · 철 +${formatNumber(preview.iron)} · 잠금·장착·강화한 장비는 남깁니다 · 되돌릴 수 없습니다`, () => this.callbacks.onEquipmentBulkDismantle(grade), { eyebrow: '분해 확인', ok: '일괄 분해' })
+      }
+    }
     else if (action === 'roster-sort') {
       this.rosterSort = (button as HTMLSelectElement).value as RosterSort
       if (this.renderedState) this.render(this.renderedState)
@@ -2163,6 +2227,11 @@ export class StrategyUI {
       if (this.renderedState) this.render(this.renderedState)
     } else if (select.matches('[data-action="formation-sort"]')) {
       this.formationSort = select.value as FormationSort
+      if (this.renderedState) this.render(this.renderedState)
+    } else if (select.matches('[data-action="equipment-filter"]')) {
+      const key = select.dataset.key as keyof typeof this.equipmentFilter
+      if (key in this.equipmentFilter) this.equipmentFilter[key] = select.value
+      this.equipmentScrollTop = 0
       if (this.renderedState) this.render(this.renderedState)
     } else if (select.matches('[data-action="equipment-sort"]')) {
       this.equipmentSort = select.value as EquipmentSort
