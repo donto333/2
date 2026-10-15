@@ -899,8 +899,8 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
       scene.add(mesh)
     })
   }
-  host('player', 10.5, 0, 11)
-  host('enemy', -17, Math.PI, 0)
+  // 후방 대군(줄지어 선 장식 병사)은 쓰지 않는다: 실제 병사 부대가 무장 뒤에서 싸운다
+  void host
 
   // 원경 연기 기둥(불타는 들판)과 먼지·불티
   const smokeMat = new THREE.SpriteMaterial({ map: softSprite(), color: 0x4a3a36, transparent: true, opacity: 0.32, depthWrite: false })

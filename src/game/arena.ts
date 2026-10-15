@@ -216,6 +216,8 @@ const ease = (k: number) => k * k * (3 - 2 * k)
 const HIT_FX_TROOPS = 6600
 const PLAYER_LINE_Z = -1.6
 const ENEMY_LINE_Z = -6.0
+/** 좌·중·우 부대 사이 간격: 병사 부대가 무장 뒤에 서므로 넓게 벌린다 */
+const LANE_GAP = 6.2
 const MIN_LINE_GAP = 3.6
 const jade = 0x52e0c4
 const ember = 0xff8066
@@ -320,7 +322,7 @@ export class Arena {
   setGenerals(generals: General[]): void {
     this.generals = generals.map(general => ({ ...general }))
     this.clearUnits()
-    const positions = [new THREE.Vector3(-4.2, 0, 6), new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(4.2, 0, 6)]
+    const positions = [new THREE.Vector3(-LANE_GAP, 0, 6), new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(LANE_GAP, 0, 6)]
     this.generals.forEach((general, index) => {
       const built = this.createUnit(general, jade, positions[index] ?? positions[0])
       const group = built.group
@@ -756,7 +758,7 @@ export class Arena {
     this.cameraVictory = 0
     this.cameraShake = 0.12
     deck.forEach((general, index) => {
-      const position = new THREE.Vector3(-4.4 + index * 4.4, 0, -8 - index * 0.9)
+      const position = new THREE.Vector3((index - 1) * LANE_GAP, 0, -8 - index * 0.9)
       const built = this.createUnit(general, ember, position)
       const group = built.group
       group.rotation.y = Math.PI
@@ -783,9 +785,9 @@ export class Arena {
       unit.squad.position.y = 0
       unit.hero?.setFade(0); if (unit.hero instanceof SkeletalHero) unit.hero.revive()
       unit.statusFill.scale.x = 1
-      unit.target.set(-4.4 + index * 4.4, 0, PLAYER_LINE_Z - index * 0.15)
+      unit.target.set((index - 1) * LANE_GAP, 0, PLAYER_LINE_Z - index * 0.15)
     })
-    this.enemyUnits.forEach((unit, index) => unit.target.set(-4.4 + index * 4.4, 0, ENEMY_LINE_Z - index * 0.15))
+    this.enemyUnits.forEach((unit, index) => unit.target.set((index - 1) * LANE_GAP, 0, ENEMY_LINE_Z - index * 0.15))
     this.playerUnits.forEach((unit, index) => this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, 0.7)), index % 2 ? 0xa4a08a : 0xb68f70))
     this.enemyUnits.forEach((unit, index) => this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, -0.7)), index % 2 ? 0xa4a08a : 0xb68f70))
     this.drainCore()
