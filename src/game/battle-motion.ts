@@ -361,6 +361,87 @@ export function projectile(from: THREE.Vector3, to: THREE.Vector3, kind: 'arrow'
   })
 }
 
+/** 화염구(책사 일반 공격): 일렁이는 불덩이가 날아가며 불꽃 꼬리를 남기고, 닿으면 터져 불똥이 튄다 */
+export function fireball(from: THREE.Vector3, to: THREE.Vector3, flight: number, onArrive: (at: THREE.Vector3) => void, size = 1): Fx {
+  const r = res()
+  const group = new THREE.Group()
+  const sprite = (color: number, opacity: number, additive = true) => new THREE.Sprite(new THREE.SpriteMaterial({ map: r.glowTex, color, transparent: true, opacity, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false }))
+  const core = sprite(0xfff2c0, 1), mid = sprite(0xffa040, 0.9), outer = sprite(0xff4a12, 0.6)
+  const head = new THREE.Group()
+  head.add(outer, mid, core)
+  group.add(head)
+  // 꼬리 불꽃: 지나간 자리에 남아 커지며 노랑 → 주황 → 검붉게 식어 사라진다
+  const flames = Array.from({ length: 22 }, () => { const f = sprite(0xffb050, 0.8); f.visible = false; group.add(f); return { f, born: 0, drift: new THREE.Vector3() } })
+  const sparks = Array.from({ length: 10 }, () => { const m = new THREE.Mesh(r.mote, glowMaterial(0xffc060, 0.95)); m.visible = false; group.add(m); return { m, born: 0, v: new THREE.Vector3() } })
+  const yellow = new THREE.Color(0xffd27a), orange = new THREE.Color(0xff6a1a), ember = new THREE.Color(0x5a1406)
+  const cur = new THREE.Vector3()
+  const arc = 0.35
+  const at = (k: number, out: THREE.Vector3) => out.lerpVectors(from, to, k).setY(THREE.MathUtils.lerp(from.y, to.y, k) + Math.sin(k * Math.PI) * arc)
+  let fi = 0, si = 0, timer = 0, sparkTimer = 0, arrived = false
+  // 터짐
+  const blast = sprite(0xffb050, 0)
+  const blastSmoke = Array.from({ length: 5 }, () => { const sm = sprite(0x2a201a, 0, false); group.add(sm); return sm })
+  group.add(blast)
+  const burst = Array.from({ length: 14 }, () => { const m = new THREE.Mesh(r.mote, glowMaterial(Math.random() < 0.5 ? 0xffd27a : 0xff6a1a, 0.95)); m.visible = false; group.add(m); return { m, v: new THREE.Vector3() } })
+  let arriveAge = 0
+  return makeFx(group, flight + 0.75, (_k, delta, age) => {
+    const k = Math.min(1, age / flight)
+    if (k < 1) {
+      at(k, cur)
+      head.position.copy(cur)
+      const flick = 1 + Math.sin(age * 47) * 0.12 + Math.sin(age * 83) * 0.08
+      core.scale.setScalar(0.28 * size * flick); mid.scale.setScalar(0.55 * size * flick); outer.scale.setScalar(0.95 * size * (2 - flick))
+      timer -= delta
+      while (timer <= 0) {
+        timer += 0.016
+        const f = flames[fi++ % flames.length]
+        f.f.visible = true; f.born = age
+        f.f.position.copy(cur).add(new THREE.Vector3((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.12))
+        f.drift.set((Math.random() - 0.5) * 0.4, 0.5 + Math.random() * 0.5, (Math.random() - 0.5) * 0.4)
+      }
+      sparkTimer -= delta
+      if (sparkTimer <= 0) {
+        sparkTimer = 0.04
+        const sp = sparks[si++ % sparks.length]
+        sp.m.visible = true; sp.born = age; sp.m.position.copy(cur)
+        sp.v.set((Math.random() - 0.5) * 1.6, Math.random() * 1.4, (Math.random() - 0.5) * 1.6)
+      }
+    } else if (!arrived) {
+      arrived = true; arriveAge = age
+      head.visible = false
+      blast.position.copy(to)
+      blastSmoke.forEach(sm => sm.position.copy(to).add(new THREE.Vector3((Math.random() - 0.5) * 0.4, Math.random() * 0.3, (Math.random() - 0.5) * 0.4)))
+      for (const b of burst) { b.m.visible = true; b.m.position.copy(to); b.m.scale.setScalar(0.04 + Math.random() * 0.04); const a = Math.random() * Math.PI * 2; b.v.set(Math.cos(a) * (1 + Math.random() * 2), 1 + Math.random() * 2.5, Math.sin(a) * (1 + Math.random() * 2)) }
+      onArrive(to.clone())
+    }
+    for (const f of flames) {
+      if (!f.f.visible) continue
+      const life = (age - f.born) / 0.32
+      if (life >= 1) { f.f.visible = false; continue }
+      f.f.position.addScaledVector(f.drift, delta)
+      f.f.scale.setScalar((0.35 + life * 0.55) * size)
+      const c = life < 0.4 ? yellow.clone().lerp(orange, life / 0.4) : orange.clone().lerp(ember, (life - 0.4) / 0.6)
+      f.f.material.color.copy(c)
+      f.f.material.opacity = 0.85 * (1 - life)
+    }
+    for (const sp of sparks) {
+      if (!sp.m.visible) continue
+      const life = (age - sp.born) / 0.4
+      if (life >= 1) { sp.m.visible = false; continue }
+      sp.m.position.addScaledVector(sp.v, delta); sp.v.y -= delta * 3
+      sp.m.scale.setScalar(0.035 * (1 - life))
+    }
+    if (arrived) {
+      const b = (age - arriveAge) / 0.6
+      blast.scale.setScalar((0.6 + Math.min(1, b * 4) * 1.8) * size)
+      blast.material.opacity = b < 0.15 ? 1 : Math.max(0, 1 - (b - 0.15) / 0.5)
+      blast.material.color.copy(yellow.clone().lerp(orange, Math.min(1, b * 2)))
+      blastSmoke.forEach((sm, i) => { sm.position.y += delta * (0.6 + i * 0.1); sm.scale.setScalar((0.4 + b * 1.4) * size); sm.material.opacity = 0.45 * Math.sin(Math.min(1, b) * Math.PI) })
+      for (const p of burst) { p.m.position.addScaledVector(p.v, delta); p.v.y -= delta * 6; (p.m.material as THREE.MeshBasicMaterial).opacity = 0.95 * Math.max(0, 1 - b) }
+    }
+  })
+}
+
 /** 맞는 순간의 번쩍임(작고 빠름) */
 export function hitSpark(position: THREE.Vector3, color: number, size = 1): Fx {
   const r = res()

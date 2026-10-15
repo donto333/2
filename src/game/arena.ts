@@ -15,7 +15,7 @@ import { STRIKE_FRAMES } from './battle-rig'
 import { SkeletalHero, bakeSquadModel, rigInfo } from './skeletal'
 import { tr } from '../i18n/translate'
 import { effectsSetting } from './settings'
-import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
+import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireball, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
 import { clamp01, damp, easeIn2, easeOut2, smoothNoise, springTo, type Spring1 } from './motion-math'
 import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
 
@@ -1136,7 +1136,9 @@ export class Arena {
     this.fx(this.later(release, () => {
       const from = this.frontOf(unit, 0.8, ranged === 'arrow' ? 1.7 : 1.9)
       const to = target.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 1, 0))
-      this.fx(projectile(from, to, ranged, ranged === 'orb' ? (side === 'player' ? 0x72c9ff : 0xc56bff) : color, flight, () => {}))
+      // 책사는 화염구를 쏜다(활은 화살)
+      if (ranged === 'orb') this.fx(fireball(from, to, flight, () => {}, 1.4))
+      else this.fx(projectile(from, to, ranged, color, flight, () => {}))
     }))
   }
 

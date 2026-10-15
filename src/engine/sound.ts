@@ -849,7 +849,7 @@ export class SoundEngine {
 
   /**
    * 무기별 공격 · 피격 소리. swing = 휘두르기 · 찌르기 · 활쏘기(무기가 움직이는 순간), hit = 맞는 순간.
-   * 칼은 "쉭 → 서걱 · 쨍", 창은 "슉 → 퍽(깊고 둔탁)", 활은 "팅 · 휘이 → 탁", 책사 기탄은 "우웅 → 파직".
+   * 칼은 "쉭 → 서걱 · 쨍", 창은 "슉 → 퍽(깊고 둔탁)", 활은 "팅 · 휘이 → 탁", 책사 화염구는 "화륵 · 후우웅 → 콰앙".
    */
   weapon(kind: WeaponSound, phase: 'swing' | 'hit', opts: { pan?: number; big?: boolean } = {}): void {
     if (!this.allow(`${kind}:${phase}`, phase === 'hit' ? 70 : 90, true)) return
@@ -873,9 +873,10 @@ export class SoundEngine {
           this.crack(out, t, 0.1, pan, 5200, 0.025)
           this.whoosh(out, t + 0.02, 0.32, 0.16, 2600 * rr, 6200 * rr, pan)
           break
-        case 'magic': // 기를 날리는 "우웅"
-          this.whoosh(out, t, 0.3, 0.22, 400, 2200, pan, send)
-          this.bell(out, t, 0.1, 1.7 * rr, pan, send)
+        case 'magic': // 화염구 발사: 불이 붙는 "화륵" + 불덩이가 날아가는 "후우웅"(타닥거림)
+          this.boom(out, t, 0.18, 140 * rr, 70, 0.25, pan)
+          this.roar(out, t, 0.55, 0.3, pan, send)
+          this.whoosh(out, t, 0.45, 0.2, 300 * rr, 1600 * rr, pan, send)
           break
       }
       return
@@ -906,10 +907,10 @@ export class SoundEngine {
         if (opts.big) this.boom(out, t, 0.24, 90, 40, 0.4, pan)
         break
       }
-      case 'magic': // 기탄이 터지는 "파직"
-        this.crack(out, t, 0.24 * big, pan, 3000, 0.1)
-        this.bell(out, t, 0.07 * big, 2.2 * rr, pan, send)
-        this.boom(out, t, 0.16 * big, 90, 40, 0.35, pan, send)
+      case 'magic': // 화염구가 터지는 "콰앙" + 불길 · 불똥
+        this.boom(out, t, 0.4 * big, 95 * rr, 34, 0.6, pan, send)
+        this.crack(out, t, 0.3 * big, pan, 1900 * rr, 0.09)
+        this.roar(out, t + 0.02, 0.7, 0.24 * big, pan, send)
         break
     }
   }
