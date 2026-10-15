@@ -218,7 +218,7 @@ const ENEMY_PLANS: EnemyPlan[] = [
   { levels: [14, 20], deck: same(['yuan-shao', 'yan-liang', 'wen-chou']) },
   { levels: [20, 26], deck: { 촉한: ['cao-cao', 'cao-ren', 'zhang-liao'], 위나라: ['zhou-yu', 'huang-gai', 'zhuge-liang'], 오나라: ['cao-cao', 'cao-ren', 'zhang-liao'] }, byYear: { 211: same(['ma-chao', 'ma-teng', 'han-sui']) } },
   { levels: [26, 32], deck: { 촉한: ['zhang-he', 'xu-huang', 'cao-hong'], 위나라: ['huang-zhong', 'fa-zheng', 'zhao-yun'], 오나라: ['zhang-liao', 'yue-jin', 'li-dian'] }, byYear: { 215: { 촉한: ['zhang-liao', 'yue-jin', 'li-dian'], 위나라: ['sun-quan', 'gan-ning', 'ling-tong'] } } },
-  { levels: [32, 38], deck: { 촉한: ['lu-xun', 'lu-meng', 'gan-ning'], 위나라: ['guan-yu', 'guan-ping', 'zhang-bao'], 오나라: ['liu-bei', 'guan-xing', 'zhang-bao'] }, byYear: { 225: same(['meng-huo', 'zhu-rong', 'guan-hai']) } },
+  { levels: [33, 39], deck: { 촉한: ['lu-xun', 'lu-meng', 'gan-ning'], 위나라: ['guan-yu', 'guan-ping', 'zhang-bao'], 오나라: ['liu-bei', 'guan-xing', 'zhang-bao'] }, byYear: { 225: same(['meng-huo', 'zhu-rong', 'guan-hai']) } },
   { levels: [39, 46], deck: { 촉한: ['simayi', 'zhang-he', 'xu-huang'], 위나라: ['zhuge-liang', 'zhao-yun', 'wei-yan'], 오나라: ['simayi', 'zhang-he', 'xu-huang'] } },
   { levels: [47, 55], deck: { 촉한: ['simayi', 'zhang-he', 'yu-jin'], 위나라: ['wei-yan', 'wang-ping', 'guan-xing'], 오나라: ['simayi', 'zhang-he', 'yu-jin'] } },
 ]

@@ -561,7 +561,7 @@ const CORE_LIBRARY: General[] = [
   },
   {
     id: 'zhao-yun', name: '조운', epithet: '상산의 상산 용기', role: '기병', grade: 5, stars: 1, level: 12,
-    attack: 91, defense: 76, command: 87, leadership: 93, martial: 95, stratagem: 70, speed: 98, skillName: '장판 단기', skillDescription: '홀로 장판을 지키며 위태로운 아군을 감싸고 버틴다.', skillUnlocked: true, accent: '#78d9d3', portrait: '조', portraitPath: '/assets/generals/zhao-yun.webp',
+    attack: 91, defense: 76, command: 87, leadership: 93, martial: 95, stratagem: 70, speed: 98, skillName: '상산의 기개', skillDescription: '상산 조자룡의 담력으로 전군의 기세를 북돋우고 위태로운 아군을 지킨다.', skillUnlocked: true, accent: '#78d9d3', portrait: '조', portraitPath: '/assets/generals/zhao-yun.webp',
   },
   {
     id: 'zhuge-liang', name: '제갈량', epithet: '와룡의 출사표', role: '책사', grade: 5, stars: 1, level: 11,
