@@ -5,6 +5,10 @@ import { templateGeneral } from './strategy'
 import { BATTLE_EFFECTS, effectValue, hasBattleEffect, type ActiveBattleEffect, type BattleEffectId, type BuffId, type DebuffId, type PlayerDebuffId } from './battle-effects'
 import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, SKILL_MORALE_CAP, SKILL_TYPE_META, baseMoraleDamage, bondFor, mainStatGrowth, isAwakened, skillCooldownFor, skillDefFor, type BondDef, type GeneralSkillDef, type SkillFx, type SkillType } from './skills'
 
+/** 황개 ‘거짓 항복’: 쿨다운을 앞당겨 줄 화공 동료, 적이 불타는 동안 황개가 덜 받는 피해 */
+export const RED_CLIFFS_PARTNERS = ['zhou-yu', 'lu-xun']
+export const RED_CLIFFS_GUARD = 0.15
+
 export type BattleMode = 'normal' | 'scenario' | 'siege' | 'duel' | 'raid'
 export type BattleTactic = 'guard' | 'feint' | 'charge'
 export type Side = 'player' | 'enemy'
@@ -341,6 +345,8 @@ export class BattleCore {
     if (unit.general.role === '책사' && this.players.some(other => this.passive(other) === 'cdForStrategists')) cooldown *= 0.85
     this.players.forEach(other => {
       if (other !== unit && this.passive(other) === 'partnerCd' && other.def.passive?.partner === unit.general.id) cooldown -= other.def.passive?.value ?? 0
+      // 황개 ‘거짓 항복’: 함께 선 주유·육손의 화공을 앞당긴다
+      if (other !== unit && this.passive(other) === 'redCliffsVanguard' && RED_CLIFFS_PARTNERS.includes(unit.general.id)) cooldown -= other.def.passive?.value ?? 0
     })
     if (this.bond?.id === 'dragon-phoenix' && unit.def.type === '계략') cooldown -= 1.5
     if (this.bond?.id === 'yellow-heaven' && unit.def.type === '계략') cooldown -= 1
@@ -431,6 +437,7 @@ export class BattleCore {
       const value = other.def.passive?.value ?? 0
       if (id === 'lowTroopDr' && teamTroops <= 0.5) dr += value
       if (id === 'factionDr') dr += value * this.players.filter(member => member.def.faction === '오').length
+      if (id === 'redCliffsVanguard' && other === unit && hasBattleEffect(this.debuffs, 'burning')) dr += RED_CLIFFS_GUARD
       if (id === 'highTroopDr' && other.troops >= other.maxTroops * 0.7) dr += value
       if (id === 'partnerDr' && unit.general.id === other.def.passive?.partner) dr += value
     })
