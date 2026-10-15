@@ -7,6 +7,7 @@ import { muteSetting, musicSetting, sfxSetting, SOUND_LEVEL_VALUE } from '../gam
 
 export type MusicTheme = 'home' | 'battle' | 'duel' | 'raid' | 'none'
 export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | '치유'
+export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
 export type Sfx =
   | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
   | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
@@ -844,6 +845,73 @@ export class SoundEngine {
       else if (kind === 'pluck') this.pluck(out, midi + 12, at, vol, { bright: 0.85, dur: 1.3, pan: -0.3 + i * 0.3, send })
       else this.brass(out, [midi - 12, midi - 5], at, 0.22, vol * 0.5, send)
     })
+  }
+
+  /**
+   * 무기별 공격 · 피격 소리. swing = 휘두르기 · 찌르기 · 활쏘기(무기가 움직이는 순간), hit = 맞는 순간.
+   * 칼은 "쉭 → 서걱 · 쨍", 창은 "슉 → 퍽(깊고 둔탁)", 활은 "팅 · 휘이 → 탁", 책사 기탄은 "우웅 → 파직".
+   */
+  weapon(kind: WeaponSound, phase: 'swing' | 'hit', opts: { pan?: number; big?: boolean } = {}): void {
+    if (!this.allow(`${kind}:${phase}`, phase === 'hit' ? 70 : 90, true)) return
+    const out = this.sfxVol, send = this.sfxSend
+    const t = this.ctx!.currentTime + 0.005
+    const pan = opts.pan ?? 0, big = opts.big ? 1.6 : 1
+    const rr = 0.9 + Math.random() * 0.2
+    if (phase === 'swing') {
+      switch (kind) {
+        case 'sword': // 칼날이 공기를 가르는 "쉭" + 얇은 쇳소리
+          this.whoosh(out, t, 0.2, 0.3, 700 * rr, 4600 * rr, pan)
+          this.whoosh(out, t + 0.03, 0.12, 0.18, 3000, 7000, pan)
+          this.metal(out, t + 0.04, 0.08, 2.6 * rr, pan)
+          break
+        case 'spear': // 짧고 곧게 뻗는 "슉" + 내딛는 발
+          this.whoosh(out, t, 0.1, 0.32, 1400 * rr, 2600 * rr, pan)
+          this.drum(out, 'tom', t, 0.1, pan, 0.6)
+          break
+        case 'arrow': // 활시위 "팅" + 화살이 날아가는 "휘이"
+          this.pluck(out, 43 + Math.round(Math.random() * 3), t, 0.2, { bright: 0.35, dur: 0.35, pan })
+          this.crack(out, t, 0.1, pan, 5200, 0.025)
+          this.whoosh(out, t + 0.02, 0.32, 0.16, 2600 * rr, 6200 * rr, pan)
+          break
+        case 'magic': // 기를 날리는 "우웅"
+          this.whoosh(out, t, 0.3, 0.22, 400, 2200, pan, send)
+          this.bell(out, t, 0.1, 1.7 * rr, pan, send)
+          break
+      }
+      return
+    }
+    switch (kind) {
+      case 'sword': // 베이는 "서걱" + 갑옷에 닿는 "쨍"
+        this.crack(out, t, 0.42 * big, pan, 3800 * rr, 0.06)
+        this.whoosh(out, t, 0.09, 0.14 * big, 5200, 1600, pan)
+        this.metal(out, t + 0.005, 0.22 * big, 1.25 * rr, pan, send)
+        this.boom(out, t, 0.12 * big, 120 * rr, 60, 0.22, pan)
+        if (opts.big) this.drum(out, 'taiko', t, 0.35, pan, rr)
+        break
+      case 'spear': // 깊게 박히는 "퍽" — 낮고 둔탁하다
+        this.drum(out, 'tom', t, 0.32 * big, pan, 0.62 * rr)
+        this.boom(out, t, 0.26 * big, 105 * rr, 44, 0.32, pan)
+        this.crack(out, t, 0.16 * big, pan, 1100 * rr, 0.05)
+        this.metal(out, t + 0.01, 0.05 * big, 0.6 * rr, pan)
+        if (opts.big) this.drum(out, 'taiko', t, 0.4, pan, 0.8)
+        break
+      case 'arrow': { // 화살이 꽂히는 "탁 · 탁"
+        const n = opts.big ? 4 : 2
+        for (let i = 0; i < n; i += 1) {
+          const at = t + i * (0.03 + Math.random() * 0.03)
+          this.crack(out, at, 0.2 * big, pan + (Math.random() - 0.5) * 0.4, 1700 * rr, 0.035)
+          this.drum(out, 'rim', at, 0.1, pan, 0.55 * rr)
+          this.drum(out, 'tom', at, 0.1 * big, pan, 1.5 * rr)
+        }
+        if (opts.big) this.boom(out, t, 0.24, 90, 40, 0.4, pan)
+        break
+      }
+      case 'magic': // 기탄이 터지는 "파직"
+        this.crack(out, t, 0.24 * big, pan, 3000, 0.1)
+        this.bell(out, t, 0.07 * big, 2.2 * rr, pan, send)
+        this.boom(out, t, 0.16 * big, 90, 40, 0.35, pan, send)
+        break
+    }
   }
 
   /**

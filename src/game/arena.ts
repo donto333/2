@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
-import { sound } from '../engine/sound'
+import { sound, type WeaponSound } from '../engine/sound'
 import { BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import { GENERAL_SKILLS, type SkillType } from './skills'
@@ -285,7 +285,7 @@ export class Arena {
   /** 스킬 쓰는 무장에게 카메라를 당긴다 */
   private cameraFocus: { target: THREE.Vector3; age: number; life: number; strength: number; side: 'player' | 'enemy' } | null = null
   /** 공격 동작 직후의 피해: 칼이 닿거나 화살이 꽂히는 순간에 맞춰 보여 준다 */
-  private pendingStrike: { side: 'player' | 'enemy'; source: string; delay: number } | null = null
+  private pendingStrike: { side: 'player' | 'enemy'; source: string; delay: number; weapon: WeaponSound } | null = null
 
   constructor(canvas: HTMLCanvasElement, callbacks: ArenaCallbacks) {
     this.callbacks = callbacks
@@ -316,6 +316,19 @@ export class Arena {
   private troopCapacity(general: General): number {
     return coreTroopCapacity(general)
   }
+
+  /** 무장의 무기 소리 종류: 궁병 = 화살, 책사 = 기탄, 찌르는 무장(보병 · 창) = 창, 그 밖에 = 칼 */
+  private weaponOf(unit: BattleUnit): WeaponSound {
+    const ranged = this.isRanged(unit.general)
+    if (ranged === 'arrow') return 'arrow'
+    if (ranged) return 'magic'
+    const kind = unit.hero?.kind
+    if (kind === 'thrust') return 'spear'
+    if (kind === 'slash') return 'sword'
+    return unit.general.role === '보병' ? 'spear' : 'sword'
+  }
+
+  private lanePanOf(unit: BattleUnit): number { return THREE.MathUtils.clamp(unit.group.position.x / 8, -0.8, 0.8) }
 
   private troopType(general: General): TroopType {
     if (general.role === '기병') return 'cavalry'
@@ -876,19 +889,23 @@ export class Arena {
       case 'hit': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
-        sound.play(event.amount / Math.max(1, unit.maxTroops / HIT_FX_TROOPS) >= 150 ? 'hitBig' : 'hit', { pan: this.lanePan(event.lane) })
+        // 맞는 소리: 때린 무기(칼 · 창 · 화살 · 기탄)에 따라 다르게, 실제로 닿는 순간에
+        const big = event.amount / Math.max(1, unit.maxTroops / HIT_FX_TROOPS) >= 150
         const strike = this.pendingStrike
+        const attacker = [...this.playerUnits, ...this.enemyUnits].find(other => other.general.name === event.source && other !== unit)
+        const weapon = strike && strike.source === event.source ? strike.weapon : attacker ? this.weaponOf(attacker) : null
+        const hitSound = () => { if (weapon) sound.weapon(weapon, 'hit', { pan: this.lanePan(event.lane), big }); else sound.play(big ? 'hitBig' : 'hit', { pan: this.lanePan(event.lane) }) }
         if (strike && strike.source === event.source && strike.side !== event.side) {
           this.pendingStrike = null
-          this.addEffect(delayed(strike.delay, () => this.showHit(unit, event.side, event.amount, event.edge)))  
-        } else this.showHit(unit, event.side, event.amount, event.edge)
+          this.addEffect(delayed(strike.delay, () => { hitSound(); this.showHit(unit, event.side, event.amount, event.edge) }))
+        } else { hitSound(); this.showHit(unit, event.side, event.amount, event.edge) }
         if (core.t - this.lastCombatLog > 1.6) {
           this.lastCombatLog = core.t
           this.callbacks.onEvent(`${event.source} · ${unit.general.name} 병력 −${Math.round(event.amount)}`)
         }
         break
       }
-      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) { this.playAttack(unit, event.side, event.target); sound.play('attack', { pan: this.lanePan(event.lane) }) } break }
+      case 'attack': { const unit = this.unitAt(event.side, event.lane); if (unit) { this.playAttack(unit, event.side, event.target) } break }
       case 'heal': { const unit = this.unitAt(event.side, event.lane); if (unit && event.amount >= 60) sound.play('heal', { pan: this.lanePan(event.lane) }); if (unit && event.amount >= 60) this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 2.6, 0)), `+${Math.round(event.amount)}`, '#8fe3b0', 0.8); break }
       case 'skill': {
         const unit = this.unitAt(event.side, event.lane)
@@ -1098,7 +1115,10 @@ export class Arena {
     if (!ranged || !target) {
       const hit = unit.hero?.hitTime ?? MELEE_STRIKE
       unit.motion = { kind: 'melee', t: 0, dur: Math.max(MELEE_DURATION, hit + 0.32), hit }
-      this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(hit) }
+      const weapon = this.weaponOf(unit)
+      this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(hit), weapon }
+      // 휘두르기 · 찌르기 소리는 무기가 뻗어 나가는 순간에
+      this.fx(this.later(Math.max(0, hit - (weapon === 'spear' ? 0.08 : 0.14)), () => sound.weapon(weapon, 'swing', { pan: this.lanePanOf(unit) })))
       const flip = unit.hero?.kind === 'slash' ? false : Math.random() < 0.5
       this.fx(this.later(hit - 0.03, () => {
         // 찌르기는 짧고 곧은 궤적, 베기는 크게 휘는 궤적
@@ -1110,7 +1130,9 @@ export class Arena {
     const release = unit.hero?.hitTime ?? SHOOT_RELEASE
     unit.motion = { kind: 'shoot', t: 0, dur: Math.max(SHOOT_DURATION, release + 0.3), hit: release }
     const flight = ranged === 'arrow' ? 0.34 : 0.42
-    this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(release) + flight }
+    const weapon = this.weaponOf(unit)
+    this.pendingStrike = { side, source: unit.general.name, delay: this.scaled(release) + flight, weapon }
+    this.fx(this.later(release, () => sound.weapon(weapon, 'swing', { pan: this.lanePanOf(unit) })))
     this.fx(this.later(release, () => {
       const from = this.frontOf(unit, 0.8, ranged === 'arrow' ? 1.7 : 1.9)
       const to = target.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 1, 0))
