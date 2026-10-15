@@ -8,7 +8,7 @@ import { muteSetting, musicSetting, sfxSetting, SOUND_LEVEL_VALUE } from '../gam
 export type MusicTheme = 'home' | 'battle' | 'duel' | 'raid' | 'none'
 export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | '치유'
 export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
-type TrackName = 'home' | 'battle'
+type TrackName = 'home' | 'battle' | 'raid'
 export type Sfx =
   | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
   | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
@@ -367,7 +367,7 @@ export class SoundEngine {
   // ── 녹음된 배경음(파일) ──
   // 웹오디오 그래프를 거치지 않고 <audio>로 바로 튼다(휴대폰 사파리 · 데스크톱 앱에서 소리가 안 나는 일을 피한다).
   // 크기는 음악 설정 · 음소거 · 스킬 때 줄이기(덕킹)를 따라 직접 맞춘다.
-  // home = 본영 ‘강의 흐름’, battle = 시나리오 · 대련 전투 곡
+  // home = 본영 ‘강의 흐름’, battle = 시나리오 · 대련 전투 곡, raid = 주간 토벌전(레이드) 곡
   private tracks = new Map<TrackName, { el: HTMLAudioElement; level: number; target: number; failed: boolean }>()
   private trackTimer = 0
   private trackRetry: (() => void) | null = null
@@ -400,7 +400,7 @@ export class SoundEngine {
     this.fadeTrack()
     const el = t.el
     // 전투 곡은 전투마다 처음부터, 본영 곡은 멈춘 자리부터 이어서
-    if (name === 'battle' && el.paused && t.level === 0) el.currentTime = 0
+    if (name !== 'home' && el.paused && t.level === 0) el.currentTime = 0
     if (el.paused) void el.play().catch(() => {
       // 자동 재생이 막히면 다음 터치 때 다시 튼다
       if (this.trackRetry) return
@@ -416,6 +416,7 @@ export class SoundEngine {
   private trackFor(theme: MusicTheme): TrackName | null {
     if (theme === 'home') return 'home'
     if (theme === 'battle' || theme === 'duel') return 'battle'
+    if (theme === 'raid') return 'raid'
     return null
   }
   /** 크기를 서서히 목표로(0이 되면 멈춘다) */
