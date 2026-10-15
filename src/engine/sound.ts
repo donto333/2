@@ -290,8 +290,8 @@ export class SoundEngine {
     window.setInterval(() => this.tick(), 50)
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return
-      if (document.hidden) void this.ctx.suspend()
-      else void this.ctx.resume()
+      if (document.hidden) { void this.ctx.suspend(); this.trackEl?.pause() }
+      else { void this.ctx.resume(); if (this.trackEl && this.trackTarget > 0) void this.trackEl.play().catch(() => {}) }
     })
   }
 
@@ -365,36 +365,61 @@ export class SoundEngine {
   }
 
   // ── 녹음된 배경음(파일) ──
+  // 웹오디오 그래프를 거치지 않고 <audio>로 바로 튼다(휴대폰 사파리 · 데스크톱 앱에서 소리가 안 나는 일을 피한다).
+  // 크기는 음악 설정 · 음소거 · 스킬 때 줄이기(덕킹)를 따라 직접 맞춘다.
   private trackEl: HTMLAudioElement | null = null
-  private trackGain: GainNode | null = null
   private trackFailed = false
-  /** 곡 파일을 처음부터(이미 틀고 있으면 이어서) 튼다. 실패하면 false */
+  private trackLevel = 0 // 지금 크기(0~1, 서서히 바뀐다)
+  private trackTarget = 0
+  private trackTimer = 0
+  private trackRetry: (() => void) | null = null
+  private trackVolume(): number {
+    if (muteSetting()) return 0
+    const duck = this.duckTimer ? 0.3 : this.pausedDuck ? 0.5 : 1
+    return SOUND_LEVEL_VALUE[musicSetting()] * 0.55 * duck
+  }
+  /** 곡을 튼다(이미 틀고 있으면 이어서). 실패하면 false */
   private track(name: 'home'): boolean {
-    if (!this.ctx || this.trackFailed) return false
-    const ctx = this.ctx
+    if (this.trackFailed) return false
     if (!this.trackEl) {
       const el = new Audio(`/assets/music/${name}.mp3`)
       el.loop = true
       el.preload = 'auto'
-      el.crossOrigin = 'anonymous'
-      el.addEventListener('error', () => { this.trackFailed = true; if (this.wanted === 'home') { this.stopTrack(); this.player = new ThemePlayer(this, THEMES.home, 'home', Math.floor(Math.random() * 1e9)) } })
-      const source = ctx.createMediaElementSource(el)
-      const gain = ctx.createGain()
-      gain.gain.value = 0
-      source.connect(gain).connect(this.musicIn)
-      this.trackEl = el; this.trackGain = gain
+      el.volume = 0
+      el.addEventListener('error', () => {
+        this.trackFailed = true
+        if (this.wanted === 'home' && this.ctx && this.unlocked) { this.stopTrack(); this.player = new ThemePlayer(this, THEMES.home, 'home', Math.floor(Math.random() * 1e9)) }
+      })
+      this.trackEl = el
     }
-    const g = this.trackGain!
-    g.gain.cancelScheduledValues(ctx.currentTime)
-    g.gain.setTargetAtTime(0.55, ctx.currentTime, 0.6) // 녹음 곡은 소리가 커서 만든 곡과 비슷하게 줄인다
-    void this.trackEl.play().catch(() => { /* 첫 터치 전이면 unlock에서 다시 */ })
+    this.trackTarget = 1
+    this.fadeTrack()
+    const el = this.trackEl
+    const start = () => el.play().catch(() => {
+      // 자동 재생이 막히면 다음 터치 때 다시 튼다
+      if (this.trackRetry) return
+      this.trackRetry = () => { document.removeEventListener('pointerdown', this.trackRetry!); document.removeEventListener('keydown', this.trackRetry!); this.trackRetry = null; if (this.wanted === 'home' && this.trackTarget > 0) void el.play().catch(() => {}) }
+      document.addEventListener('pointerdown', this.trackRetry); document.addEventListener('keydown', this.trackRetry)
+    })
+    if (el.paused) void start()
     return true
   }
   private stopTrack(): void {
-    if (!this.ctx || !this.trackEl || !this.trackGain) return
-    const el = this.trackEl
-    this.trackGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.35)
-    window.setTimeout(() => { if (this.wanted !== 'home') el.pause() }, 1600)
+    if (!this.trackEl) return
+    this.trackTarget = 0
+    this.fadeTrack()
+  }
+  /** 크기를 서서히 목표로(0이 되면 멈춘다) */
+  private fadeTrack(): void {
+    if (this.trackTimer) return
+    this.trackTimer = window.setInterval(() => {
+      const el = this.trackEl
+      if (!el) return
+      const step = this.trackTarget > this.trackLevel ? 0.06 : 0.08
+      this.trackLevel = this.trackTarget > this.trackLevel ? Math.min(this.trackTarget, this.trackLevel + step) : Math.max(this.trackTarget, this.trackLevel - step)
+      el.volume = Math.max(0, Math.min(1, this.trackLevel * this.trackVolume()))
+      if (this.trackLevel === 0 && this.trackTarget === 0) el.pause()
+    }, 60)
   }
 
   /** 잠시 뒤 다른 곡으로(그 사이 setTheme을 부르면 취소) */
