@@ -14,7 +14,7 @@ const num = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(va
 export function duelGeneralPower(general) {
   if (!general || typeof general !== 'object') return 0
   const base = num(general.leadership) * 1.15 + num(general.martial) * 1.25 + num(general.stratagem) * 0.9 + num(general.speed) * 0.65 + num(general.defense) * 0.25
-  const level = Math.max(1, num(general.level, 1))
+  const level = Math.max(1, Math.min(60, num(general.level, 1))) // 무장 최고 레벨 60
   const stars = Math.max(1, Math.min(5, num(general.stars, 1)))
   return base * (GRADE_MULT[num(general.grade, 3)] ?? 1) * (1 + (level - 1) * 0.035) * (1 + (stars - 1) * 0.06)
 }

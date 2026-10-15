@@ -55,6 +55,8 @@ import {
   type StrategyState,
   type FactionTerritorySnapshot,
   type Faction,
+  clampGeneralLevels,
+  MAX_GENERAL_LEVEL,
 } from './game/strategy'
 import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
@@ -86,6 +88,16 @@ const PENDING_TERRITORY_BATTLES_KEY = 'cheonharo.territory.pending-battles.v1'
 // 모바일 브라우저·앱 안 웹뷰는 100vh가 주소창·상단 바까지 포함해 화면 아래가 잘린다: 실제 보이는 높이를 CSS 변수로 넘긴다
 /** 결과가 성공일 때만 내는 효과음(실패는 알림이 붉은색일 때 따로 난다) */
 function playSfx(name: Sfx): void { sound.play(name) }
+
+/** 최고 레벨을 넘은 무장을 맞추고 알린다(돌려준 재료 포함) */
+function noticeLevelCap(): boolean {
+  const capped = clampGeneralLevels(state)
+  if (!capped.generals.length) return false
+  const message = `최고 레벨이 Lv.${MAX_GENERAL_LEVEL}으로 정해졌습니다 · ${capped.generals.join(' · ')} → Lv.${MAX_GENERAL_LEVEL} · 넘은 만큼 은전 +${capped.silver.toLocaleString('ko-KR')} · 병서 +${capped.manuals.toLocaleString('ko-KR')} 반환`
+  state.lastNotice = message
+  window.setTimeout(() => ui.notify(message, 'jade'), 2600)
+  return true
+}
 
 function syncAppHeight(): void {
   document.documentElement.style.setProperty('--app-h', `${Math.round(window.innerHeight)}px`)
@@ -285,7 +297,9 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   const regraded = migrateGeneralGrades(state).changed > 0
   if (regraded) { const message = state.lastNotice; window.setTimeout(() => ui.notify(message), 1800) }
   // 유형별 성장(2026.10): 보유 무장 능력치를 새 성장 공식으로 다시 계산(레벨·성급·장비 유지)
-  const regrown = normalizeGeneralStats(state) > 0
+  // 최고 레벨 60(2026.10.15): 넘은 무장은 60으로, 넘은 만큼의 은전·병서는 돌려준다
+  const capped = noticeLevelCap()
+  const regrown = normalizeGeneralStats(state) > 0 || capped
   if (receivedDailyGold || migratedStarter || normalizedTerritories || regraded || regrown) persistLocalGame()
   localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories || regraded || regrown) && mode === 'guest'
 }
@@ -1742,7 +1756,9 @@ async function refreshAccount(): Promise<void> {
       const migratedStarter = migrateLegacyStarterRoster(state)
       const regraded = migrateGeneralGrades(state).changed > 0
       if (regraded) { const message = state.lastNotice; window.setTimeout(() => ui.notify(message), 1800) }
-      const regrown = normalizeGeneralStats(state) > 0
+      const capped = noticeLevelCap()
+      if (capped) queueAccountSave(true)
+      const regrown = normalizeGeneralStats(state) > 0 || capped
       if (migratedStarter || regraded || regrown) {
         persistLocalGame()
         localSaveDirty = true

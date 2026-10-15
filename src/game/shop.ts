@@ -1,6 +1,6 @@
 // 상점 도우미: 묶음별 이득(금화당 효율), 지금 모자란 자원과 그것을 채울 가장 작은 묶음 추천.
 import { researchStatus } from './research'
-import { HONOR_SHOP_PACKAGES, MANUAL_SHOP_PACKAGES, RESOURCE_SHOP_PACKAGES, buildingCost, conquestCost, recruitCost, upgradeCost, type ResourceKey, type StrategyState } from './strategy'
+import { HONOR_SHOP_PACKAGES, MANUAL_SHOP_PACKAGES, RESOURCE_SHOP_PACKAGES, buildingCost, conquestCost, recruitCost, upgradeCost, MAX_GENERAL_LEVEL, type ResourceKey, type StrategyState } from './strategy'
 
 export type ShopResource = ResourceKey | 'honor' | 'manuals'
 export interface ShopPackage { id: string; resource: ShopResource; amount: number; goldCost: number; kind: 'resource' | 'honor' | 'manuals' }
@@ -49,7 +49,7 @@ export function shopNeeds(state: StrategyState): ShopNeed[] {
     }
   }
   // 출전 무장 중 가장 낮은 레벨 무장의 다음 레벨업(병서·은전)
-  const lowest = state.formation.map(id => state.generals.find(general => general.id === id)).filter((general): general is NonNullable<typeof general> => Boolean(general)).sort((a, b) => a.level - b.level)[0]
+  const lowest = state.formation.map(id => state.generals.find(general => general.id === id)).filter((general): general is NonNullable<typeof general> => Boolean(general) && general!.level < MAX_GENERAL_LEVEL).sort((a, b) => a.level - b.level)[0]
   if (lowest) add(`${lowest.name} Lv.${lowest.level + 1} 강화`, upgradeCost(state, lowest))
   // 다음에 시작할 수 있는 연구 중 가장 싼 것
   const research = state.research

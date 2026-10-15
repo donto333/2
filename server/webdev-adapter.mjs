@@ -721,7 +721,7 @@ async function currentRaidBossLevel(now = Date.now()) {
   if (raidLevelCache.weekKey === weekKey && now - raidLevelCache.at < 10 * 60 * 1000) return raidLevelCache;
   const accounts = await listGameStates();
   const decks = accounts.map(account => savedSquadDecks(account)[0] ?? []).filter(deck => deck.length);
-  const ranked = decks.map(deck => ({ power: duelDeckPower(deck), level: deck.reduce((sum, general) => sum + (Number(general.level) || 1), 0) / deck.length })).sort((left, right) => right.power - left.power);
+  const ranked = decks.map(deck => ({ power: duelDeckPower(deck), level: deck.reduce((sum, general) => sum + Math.min(60, Number(general.level) || 1), 0) / deck.length })).sort((left, right) => right.power - left.power);
   raidLevelCache = { at: now, weekKey, level: raidBossLevel(ranked.map(entry => entry.level)), registered: ranked.length };
   return raidLevelCache;
 }

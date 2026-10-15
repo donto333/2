@@ -1459,6 +1459,25 @@ export function recruit(state: StrategyState, count = 1, options: RecruitOptions
 export interface UpgradeResult { ok: boolean; message: string }
 
 /** 무장 1레벨 강화 비용(연구 할인 반영) */
+/** 무장 최고 레벨. 성장 공식(MAX_GROWTH_BUDGET)·레이드 보스(최대 Lv60)·시나리오(최대 Lv55)가 모두 이 레벨을 끝으로 맞춰져 있다 */
+export const MAX_GENERAL_LEVEL = 60
+export const isMaxLevel = (general: Pick<General, 'level'>): boolean => general.level >= MAX_GENERAL_LEVEL
+
+/** 최고 레벨을 넘은 무장(상한이 생기기 전 기록)은 60으로 맞추고, 넘은 레벨에 쓴 은전·병서를 돌려준다 */
+export function clampGeneralLevels(state: StrategyState): { generals: string[]; silver: number; manuals: number } {
+  const out = { generals: [] as string[], silver: 0, manuals: 0 }
+  for (const general of state.generals) {
+    if (general.level <= MAX_GENERAL_LEVEL) continue
+    for (let level = MAX_GENERAL_LEVEL; level < general.level; level += 1) { out.silver += 650 + level * 350; out.manuals += 12 + level * 2 }
+    out.generals.push(`${general.name} Lv.${general.level}`)
+    general.level = MAX_GENERAL_LEVEL
+    const template = templateGeneral(general.id)
+    if (template) Object.assign(general, statsAt(template, general.level, general.stars))
+  }
+  if (out.generals.length) { state.silver += out.silver; state.resources.silver = state.silver; state.manuals += out.manuals }
+  return out
+}
+
 export function upgradeCost(state: StrategyState, general: Pick<General, 'level'>): { silver: number; manuals: number } {
   const levelCut = 1 - researchMods(state).levelCost
   return { silver: Math.round((650 + general.level * 350) * levelCut), manuals: Math.round((12 + general.level * 2) * levelCut) }
@@ -1469,7 +1488,7 @@ export function affordableUpgrades(state: StrategyState, id: string, limit = 10)
   const general = findGeneral(state, id)
   if (!general) return 0
   let silver = state.silver, manuals = state.manuals, level = general.level, count = 0
-  while (count < limit) {
+  while (count < limit && level < MAX_GENERAL_LEVEL) {
     const cost = upgradeCost(state, { level })
     if (silver < cost.silver || manuals < cost.manuals) break
     silver -= cost.silver; manuals -= cost.manuals; level += 1; count += 1
@@ -1493,6 +1512,7 @@ export function upgradeMany(state: StrategyState, id: string, limit = 10): Upgra
 export function upgrade(state: StrategyState, id: string): UpgradeResult {
   const general = findGeneral(state, id)
   if (!general) return { ok: false, message: '무장을 찾을 수 없습니다.' }
+  if (isMaxLevel(general)) return { ok: false, message: `${general.name}은(는) 최고 레벨(Lv.${MAX_GENERAL_LEVEL})입니다. 성급을 올리면 더 강해집니다.` }
   const { silver: silverCost, manuals: manualCost } = upgradeCost(state, general)
   if (state.silver < silverCost || state.manuals < manualCost) return { ok: false, message: `강화 재료가 부족합니다. 은전 ${formatNumber(silverCost)} · 병서 ${manualCost} 필요` }
   state.silver -= silverCost
