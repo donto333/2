@@ -9,6 +9,8 @@ export type MusicTheme = 'home' | 'battle' | 'duel' | 'raid' | 'none'
 export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | '치유'
 export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
 type TrackName = 'home' | 'battle' | 'raid'
+/** 녹음된 짧은 효과음 파일(public/assets/sfx) */
+type SfxFile = 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard'
 export type Sfx =
   | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
   | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
@@ -288,7 +290,8 @@ export class SoundEngine {
     this.unlocked = true
     this.applyVolumes()
     this.setTheme(this.wanted)
-    this.fileBuffer('click') // 버튼 효과음 미리 받기
+    // 버튼 · 스킬 효과음 미리 받기
+    for (const name of ['click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard'] as const) this.fileBuffer(name)
     window.setInterval(() => this.tick(), 50)
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return
@@ -755,7 +758,7 @@ export class SoundEngine {
   // ── 파일 효과음(짧은 녹음) ──
   private files = new Map<string, AudioBuffer | null | 'loading'>()
   /** 짧은 효과음 파일을 한 번만 받아 풀어 둔다(준비되기 전에는 null) */
-  private fileBuffer(name: 'click'): AudioBuffer | null {
+  private fileBuffer(name: SfxFile): AudioBuffer | null {
     const have = this.files.get(name)
     if (have && have !== 'loading') return have
     if (have === undefined && this.ctx) {
@@ -1305,6 +1308,15 @@ export class SoundEngine {
    */
   skill(type: SkillSound | string, side: 'player' | 'enemy', pan = 0, voice: { seed?: number; tags?: string[]; impact?: number; hits?: number; hero?: boolean } = {}): void {
     if (!this.allow('skill', 120)) return
+    // 녹음된 스킬 효과음: 공격 계열(돌격 · 사격 · 계략) · 힐러(치유) · 버프(통솔) · 방어(수호)
+    const file: SfxFile = type === '치유' ? 'skill-heal' : type === '통솔' ? 'skill-buff' : type === '수호' ? 'skill-guard' : 'skill-attack'
+    const clip = this.fileBuffer(file)
+    if (clip) {
+      this.duckFor(side === 'player' ? 1400 : 900)
+      this.play_(clip, this.sfxVol, this.ctx!.currentTime + 0.005, side === 'player' ? 0.85 : 0.5, { pan, send: this.sfxSend })
+      return
+    }
+    // (파일을 아직 못 받았으면 아래의 만든 소리로)
     const out = this.sfxVol, send = this.sfxSend, hall = this.hallSend
     const t = this.ctx!.currentTime + 0.005
     const seed = voice.seed ?? 7
