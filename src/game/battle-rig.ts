@@ -68,6 +68,8 @@ function polearm(head: THREE.BufferGeometry[], shaftColor: number, headColor: nu
   const shaft = new THREE.CylinderGeometry(0.021, 0.021, 2.6, 6)
   shaft.translate(0, 0.4, 0)
   const parts = [shaft, ...head].map(g => g.index ? g.toNonIndexed() : g)
+  // 붙일 도형마다 속성이 다르면 합칠 수 없으니 위치 · 노멀만 남긴다
+  for (const g of parts) for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name)
   // 자루와 날을 한 재질로 칠하되, 날 꼭짓점만 밝은 금속빛이 되도록 꼭짓점 색을 쓴다
   const colors: number[] = []
   const shaftRgb = new THREE.Color(shaftColor), headRgb = new THREE.Color(headColor)
@@ -76,12 +78,23 @@ function polearm(head: THREE.BufferGeometry[], shaftColor: number, headColor: nu
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
   return { geometry, material: new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.75, roughness: rough }) }
 }
-/** 청룡언월도(관우): 넓게 휜 큰 칼날 */
+/** 청룡언월도(관우): 납작한 강철 언월 칼날(바깥 날이 둥글게 휘고 등에 갈고리) + 청동 용머리 고리 */
 function glaiveProp(): Prop {
-  const blade = new THREE.CylinderGeometry(0.2, 0.2, 0.03, 16, 1, false, 0, Math.PI * 0.62)
-  blade.rotateZ(Math.PI / 2); blade.rotateY(Math.PI / 2); blade.scale(1, 2.4, 1); blade.translate(0.07, 1.62, 0)
-  const back = new THREE.BoxGeometry(0.05, 0.12, 0.03); back.translate(-0.06, 1.38, 0)
-  return polearm([blade, back], 0x2d4a2c, 0xd9d2b8)
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.035, 0)
+  shape.lineTo(0.045, 0)
+  shape.quadraticCurveTo(0.2, 0.22, 0.165, 0.46) // 배가 불룩한 바깥 날
+  shape.quadraticCurveTo(0.12, 0.68, -0.025, 0.8) // 위로 휘어 뾰족한 끝
+  shape.quadraticCurveTo(-0.03, 0.66, -0.05, 0.56)
+  shape.lineTo(-0.115, 0.47) // 등 갈고리
+  shape.lineTo(-0.06, 0.44)
+  shape.quadraticCurveTo(-0.045, 0.2, -0.035, 0)
+  const blade = new THREE.ExtrudeGeometry(shape, { depth: 0.008, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.006, bevelSegments: 1, curveSegments: 10 })
+  blade.translate(0, 1.5, -0.004)
+  blade.deleteAttribute('uv')
+  const collar = new THREE.CylinderGeometry(0.034, 0.028, 0.14, 10); collar.translate(0, 1.44, 0)
+  collar.deleteAttribute('uv')
+  return polearm([blade, collar], 0x2d3a2a, 0xc4c8c9, 0.32)
 }
 /** 장팔사모(장비): 뱀처럼 굽이친 창날 */
 function snakeProp(): Prop {
