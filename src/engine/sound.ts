@@ -354,11 +354,47 @@ export class SoundEngine {
     if (this.player && this.player.name === theme && !this.player.stopped) return
     this.player?.stop()
     this.player = null
+    // 본영 배경음은 녹음된 곡(강의 흐름)을 되풀이해 튼다. 곡을 못 불러오면 예전처럼 만든 곡으로
+    const recorded = theme === 'home' && this.track('home')
+    if (!recorded) this.stopTrack()
     if (theme !== 'none') {
       if (theme === 'home') this.intensity = 0
-      this.player = new ThemePlayer(this, THEMES[theme], theme, Math.floor(Math.random() * 1e9))
+      if (!recorded) this.player = new ThemePlayer(this, THEMES[theme], theme, Math.floor(Math.random() * 1e9))
     }
     this.setAmbience(theme === 'none' ? 'none' : theme === 'home' ? 'home' : 'battle')
+  }
+
+  // ── 녹음된 배경음(파일) ──
+  private trackEl: HTMLAudioElement | null = null
+  private trackGain: GainNode | null = null
+  private trackFailed = false
+  /** 곡 파일을 처음부터(이미 틀고 있으면 이어서) 튼다. 실패하면 false */
+  private track(name: 'home'): boolean {
+    if (!this.ctx || this.trackFailed) return false
+    const ctx = this.ctx
+    if (!this.trackEl) {
+      const el = new Audio(`/assets/music/${name}.mp3`)
+      el.loop = true
+      el.preload = 'auto'
+      el.crossOrigin = 'anonymous'
+      el.addEventListener('error', () => { this.trackFailed = true; if (this.wanted === 'home') { this.stopTrack(); this.player = new ThemePlayer(this, THEMES.home, 'home', Math.floor(Math.random() * 1e9)) } })
+      const source = ctx.createMediaElementSource(el)
+      const gain = ctx.createGain()
+      gain.gain.value = 0
+      source.connect(gain).connect(this.musicIn)
+      this.trackEl = el; this.trackGain = gain
+    }
+    const g = this.trackGain!
+    g.gain.cancelScheduledValues(ctx.currentTime)
+    g.gain.setTargetAtTime(0.55, ctx.currentTime, 0.6) // 녹음 곡은 소리가 커서 만든 곡과 비슷하게 줄인다
+    void this.trackEl.play().catch(() => { /* 첫 터치 전이면 unlock에서 다시 */ })
+    return true
+  }
+  private stopTrack(): void {
+    if (!this.ctx || !this.trackEl || !this.trackGain) return
+    const el = this.trackEl
+    this.trackGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.35)
+    window.setTimeout(() => { if (this.wanted !== 'home') el.pause() }, 1600)
   }
 
   /** 잠시 뒤 다른 곡으로(그 사이 setTheme을 부르면 취소) */
