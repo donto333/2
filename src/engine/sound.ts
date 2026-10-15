@@ -1092,7 +1092,7 @@ export class SoundEngine {
         else if (roll < 0.85) this.whoosh(this.ambienceBus, t, 0.5, 0.02, 400, 1100, pan)
       }, 900)
     } else {
-      loopNoise('bandpass', 600, 0.6, 0.025, 0.07, 220) // 잔잔한 바람
+      // (본영은 바람 잡음을 깔지 않는다 — 배경음 뒤에서 '치지직' 하는 잡음처럼 들린다) 새소리만 가끔
       // 새소리: 짧게 올라가는 지저귐 몇 번
       this.ambienceTimer = window.setInterval(() => {
         if (!this.ctx || this.ctx.state !== 'running' || !this.ambienceBus || Math.random() < 0.55) return
