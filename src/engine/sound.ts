@@ -8,6 +8,7 @@ import { muteSetting, musicSetting, sfxSetting, SOUND_LEVEL_VALUE } from '../gam
 export type MusicTheme = 'home' | 'battle' | 'duel' | 'raid' | 'none'
 export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | '치유'
 export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
+type TrackName = 'home' | 'battle'
 export type Sfx =
   | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
   | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
@@ -290,8 +291,8 @@ export class SoundEngine {
     window.setInterval(() => this.tick(), 50)
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return
-      if (document.hidden) { void this.ctx.suspend(); this.trackEl?.pause() }
-      else { void this.ctx.resume(); if (this.trackEl && this.trackTarget > 0) void this.trackEl.play().catch(() => {}) }
+      if (document.hidden) { void this.ctx.suspend(); for (const t of this.tracks.values()) t.el.pause() }
+      else { void this.ctx.resume(); for (const t of this.tracks.values()) if (t.target > 0) void t.el.play().catch(() => {}) }
     })
   }
 
@@ -354,9 +355,8 @@ export class SoundEngine {
     if (this.player && this.player.name === theme && !this.player.stopped) return
     this.player?.stop()
     this.player = null
-    // 본영 배경음은 녹음된 곡(강의 흐름)을 되풀이해 튼다. 곡을 못 불러오면 예전처럼 만든 곡으로
-    const recorded = theme === 'home' && this.track('home')
-    if (!recorded) this.stopTrack()
+    // 본영 · 시나리오 · 대련은 녹음된 곡을 되풀이해 튼다(곡을 못 불러오면 예전처럼 만든 곡으로)
+    const recorded = this.track(this.trackFor(theme))
     if (theme !== 'none') {
       if (theme === 'home') this.intensity = 0
       if (!recorded) this.player = new ThemePlayer(this, THEMES[theme], theme, Math.floor(Math.random() * 1e9))
@@ -367,10 +367,8 @@ export class SoundEngine {
   // ── 녹음된 배경음(파일) ──
   // 웹오디오 그래프를 거치지 않고 <audio>로 바로 튼다(휴대폰 사파리 · 데스크톱 앱에서 소리가 안 나는 일을 피한다).
   // 크기는 음악 설정 · 음소거 · 스킬 때 줄이기(덕킹)를 따라 직접 맞춘다.
-  private trackEl: HTMLAudioElement | null = null
-  private trackFailed = false
-  private trackLevel = 0 // 지금 크기(0~1, 서서히 바뀐다)
-  private trackTarget = 0
+  // home = 본영 ‘강의 흐름’, battle = 시나리오 · 대련 전투 곡
+  private tracks = new Map<TrackName, { el: HTMLAudioElement; level: number; target: number; failed: boolean }>()
   private trackTimer = 0
   private trackRetry: (() => void) | null = null
   private trackVolume(): number {
@@ -378,47 +376,59 @@ export class SoundEngine {
     const duck = this.duckTimer ? 0.3 : this.pausedDuck ? 0.5 : 1
     return SOUND_LEVEL_VALUE[musicSetting()] * 0.55 * duck
   }
-  /** 곡을 튼다(이미 틀고 있으면 이어서). 실패하면 false */
-  private track(name: 'home'): boolean {
-    if (this.trackFailed) return false
-    if (!this.trackEl) {
+  /** 곡을 튼다(이미 틀고 있으면 이어서), 다른 곡은 서서히 멈춘다. 그 곡을 못 쓰면 false */
+  private track(name: TrackName | null): boolean {
+    for (const [other, t] of this.tracks) if (other !== name) t.target = 0
+    if (!name) { this.fadeTrack(); return false }
+    let t = this.tracks.get(name)
+    if (!t) {
       const el = new Audio(`/assets/music/${name}.mp3`)
       el.loop = true
       el.preload = 'auto'
       el.volume = 0
+      t = { el, level: 0, target: 0, failed: false }
+      const entry = t
       el.addEventListener('error', () => {
-        this.trackFailed = true
-        if (this.wanted === 'home' && this.ctx && this.unlocked) { this.stopTrack(); this.player = new ThemePlayer(this, THEMES.home, 'home', Math.floor(Math.random() * 1e9)) }
+        entry.failed = true; entry.target = 0
+        // 곡을 못 불러오면 그 화면은 예전처럼 만든 곡으로
+        if (this.ctx && this.unlocked && this.trackFor(this.wanted) === name && this.wanted !== 'none') { this.player?.stop(); this.player = new ThemePlayer(this, THEMES[this.wanted as Exclude<MusicTheme, 'none'>], this.wanted, Math.floor(Math.random() * 1e9)) }
       })
-      this.trackEl = el
+      this.tracks.set(name, t)
     }
-    this.trackTarget = 1
+    if (t.failed) { this.fadeTrack(); return false }
+    t.target = 1
     this.fadeTrack()
-    const el = this.trackEl
-    const start = () => el.play().catch(() => {
+    const el = t.el
+    // 전투 곡은 전투마다 처음부터, 본영 곡은 멈춘 자리부터 이어서
+    if (name === 'battle' && el.paused && t.level === 0) el.currentTime = 0
+    if (el.paused) void el.play().catch(() => {
       // 자동 재생이 막히면 다음 터치 때 다시 튼다
       if (this.trackRetry) return
-      this.trackRetry = () => { document.removeEventListener('pointerdown', this.trackRetry!); document.removeEventListener('keydown', this.trackRetry!); this.trackRetry = null; if (this.wanted === 'home' && this.trackTarget > 0) void el.play().catch(() => {}) }
+      this.trackRetry = () => {
+        document.removeEventListener('pointerdown', this.trackRetry!); document.removeEventListener('keydown', this.trackRetry!); this.trackRetry = null
+        for (const x of this.tracks.values()) if (x.target > 0) void x.el.play().catch(() => {})
+      }
       document.addEventListener('pointerdown', this.trackRetry); document.addEventListener('keydown', this.trackRetry)
     })
-    if (el.paused) void start()
     return true
   }
-  private stopTrack(): void {
-    if (!this.trackEl) return
-    this.trackTarget = 0
-    this.fadeTrack()
+  /** 화면(곡 주제)에 쓰는 녹음 곡 */
+  private trackFor(theme: MusicTheme): TrackName | null {
+    if (theme === 'home') return 'home'
+    if (theme === 'battle' || theme === 'duel') return 'battle'
+    return null
   }
   /** 크기를 서서히 목표로(0이 되면 멈춘다) */
   private fadeTrack(): void {
     if (this.trackTimer) return
     this.trackTimer = window.setInterval(() => {
-      const el = this.trackEl
-      if (!el) return
-      const step = this.trackTarget > this.trackLevel ? 0.06 : 0.08
-      this.trackLevel = this.trackTarget > this.trackLevel ? Math.min(this.trackTarget, this.trackLevel + step) : Math.max(this.trackTarget, this.trackLevel - step)
-      el.volume = Math.max(0, Math.min(1, this.trackLevel * this.trackVolume()))
-      if (this.trackLevel === 0 && this.trackTarget === 0) el.pause()
+      const vol = this.trackVolume()
+      for (const t of this.tracks.values()) {
+        const up = t.target > t.level
+        t.level = up ? Math.min(t.target, t.level + 0.06) : Math.max(t.target, t.level - 0.08)
+        t.el.volume = Math.max(0, Math.min(1, t.level * vol))
+        if (t.level === 0 && t.target === 0 && !t.el.paused) t.el.pause()
+      }
     }, 60)
   }
 
