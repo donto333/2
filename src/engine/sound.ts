@@ -716,8 +716,8 @@ export class SoundEngine {
       case 'battleStart': this.horn(out, 45, t, 1.1, 0.16, send); [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.gong(out, t + 0.84, 0.32, 1, send); break
       case 'attack': this.whoosh(out, t, 0.13, 0.08, 1200, 3200, pan); break
       // 타격: 짧은 파열음(딱) + 몸에 닿는 둔탁한 소리 + 작은 저음(쿵)
-      case 'hit': { const rr = 0.85 + Math.random() * 0.3; this.crack(out, t, 0.24, pan, 2200 * rr); this.drum(out, 'tom', t, 0.24, pan, rr); this.boom(out, t, 0.16, 130 * rr, 60, 0.22, pan); break }
-      case 'hitBig': { const rr = 0.85 + Math.random() * 0.25; this.boom(out, t, 0.5, 92 * rr, 32, 0.75, pan, send); this.crack(out, t, 0.42, pan, 2600 * rr, 0.09); this.drum(out, 'taiko', t, 0.45, pan, rr); this.metal(out, t, 0.16, rr, pan); break }
+      case 'hit': { const rr = 0.85 + Math.random() * 0.3; this.thump(out, t, 0.3, pan, undefined, rr); this.drum(out, 'tom', t, 0.22, pan, 0.75 * rr); break }
+      case 'hitBig': { const rr = 0.85 + Math.random() * 0.25; this.thump(out, t, 0.55, pan, send, 0.85 * rr); this.drum(out, 'taiko', t, 0.55, pan, 0.8 * rr); break }
       case 'unitDown': this.drum(out, 'taiko', t, 0.45, pan, 0.78); this.whoosh(out, t, 0.5, 0.14, 500, 120, pan, send); break
       case 'enemySkill': this.gong(out, t, 0.24, 0.7, send); this.whoosh(out, t, 0.35, 0.12, 600, 2400, pan); break
       case 'enemyWarn': [0, 0.13, 0.26].forEach(d => this.bell(out, t + d, 0.14, 2.2, 0, send)); break
@@ -755,6 +755,19 @@ export class SoundEngine {
     n.connect(lp).connect(ng); this.route(out, ng, pan, send)
     n.start(t, Math.random() * 1.5); n.stop(t + 0.32)
     n.onended = () => { try { ng.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 둥근 폭발음("펑 · 쾅"): 낮게 걸러진 잡음이 터졌다 빠르게 가라앉는다 + 저음 */
+  thump(out: AudioNode, t: number, vol: number, pan = 0, send?: AudioNode, low = 1): void {
+    const ctx = this.ctx!
+    const n = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
+    n.buffer = this.noise
+    lp.type = 'lowpass'; lp.Q.value = 1.2
+    lp.frequency.setValueAtTime(1500 * low, t); lp.frequency.exponentialRampToValueAtTime(140 * low, t + 0.3)
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34)
+    n.connect(lp).connect(g); this.route(out, g, pan, send)
+    n.start(t, Math.random() * 1.5); n.stop(t + 0.36)
+    n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+    this.boom(out, t, vol * 0.9, 100 * low, 34, 0.55, pan, send)
   }
   /** 날카로운 파열음(맞는 순간의 "딱"): 아주 짧은 고음 잡음 + 딸깍 */
   crack(out: AudioNode, t: number, vol: number, pan = 0, bright = 2600, dur = 0.07): void {
@@ -863,7 +876,6 @@ export class SoundEngine {
         case 'sword': // 칼날이 공기를 가르는 "쉭" + 얇은 쇳소리
           this.whoosh(out, t, 0.2, 0.3, 700 * rr, 4600 * rr, pan)
           this.whoosh(out, t + 0.03, 0.12, 0.18, 3000, 7000, pan)
-          this.metal(out, t + 0.04, 0.08, 2.6 * rr, pan)
           break
         case 'spear': // 짧고 곧게 뻗는 "슉" + 내딛는 발
           this.whoosh(out, t, 0.1, 0.32, 1400 * rr, 2600 * rr, pan)
@@ -892,16 +904,16 @@ export class SoundEngine {
     }
     switch (kind) {
       case 'sword': // 베이는 "서걱" + 갑옷에 닿는 "쨍"
-        this.crack(out, t, 0.42 * big, pan, 3800 * rr, 0.06)
-        this.whoosh(out, t, 0.09, 0.14 * big, 5200, 1600, pan)
-        this.metal(out, t + 0.005, 0.22 * big, 1.25 * rr, pan, send)
-        this.boom(out, t, 0.12 * big, 120 * rr, 60, 0.22, pan)
+        // 쾅: 둥근 폭발음 + 갑옷에 닿는 낮은 쇳소리
+        this.thump(out, t, 0.42 * big, pan, send, rr)
+        this.metal(out, t + 0.005, 0.12 * big, 0.62 * rr, pan, send)
+        this.drum(out, 'tom', t, 0.22 * big, pan, 0.7 * rr)
         if (opts.big) this.drum(out, 'taiko', t, 0.35, pan, rr)
         break
       case 'spear': // 깊게 박히는 "퍽" — 낮고 둔탁하다
         this.drum(out, 'tom', t, 0.32 * big, pan, 0.62 * rr)
         this.boom(out, t, 0.26 * big, 105 * rr, 44, 0.32, pan)
-        this.crack(out, t, 0.16 * big, pan, 1100 * rr, 0.05)
+        this.thump(out, t, 0.3 * big, pan, undefined, 0.8 * rr)
         this.metal(out, t + 0.01, 0.05 * big, 0.6 * rr, pan)
         if (opts.big) this.drum(out, 'taiko', t, 0.4, pan, 0.8)
         break
@@ -909,8 +921,7 @@ export class SoundEngine {
         const n = opts.big ? 4 : 2
         for (let i = 0; i < n; i += 1) {
           const at = t + i * (0.03 + Math.random() * 0.03)
-          this.crack(out, at, 0.2 * big, pan + (Math.random() - 0.5) * 0.4, 1700 * rr, 0.035)
-          this.drum(out, 'rim', at, 0.1, pan, 0.55 * rr)
+          this.thump(out, at, 0.2 * big, pan + (Math.random() - 0.5) * 0.4, undefined, 1.2 * rr)
           this.drum(out, 'tom', at, 0.1 * big, pan, 1.5 * rr)
         }
         if (opts.big) this.boom(out, t, 0.24, 90, 40, 0.4, pan)
@@ -964,7 +975,7 @@ export class SoundEngine {
         let at = 0, gap = 0.12
         while (t + at < hit - 0.05) { this.drum(out, 'tom', t + at, (0.16 + at * 0.35) * v, pan, r); gap = Math.max(0.045, gap * 0.8); at += gap }
         this.boom(out, hit, 0.62 * v, 84 * r, 30, 1.0, pan, hall)
-        this.crack(out, hit, 0.5 * v, pan, 2400 * r)
+        this.thump(out, hit, 0.6 * v, pan, hall, r)
         this.drum(out, 'taiko', hit, 0.75 * v, pan, r * 0.9)
         this.shing(out, hit + 0.01, 0.32 * v, 1.6 * r, pan, send)
         this.drum(out, 'cymbal', hit, 0.16 * v, pan)
@@ -974,7 +985,7 @@ export class SoundEngine {
         // 활시위 당김 → 화살비 → 둔탁하게 꽂히는 소리
         this.pluck(out, 40 + (seed % 5), t + 0.02, 0.22 * v, { bright: 0.2, dur: 0.5, pan })
         for (let i = 0; i < 9; i += 1) this.whoosh(out, hit - 0.25 + i * 0.035, 0.22, 0.1 * v, 2200 * r, 5200 * r, pan + (Math.random() - 0.5) * 0.8)
-        for (let i = 0; i < 6; i += 1) { const at = hit + 0.12 + i * 0.045 + Math.random() * 0.02; this.drum(out, 'tom', at, 0.22 * v, pan + (Math.random() - 0.5) * 0.6, 1.3 * r); this.crack(out, at, 0.2 * v, pan, 1800) }
+        for (let i = 0; i < 6; i += 1) { const at = hit + 0.12 + i * 0.045 + Math.random() * 0.02; this.drum(out, 'tom', at, 0.22 * v, pan + (Math.random() - 0.5) * 0.6, 1.3 * r); this.thump(out, at, 0.22 * v, pan, undefined, 1.1 * r) }
         this.boom(out, hit + 0.38, 0.45 * v, 70 * r, 32, 0.7, pan, hall)
         break
       }
@@ -983,7 +994,7 @@ export class SoundEngine {
         ;[1, 1.19, 1.5, 1.78].forEach((rr, i) => this.bell(out, t + i * 0.05, 0.09 * v, rr * 0.75 * r, -0.4 + i * 0.25, send))
         this.gong(out, hit, 0.4 * v, 0.6 * r, hall)
         this.boom(out, hit, 0.55 * v, 66 * r, 26, 1.3, pan, hall)
-        this.crack(out, hit, 0.32 * v, pan, 1600)
+        this.thump(out, hit, 0.45 * v, pan, hall, 0.9 * r)
         break
       }
       case '통솔': {
@@ -1011,7 +1022,7 @@ export class SoundEngine {
         this.gong(out, hit, 0.35 * v, r, hall); this.boom(out, hit, 0.4 * v, 70, 30, 0.8, pan)
     }
     // 연타(능통 필사의 연격 등): 타격 수만큼 더 친다
-    for (let i = 1; i < (voice.hits ?? 1); i += 1) { const at = hit + i * 0.2; this.boom(out, at, 0.45 * v, 90 * r, 34, 0.6, pan); this.crack(out, at, 0.4 * v, pan); this.shing(out, at, 0.22 * v, 1.9 * r, pan) }
+    for (let i = 1; i < (voice.hits ?? 1); i += 1) { const at = hit + i * 0.2; this.boom(out, at, 0.45 * v, 90 * r, 34, 0.6, pan); this.thump(out, at, 0.45 * v, pan, undefined, r); this.shing(out, at, 0.12 * v, 1.2 * r, pan) }
     // 효과마다 덧붙는 소리
     for (const tag of new Set(voice.tags ?? [])) {
       switch (tag) {
@@ -1023,7 +1034,7 @@ export class SoundEngine {
         case 'slow': this.warble(out, hit, 1.2, 0.09 * v, 52, pan, hall); this.boom(out, hit, 0.3 * v, 50, 24, 1.4, pan); break
         case 'blind': this.whoosh(out, hit, 0.9, 0.2 * v, 900, 5500, pan, hall); this.whoosh(out, hit + 0.1, 0.8, 0.14 * v, 5000, 1200, -pan, hall); break
         case 'chain': this.rattle(out, hit, 12, 0.18 * v, 2.3, pan); break
-        case 'armor-break': case 'fracture': this.crack(out, hit + 0.04, 0.55 * v, pan, 4200, 0.12); this.rattle(out, hit + 0.05, 6, 0.22 * v, 1.4, pan); break
+        case 'armor-break': case 'fracture': this.thump(out, hit + 0.04, 0.5 * v, pan, undefined, 0.9); this.rattle(out, hit + 0.05, 6, 0.22 * v, 1.4, pan); break
         case 'mark': [0, 0.12].forEach(d => this.bell(out, hit + d, 0.13 * v, 2.6, pan, send)); break
         case 'atk-up': case 'cavalry-surge': case 'insight': case 'swift': this.horn(out, 57 + (seed % 3), hit, 0.5, 0.12 * v, hall); break
         case 'dr-up': case 'iron-wall': case 'phoenix-guard': case 'bodyguard': case 'undying': this.shield(out, hit + 0.08, 0.32 * v, pan, hall); break
