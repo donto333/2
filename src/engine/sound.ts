@@ -779,7 +779,8 @@ export class SoundEngine {
     n.connect(lp).connect(g); this.route(out, g, pan, send)
     n.start(t, Math.random()); n.stop(t + dur + 0.05)
     n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
-    for (let i = 0; i < 18; i += 1) this.crack(out, t + Math.random() * dur * 0.85, vol * (0.25 + Math.random() * 0.35), pan + (Math.random() - 0.5) * 0.6, 3500 + Math.random() * 3000, 0.02)
+    // 불똥은 몇 번만, 낮게(높고 잦으면 비닐이 바스락거리는 소리처럼 들린다)
+    for (let i = 0; i < 5; i += 1) this.crack(out, t + Math.random() * dur * 0.7, vol * (0.2 + Math.random() * 0.2), pan + (Math.random() - 0.5) * 0.6, 900 + Math.random() * 500, 0.03)
   }
   /** 짐승 같은 포효(공포 · 분노): 낮은 톱니파에 목청(필터)이 열렸다 닫힌다 */
   growl(out: AudioNode, t: number, dur: number, vol: number, f = 72, pan = 0, send?: AudioNode): void {
@@ -849,7 +850,7 @@ export class SoundEngine {
 
   /**
    * 무기별 공격 · 피격 소리. swing = 휘두르기 · 찌르기 · 활쏘기(무기가 움직이는 순간), hit = 맞는 순간.
-   * 칼은 "쉭 → 서걱 · 쨍", 창은 "슉 → 퍽(깊고 둔탁)", 활은 "팅 · 휘이 → 탁", 책사 화염구는 "화륵 · 후우웅 → 콰앙".
+   * 칼은 "쉭 → 서걱 · 쨍", 창은 "슉 → 퍽(깊고 둔탁)", 활은 "팅 · 휘이 → 탁", 책사 화염구는 "슈욱 → 펑".
    */
   weapon(kind: WeaponSound, phase: 'swing' | 'hit', opts: { pan?: number; big?: boolean } = {}): void {
     if (!this.allow(`${kind}:${phase}`, phase === 'hit' ? 70 : 90, true)) return
@@ -873,11 +874,19 @@ export class SoundEngine {
           this.crack(out, t, 0.1, pan, 5200, 0.025)
           this.whoosh(out, t + 0.02, 0.32, 0.16, 2600 * rr, 6200 * rr, pan)
           break
-        case 'magic': // 화염구 발사: 불이 붙는 "화륵" + 불덩이가 날아가는 "후우웅"(타닥거림)
-          this.boom(out, t, 0.18, 140 * rr, 70, 0.25, pan)
-          this.roar(out, t, 0.55, 0.3, pan, send)
-          this.whoosh(out, t, 0.45, 0.2, 300 * rr, 1600 * rr, pan, send)
+        case 'magic': { // 화염구 발사 "슈욱": 낮게 깔린 바람이 빠르게 밀려 나간다(타닥거리는 잡음 없이)
+          const ctx = this.ctx!
+          const n = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
+          n.buffer = this.noise
+          lp.type = 'lowpass'; lp.Q.value = 6
+          lp.frequency.setValueAtTime(260 * rr, t); lp.frequency.exponentialRampToValueAtTime(1500 * rr, t + 0.16); lp.frequency.exponentialRampToValueAtTime(420, t + 0.42)
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.07); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45)
+          n.connect(lp).connect(g); this.route(out, g, pan, send)
+          n.start(t, Math.random() * 1.5); n.stop(t + 0.48)
+          n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+          this.boom(out, t, 0.14, 120 * rr, 60, 0.2, pan)
           break
+        }
       }
       return
     }
@@ -907,11 +916,18 @@ export class SoundEngine {
         if (opts.big) this.boom(out, t, 0.24, 90, 40, 0.4, pan)
         break
       }
-      case 'magic': // 화염구가 터지는 "콰앙" + 불길 · 불똥
-        this.boom(out, t, 0.4 * big, 95 * rr, 34, 0.6, pan, send)
-        this.crack(out, t, 0.3 * big, pan, 1900 * rr, 0.09)
-        this.roar(out, t + 0.02, 0.7, 0.24 * big, pan, send)
+      case 'magic': { // 화염구가 터지는 "펑": 묵직한 저음 + 짧고 둥근 폭발음(날카로운 잡음 없이)
+        const ctx = this.ctx!
+        this.boom(out, t, 0.55 * big, 110 * rr, 36, 0.55, pan, send)
+        const n = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
+        n.buffer = this.noise
+        lp.type = 'lowpass'; lp.frequency.setValueAtTime(1800, t); lp.frequency.exponentialRampToValueAtTime(180, t + 0.35)
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.55 * big, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4)
+        n.connect(lp).connect(g); this.route(out, g, pan, send)
+        n.start(t, Math.random() * 1.5); n.stop(t + 0.42)
+        n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
         break
+      }
     }
   }
 
