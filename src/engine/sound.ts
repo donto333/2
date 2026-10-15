@@ -358,6 +358,7 @@ export class SoundEngine {
       if (theme === 'home') this.intensity = 0
       this.player = new ThemePlayer(this, THEMES[theme], theme, Math.floor(Math.random() * 1e9))
     }
+    this.setAmbience(theme === 'none' ? 'none' : theme === 'home' ? 'home' : 'battle')
   }
 
   /** 잠시 뒤 다른 곡으로(그 사이 setTheme을 부르면 취소) */
@@ -713,12 +714,12 @@ export class SoundEngine {
       case 'build': [0, 0.13, 0.26].forEach((d, i) => { this.drum(out, i === 2 ? 'tom' : 'rim', t + d, i === 2 ? 0.3 : 0.24, 0, i === 2 ? 1 : 0.85); this.metal(out, t + d, 0.06, 0.9) }); break
       case 'research': this.whoosh(out, t, 0.2, 0.12, 2000, 5200); this.bell(out, t + 0.12, 0.1, 1.5, 0, send); break
       case 'formation': this.drum(out, 'taiko', t, 0.3); this.drum(out, 'rim', t + 0.1, 0.12); break
-      case 'battleStart': this.horn(out, 45, t, 1.1, 0.16, send); [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.gong(out, t + 0.84, 0.32, 1, send); break
+      case 'battleStart': window.setTimeout(() => { this.crowd('cry', 0.2, 0, 10); this.neigh(0.14, -0.4) }, 650); this.horn(out, 45, t, 1.1, 0.16, send); [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.gong(out, t + 0.84, 0.32, 1, send); break
       case 'attack': this.whoosh(out, t, 0.13, 0.08, 1200, 3200, pan); break
       // 타격: 짧은 파열음(딱) + 몸에 닿는 둔탁한 소리 + 작은 저음(쿵)
       case 'hit': { const rr = 0.85 + Math.random() * 0.3; this.thump(out, t, 0.3, pan, undefined, rr); this.drum(out, 'tom', t, 0.22, pan, 0.75 * rr); break }
       case 'hitBig': { const rr = 0.85 + Math.random() * 0.25; this.thump(out, t, 0.55, pan, send, 0.85 * rr); this.drum(out, 'taiko', t, 0.55, pan, 0.8 * rr); break }
-      case 'unitDown': this.drum(out, 'taiko', t, 0.45, pan, 0.78); this.whoosh(out, t, 0.5, 0.14, 500, 120, pan, send); break
+      case 'unitDown': this.crowd('groan', 0.13, pan, 6); this.neigh(0.13, pan, 0.85); this.drum(out, 'taiko', t, 0.45, pan, 0.78); this.whoosh(out, t, 0.5, 0.14, 500, 120, pan, send); break
       case 'enemySkill': this.gong(out, t, 0.24, 0.7, send); this.whoosh(out, t, 0.35, 0.12, 600, 2400, pan); break
       case 'enemyWarn': [0, 0.13, 0.26].forEach(d => this.bell(out, t + d, 0.14, 2.2, 0, send)); break
       case 'pattern': this.horn(out, 50, t, 0.7, 0.13, send); this.drum(out, 'tom', t + 0.05, 0.2); this.drum(out, 'tom', t + 0.15, 0.24); break
@@ -861,6 +862,247 @@ export class SoundEngine {
     })
   }
 
+  // ── 말 ──────────────────────────────────────────────
+  /** 말발굽 한 번: 흙바닥을 디디는 낮고 둔탁한 소리(부대 기병이면 여러 마리가 겹친다) */
+  hoof(vol: number, pan = 0, herd = 1): void {
+    if (!this.allow(`hoof${Math.round(pan * 4)}`, 45, true)) return
+    const ctx = this.ctx!, out = this.sfxVol
+    const t = ctx.currentTime + 0.005
+    for (let i = 0; i < herd; i += 1) {
+      const at = t + (i ? Math.random() * 0.06 : 0)
+      const rr = 0.8 + Math.random() * 0.4
+      const n = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
+      n.buffer = this.noise
+      lp.type = 'lowpass'; lp.frequency.value = 520 * rr
+      g.gain.setValueAtTime(vol * 2 * (i ? 0.55 : 1), at); g.gain.exponentialRampToValueAtTime(0.0001, at + 0.07)
+      n.connect(lp).connect(g); this.route(out, g, pan + (Math.random() - 0.5) * 0.3)
+      n.start(at, Math.random() * 1.5); n.stop(at + 0.08)
+      n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+      const o = ctx.createOscillator(), og = ctx.createGain()
+      o.frequency.setValueAtTime(95 * rr, at); o.frequency.exponentialRampToValueAtTime(55, at + 0.07)
+      og.gain.setValueAtTime(vol * 1.6 * (i ? 0.5 : 1), at); og.gain.exponentialRampToValueAtTime(0.0001, at + 0.09)
+      o.connect(og); this.route(out, og, pan)
+      o.start(at); o.stop(at + 0.1)
+      o.onended = () => { try { og.disconnect() } catch { /* 끝 */ } }
+    }
+  }
+  /** 말 울음(히힝): 성대 소리(톱니파)가 높게 올라갔다가 떨리며 내려오고, 콧구멍 바람이 섞인다 */
+  neigh(vol = 0.18, pan = 0, low = 1): void {
+    if (!this.allow('neigh', 700)) return
+    const ctx = this.ctx!, out = this.sfxVol, send = this.sfxSend
+    const t = ctx.currentTime + 0.01, dur = 1.1
+    const base = (520 + Math.random() * 120) * low
+    const o = ctx.createOscillator(), g = ctx.createGain()
+    o.type = 'sawtooth'
+    o.frequency.setValueAtTime(base * 0.8, t)
+    o.frequency.linearRampToValueAtTime(base * 1.9, t + 0.18)
+    o.frequency.linearRampToValueAtTime(base * 1.5, t + 0.45)
+    o.frequency.linearRampToValueAtTime(base * 0.9, t + dur)
+    const trill = ctx.createOscillator(), tg = ctx.createGain()
+    trill.frequency.setValueAtTime(9, t); trill.frequency.linearRampToValueAtTime(16, t + dur)
+    tg.gain.setValueAtTime(base * 0.02, t); tg.gain.linearRampToValueAtTime(base * 0.16, t + 0.4)
+    trill.connect(tg); tg.connect(o.frequency)
+    // 목청(포먼트) 두 개
+    const f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter()
+    f1.type = 'bandpass'; f1.frequency.value = 1100 * low; f1.Q.value = 4
+    f2.type = 'bandpass'; f2.frequency.value = 2400 * low; f2.Q.value = 6
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.06); g.gain.setValueAtTime(vol, t + dur * 0.55); g.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+    // 떨림(음량)
+    const am = ctx.createOscillator(), ag = ctx.createGain()
+    am.frequency.value = 13; ag.gain.value = vol * 0.45
+    am.connect(ag); ag.connect(g.gain)
+    o.connect(f1); o.connect(f2); f1.connect(g); f2.connect(g)
+    this.route(out, g, pan, send)
+    ;[o, trill, am].forEach(node => { node.start(t); node.stop(t + dur + 0.05) })
+    o.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+    this.snort(vol * 0.6, pan, t + dur - 0.1)
+  }
+  /** 말 콧김(푸르릉) */
+  snort(vol = 0.1, pan = 0, at?: number): void {
+    const ctx = this.ctx!, out = this.sfxVol
+    const t = at ?? ctx.currentTime + 0.005
+    const n = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain()
+    n.buffer = this.noise
+    bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 1.4
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35)
+    const am = ctx.createOscillator(), ag = ctx.createGain()
+    am.frequency.value = 28; ag.gain.value = vol * 0.6; am.connect(ag); ag.connect(g.gain)
+    n.connect(bp).connect(g); this.route(out, g, pan)
+    n.start(t, Math.random() * 1.5); n.stop(t + 0.4); am.start(t); am.stop(t + 0.4)
+    n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+
+  // ── 사람 목소리(함성) ─────────────────────────────────
+  /**
+   * 병사들의 함성("와아아!"): 여러 사람 목소리(조금씩 다른 음높이 · 떨림)를 모음 포먼트에 통과시킨다.
+   * mood: 'cry' 진격 함성(우→아로 열린다), 'shout' 짧은 기합, 'groan' 쓰러질 때 낮은 신음
+   */
+  crowd(mood: 'cry' | 'shout' | 'groan', vol = 0.2, pan = 0, voices = 9): void {
+    if (!this.allow(`crowd:${mood}`, mood === 'shout' ? 400 : 900)) return
+    const ctx = this.ctx!, out = this.sfxVol, send = this.sfxSend
+    const t = ctx.currentTime + 0.01
+    const dur = mood === 'cry' ? 2.1 : mood === 'shout' ? 0.75 : 1.3
+    const pitch = mood === 'groan' ? 95 : mood === 'shout' ? 165 : 150
+    const bus = ctx.createGain()
+    bus.gain.setValueAtTime(0.0001, t)
+    bus.gain.linearRampToValueAtTime(vol, t + (mood === 'shout' ? 0.05 : 0.25))
+    bus.gain.setValueAtTime(vol, t + dur * 0.6)
+    bus.gain.linearRampToValueAtTime(0.0001, t + dur)
+    // 모음: 우(300/800) → 아(750/1200), 신음은 오(450/800)
+    const F = [ctx.createBiquadFilter(), ctx.createBiquadFilter(), ctx.createBiquadFilter()]
+    const [a1, a2] = mood === 'groan' ? [450, 800] : [750, 1200]
+    F.forEach((f, i) => { f.type = 'bandpass'; f.Q.value = [5, 7, 9][i] })
+    F[0].frequency.setValueAtTime(mood === 'groan' ? a1 : 320, t); F[0].frequency.linearRampToValueAtTime(a1, t + 0.25)
+    F[1].frequency.setValueAtTime(mood === 'groan' ? a2 : 820, t); F[1].frequency.linearRampToValueAtTime(a2, t + 0.25)
+    F[2].frequency.value = 2600
+    const mix = ctx.createGain(); mix.gain.value = 1
+    F.forEach((f, i) => { const fg = ctx.createGain(); fg.gain.value = [1, 0.7, 0.35][i]; mix.connect(f); f.connect(fg); fg.connect(bus) })
+    const nodes: AudioScheduledSourceNode[] = []
+    for (let i = 0; i < voices; i += 1) {
+      const o = ctx.createOscillator(), vg = ctx.createGain()
+      o.type = 'sawtooth'
+      const p = pitch * (0.75 + Math.random() * 0.6)
+      const start = t + Math.random() * (mood === 'shout' ? 0.06 : 0.3)
+      o.frequency.setValueAtTime(p * (mood === 'groan' ? 1.1 : 0.9), start)
+      o.frequency.linearRampToValueAtTime(p * (mood === 'groan' ? 0.8 : 1.12), start + dur * 0.5)
+      o.frequency.linearRampToValueAtTime(p * (mood === 'groan' ? 0.7 : 0.95), t + dur)
+      const vib = ctx.createOscillator(), vbg = ctx.createGain()
+      vib.frequency.value = 4.5 + Math.random() * 2.5; vbg.gain.value = p * 0.025
+      vib.connect(vbg); vbg.connect(o.frequency)
+      vg.gain.setValueAtTime(0.0001, t); vg.gain.linearRampToValueAtTime(0.5 + Math.random() * 0.5, start + 0.08)
+      o.connect(vg); vg.connect(mix)
+      o.start(start); o.stop(t + dur + 0.05); vib.start(start); vib.stop(t + dur + 0.05)
+      nodes.push(o)
+    }
+    // 숨소리(목소리의 거친 결)
+    const n = ctx.createBufferSource(), ng = ctx.createGain()
+    n.buffer = this.noise; n.loop = true
+    ng.gain.value = 0.25
+    n.connect(ng); ng.connect(mix)
+    n.start(t, Math.random()); n.stop(t + dur + 0.05)
+    this.route(out, bus, pan, send)
+    nodes[0].onended = () => { try { bus.disconnect() } catch { /* 끝 */ } }
+  }
+
+  // ── 배경 환경음(바람 · 먼 전투 소리 · 새소리) ─────────────────
+  private ambienceBus: GainNode | null = null
+  private ambienceNodes: AudioScheduledSourceNode[] = []
+  private ambienceTimer = 0
+  private ambienceKind: 'battle' | 'home' | 'none' = 'none'
+  /** 화면에 맞는 환경음: 전장은 바람과 멀리서 들리는 함성 · 쇳소리 · 북, 본영은 잔잔한 바람과 새소리 */
+  setAmbience(kind: 'battle' | 'home' | 'none'): void {
+    if (!this.ctx || kind === this.ambienceKind) return
+    this.ambienceKind = kind
+    const ctx = this.ctx
+    const old = this.ambienceBus, oldNodes = this.ambienceNodes
+    if (old) { old.gain.setTargetAtTime(0, ctx.currentTime, 0.6); window.setTimeout(() => { oldNodes.forEach(node => { try { node.stop() } catch { /* 끝 */ } }); try { old.disconnect() } catch { /* 끝 */ } }, 3000) }
+    window.clearInterval(this.ambienceTimer)
+    this.ambienceBus = null; this.ambienceNodes = []
+    if (kind === 'none') return
+    const bus = ctx.createGain()
+    bus.gain.setValueAtTime(0, ctx.currentTime); bus.gain.setTargetAtTime(1, ctx.currentTime, 1.2)
+    bus.connect(this.sfxVol)
+    this.ambienceBus = bus
+    const loopNoise = (type: BiquadFilterType, freq: number, q: number, vol: number, lfoRate: number, lfoDepth: number) => {
+      const n = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain()
+      n.buffer = this.noise; n.loop = true
+      f.type = type; f.frequency.value = freq; f.Q.value = q
+      g.gain.value = vol
+      const lfo = ctx.createOscillator(), lg = ctx.createGain()
+      lfo.frequency.value = lfoRate; lg.gain.value = lfoDepth
+      lfo.connect(lg); lg.connect(f.frequency)
+      const lfo2 = ctx.createOscillator(), lg2 = ctx.createGain()
+      lfo2.frequency.value = lfoRate * 0.63; lg2.gain.value = vol * 0.5
+      lfo2.connect(lg2); lg2.connect(g.gain)
+      n.connect(f).connect(g).connect(bus)
+      n.start(ctx.currentTime, Math.random()); lfo.start(); lfo2.start()
+      this.ambienceNodes.push(n, lfo, lfo2)
+    }
+    if (kind === 'battle') {
+      loopNoise('bandpass', 380, 0.8, 0.05, 0.11, 160) // 들판을 쓰는 바람
+      loopNoise('lowpass', 160, 0.7, 0.05, 0.05, 40) // 낮게 깔린 웅성거림
+      loopNoise('bandpass', 900, 2.2, 0.012, 0.3, 250) // 먼 함성의 결
+      // 멀리서 들리는 쇳소리 · 북 · 말 울음(가끔)
+      this.ambienceTimer = window.setInterval(() => {
+        if (!this.ctx || this.ctx.state !== 'running' || !this.ambienceBus) return
+        const t = this.ctx.currentTime + Math.random() * 0.5, pan = (Math.random() - 0.5) * 1.6, roll = Math.random()
+        if (roll < 0.45) this.play_(this.sample('metal'), this.ambienceBus, t, 0.035, { rate: 0.7 + Math.random() * 0.6, pan, filter: 1400 })
+        else if (roll < 0.75) this.play_(this.sample('taiko'), this.ambienceBus, t, 0.05, { rate: 0.8, pan, filter: 500 })
+        else if (roll < 0.85) this.whoosh(this.ambienceBus, t, 0.5, 0.02, 400, 1100, pan)
+      }, 900)
+    } else {
+      loopNoise('bandpass', 600, 0.6, 0.025, 0.07, 220) // 잔잔한 바람
+      // 새소리: 짧게 올라가는 지저귐 몇 번
+      this.ambienceTimer = window.setInterval(() => {
+        if (!this.ctx || this.ctx.state !== 'running' || !this.ambienceBus || Math.random() < 0.55) return
+        const c = this.ctx, bus2 = this.ambienceBus
+        const t0 = c.currentTime + Math.random() * 0.6, pan = (Math.random() - 0.5) * 1.4
+        const base = 2600 + Math.random() * 1800, n = 2 + Math.floor(Math.random() * 4)
+        for (let i = 0; i < n; i += 1) {
+          const t = t0 + i * (0.09 + Math.random() * 0.05)
+          const o = c.createOscillator(), g = c.createGain()
+          o.type = 'sine'
+          o.frequency.setValueAtTime(base, t); o.frequency.exponentialRampToValueAtTime(base * (1.3 + Math.random() * 0.4), t + 0.06)
+          g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.018, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08)
+          o.connect(g); this.route(bus2, g, pan)
+          o.start(t); o.stop(t + 0.1)
+          o.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+        }
+      }, 1400)
+    }
+  }
+
+  // ── 자연 현상(계략 속성) ─────────────────────────────────
+  /** 벼락: 찢어지는 소리 + 길게 굴러가는 우르릉 */
+  thunder(t: number, vol: number, pan = 0): void {
+    const ctx = this.ctx!, out = this.sfxVol, hall = this.hallSend
+    this.thump(out, t, vol * 0.8, pan, hall, 1.4)
+    const n = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
+    n.buffer = this.noise; n.loop = true
+    lp.type = 'lowpass'; lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(120, t + 2.2)
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.05)
+    for (let i = 1; i < 6; i += 1) g.gain.linearRampToValueAtTime(vol * (0.4 + Math.random() * 0.5) * (1 - i / 7), t + i * 0.35)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.4)
+    n.connect(lp).connect(g); this.route(out, g, pan, hall)
+    n.start(t, Math.random()); n.stop(t + 2.5)
+    n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+  }
+  /** 물: 쏴아 밀려오는 물결 + 거품 */
+  water(t: number, vol: number, pan = 0): void {
+    const ctx = this.ctx!, out = this.sfxVol
+    const n = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), g = ctx.createGain()
+    n.buffer = this.noise; n.loop = true
+    bp.type = 'bandpass'; bp.Q.value = 0.9
+    bp.frequency.setValueAtTime(500, t); bp.frequency.linearRampToValueAtTime(1800, t + 0.5); bp.frequency.linearRampToValueAtTime(700, t + 1.4)
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.35); g.gain.linearRampToValueAtTime(0.0001, t + 1.5)
+    n.connect(bp).connect(g); this.route(out, g, pan, this.hallSend)
+    n.start(t, Math.random()); n.stop(t + 1.55)
+    n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+    for (let i = 0; i < 10; i += 1) {
+      const at = t + 0.2 + Math.random() * 1.0, f = 300 + Math.random() * 500
+      const o = ctx.createOscillator(), og = ctx.createGain()
+      o.frequency.setValueAtTime(f, at); o.frequency.exponentialRampToValueAtTime(f * 2.2, at + 0.05)
+      og.gain.setValueAtTime(vol * 0.35, at); og.gain.exponentialRampToValueAtTime(0.0001, at + 0.06)
+      o.connect(og); this.route(out, og, pan + (Math.random() - 0.5) * 0.5)
+      o.start(at); o.stop(at + 0.07)
+      o.onended = () => { try { og.disconnect() } catch { /* 끝 */ } }
+    }
+  }
+  /** 천명(5등급) 무장의 주제 가락: 무장마다 다른 호궁 네 음(스킬을 쓸 때) */
+  heroTheme(seed: number, vol = 0.12): void {
+    if (!this.ctx || !this.unlocked) return
+    const scale = [0, 3, 5, 7, 10, 12, 15]
+    const root = 57 + (seed % 4)
+    const t = this.ctx.currentTime + 0.05
+    let at = t
+    for (let i = 0; i < 4; i += 1) {
+      const deg = scale[(seed >> (i * 2 + 1)) % scale.length]
+      const dur = i === 3 ? 0.9 : 0.22 + ((seed >> i) % 2) * 0.12
+      this.erhu(this.sfxVol, root + deg, at, dur, vol, i === 3 ? -1 : 0)
+      at += dur
+    }
+  }
+
   /**
    * 무기별 공격 · 피격 소리. swing = 휘두르기 · 찌르기 · 활쏘기(무기가 움직이는 순간), hit = 맞는 순간.
    * 칼은 "쉭 → 서걱 · 쨍", 창은 "슉 → 퍽(깊고 둔탁)", 활은 "팅 · 휘이 → 탁", 책사 화염구는 "슈욱 → 펑".
@@ -939,7 +1181,9 @@ export class SoundEngine {
         n.connect(lp).connect(g); this.route(out, g, pan, hall)
         n.start(t, Math.random() * 1.5); n.stop(t + 0.58)
         n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
-        // 폭발 뒤 낮게 굴러가는 여운(우르릉)
+        // 폭발 뒤 낮게 굴러가는 여운(우르릉) — 연달아 터지면 겹쳐 웅웅거리지 않게 0.7초에 한 번만
+        if (performance.now() - (this.last.get('fireTail') ?? -1e9) < 700) break
+        this.last.set('fireTail', performance.now())
         const tail = ctx.createBufferSource(), tlp = ctx.createBiquadFilter(), tg = ctx.createGain()
         tail.buffer = this.noise; tail.loop = true
         tlp.type = 'lowpass'; tlp.frequency.value = 140; tlp.Q.value = 0.8
@@ -956,7 +1200,7 @@ export class SoundEngine {
    * 스킬 소리: 계열(돌격·사격·계략·통솔·수호·치유)마다 다른 바탕 + 스킬 효과(화계·공포·혼란·출혈…)마다 덧붙는 소리
    * + 무장마다 다른 짧은 가락과 음높이. impact = 시전부터 타격까지(초) — 큰 타격음은 그 순간에 맞춘다.
    */
-  skill(type: SkillSound | string, side: 'player' | 'enemy', pan = 0, voice: { seed?: number; tags?: string[]; impact?: number; hits?: number } = {}): void {
+  skill(type: SkillSound | string, side: 'player' | 'enemy', pan = 0, voice: { seed?: number; tags?: string[]; impact?: number; hits?: number; hero?: boolean } = {}): void {
     if (!this.allow('skill', 120)) return
     const out = this.sfxVol, send = this.sfxSend, hall = this.hallSend
     const t = this.ctx!.currentTime + 0.005
@@ -969,6 +1213,9 @@ export class SoundEngine {
     this.swell(out, t, Math.max(0.15, hit - t - 0.02), 0.07 * v)
     this.whoosh(out, t, hit - t, 0.12 * v, 300, 2800, pan, send)
     if (side === 'player') this.motif(out, t + 0.02, seed, 0.11, type === '통솔' ? 'brass' : type === '치유' || type === '계략' ? 'bell' : 'pluck', send)
+    // 천명 무장: 무장마다의 주제 가락(호궁) + 아군 함성
+    if (voice.hero && side === 'player') this.heroTheme(seed)
+    if (type === '돌격' || type === '통솔') this.crowd(type === '통솔' ? 'cry' : 'shout', (type === '통솔' ? 0.16 : 0.13) * v, pan, 8)
     switch (type) {
       case '돌격': {
         // 말발굽처럼 빨라지는 북 → 쿵 · 딱 · 칼날
@@ -990,6 +1237,8 @@ export class SoundEngine {
         break
       }
       case '계략': {
+        // 불이 아닌 계략은 벼락이 떨어진다(화계는 아래 불길 소리)
+        if (!(voice.tags ?? []).includes('burning') && !(voice.tags ?? []).includes('water')) this.thunder(hit, 0.42 * v, pan)
         this.warble(out, t + 0.03, hit - t + 0.3, 0.09 * v, 74 + (seed % 7), pan, hall)
         ;[1, 1.19, 1.5, 1.78].forEach((rr, i) => this.bell(out, t + i * 0.05, 0.09 * v, rr * 0.75 * r, -0.4 + i * 0.25, send))
         this.gong(out, hit, 0.4 * v, 0.6 * r, hall)
@@ -1042,6 +1291,9 @@ export class SoundEngine {
         case 'heal': case 'hot': case 'cleanse': [88, 91, 93].forEach((m, i) => this.pluck(out, m, hit + 0.1 + i * 0.05, 0.12 * v, { bright: 0.9, dur: 1.4, send: hall })); break
         case 'strip': this.whoosh(out, hit, 0.4, 0.16 * v, 4500, 600, pan, hall); break
         case 'selfCost': this.boom(out, t + 0.05, 0.35 * v, 55, 40, 0.3, pan); this.boom(out, t + 0.3, 0.3 * v, 55, 40, 0.3, pan); break
+        case 'water': this.water(hit - 0.1, 0.3 * v, pan); break
+        case 'wind': this.whoosh(out, hit - 0.3, 1.2, 0.28 * v, 300, 1400, pan, hall); this.whoosh(out, hit - 0.1, 1.0, 0.18 * v, 900, 2600, -pan, hall); break
+        case 'thunder': this.thunder(hit, 0.4 * v, pan); break
       }
     }
   }

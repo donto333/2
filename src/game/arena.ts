@@ -193,6 +193,8 @@ interface BattleUnit {
   /** 돌진 · 밀림처럼 무장 몸(actor)이 제자리에서 앞뒤로 움직일 때의 걸음 가중치(말 다리를 움직인다) */
   dashGait: number
   prevPz: number
+  /** 말발굽 소리 박자(한 걸음 주기 안의 위치) */
+  hoofPhase: number
   /** 동작이 바뀌는 순간의 자세 차이를 부드럽게 지우는 관성 블렌딩 */
   blend: PoseBlend
   /** 쓰러져 땅에 닿을 때 흙먼지를 이미 냈는가 */
@@ -911,6 +913,8 @@ export class Arena {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
         sound.skill(event.type, event.side, this.lanePan(event.lane), this.skillVoice(unit, event.type, event.side))
+        // 돌격 스킬: 말이 앞발을 들며 운다
+        if (event.type === '돌격' && unit.mounted) sound.neigh(event.side === 'player' ? 0.17 : 0.11, this.lanePan(event.lane))
         this.callbacks.onSkillCast?.({ side: event.side, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
         this.playSkill(unit, event.side, event.type, event.name, event.morale, event.target)
         if (event.side === 'enemy') this.enemyWarning = null
@@ -991,10 +995,10 @@ export class Arena {
     }
   }
 
-  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'dashGait' | 'prevPz' | 'blend' | 'fallDust' | 'aim' | 'aimTo' | 'aimHold'> {
+  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'dashGait' | 'prevPz' | 'hoofPhase' | 'blend' | 'fallDust' | 'aim' | 'aimTo' | 'aimHold'> {
     return {
       actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0, strikeAge: -1,
-      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, dashGait: 0, prevPz: 0, fallDust: false, aim: 0, aimTo: 0, aimHold: 0,
+      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, dashGait: 0, prevPz: 0, hoofPhase: Math.random(), fallDust: false, aim: 0, aimTo: 0, aimHold: 0,
       blend: { off: [0, 0, 0, 0, 0], vel: [0, 0, 0, 0, 0], prev: [0, 0, 0, 0, 1], prevVel: [0, 0, 0, 0, 0], motion: null },
     }
   }
@@ -1192,7 +1196,7 @@ export class Arena {
 
   /** 스킬: 기 모으기(슬로모션·카메라 당김) → 종류별 발동 */
   /** 스킬 소리 정보: 무장마다의 음높이 · 가락(이름으로 정한 수), 스킬 효과 목록, 타격 순간(실제 초) */
-  private skillVoice(unit: BattleUnit, type: SkillType, side: 'player' | 'enemy'): { seed: number; tags: string[]; impact: number; hits: number } {
+  private skillVoice(unit: BattleUnit, type: SkillType, side: 'player' | 'enemy'): { seed: number; tags: string[]; impact: number; hits: number; hero: boolean } {
     let seed = 0
     for (const ch of unit.general.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0
     const def = GENERAL_SKILLS[unit.general.id]
@@ -1210,7 +1214,10 @@ export class Arena {
     const game = this.scaled(game0)
     const slow = side === 'player' ? SKILL_SLOWMO_PLAYER : SKILL_SLOWMO_ENEMY
     const impact = game <= slow * 0.32 ? game / 0.32 : slow + (game - slow * 0.32)
-    return { seed, tags, impact, hits }
+    const skillName = def?.active.name ?? ''
+    if (/수공|홍수|물/.test(skillName)) tags.push('water')
+    if (/풍|바람|질풍/.test(skillName)) tags.push('wind')
+    return { seed, tags, impact, hits, hero: unit.general.grade === 5 }
   }
 
   private playSkill(unit: BattleUnit, side: 'player' | 'enemy', type: SkillType, name: string, morale: number, targetLane: number): void {
@@ -1392,6 +1399,16 @@ export class Arena {
     const dashSpeed = dt > 0 ? Math.abs(pz - unit.prevPz) / dt : 0
     unit.prevPz = pz
     unit.dashGait = damp(unit.dashGait, unit.troops > 0 ? clamp01((dashSpeed - 0.15) / 1.6) : 0, dashSpeed > 0.15 ? 0.04 : 0.14, dt)
+    // 말발굽: 달리는 빠르기만큼 다그닥 다그닥(질주는 세 발 + 쉼), 기병 부대는 여러 마리가 겹친다
+    const run = Math.max(unit.gait, unit.dashGait)
+    if (unit.mounted && run > 0.15 && unit.troops > 0 && this.battleActive) {
+      const before = unit.hoofPhase
+      unit.hoofPhase = (unit.hoofPhase + dt * (1.2 + 1.5 * run)) % 1
+      for (const beat of [0, 0.13, 0.26]) {
+        const crossed = before <= unit.hoofPhase ? before < beat && unit.hoofPhase >= beat : before < beat || unit.hoofPhase >= beat
+        if (crossed) sound.hoof(0.05 + 0.13 * run, this.lanePanOf(unit), unit.troopType === 'cavalry' ? 3 : 1)
+      }
+    }
     // 히트스톱 동안에는 그 자세로 잠깐 멈출 뿐 좌우로 떨지 않는다(무게감 있는 말 탄 무장에 떨림은 어색하다)
     unit.shake = Math.max(0, unit.shake - this.frameDelta)
     unit.aimHold = Math.max(0, unit.aimHold - dt)
