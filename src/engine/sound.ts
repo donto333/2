@@ -10,7 +10,7 @@ export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | 
 export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
 type TrackName = 'home' | 'battle' | 'raid'
 /** 녹음된 짧은 효과음 파일(public/assets/sfx) */
-type SfxFile = 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard'
+type SfxFile = 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard' | 'victory-cry'
 export type Sfx =
   | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
   | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
@@ -291,7 +291,7 @@ export class SoundEngine {
     this.applyVolumes()
     this.setTheme(this.wanted)
     // 버튼 · 스킬 효과음 미리 받기
-    for (const name of ['click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard'] as const) this.fileBuffer(name)
+    for (const name of ['click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard', 'victory-cry'] as const) this.fileBuffer(name)
     window.setInterval(() => this.tick(), 50)
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return
@@ -840,7 +840,7 @@ export class SoundEngine {
       case 'tactic': this.drum(out, 'taiko', t, 0.32); break
       case 'move': this.whoosh(out, t, 0.18, 0.07, 500, 1400, pan); this.drum(out, 'rim', t, 0.08); break
       case 'raidSquad': this.boom(out, t, 0.4, 80, 30, 0.8, 0, send); this.drum(out, 'taiko', t, 0.45); break
-      case 'victory': this.stinger(true); break
+      case 'victory': { this.stinger(true); const cry = this.fileBuffer('victory-cry'); if (cry) this.play_(cry, out, t, 0.8, { send }); break } // 승리: 병사들의 함성(앞 1초)
       case 'defeat': this.stinger(false); break
     }
   }
@@ -1312,7 +1312,6 @@ export class SoundEngine {
     const file: SfxFile = type === '치유' ? 'skill-heal' : type === '통솔' ? 'skill-buff' : type === '수호' ? 'skill-guard' : 'skill-attack'
     const clip = this.fileBuffer(file)
     if (clip) {
-      this.duckFor(side === 'player' ? 1400 : 900)
       this.play_(clip, this.sfxVol, this.ctx!.currentTime + 0.005, side === 'player' ? 0.85 : 0.5, { pan, send: this.sfxSend })
       return
     }
@@ -1323,7 +1322,7 @@ export class SoundEngine {
     const r = 0.88 + (seed % 25) / 100 // 무장마다 음높이
     const v = side === 'enemy' ? 0.62 : 1
     const hit = t + Math.max(0.2, voice.impact ?? 0.6)
-    this.duckFor(side === 'player' ? 1400 : 900)
+    // (스킬을 써도 배경음은 줄이지 않는다)
     // 시전: 기를 모으는 소리(공통) + 무장 가락
     this.swell(out, t, Math.max(0.15, hit - t - 0.02), 0.07 * v)
     this.whoosh(out, t, hit - t, 0.12 * v, 300, 2800, pan, send)
