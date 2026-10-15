@@ -10,7 +10,7 @@ export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | 
 export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
 type TrackName = 'home' | 'battle' | 'raid'
 /** 녹음된 짧은 효과음 파일(public/assets/sfx) */
-type SfxFile = 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard' | 'victory-cry'
+type SfxFile = 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard' | 'victory-cry' | 'gallop'
 export type Sfx =
   | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
   | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
@@ -291,7 +291,7 @@ export class SoundEngine {
     this.applyVolumes()
     this.setTheme(this.wanted)
     // 버튼 · 스킬 효과음 미리 받기
-    for (const name of ['click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard', 'victory-cry'] as const) this.fileBuffer(name)
+    for (const name of ['click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard', 'victory-cry', 'gallop'] as const) this.fileBuffer(name)
     window.setInterval(() => this.tick(), 50)
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return
@@ -969,6 +969,41 @@ export class SoundEngine {
   }
 
   // ── 말 ──────────────────────────────────────────────
+  // 녹음된 말발굽(질주) 소리를 되풀이해 틀고, 달리는 말의 양 · 빠르기에 맞춰 크기 · 빠르기 · 좌우를 바꾼다
+  private gallopSrc: AudioBufferSourceNode | null = null
+  private gallopGain: GainNode | null = null
+  private gallopPanner: StereoPannerNode | null = null
+  private gallopIdle = 0
+  /** level 0~1(0이면 서서히 꺼진다), pan −1~1, rate 재생 빠르기 */
+  gallop(level: number, pan = 0, rate = 1): void {
+    if (!this.ctx || !this.unlocked || this.ctx.state !== 'running') return
+    const ctx = this.ctx, t = ctx.currentTime
+    if (level <= 0.01) {
+      if (this.gallopGain) this.gallopGain.gain.setTargetAtTime(0, t, 0.25)
+      if (this.gallopSrc && (this.gallopIdle += 1) > 120) { try { this.gallopSrc.stop() } catch { /* 끝 */ } this.gallopSrc = null }
+      return
+    }
+    this.gallopIdle = 0
+    if (!this.gallopSrc) {
+      const clip = this.fileBuffer('gallop')
+      if (!clip) return
+      const src = ctx.createBufferSource()
+      src.buffer = clip; src.loop = true
+      // mp3 앞뒤의 아주 짧은 빈 구간은 건너뛰고 이어 돈다
+      src.loopStart = Math.min(0.03, clip.duration * 0.1); src.loopEnd = Math.max(src.loopStart + 0.5, clip.duration - 0.03)
+      if (!this.gallopGain) {
+        this.gallopGain = ctx.createGain(); this.gallopGain.gain.value = 0
+        if (typeof ctx.createStereoPanner === 'function') { this.gallopPanner = ctx.createStereoPanner(); this.gallopGain.connect(this.gallopPanner).connect(this.sfxVol) } else this.gallopGain.connect(this.sfxVol)
+      }
+      src.connect(this.gallopGain)
+      src.start(t, Math.random() * clip.duration * 0.8)
+      this.gallopSrc = src
+    }
+    this.gallopGain!.gain.setTargetAtTime(0.08 + 0.3 * level, t, 0.15)
+    this.gallopSrc.playbackRate.setTargetAtTime(Math.max(0.8, Math.min(1.25, rate)), t, 0.3)
+    if (this.gallopPanner) this.gallopPanner.pan.setTargetAtTime(Math.max(-0.7, Math.min(0.7, pan)), t, 0.3)
+  }
+
   /** 말발굽 한 번: 흙바닥을 디디는 낮고 둔탁한 소리(부대 기병이면 여러 마리가 겹친다) */
   hoof(vol: number, pan = 0, herd = 1): void {
     if (!this.allow(`hoof${Math.round(pan * 4)}`, 45, true)) return

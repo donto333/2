@@ -281,6 +281,9 @@ export class Arena {
   private fpsTime = 0
   /** 연출용 시간 흐름: 스킬 기 모으기 슬로모션 · 강타 순간 멈춤(실제 초) */
   private slowMo = 0
+  private gallopSum = 0
+  private gallopPan = 0
+  private gallopPeak = 0
   private hitStop = 0
   /** 최근 히트스톱 사용량(초): 1초에 0.15초씩 줄어든다. 0.2초를 넘으면 더 멈추지 않는다(고레벨에서 계속 멈춰 렉처럼 보이던 문제) */
   private hitStopSpent = 0
@@ -1404,15 +1407,11 @@ export class Arena {
     const dashSpeed = dt > 0 ? Math.abs(pz - unit.prevPz) / dt : 0
     unit.prevPz = pz
     unit.dashGait = damp(unit.dashGait, unit.troops > 0 ? clamp01((dashSpeed - 0.15) / 1.6) : 0, dashSpeed > 0.15 ? 0.04 : 0.14, dt)
-    // 말발굽: 달리는 빠르기만큼 다그닥 다그닥(질주는 세 발 + 쉼), 기병 부대는 여러 마리가 겹친다
+    // 말발굽: 달리는 말의 빠르기를 모아 녹음된 말발굽 소리의 크기 · 빠르기로 쓴다(updateGallop)
     const run = Math.max(unit.gait, unit.dashGait)
     if (unit.mounted && run > 0.15 && unit.troops > 0 && this.battleActive) {
-      const before = unit.hoofPhase
-      unit.hoofPhase = (unit.hoofPhase + dt * (1.2 + 1.5 * run)) % 1
-      for (const beat of [0, 0.13, 0.26]) {
-        const crossed = before <= unit.hoofPhase ? before < beat && unit.hoofPhase >= beat : before < beat || unit.hoofPhase >= beat
-        if (crossed) sound.hoof(0.05 + 0.13 * run, this.lanePanOf(unit), unit.troopType === 'cavalry' ? 3 : 1)
-      }
+      const w = run * (unit.troopType === 'cavalry' ? 1.4 : 1)
+      this.gallopSum += w; this.gallopPan += w * this.lanePanOf(unit); this.gallopPeak = Math.max(this.gallopPeak, run)
     }
     // 히트스톱 동안에는 그 자세로 잠깐 멈출 뿐 좌우로 떨지 않는다(무게감 있는 말 탄 무장에 떨림은 어색하다)
     unit.shake = Math.max(0, unit.shake - this.frameDelta)
@@ -1585,6 +1584,9 @@ export class Arena {
     this.enemyUnits.forEach((unit, index) => {
       this.updateUnitMotion(unit, delta, this.clock.getElapsed() + index * 0.4, ember)
     })
+    // 말발굽 소리: 이번 프레임에 달린 말들을 모아 한 번에(말이 많고 빠를수록 크게 · 빠르게)
+    sound.gallop(this.battleActive ? Math.min(1, this.gallopSum / 3.5) : 0, this.gallopSum > 0 ? this.gallopPan / this.gallopSum : 0, 0.9 + 0.25 * this.gallopPeak)
+    this.gallopSum = 0; this.gallopPan = 0; this.gallopPeak = 0
     this.updateCamera(realDelta)
     if (!this.battleActive || !this.core || this.paused) return
     let remaining = delta * this.speed
