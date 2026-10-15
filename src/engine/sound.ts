@@ -786,12 +786,12 @@ export class SoundEngine {
       case 'build': [0, 0.13, 0.26].forEach((d, i) => { this.drum(out, i === 2 ? 'tom' : 'rim', t + d, i === 2 ? 0.3 : 0.24, 0, i === 2 ? 1 : 0.85); this.metal(out, t + d, 0.06, 0.9) }); break
       case 'research': this.whoosh(out, t, 0.2, 0.12, 2000, 5200); this.bell(out, t + 0.12, 0.1, 1.5, 0, send); break
       case 'formation': this.drum(out, 'taiko', t, 0.3); this.drum(out, 'rim', t + 0.1, 0.12); break
-      case 'battleStart': window.setTimeout(() => { this.crowd('cry', 0.2, 0, 10); this.neigh(0.14, -0.4) }, 650); this.horn(out, 45, t, 1.1, 0.16, send); [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.gong(out, t + 0.84, 0.32, 1, send); break
+      case 'battleStart': window.setTimeout(() => this.neigh(0.14, -0.4), 650); this.horn(out, 45, t, 1.1, 0.16, send); [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.gong(out, t + 0.84, 0.32, 1, send); break
       case 'attack': this.whoosh(out, t, 0.13, 0.08, 1200, 3200, pan); break
       // 타격: 짧은 파열음(딱) + 몸에 닿는 둔탁한 소리 + 작은 저음(쿵)
       case 'hit': { const rr = 0.85 + Math.random() * 0.3; this.thump(out, t, 0.3, pan, undefined, rr); this.drum(out, 'tom', t, 0.22, pan, 0.75 * rr); break }
       case 'hitBig': { const rr = 0.85 + Math.random() * 0.25; this.thump(out, t, 0.55, pan, send, 0.85 * rr); this.drum(out, 'taiko', t, 0.55, pan, 0.8 * rr); break }
-      case 'unitDown': this.crowd('groan', 0.13, pan, 6); this.neigh(0.13, pan, 0.85); this.drum(out, 'taiko', t, 0.45, pan, 0.78); this.whoosh(out, t, 0.5, 0.14, 500, 120, pan, send); break
+      case 'unitDown': this.neigh(0.13, pan, 0.85); this.drum(out, 'taiko', t, 0.45, pan, 0.78); this.whoosh(out, t, 0.5, 0.14, 500, 120, pan, send); break
       case 'enemySkill': this.gong(out, t, 0.24, 0.7, send); this.whoosh(out, t, 0.35, 0.12, 600, 2400, pan); break
       case 'enemyWarn': [0, 0.13, 0.26].forEach(d => this.bell(out, t + d, 0.14, 2.2, 0, send)); break
       case 'pattern': this.horn(out, 50, t, 0.7, 0.13, send); this.drum(out, 'tom', t + 0.05, 0.2); this.drum(out, 'tom', t + 0.15, 0.24); break
@@ -1285,9 +1285,8 @@ export class SoundEngine {
     this.swell(out, t, Math.max(0.15, hit - t - 0.02), 0.07 * v)
     this.whoosh(out, t, hit - t, 0.12 * v, 300, 2800, pan, send)
     if (side === 'player') this.motif(out, t + 0.02, seed, 0.11, type === '통솔' ? 'brass' : type === '치유' || type === '계략' ? 'bell' : 'pluck', send)
-    // 천명 무장: 무장마다의 주제 가락(호궁) + 아군 함성
+    // 천명 무장: 무장마다의 주제 가락(호궁)
     if (voice.hero && side === 'player') this.heroTheme(seed)
-    if (type === '돌격' || type === '통솔') this.crowd(type === '통솔' ? 'cry' : 'shout', (type === '통솔' ? 0.16 : 0.13) * v, pan, 8)
     switch (type) {
       case '돌격': {
         // 말발굽처럼 빨라지는 북 → 쿵 · 딱 · 칼날
