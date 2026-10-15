@@ -1926,3 +1926,18 @@ body .slot-picker { z-index: 40; }
 .roster-group small { margin-left: 8px; color: var(--muted, #b9a58a); font-size: 12px; font-weight: 400; }
 .gcard-lane--reserve { background: rgba(82, 224, 196, .85) !important; color: #10231d !important; }
 .roster-group[id] { scroll-margin-top: calc(var(--mobile-top, 92px) + 8px); }
+
+/* 적 전술 예고 칸: 설명 문장 없이 낮게(예고 이름 · 좌중우 · 남은 시간 막대) */
+body .bt-stage .bt-callout { padding: 5px 12px 6px; }
+body .bt-stage .bt-callout .eyebrow { font-size: 11px; line-height: 1.2; }
+body .bt-stage .bt-callout strong { font-size: 17px; margin: 0 0 3px; line-height: 1.2; }
+body .bt-stage .bt-callout .bt-lanes { gap: 6px; margin-bottom: 4px; }
+body .bt-stage .bt-callout .bt-lanes span { padding: 2px 0; font-size: 12px; border-radius: 6px; }
+body .bt-stage .bt-callout .bt-bar--window { height: 4px; }
+body .bt-stage .bt-enemy-warn { padding: 5px 10px; font-size: 13px; }
+@media (max-width: 720px) {
+  body .bt-stage .bt-callout { padding: 4px 10px 5px; }
+  body .bt-stage .bt-callout strong { font-size: 15px; margin-bottom: 2px; }
+  body .bt-stage .bt-callout .bt-lanes span { padding: 1px 0; font-size: 11px; }
+  body .bt-stage .bt-enemy-warn { padding: 4px 8px; font-size: 12px; }
+}

@@ -788,13 +788,12 @@ export class StrategyUI {
     callout?.classList.toggle('is-guard', pattern?.kind === 'guard')
     callout?.classList.toggle('is-hold', pattern?.kind === 'hold')
     set('[data-bt-pattern]', pattern ? pattern.label : snapshot.active ? '다음 예고 대기' : '전투 시작 전')
-    set('[data-bt-warning]', pattern ? pattern.warning : snapshot.active ? '적이 움직임을 준비합니다.' : '적 전술 예고가 뜨면 같은 레인의 무장 버튼을 누르십시오.')
     width('[data-bt-window]', pattern ? pattern.timeLeft / pattern.window * 100 : 0)
     this.root.querySelectorAll<HTMLElement>('[data-bt-lane]').forEach(node => node.classList.toggle('is-target', Boolean(pattern && pattern.kind !== 'guard' && pattern.lanes.includes(Number(node.dataset.btLane)))))
     const warn = q('[data-bt-enemy-warn]')
     if (warn) {
       warn.hidden = !snapshot.enemyWarning
-      if (snapshot.enemyWarning) warn.textContent = `적장 스킬 예고 · ${snapshot.enemyWarning.general}의 ‘${snapshot.enemyWarning.name}’ · 철벽 태세로 막거나 같은 레인 무장의 스킬로 끊으십시오`
+      if (snapshot.enemyWarning) warn.textContent = `적장 스킬 예고 · ${snapshot.enemyWarning.general}의 ‘${snapshot.enemyWarning.name}’`
     }
     section.classList.toggle('is-enemy-warning', Boolean(snapshot.enemyWarning))
     snapshot.units.forEach(unit => {
@@ -1837,7 +1836,7 @@ export class StrategyUI {
 <div class="bt-hud glass-card"><div class="bt-hud-row"><span class="bt-phase" data-bt-phase>${battle?.phaseName ?? '1막 · 서전'}</span><b data-bt-morale-text>적 사기 ${battle?.moraleValue ?? 80} / ${battle?.moraleMax ?? 80}</b></div><div class="bt-bar bt-bar--morale"><i data-bt-morale style="width:${battle?.morale ?? 100}%"></i></div><div class="bt-hud-row bt-hud-row--threat"><span>위협도 <b data-bt-threat-text>${battle?.threat ?? 0}</b></span><div class="bt-bar bt-bar--threat"><i data-bt-threat style="width:${battle?.threat ?? 0}%"></i></div><b class="bt-collapse" data-bt-collapse>붕괴 ${battle?.collapses ?? 0}/2</b></div><div class="bt-hud-meta"><span class="bt-mode">${modeLabel}</span>${battle?.mode === 'raid' ? `<span class="bt-raid-damage">누적 피해 <b data-bt-raid>${formatNumber(battle?.raidDamage ?? 0)}</b></span>` : ''}<span data-bt-status>${battle?.status ?? '대기 중'}</span><span class="bt-time" data-bt-time>제한 90초</span><span data-bt-combo>연계 ${battle?.combo ?? 0}</span><span data-bt-pressure>적 압박 ×1.00</span><span data-bt-bond>${escapeHtml(battle?.bond ? `인연 · ${battle.bond}` : '인연 없음')}</span></div></div>
 <div class="bt-enemies glass-card"><span class="bt-enemies-label">상대 무장</span><div class="bt-enemy-row" data-bt-enemies>${this.enemyHudMarkup(battle?.opponentDeck)}</div></div>
 </div>
-<div class="bt-stage"><div class="bt-paused" data-bt-paused hidden><strong>일시 정지</strong><small>전투 시간과 적의 행동이 멈췄습니다.</small><button class="action-button action-button--primary" data-action="battle-pause">▶ 계속하기</button></div><div class="bt-callout" data-bt-callout><span class="eyebrow">적 전술 예고</span><strong data-bt-pattern>${active ? '다음 예고 대기' : '전투 시작 전'}</strong><p data-bt-warning>적 전술 예고가 뜨면 같은 레인의 무장 버튼을 누르십시오.</p><div class="bt-lanes"><span data-bt-lane="0">↙ 좌</span><span data-bt-lane="1">↑ 중</span><span data-bt-lane="2">↘ 우</span></div><div class="bt-bar bt-bar--window"><i data-bt-window style="width:0%"></i></div></div><div class="bt-enemy-warn" data-bt-enemy-warn hidden></div><div class="bt-feed"><ul class="bt-log" data-bt-log><li>전투 기록이 여기에 표시됩니다.</li></ul><button class="bt-log-toggle" data-action="battle-log">${this.battleLogOpen ? '접기' : '더 보기'}</button><div class="battle-effects" data-battle-effects>${this.battleEffectsMarkup(battle?.activeEffects)}</div></div></div>
+<div class="bt-stage"><div class="bt-paused" data-bt-paused hidden><strong>일시 정지</strong><small>전투 시간과 적의 행동이 멈췄습니다.</small><button class="action-button action-button--primary" data-action="battle-pause">▶ 계속하기</button></div><div class="bt-callout" data-bt-callout><span class="eyebrow">적 전술 예고</span><strong data-bt-pattern>${active ? '다음 예고 대기' : '전투 시작 전'}</strong><div class="bt-lanes"><span data-bt-lane="0">↙ 좌</span><span data-bt-lane="1">↑ 중</span><span data-bt-lane="2">↘ 우</span></div><div class="bt-bar bt-bar--window"><i data-bt-window style="width:0%"></i></div></div><div class="bt-enemy-warn" data-bt-enemy-warn hidden></div><div class="bt-feed"><ul class="bt-log" data-bt-log><li>전투 기록이 여기에 표시됩니다.</li></ul><button class="bt-log-toggle" data-action="battle-log">${this.battleLogOpen ? '접기' : '더 보기'}</button><div class="battle-effects" data-battle-effects>${this.battleEffectsMarkup(battle?.activeEffects)}</div></div></div>
 <div class="bt-controls glass-card"><div class="bt-units">${units}</div><div class="bt-tactic-row"><div class="bt-gauge"><span data-bt-gauge-text>전술 게이지 ${battle?.tacticGauge ?? 0}</span><div class="bt-bar bt-bar--gauge"><i data-bt-gauge style="width:${battle?.tacticGauge ?? 0}%"></i></div></div>${tactic('guard', '▣', '철벽 태세', '위협·적장 스킬 억제')}${tactic('feint', '⌁', '유인책', '연계 +2')}${tactic('charge', '⚔', '전군 돌격', '연계를 사기 피해로')}</div>${active ? '' : '<button class="action-button action-button--primary battle-start" data-action="battle-start">전투 시작 <span>→</span></button>'}</div>
 </section>`
   }
@@ -2037,6 +2036,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.15', '전투 적 예고 칸 간결하게', '전투 화면의 적 전술 예고 칸에서 설명 문장을 없애고 칸 높이를 줄였습니다(예고 이름 · 좌중우 표시 · 남은 시간 막대만). 적장 스킬 예고도 장수와 스킬 이름만 짧게 보여 줍니다.', '완료', 'jade'],
       ['2026.10.15', '적군 피격 모션', '공격을 받으면 적군만 피격 모션을 합니다. 적 무장은 상체가 뒤로 젖혀지며 고개가 꺾이고 말은 머리를 쳐들었다가 천천히 제자리로 돌아오며, 뒤로 조금 밀리고 뒤의 병사들도 휘청입니다(강타일수록 크게). 아군은 맞아도 자세가 흐트러지지 않고 밀리지 않습니다(맞을 때 번쩍임과 소리는 그대로).', '완료', 'jade'],
       ['2026.10.15', '말 · 함성 · 전장 환경음 · 자연 현상 · 천명 주제 가락', '무료 효과음 사이트는 이 작업 환경에서 받을 수 없어 비슷한 소리를 직접 만들어 넣었습니다. 말: 달리는 빠르기에 맞춘 말발굽(질주는 다그닥 세 발, 기병 부대는 여러 마리가 겹침), 돌격 스킬 · 부대 붕괴 때 말 울음과 콧김. 함성: 전투 시작 진격 함성(와아아), 돌격 스킬 기합, 통솔 스킬 함성, 부대가 무너질 때 낮은 신음. 환경음: 전장은 들판 바람 · 낮은 웅성거림 · 멀리서 들리는 쇳소리와 북, 본영은 잔잔한 바람과 새소리(화면에 따라 자연스럽게 바뀜). 자연 현상: 불이 아닌 계략은 벼락(우르릉), 수공 계열은 물결, 바람 계열은 돌풍 소리. 천명 무장은 스킬을 쓸 때 무장마다 다른 호궁 주제 가락이 흐릅니다. 화염구 여운이 겹쳐 웅웅거리지 않게 0.7초에 한 번만 울리게 했습니다.', '완료', 'jade'],
       ['2026.10.15', '타격음을 "펑 · 쾅"으로', '맞는 소리가 "딱딱" 하고 가볍게 들리던 것을 묵직한 "펑 · 쾅"으로 바꿨습니다. 날카로운 파열음 대신 낮게 터지는 둥근 폭발음과 저음 · 북을 썼습니다(칼은 쾅 + 낮은 쇳소리, 창은 깊은 펑, 화살은 작은 퍽퍽, 강타는 더 크게). 스킬 타격음도 같은 방식으로 바꿨습니다.', '완료', 'jade'],
