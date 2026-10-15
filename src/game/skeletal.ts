@@ -73,6 +73,13 @@ function timing(info: RigInfo, name: string, wantHit: number): { start: number; 
 }
 
 const tmpV = new THREE.Vector3()
+const tmpQ = new THREE.Quaternion()
+/** 피격 움찔: 뼈마다 [이름, 앞뒤 젖힘(−면 뒤로), 옆 기울기, 돌림](라디안, 최대치) */
+const FLINCH: Array<[string, number, number, number]> = [
+  ['Spine1', -0.11, 0.06, 0.05], ['Spine2', -0.09, 0.05, 0.05], ['Neck', -0.07, 0, 0.09], ['Head', -0.17, 0.07, 0.18],
+  ['LeftArm', 0, 0.15, 0],
+  ['HorseNeck', -0.2, 0, 0.09], ['HorseNeck1', -0.12, 0, 0.06], ['HorseHead', -0.14, 0.04, 0],
+]
 
 /**
  * 뼈대 무장 한 명. 예전 AnimatedHero와 같은 모양으로 쓰인다(play · playOnce · update · setFlash · setFade).
@@ -96,6 +103,11 @@ export class SkeletalHero {
   private scene: THREE.Object3D | null = null
   private tianming: TianmingAura | null = null
   private ornaments: Ornaments | null = null
+  private flinchApplied = false
+  private readonly flinchBones: Array<{ bone: THREE.Object3D; saved: THREE.Quaternion; x: THREE.Vector3; y: THREE.Vector3; z: THREE.Vector3; pitch: number; roll: number; yaw: number }> = []
+  private flinchAge = -1
+  private flinchPower = 0
+  private flinchSide = 1
   private readonly body: THREE.MeshStandardMaterial[] = []
   private bodyMesh: THREE.SkinnedMesh | null = null
   /** 장식을 붙일 뼈의 기본 자세(모델 좌표 → 뼈 좌표) */
@@ -123,6 +135,13 @@ export class SkeletalHero {
     this.scene = scene
     // 동작을 입히기 전(기본 자세)의 뼈 위치를 기억해 둔다: 장식은 모델 좌표로 만들어 뼈에 붙인다
     scene.updateMatrixWorld(true)
+    // 피격 움찔에 쓸 뼈: 기본 자세에서 모델 좌표의 축(좌우 · 앞뒤 · 위)을 뼈 좌표로 바꿔 둔다
+    for (const [name, pitch, roll, yaw] of FLINCH) {
+      const bone = scene.getObjectByName(name)
+      if (!bone) continue
+      const inv = bone.getWorldQuaternion(new THREE.Quaternion()).invert()
+      this.flinchBones.push({ bone, saved: new THREE.Quaternion(), x: new THREE.Vector3(1, 0, 0).applyQuaternion(inv), z: new THREE.Vector3(0, 0, 1).applyQuaternion(inv), y: new THREE.Vector3(0, 1, 0).applyQuaternion(inv), pitch, roll, yaw })
+    }
     for (const name of ['Head', 'HeadTop_End', 'Neck', 'Spine2']) {
       const bone = scene.getObjectByName(name)
       if (bone) this.rest.set(name, { bone, toLocal: bone.matrixWorld.clone().invert(), at: new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld) })
@@ -238,9 +257,35 @@ export class SkeletalHero {
       this.horse.gallop.setEffectiveWeight(hg * run)
       this.horse.gallop.timeScale = 0.85 + 0.3 * g
     }
+    // 지난 프레임에 덧입힌 움찔을 먼저 걷어낸다(동작이 없는 뼈에 쌓이지 않게)
+    if (this.flinchApplied) { for (const f of this.flinchBones) f.bone.quaternion.copy(f.saved); this.flinchApplied = false }
     this.mixer.update(delta)
+    // 피격 움찔: 동작 위에 덧입힌다(빠르게 젖혀졌다가 천천히 돌아온다)
+    if (this.flinchAge >= 0 && !this.death) {
+      this.flinchApplied = true
+      this.flinchAge += delta
+      const a = this.flinchAge
+      const e = (a < 0.07 ? Math.sin((a / 0.07) * Math.PI / 2) : Math.exp(-(a - 0.07) / 0.16)) * this.flinchPower
+      if (a > 0.9) this.flinchAge = -1
+      for (const f of this.flinchBones) {
+        f.saved.copy(f.bone.quaternion)
+        if (f.pitch) f.bone.quaternion.multiply(tmpQ.setFromAxisAngle(f.x, f.pitch * e))
+        if (f.roll) f.bone.quaternion.multiply(tmpQ.setFromAxisAngle(f.z, f.roll * e * this.flinchSide))
+        if (f.yaw) f.bone.quaternion.multiply(tmpQ.setFromAxisAngle(f.y, f.yaw * e * this.flinchSide))
+      }
+    }
     this.tianming?.update(delta, !!this.death)
     this.ornaments?.update(delta, g)
+  }
+
+  /** 피격 움찔(적군만): 상체가 뒤로 젖혀지고 고개가 꺾이며, 말은 머리를 쳐든다. power 0~1 */
+  flinch(power = 1): void {
+    if (this.death) return
+    // 이미 움찔하는 중에 또 맞으면 더 약해지지 않게(쌓이되 상한)
+    const still = this.flinchAge >= 0 && this.flinchAge < 0.2 ? this.flinchPower : 0
+    this.flinchAge = 0
+    this.flinchPower = Math.min(1.3, Math.max(still, 0.55 + power * 0.6))
+    this.flinchSide = Math.random() < 0.5 ? -1 : 1
   }
 
   /** 무장 전용 의상 텍스처로 갈아입힌다(같은 UV 배치) */

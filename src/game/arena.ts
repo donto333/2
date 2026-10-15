@@ -958,6 +958,7 @@ export class Arena {
           this.fx(shockwave(at, 0x9ff5e2, 3, 0.6))
           this.addHitStop(0.08)
           this.kick(foe, 1)
+          if (foe.hero instanceof SkeletalHero) foe.hero.flinch(1)
           foe.shake = 0.12
         }
         break
@@ -1085,18 +1086,22 @@ export class Arena {
     if (edge === 'adv' && this.clock.getElapsed() - (this.edgeShownAt.get(unit) ?? -99) > 3.5) {
       this.edgeShownAt.set(unit, this.clock.getElapsed())
       this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 3.1, 0)), edge === 'adv' ? '상성 우위!' : '상성 열세', edge === 'adv' ? '#ffd27a' : '#b9c2c9', edge === 'adv' ? 1.05 : 0.8)
-      if (edge === 'adv') { this.cameraShake = Math.min(0.62, this.cameraShake + 0.08); this.kick(unit, 0.25) }
+      if (edge === 'adv') { this.cameraShake = Math.min(0.62, this.cameraShake + 0.08); if (side === 'enemy') this.kick(unit, 0.25) }
     }
     // 연출 기준은 Lv20 무렵 병력(약 6,600)에 맞춘 값이다. 병력이 많은 고레벨은 피해를 병력 비율로 줄여 같은 기준을 쓴다(낮은 레벨은 그대로)
     const felt = amount / Math.max(1, unit.maxTroops / HIT_FX_TROOPS)
     unit.hitFlash = 0.18
-    this.kick(unit, Math.min(0.72, 0.22 + felt / 300))
-    // 밀려남은 속도로 준다(이동 스프링이 받아 부드럽게 멈춘다)
-    unit.vel.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.6 : -0.6, 0, side === 'enemy' ? -1.8 : 1.8))
+    // 피격 모션은 적군만: 무장이 움찔하며 뒤로 밀리고 말이 머리를 쳐들며, 뒤의 병사들도 휘청인다(아군은 자세를 흐트러뜨리지 않는다)
+    if (side === 'enemy') {
+      this.kick(unit, Math.min(0.72, 0.22 + felt / 300))
+      // 밀려남은 속도로 준다(이동 스프링이 받아 부드럽게 멈춘다)
+      unit.vel.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.6 : -0.6, 0, -1.8))
+      if (unit.hero instanceof SkeletalHero) unit.hero.flinch(Math.min(1, felt / 180))
+    }
     this.cameraShake = Math.min(0.62, this.cameraShake + (felt >= 160 ? 0.14 : 0.03))
     // 히트스톱은 피해에 비례(격투 게임의 히트랙처럼): 약한 타격은 멈추지 않고, 강타일수록 길게. 멈춘 동안 맞은 쪽이 떨린다
     const stop = felt >= 160 ? Math.min(0.11, 0.05 + (felt - 160) / 3000) : felt >= 110 ? 0.03 : 0
-    if (stop > 0) { this.addHitStop(stop); unit.shake = Math.max(unit.shake, stop + 0.05) }
+    if (stop > 0) { this.addHitStop(stop); if (side === 'enemy') unit.shake = Math.max(unit.shake, stop + 0.05) }
     if (!this.reducedFx) this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, felt >= 120 ? 1.3 : 0.9))
     if (felt >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember, felt >= 120 || amount >= unit.maxTroops * 0.05 || edge === 'adv', felt)
   }
