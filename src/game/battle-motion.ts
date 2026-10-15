@@ -102,8 +102,9 @@ export function actorPose(motion: Motion | null, hitReact: number, out: Pose): P
     }
   }
   // 피격(감쇠 진동 스프링 값, 음수로 살짝 넘어오기도 한다): 뒤로 밀리며 젖혀진다
-  out.z += hitReact * 0.35
-  out.tilt += hitReact * 0.22
+  // 피격: 뒤로 조금 밀리고 살짝 젖혀진다(말과 무장은 무거워 크게 기울지 않는다)
+  out.z += hitReact * 0.3
+  out.tilt += hitReact * 0.07
   return out
 }
 

@@ -16,7 +16,7 @@ import { SkeletalHero, bakeSquadModel, rigInfo } from './skeletal'
 import { tr } from '../i18n/translate'
 import { effectsSetting } from './settings'
 import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
-import { clamp01, damp, easeIn2, easeOut2, smoothNoise, springTo, wobble, type Spring1 } from './motion-math'
+import { clamp01, damp, easeIn2, easeOut2, smoothNoise, springTo, type Spring1 } from './motion-math'
 import { animateGeneral, buildEnvironment, createGeneralModel, createSquad, detectSceneQuality, type Environment, type GeneralRig, type SceneQuality, type Squad } from './battle-scene'
 
 /** 마지막 색보정: 가장자리 어둡게(비네트) · 따뜻한 대비 */
@@ -978,8 +978,8 @@ export class Arena {
 
   /** 맞은 순간: 바로 조금 밀리고(즉각 반응) 속도를 받아 더 밀렸다가 되튕긴다 */
   private kick(unit: BattleUnit, amount: number): void {
-    unit.hit.x = Math.min(1.1, Math.max(0, unit.hit.x) + amount * 0.55)
-    unit.hit.v += amount * 9
+    // 짧게 밀리는 힘(속도)만 준다: 여러 번 맞아도 쌓여 흔들리지 않게 상한을 둔다
+    unit.hit.v = Math.min(14, Math.max(unit.hit.v, 0) + amount * 14)
   }
 
   private readonly edgeShownAt = new WeakMap<BattleUnit, number>()
@@ -1065,8 +1065,8 @@ export class Arena {
     unit.hitFlash = 0.18
     this.kick(unit, Math.min(0.72, 0.22 + felt / 300))
     // 밀려남은 속도로 준다(이동 스프링이 받아 부드럽게 멈춘다)
-    unit.vel.add(new THREE.Vector3(unit.group.position.x > 0 ? 1.2 : -1.2, 0, side === 'enemy' ? -3.3 : 3.3))
-    this.cameraShake = Math.min(0.62, this.cameraShake + (felt >= 160 ? 0.18 : 0.06))
+    unit.vel.add(new THREE.Vector3(unit.group.position.x > 0 ? 0.6 : -0.6, 0, side === 'enemy' ? -1.8 : 1.8))
+    this.cameraShake = Math.min(0.62, this.cameraShake + (felt >= 160 ? 0.14 : 0.03))
     // 히트스톱은 피해에 비례(격투 게임의 히트랙처럼): 약한 타격은 멈추지 않고, 강타일수록 길게. 멈춘 동안 맞은 쪽이 떨린다
     const stop = felt >= 160 ? Math.min(0.11, 0.05 + (felt - 160) / 3000) : felt >= 110 ? 0.03 : 0
     if (stop > 0) { this.addHitStop(stop); unit.shake = Math.max(unit.shake, stop + 0.05) }
@@ -1305,8 +1305,8 @@ export class Arena {
     const forward = -unit.vel.z * facing, side = unit.vel.x * facing
     unit.lean.x = damp(unit.lean.x, -THREE.MathUtils.clamp(forward * 0.05, -0.1, 0.12), 0.16, dt)
     unit.lean.z = damp(unit.lean.z, -THREE.MathUtils.clamp(side * 0.04, -0.08, 0.08), 0.16, dt)
-    // 피격: 감쇠 진동(밀렸다가 살짝 되튕겨 자리 잡는다)
-    wobble(unit.hit, 0, 2.3, 0.42, dt)
+    // 피격: 한 번 밀렸다가 되튕김 없이 제자리로(진동시키면 말 탄 무장이 덜덜 떠는 것처럼 보인다)
+    springTo(unit.hit, 0, 0.11, dt)
     unit.attackMotion = Math.max(0, unit.attackMotion - delta * 2.6)
     unit.skillPulse = Math.max(0, unit.skillPulse - delta * 1.1)
     unit.hitFlash = Math.max(0, unit.hitFlash - delta)
@@ -1336,13 +1336,12 @@ export class Arena {
       blend.prev[i] = shown
     }
     const [pz, py, ptilt, ptwist, pscale] = blend.prev
-    // 히트스톱 동안 맞은 쪽이 좌우로 떨린다(격투 게임의 히트랙 떨림)
+    // 히트스톱 동안에는 그 자세로 잠깐 멈출 뿐 좌우로 떨지 않는다(무게감 있는 말 탄 무장에 떨림은 어색하다)
     unit.shake = Math.max(0, unit.shake - this.frameDelta)
-    const jitter = unit.shake > 0 && !this.reducedFx ? Math.sin(this.clock.getElapsed() * 95 + unit.motionPhase) * 0.05 * Math.min(1, unit.shake / 0.06) : 0
     unit.aimHold = Math.max(0, unit.aimHold - dt)
     unit.aim = damp(unit.aim, unit.aimHold > 0 ? unit.aimTo : 0, 0.09, dt)
     // 돌진도 돌린 방향으로
-    unit.actor.position.set(jitter + pz * Math.sin(unit.aim), py, pz * Math.cos(unit.aim))
+    unit.actor.position.set(pz * Math.sin(unit.aim), py, pz * Math.cos(unit.aim))
     unit.actor.rotation.set(ptilt + unit.lean.x, ptwist + unit.aim, unit.lean.z)
     unit.actor.scale.setScalar(pscale)
     unit.glow = Math.max(0, unit.glow - (unit.motion?.kind === 'skill' ? 0 : delta * 2.2))
