@@ -3,7 +3,7 @@ import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strat
 import { sound } from '../engine/sound'
 import { BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
-import type { SkillType } from './skills'
+import { GENERAL_SKILLS, type SkillType } from './skills'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
@@ -227,6 +227,9 @@ const LANE_GAP_PORTRAIT = 4.4
 const PORTRAIT_LANE_NDC = 0.66
 const MIN_LINE_GAP = 3.6
 const jade = 0x52e0c4
+/** 스킬 시전 직후 짧은 슬로모션(실제 초) */
+const SKILL_SLOWMO_PLAYER = 0.3
+const SKILL_SLOWMO_ENEMY = 0.18
 const ember = 0xff8066
 type TroopType = 'cavalry' | 'spearmen' | 'archer'
 export type CommanderArchetype = '무장형' | '책사형' | '지원형'
@@ -890,7 +893,7 @@ export class Arena {
       case 'skill': {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
-        sound.skill(event.type, event.side, this.lanePan(event.lane))
+        sound.skill(event.type, event.side, this.lanePan(event.lane), this.skillVoice(unit, event.type, event.side))
         this.callbacks.onSkillCast?.({ side: event.side, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
         this.playSkill(unit, event.side, event.type, event.name, event.morale, event.target)
         if (event.side === 'enemy') this.enemyWarning = null
@@ -1164,6 +1167,28 @@ export class Arena {
   }
 
   /** 스킬: 기 모으기(슬로모션·카메라 당김) → 종류별 발동 */
+  /** 스킬 소리 정보: 무장마다의 음높이 · 가락(이름으로 정한 수), 스킬 효과 목록, 타격 순간(실제 초) */
+  private skillVoice(unit: BattleUnit, type: SkillType, side: 'player' | 'enemy'): { seed: number; tags: string[]; impact: number; hits: number } {
+    let seed = 0
+    for (const ch of unit.general.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0
+    const def = GENERAL_SKILLS[unit.general.id]
+    const tags: string[] = []
+    let hits = 1
+    for (const fx of def?.active.fx ?? []) {
+      if (fx.k === 'debuff' || fx.k === 'buff') tags.push(fx.id)
+      else if (fx.k === 'hits') hits = fx.n
+      else tags.push(fx.k)
+    }
+    // 화공 계열(적벽 · 이릉)은 화계 소리
+    if (/화|불|적벽/.test(def?.active.name ?? '') && !tags.includes('burning')) tags.push('burning')
+    // 타격 순간: 게임 시간 → 실제 시간(시전 직후 슬로모션 구간은 0.32배로 흐른다)
+    const game0 = type === '돌격' ? CHARGE_STRIKE : type === '계략' ? SKILL_RELEASE + 0.22 : type === '통솔' ? SKILL_RELEASE + 0.25 : type === '사격' ? SKILL_RELEASE + 0.1 : SKILL_RELEASE
+    const game = this.scaled(game0)
+    const slow = side === 'player' ? SKILL_SLOWMO_PLAYER : SKILL_SLOWMO_ENEMY
+    const impact = game <= slow * 0.32 ? game / 0.32 : slow + (game - slow * 0.32)
+    return { seed, tags, impact, hits }
+  }
+
   private playSkill(unit: BattleUnit, side: 'player' | 'enemy', type: SkillType, name: string, morale: number, targetLane: number): void {
     const foes = side === 'player' ? this.enemyUnits : this.playerUnits
     const allies = side === 'player' ? this.playerUnits : this.enemyUnits
@@ -1180,8 +1205,8 @@ export class Arena {
     unit.glowColor.copy(tint)
     unit.hero?.playOnce('Skill')
     // 기 모으기
-    this.slowMo = Math.max(this.slowMo, side === 'player' ? 0.38 : 0.22)
-    this.cameraFocus = { target: origin.clone(), age: 0, life: side === 'player' ? 1.35 : 1.05, strength: side === 'player' ? 0.7 : 0.5, side }
+    // 카메라는 당기지 않는다(스킬마다 화면이 확대되면 어지럽다) — 짧은 슬로모션과 소리 · 빛으로만 강조
+    this.slowMo = Math.max(this.slowMo, side === 'player' ? SKILL_SLOWMO_PLAYER : SKILL_SLOWMO_ENEMY)
     this.fx(groundCircle(origin, color, 2.4, SKILL_RELEASE + 0.9))
     this.fx(lightPillar(origin, color, 0.9, 5.5, SKILL_RELEASE + 0.35))
     if (!this.reducedFx) this.fx(chargeMotes(origin, color))
@@ -1533,13 +1558,14 @@ export class Arena {
     const victoryOffset = this.cameraVictory > 0 ? (1 - this.cameraVictory / 1.5) * 2.8 : 0
     // 흔들림: trauma²(약한 충격은 거의 안 흔들리고 강타만 크게) + 매 프레임 무작위 대신 이어지는 노이즈
     const trauma = Math.min(1, this.cameraShake / 0.62)
-    const shake = trauma * trauma * 0.62 * (this.reducedFx ? 0.4 : 1)
+    const shake = trauma * trauma * 0.32 * (this.reducedFx ? 0.4 : 1)
     const nt = this.clock.getElapsed() * 21
     const nx = smoothNoise(nt, 1) * 0.5, ny = smoothNoise(nt, 7) * 0.5
     const living = [...this.playerUnits, ...this.enemyUnits].filter(unit => unit.troops > 0)
     const frontZ = living.length ? living.reduce((sum, unit) => sum + unit.group.position.z, 0) / living.length : this.cameraLookAt.z
     const selected = this.playerUnits[this.selectedUnit]
-    const focusX = this.battleActive && selected ? selected.group.position.x * 0.12 : 0
+    void selected
+    const focusX = 0 // 고른 무장을 따라 카메라가 옆으로 흔들리지 않게 고정
     const focusZ = this.battleActive ? Math.max(-4.5, Math.min(2.5, frontZ * 0.18 - 2.2)) : this.cameraLookAt.z
     // 세로 화면(휴대폰)은 가로 시야가 좁으니 카메라를 뒤로 물려 세 레인이 모두 보이게 한다
     const aspect = this.camera.aspect || 1
@@ -1550,7 +1576,7 @@ export class Arena {
       this.cameraLookAt.z + (this.cameraBase.z - this.cameraLookAt.z) * pull + introOffset + victoryOffset + (this.battleActive ? frontZ * 0.06 : 0),
     )
     this.camera.lookAt(this.cameraLookAt.x + focusX, this.cameraLookAt.y + (this.cameraVictory > 0 ? 1.2 : 0), focusZ)
-    this.camera.rotateZ(smoothNoise(nt, 13) * shake * 0.03)
+    // (화면 기울임 흔들림은 어지러워서 쓰지 않는다)
     // 스킬: 쓰는 무장 쪽으로 카메라를 바짝 당겼다가 돌아온다
     const focus = this.cameraFocus
     if (focus) {

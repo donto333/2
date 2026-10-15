@@ -260,9 +260,10 @@ export class SkeletalHero {
   setFlash(amount: number, glow = 0, glowColor?: THREE.Color): void {
     const aura = this.tianming ? this.tianming.glow : 0
     const tint = this.tianming?.color
-    const r = amount * 0.22 + (glowColor ? glowColor.r * glow * 0.16 : 0) + (tint ? tint.r * aura * 0.012 : 0)
-    const g = amount * 0.12 + (glowColor ? glowColor.g * glow * 0.16 : 0) + (tint ? tint.g * aura * 0.012 : 0)
-    const b = amount * 0.05 + (glowColor ? glowColor.b * glow * 0.16 : 0) + (tint ? tint.b * aura * 0.012 : 0)
+    // 맞는 순간 몸이 하얗게 번쩍인다(타격감)
+    const r = amount * 0.42 + (glowColor ? glowColor.r * glow * 0.16 : 0) + (tint ? tint.r * aura * 0.012 : 0)
+    const g = amount * 0.3 + (glowColor ? glowColor.g * glow * 0.16 : 0) + (tint ? tint.g * aura * 0.012 : 0)
+    const b = amount * 0.18 + (glowColor ? glowColor.b * glow * 0.16 : 0) + (tint ? tint.b * aura * 0.012 : 0)
     for (const material of this.materials) material.emissive.setRGB(r, g, b)
   }
 
