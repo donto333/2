@@ -125,7 +125,9 @@ describe('commander attributes', () => {
     expect(typeOf('liu-bei')).toBe('치유')
     expect(typeOf('cao-ren')).toBe('수호')
     expect(typeOf('huang-zhong')).toBe('사격')
-    expect(typeOf('cao-cao')).toBe('통솔')
+    expect(typeOf('yuan-shao')).toBe('통솔')
+    // 2026.10.15: 조운·동탁·손권·조조는 수호형(전열 탱커)으로 바뀌었다
+    for (const id of ['zhao-yun', 'dong-zhuo', 'sun-quan', 'cao-cao']) expect(typeOf(id)).toBe('수호')
     expect(catalog.every(general => GENERAL_SKILLS[general.id])).toBe(true)
     expect(catalog.find(general => general.id === 'gao-shun')!.skillName).toBe('함진영')
     expect(catalog.find(general => general.id === 'huang-zhong')!.skillName).toBe('정군산 일격')

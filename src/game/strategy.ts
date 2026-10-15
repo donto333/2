@@ -561,7 +561,7 @@ const CORE_LIBRARY: General[] = [
   },
   {
     id: 'zhao-yun', name: '조운', epithet: '상산의 상산 용기', role: '기병', grade: 5, stars: 1, level: 12,
-    attack: 91, defense: 76, command: 87, leadership: 93, martial: 95, stratagem: 70, speed: 98, skillName: '장판 돌파', skillDescription: '위험한 측면을 돌파하고 아군 전열로 복귀한다.', skillUnlocked: true, accent: '#78d9d3', portrait: '조', portraitPath: '/assets/generals/zhao-yun.webp',
+    attack: 91, defense: 76, command: 87, leadership: 93, martial: 95, stratagem: 70, speed: 98, skillName: '장판 단기', skillDescription: '홀로 장판을 지키며 위태로운 아군을 감싸고 버틴다.', skillUnlocked: true, accent: '#78d9d3', portrait: '조', portraitPath: '/assets/generals/zhao-yun.webp',
   },
   {
     id: 'zhuge-liang', name: '제갈량', epithet: '와룡의 출사표', role: '책사', grade: 5, stars: 1, level: 11,
@@ -621,8 +621,8 @@ type ExpansionSpec = [string, string, string, Role, Grade, string, string, strin
 
 const EXPANSION_SPECS: ExpansionSpec[] = [
   ['liu-bei', '유비', '현덕의 인덕과 쌍검', '보병', 5, '인덕의 결집', '아군 전체의 사기를 끌어올리고 전열을 회복한다.', '유'],
-  ['cao-cao', '조조', '맹덕의 천하 제패', '기병', 5, '위무의 질주', '적의 약한 측면을 포착해 전군의 공격력을 높인다.', '조'],
-  ['sun-quan', '손권', '중모의 강동 수호', '궁병', 5, '강동의 결의', '아군 궁병의 사거리와 명중률을 강화한다.', '손'],
+  ['cao-cao', '조조', '맹덕의 천하 제패', '기병', 5, '위무의 방진', '전군을 굳게 묶어 피해를 줄이고 공세를 북돋는다.', '조'],
+  ['sun-quan', '손권', '중모의 강동 수호', '궁병', 5, '강동 수성', '강동의 성벽처럼 아군 전체를 단단히 지킨다.', '손'],
   ['sun-ce', '손책', '백부의 소패왕', '기병', 5, '소패왕 돌격', '중앙의 적을 밀어내고 기동 속도를 크게 높인다.', '손'],
   ['sun-jian', '손견', '문대의 옥새 선봉', '보병', 4, '강동 선봉', '첫 공격에 추가 피해를 더하고 적 사기를 낮춘다.', '손'],
   ['pang-tong', '방통', '사원의 봉추 연환', '책사', 4, '연환계', '적 부대를 묶어 다음 충격파 피해를 증폭한다.', '방'],
@@ -666,7 +666,7 @@ const EXPANSION_SPECS: ExpansionSpec[] = [
   ['guan-xing', '관흥', '안국의 춘추 계승', '기병', 2, '춘추 계승', '쓰러진 적이 많을수록 공격력이 상승한다.', '관'],
   ['zhang-bao', '장포', '중진의 장판 유산', '보병', 2, '장판 유산', '보병 진형의 충격 저항을 높인다.', '장'],
   ['ma-dai', '마대', '금성의 서량 추격', '기병', 2, '서량 추격', '후퇴하는 적에게 추가 피해를 입힌다.', '마'],
-  ['dong-zhuo', '동탁', '중영의 폭정 철기', '보병', 5, '폭정의 압박', '적의 사기를 짓누르지만 아군 속도는 낮아진다.', '동'],
+  ['dong-zhuo', '동탁', '중영의 폭정 철기', '보병', 5, '폭정의 방벽', '거구로 전열을 막아서며 적에게 공포를 심는다.', '동'],
   ['diao-chan', '초선', '폐월의 연환 미혹', '책사', 4, '연환 미혹', '적 지휘관을 혼란시켜 다음 행동을 지연한다.', '초'],
   ['cai-wenji', '채문희', '문희의 호가 귀환', '책사', 1, '호가 귀환', '전투 기록을 되살려 아군 사기를 회복한다.', '채'],
   ['da-qiao', '대교', '강동의 옥련', '궁병', 2, '옥련의 가호', '아군 장수의 스킬 재사용 대기시간을 줄인다.', '대'],
@@ -790,6 +790,8 @@ export function normalizeGeneralStats(state: StrategyState): number {
     if (!template) continue
     const stats = statsAt(template, general.level, general.stars)
     if (GROWTH_STATS.some(key => general[key] !== stats[key])) { Object.assign(general, stats); changed += 1 }
+    // 스킬을 다시 짠 무장(예: 수호형으로 바뀐 무장)은 저장된 스킬 이름·설명도 새것으로
+    if (general.skillName !== template.skillName || general.skillDescription !== template.skillDescription) { general.skillName = template.skillName; general.skillDescription = template.skillDescription; changed += 1 }
   }
   return changed
 }

@@ -22,12 +22,12 @@ function enemyAttackShare(players: string[], runs = 12): number[] {
 
 describe('진형: 가운데는 전열', () => {
   it('적 공격의 30%는 전열부터 노린다(제 자리 몫까지 약 절반 이상)', () => {
-    const share = enemyAttackShare(['lu-bu', 'zhao-yun', 'guan-yu'])
+    const share = enemyAttackShare(['lu-bu', 'zhang-fei', 'guan-yu'])
     expect(share[1]).toBeGreaterThan(0.45)
     expect(share[1]).toBeLessThan(0.65)
   })
   it('수호형이 전열이면 더 끌어당긴다(도발)', () => {
-    const plain = enemyAttackShare(['lu-bu', 'zhao-yun', 'guan-yu'])
+    const plain = enemyAttackShare(['lu-bu', 'zhang-fei', 'guan-yu'])
     const tank = enemyAttackShare(['lu-bu', 'cao-ren', 'guan-yu'])
     expect(tank[1]).toBeGreaterThan(plain[1] + 0.08)
     expect(BATTLE_RULES.frontDr + BATTLE_RULES.frontTankDr).toBeCloseTo(0.4, 6)

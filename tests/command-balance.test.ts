@@ -6,12 +6,12 @@ import { scaleGeneral, templateGeneral } from '../src/game/strategy'
 const make = (id: string, level = 30) => ({ ...scaleGeneral({ ...templateGeneral(id)!, level: 1, stars: 1 }, level, 3), skillUnlocked: true })
 
 /** 여포·조인(전열) + 세 번째 무장으로 싸웠을 때 평균 승리 시간 */
-function averageWin(third: string, runs = 16): number {
+function averageWin(third: string | ReturnType<typeof make>, runs = 16): number {
   let total = 0, wins = 0
   for (let run = 0; run < runs; run += 1) {
     let seed = 5 + run * 11
     const rng = () => (seed = (seed * 16807) % 2147483647) / 2147483647
-    const core = new BattleCore(['lu-bu', 'cao-ren', third].map(id => make(id)), ['lu-xun', 'lu-meng', 'gan-ning'].map(id => make(id, 46)), { mode: 'scenario', rng, autoPilot: { accuracy: 0.75, reaction: [0.35, 0.9] } })
+    const core = new BattleCore([make('lu-bu'), make('cao-ren'), typeof third === 'string' ? make(third) : third], ['lu-xun', 'lu-meng', 'gan-ning'].map(id => make(id, 46)), { mode: 'scenario', rng, autoPilot: { accuracy: 0.75, reaction: [0.35, 0.9] } })
     while (core.active && core.t < BATTLE_RULES.timeLimit + 5) { core.tick(0.05); core.drainEvents() }
     if (core.result?.won) { wins += 1; total += core.t }
   }
@@ -25,7 +25,9 @@ describe('통솔(아군 강화)형 밸런스', () => {
     expect(SKILL_TYPE_META['통솔'].base).toBeGreaterThanOrEqual(10)
     expect(SKILL_TYPE_META['통솔'].cooldown).toBeLessThanOrEqual(11)
   })
-  it('천명 통솔형(조조)을 넣으면 신병 통솔형(송헌)보다 빨리 이긴다', () => {
-    expect(averageWin('cao-cao')).toBeLessThan(averageWin('song-xian'))
+  it('같은 통솔 스킬이라도 천명 등급이면 신병 등급보다 빨리 이긴다(버프가 등급만큼 세짐)', () => {
+    // 조조가 수호형으로 바뀌어(2026.10.15) 특정 무장 대신, 같은 무장(이전 · 공격·방어 버프)의 등급만 바꿔 비교한다
+    const base = make('li-dian')
+    expect(averageWin({ ...base, grade: 5 })).toBeLessThan(averageWin({ ...base, grade: 1 }))
   })
 })

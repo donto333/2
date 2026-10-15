@@ -31,11 +31,11 @@ describe('자동 편성', () => {
 
   it('places a guardian (or else the sturdiest general) in the center lane (front line)', () => {
     const state = createInitialState()
-    own(state, ['cao-ren', 'guan-yu', 'zhao-yun'], 10)
+    own(state, ['cao-ren', 'guan-yu', 'zhang-fei'], 10)
     autoFormation(state)
     expect(state.formation[1]).toBe('cao-ren')
     const noTank = createInitialState()
-    own(noTank, ['lu-bu', 'guan-yu', 'zhao-yun'], 10)
+    own(noTank, ['lu-bu', 'guan-yu', 'zhang-fei'], 10)
     autoFormation(noTank)
     const center = noTank.generals.find(general => general.id === noTank.formation[1])!
     expect(noTank.generals.every(general => center.defense + center.leadership >= general.defense + general.leadership)).toBe(true)
