@@ -4,8 +4,9 @@ import * as THREE from 'three'
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { General } from './strategy'
 import { SIGNATURE_WEAPONS, STRIKE_FRAMES, strikeInfluences, strikeModel, type SignatureWeapon, type StrikeKind, type StrikeModel } from './battle-rig'
+import { bakeSquadModel, rigInfo } from './skeletal'
 
-export type ModelName = 'lubu' | 'caocao' | 'zhugeliang' | 'cavalry' | 'lancer' | 'archer' | 'battlefield'
+export type ModelName = 'lubu' | 'caocao' | 'zhugeliang' | 'cavalry' | 'tianming' | 'lancer' | 'archer' | 'battlefield'
 const BASE = '/assets/models/'
 const cache = new Map<ModelName, Promise<GLTF>>()
 let loader: GLTFLoader | null = null
@@ -31,12 +32,13 @@ export function loadModel(name: ModelName): Promise<GLTF> {
   return pending
 }
 
-/** 무장에게 어울리는 모델: 여포·조조·제갈량은 전용, 그 밖에는 병종별 장수 모델 */
+/** 무장에게 어울리는 모델: 여포·조조·제갈량은 전용, 천명(5등급) 기병은 백마 탄 천명장수, 그 밖에는 병종별 장수 모델 */
 export function heroModelFor(general: General): ModelName {
   if (general.id === 'lu-bu') return 'lubu'
   if (general.id === 'cao-cao') return 'caocao'
   if (general.id === 'zhuge-liang') return 'zhugeliang'
   if (general.role === '책사') return 'zhugeliang'
+  if (general.role === '기병' && general.grade === 5) return 'tianming'
   if (general.role === '궁병') return 'archer'
   if (general.role === '보병') return 'lancer'
   return 'cavalry'
@@ -54,7 +56,7 @@ export type HeroAction = 'Idle' | 'Walk' | 'Gallop' | 'Attack' | 'Skill'
  * 첫 전투에서 멈칫하지 않도록 본영 화면에 있을 때 모델을 하나씩 미리 불러와 굽는다.
  * 굽기는 메인 스레드를 잠깐 쓰므로 모델 사이에 쉬는 틈을 둔다.
  */
-export function preloadStrikeModels(names: ModelName[] = ['lancer', 'cavalry', 'archer', 'lubu', 'caocao', 'zhugeliang']): void {
+export function preloadStrikeModels(names: ModelName[] = ['lancer', 'cavalry', 'archer', 'lubu', 'caocao', 'zhugeliang', 'tianming']): void {
   let index = 0
   const idle = (run: () => void) => {
     const w = window as Window & { requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number }
@@ -63,7 +65,8 @@ export function preloadStrikeModels(names: ModelName[] = ['lancer', 'cavalry', '
   const next = () => {
     const name = names[index++]
     if (!name) return
-    void strikeModelFor(name).catch(() => {}).finally(() => idle(next))
+    // 뼈대 모델: 병사용 자세(공격·걷기)를 미리 굽는다. 예전 모델은 예전처럼 공격 자세를 굽는다
+    void loadModel(name).then(gltf => { if (rigInfo(gltf)) { if (name === 'lancer' || name === 'cavalry' || name === 'archer') bakeSquadModel(gltf) } else return strikeModelFor(name) }).catch(() => {}).finally(() => idle(next))
   }
   idle(next)
 }

@@ -30,7 +30,7 @@ export const STRIKE_FRAMES = 12
 type V3 = [number, number, number]
 interface RigBone { name: string; parent: number; pivot: V3 }
 interface RigKey { t: number; b: Record<string, { r?: V3; m?: V3 }> }
-interface Prop { geometry: THREE.BufferGeometry; material: THREE.Material }
+export interface Prop { geometry: THREE.BufferGeometry; material: THREE.Material }
 interface RigSpec {
   kind: StrikeKind
   bones: RigBone[]
@@ -489,4 +489,12 @@ export function strikeInfluences(progress: number, out: number[], times: number[
   if (i >= 1) out[i - 1] = 1 - a
   if (i + 1 <= n - 1) out[i] += a
   return out
+}
+
+/** 손에 쥐여 줄 무기(손잡이가 원점, 날이 +Y): 뼈대 모델의 손 뼈에 붙인다 */
+export type HandProp = 'sword' | 'fan' | SignatureWeapon
+export function handProp(kind: HandProp): Prop {
+  if (kind === 'sword') return swordProp()
+  if (kind === 'fan') return fanProp()
+  return WEAPON_PROPS[kind]()
 }

@@ -9,8 +9,9 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
-import { AnimatedHero, heroModelFor, heroStrikeModel, strikeModelFor, troopModelFor } from './battle-models'
-import { STRIKE_FRAMES } from './battle-rig'
+import { AnimatedHero, heroModelFor, heroStrikeModel, loadModel, strikeModelFor, troopModelFor } from './battle-models'
+import { SIGNATURE_WEAPONS, STRIKE_FRAMES } from './battle-rig'
+import { SkeletalHero, bakeSquadModel, rigInfo } from './skeletal'
 import { tr } from '../i18n/translate'
 import { effectsSetting } from './settings'
 import { CHARGE_STRIKE, MELEE_DURATION, MELEE_STRIKE, SHOOT_DURATION, SHOOT_RELEASE, SKILL_RELEASE, actorPose, chargeMotes, dashTrail, delayed, fireBurst, groundCircle, healMotes, hitSpark, lightPillar, lightning, projectile, shieldDome, shockwave, skillDuration, slashArc, type Fx, type Motion, type Pose } from './battle-motion'
@@ -167,7 +168,7 @@ interface BattleUnit {
   squadCtl: Squad
   skillPulse: number
   /** 실사 3D 모델(불러오면 도형 모델 대신 보인다) */
-  hero: AnimatedHero | null
+  hero: AnimatedHero | SkeletalHero | null
   mounted: boolean
   /** 무장 몸 전체를 움직이는 축(돌진·젖힘·떠오름). 무장 모델은 이 안에 있다 */
   actor: THREE.Group
@@ -490,17 +491,22 @@ export class Arena {
   /** 실사 모델을 불러와 도형 모델·병사와 바꾼다(불러오기 전에는 도형 모델로 바로 싸울 수 있다) */
   private attachRealModels(unit: BattleUnit): void {
     const name = heroModelFor(unit.general)
-    unit.mounted = name === 'lubu' || name === 'caocao' || name === 'zhugeliang' || name === 'cavalry'
-    void heroStrikeModel(unit.general).then(model => {
+    unit.mounted = name === 'lubu' || name === 'caocao' || name === 'zhugeliang' || name === 'cavalry' || name === 'tianming'
+    // 뼈대가 심어진 모델이면 실제 뼈 애니메이션으로, 예전 모델이면 구운 자세(모프)로 움직인다
+    void loadModel(name).then(async (gltf): Promise<AnimatedHero | SkeletalHero> => rigInfo(gltf) ? new SkeletalHero(gltf, SIGNATURE_WEAPONS[unit.general.id]) : new AnimatedHero(await heroStrikeModel(unit.general))).then(hero => {
       if (unit.hero || !unit.group.parent && !this.playerUnits.includes(unit)) return
-      const hero = new AnimatedHero(model)
       hero.root.rotation.y = Math.PI // 모델은 +Z를 본다 → 부대 앞(-Z)으로
       hero.root.scale.setScalar(1.18) // 무장은 병사보다 한눈에 띄게 조금 크게
       unit.actor.add(hero.root)
       unit.rig.root.visible = false
       unit.hero = hero
     }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
-    void strikeModelFor(troopModelFor(unit.general.role)).then(model => unit.squadCtl.upgrade(model.geometry, model.materials, model.duration, STRIKE_FRAMES, model.times)).catch(() => {})
+    const troop = troopModelFor(unit.general.role)
+    void loadModel(troop).then(gltf => {
+      const baked = bakeSquadModel(gltf)
+      if (baked) { unit.squadCtl.upgrade(baked.geometry, baked.materials, baked.duration, STRIKE_FRAMES, baked.times, baked.walkFrames, baked.walkPeriod); return }
+      return strikeModelFor(troop).then(model => unit.squadCtl.upgrade(model.geometry, model.materials, model.duration, STRIKE_FRAMES, model.times))
+    }).catch(() => {})
   }
 
   private clearUnits(): void {
@@ -773,7 +779,7 @@ export class Arena {
       unit.hit.x = 0; unit.hit.v = 0
       unit.actor.rotation.z = 0
       unit.squad.position.y = 0
-      unit.hero?.setFade(0)
+      unit.hero?.setFade(0); if (unit.hero instanceof SkeletalHero) unit.hero.revive()
       unit.statusFill.scale.x = 1
       unit.target.set(-4.4 + index * 4.4, 0, PLAYER_LINE_Z - index * 0.15)
     })
@@ -1259,7 +1265,7 @@ export class Arena {
       unit.troops = coreUnit.troops
       unit.maxTroops = coreUnit.maxTroops
       unit.statusFill.scale.x = Math.max(0.001, unit.troops / Math.max(1, unit.maxTroops))
-      if (unit.troops > 0 && (!unit.group.visible || unit.dying > 0)) { unit.group.visible = true; unit.dying = 0; unit.hero?.setFade(0) }
+      if (unit.troops > 0 && (!unit.group.visible || unit.dying > 0)) { unit.group.visible = true; unit.dying = 0; unit.hero?.setFade(0); if (unit.hero instanceof SkeletalHero) unit.hero.revive() }
     })
     sync(this.playerUnits, core.players)
     sync(this.enemyUnits, core.enemies)
@@ -1354,9 +1360,16 @@ export class Arena {
     const sideways = unit.mounted ? (unit.motionPhase % 1.6 < 0.8 ? 1 : -1) : 0
     // 휘청: 넘어가기 직전 잠깐 뒤로 젖혀진다
     const sway = Math.sin(clamp01(fall / 0.2) * Math.PI) * 0.12
-    unit.actor.rotation.x = sideways ? -angle * 0.25 + sway : -angle * 1.38 + sway
-    unit.actor.rotation.z = sideways * angle * 1.25
-    unit.actor.position.y = -buckle * 0.12 - sink * 0.45
+    const hero = unit.hero
+    if (hero && 'skeletal' in hero) {
+      // 뼈대 무장: 쓰러지는(말에서 떨어지는) 동작이 몸을 눕힌다. 끝에 땅속으로 가라앉으며 흐려진다
+      hero.playDeath()
+      unit.actor.position.y = -sink * 0.3
+    } else {
+      unit.actor.rotation.x = sideways ? -angle * 0.25 + sway : -angle * 1.38 + sway
+      unit.actor.rotation.z = sideways * angle * 1.25
+      unit.actor.position.y = -buckle * 0.12 - sink * 0.45
+    }
     unit.squad.position.y = -fall * 0.7
     if (!unit.fallDust && fall >= 0.55) {
       unit.fallDust = true
