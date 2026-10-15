@@ -216,8 +216,11 @@ const ease = (k: number) => k * k * (3 - 2 * k)
 const HIT_FX_TROOPS = 6600
 const PLAYER_LINE_Z = -1.6
 const ENEMY_LINE_Z = -6.0
-/** 좌·중·우 부대 사이 간격: 병사 부대가 무장 뒤에 서므로 넓게 벌린다 */
-const LANE_GAP = 6.2
+/** 좌·중·우 부대 사이 간격: 병사 부대가 무장 뒤에 서므로 넓게 벌린다(세로 화면은 좁게) */
+const LANE_GAP_WIDE = 6.2
+const LANE_GAP_PORTRAIT = 4.4
+/** 세로 화면에서 좌·우 부대가 서는 화면 가로 위치(-1~1): 아래 좌·우 카드의 가운데(±2/3)에 맞춘다 */
+const PORTRAIT_LANE_NDC = 0.66
 const MIN_LINE_GAP = 3.6
 const jade = 0x52e0c4
 const ember = 0xff8066
@@ -322,7 +325,8 @@ export class Arena {
   setGenerals(generals: General[]): void {
     this.generals = generals.map(general => ({ ...general }))
     this.clearUnits()
-    const positions = [new THREE.Vector3(-LANE_GAP, 0, 6), new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(LANE_GAP, 0, 6)]
+    const gap = this.laneGap()
+    const positions = [new THREE.Vector3(-gap, 0, 6), new THREE.Vector3(0, 0, 7.4), new THREE.Vector3(gap, 0, 6)]
     this.generals.forEach((general, index) => {
       const built = this.createUnit(general, jade, positions[index] ?? positions[0])
       const group = built.group
@@ -758,7 +762,7 @@ export class Arena {
     this.cameraVictory = 0
     this.cameraShake = 0.12
     deck.forEach((general, index) => {
-      const position = new THREE.Vector3((index - 1) * LANE_GAP, 0, -8 - index * 0.9)
+      const position = new THREE.Vector3((index - 1) * this.laneGap(), 0, -8 - index * 0.9)
       const built = this.createUnit(general, ember, position)
       const group = built.group
       group.rotation.y = Math.PI
@@ -785,9 +789,9 @@ export class Arena {
       unit.squad.position.y = 0
       unit.hero?.setFade(0); if (unit.hero instanceof SkeletalHero) unit.hero.revive()
       unit.statusFill.scale.x = 1
-      unit.target.set((index - 1) * LANE_GAP, 0, PLAYER_LINE_Z - index * 0.15)
+      unit.target.set((index - 1) * this.laneGap(), 0, PLAYER_LINE_Z - index * 0.15)
     })
-    this.enemyUnits.forEach((unit, index) => unit.target.set((index - 1) * LANE_GAP, 0, ENEMY_LINE_Z - index * 0.15))
+    this.enemyUnits.forEach((unit, index) => unit.target.set((index - 1) * this.laneGap(), 0, ENEMY_LINE_Z - index * 0.15))
     this.playerUnits.forEach((unit, index) => this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, 0.7)), index % 2 ? 0xa4a08a : 0xb68f70))
     this.enemyUnits.forEach((unit, index) => this.spawnDustCloud(unit.group.position.clone().add(new THREE.Vector3(0, 0, -0.7)), index % 2 ? 0xa4a08a : 0xb68f70))
     this.drainCore()
@@ -1526,7 +1530,7 @@ export class Arena {
     const focusZ = this.battleActive ? Math.max(-4.5, Math.min(2.5, frontZ * 0.18 - 2.2)) : this.cameraLookAt.z
     // 세로 화면(휴대폰)은 가로 시야가 좁으니 카메라를 뒤로 물려 세 레인이 모두 보이게 한다
     const aspect = this.camera.aspect || 1
-    const pull = aspect < 0.8 ? 1.75 : aspect < 1.25 ? 1.3 : 1
+    const pull = this.cameraPull(aspect)
     this.camera.position.set(
       this.cameraLookAt.x + (this.cameraBase.x - this.cameraLookAt.x) * pull + focusX + nx * shake,
       this.cameraLookAt.y + (this.cameraBase.y - this.cameraLookAt.y) * pull + ny * shake * 0.55,
@@ -1568,6 +1572,25 @@ export class Arena {
     this.environment.update(this.clock.getElapsed(), delta)
     if (this.composer) this.composer.render(delta)
     else this.renderer.render(this.scene, this.camera)
+  }
+
+  /** 좌·중·우 부대 간격(화면 비율에 따라) */
+  private laneGap(): number {
+    return (this.camera.aspect || 1) < 0.8 ? LANE_GAP_PORTRAIT : LANE_GAP_WIDE
+  }
+
+  /**
+   * 카메라를 얼마나 뒤로 물릴지: 좌·우 부대가 화면 안(세로 화면은 아래 좌·우 카드 위)에 오도록
+   * 부대 줄 깊이에서의 가로 시야 폭을 맞춘다.
+   */
+  private cameraPull(aspect: number): number {
+    const base = aspect < 0.8 ? 1.75 : aspect < 1.25 ? 1.3 : 1
+    const halfTan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))
+    const ndc = aspect < 0.8 ? PORTRAIT_LANE_NDC : 0.72
+    const depth = this.laneGap() / (ndc * halfTan * aspect)
+    const span = this.cameraBase.z - this.cameraLookAt.z
+    const needed = (depth + PLAYER_LINE_Z - this.cameraLookAt.z) / span
+    return Math.max(base, needed)
   }
 
   private resize = (): void => {
