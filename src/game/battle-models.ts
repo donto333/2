@@ -5,6 +5,7 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { General } from './strategy'
 import { SIGNATURE_WEAPONS, STRIKE_FRAMES, strikeInfluences, strikeModel, type SignatureWeapon, type StrikeKind, type StrikeModel } from './battle-rig'
 import { bakeSquadModel, rigInfo } from './skeletal'
+import { heroLook } from './hero-style'
 
 export type ModelName = 'lubu' | 'caocao' | 'zhugeliang' | 'cavalry' | 'tianming' | 'lancer' | 'archer' | 'battlefield'
 const BASE = '/assets/models/'
@@ -32,16 +33,25 @@ export function loadModel(name: ModelName): Promise<GLTF> {
   return pending
 }
 
-/** 무장에게 어울리는 모델: 여포·조조·제갈량은 전용, 천명(5등급) 기병은 백마 탄 천명장수, 그 밖에는 병종별 장수 모델 */
+/** 무장에게 어울리는 모델: 모든 무장은 말을 탄다(여포·조조·제갈량은 전용, 천명 무장은 저마다의 모습 — hero-style.ts) */
 export function heroModelFor(general: General): ModelName {
-  if (general.id === 'lu-bu') return 'lubu'
-  if (general.id === 'cao-cao') return 'caocao'
-  if (general.id === 'zhuge-liang') return 'zhugeliang'
-  if (general.role === '책사') return 'zhugeliang'
-  if (general.role === '기병' && general.grade === 5) return 'tianming'
-  if (general.role === '궁병') return 'archer'
-  if (general.role === '보병') return 'lancer'
-  return 'cavalry'
+  return heroLook(general).model
+}
+
+const skins = new Map<string, Promise<THREE.Texture>>()
+/** 무장 전용 의상 텍스처(모델 텍스처와 같은 UV 배치) */
+export function loadSkin(name: string): Promise<THREE.Texture> {
+  const cached = skins.get(name)
+  if (cached) return cached
+  const pending = new THREE.TextureLoader().loadAsync(`${BASE}skins/${name}.jpg`).then(texture => {
+    texture.flipY = false // glTF 텍스처와 같은 방향
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.anisotropy = 4
+    return texture
+  })
+  pending.catch(() => skins.delete(name))
+  skins.set(name, pending)
+  return pending
 }
 
 export function troopModelFor(role: General['role']): ModelName {

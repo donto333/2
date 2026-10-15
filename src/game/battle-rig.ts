@@ -123,6 +123,21 @@ function fanProp(): Prop {
   return { geometry: mergeGeometries([handle.toNonIndexed(), fan.toNonIndexed()])!, material: new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.8, side: THREE.DoubleSide }) }
 }
 
+/** 활(말 위 궁병 무장): 손잡이가 원점, 활대는 ±Y로 뻗고 끝이 활 쏘는 사람 쪽(-Z)으로 휜다 */
+function bowProp(): Prop {
+  const pts: THREE.Vector3[] = []
+  for (let i = 0; i <= 12; i += 1) {
+    const y = -0.62 + (i / 12) * 1.3, u = (y - 0.04) / 0.65
+    pts.push(new THREE.Vector3(0, y, -0.2 * u * u + 0.05 * Math.pow(Math.abs(u), 6)))
+  }
+  const limb = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.018, 5)
+  const a = pts[0], b = pts[pts.length - 1]
+  const string = new THREE.CylinderGeometry(0.004, 0.004, a.distanceTo(b), 3)
+  string.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2)
+  const grip = new THREE.CylinderGeometry(0.026, 0.026, 0.14, 6)
+  return { geometry: mergeGeometries([limb.toNonIndexed(), string.toNonIndexed(), grip.toNonIndexed()])!, material: new THREE.MeshStandardMaterial({ color: 0x4a2c1a, roughness: 0.6 }) }
+}
+
 // ── 모델별 동작 설계 ─────────────────────────────────────────
 // 몸 기준 축: +Z가 앞, +Y가 위, -X가 몸의 오른쪽(무기 쥔 쪽).
 const LANCER: RigSpec = {
@@ -492,9 +507,10 @@ export function strikeInfluences(progress: number, out: number[], times: number[
 }
 
 /** 손에 쥐여 줄 무기(손잡이가 원점, 날이 +Y): 뼈대 모델의 손 뼈에 붙인다 */
-export type HandProp = 'sword' | 'fan' | SignatureWeapon
+export type HandProp = 'sword' | 'fan' | 'bow' | SignatureWeapon
 export function handProp(kind: HandProp): Prop {
   if (kind === 'sword') return swordProp()
+  if (kind === 'bow') return bowProp()
   if (kind === 'fan') return fanProp()
   return WEAPON_PROPS[kind]()
 }

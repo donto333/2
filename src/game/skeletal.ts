@@ -5,7 +5,9 @@
 import * as THREE from 'three'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { STRIKE_FRAMES, handProp, type HandProp, type SignatureWeapon, type StrikeKind } from './battle-rig'
+import { STRIKE_FRAMES, handProp, type HandProp, type StrikeKind } from './battle-rig'
+import type { TianmingLook } from './hero-style'
+import { buildOrnaments, type Ornaments, type RestFrame } from './tianming-ornaments'
 
 type HeroAction = 'Idle' | 'Walk' | 'Gallop' | 'Attack' | 'Skill'
 
@@ -43,9 +45,15 @@ export function rigInfo(gltf: GLTF): RigInfo | null {
 }
 
 /** 병종(공격 종류)·말 여부에 따른 동작 이름 */
-function clipSet(info: RigInfo): { idle: string; walk: string; attack: string; skill: string; death: string } {
-  if (info.mounted) return { idle: 'MountedIdle', walk: 'MountedMove', attack: info.kind === 'cast' ? 'MountedCast' : 'MountedSlash', skill: 'MountedChargeSlash', death: 'FallFromHorseDeath' }
-  if (info.kind === 'shoot') return { idle: 'ArcherIdle', walk: 'ArcherMove', attack: 'Shoot', skill: 'Shoot', death: 'Death' }
+const MOUNTED_ATTACK: Record<StrikeKind, string> = { slash: 'MountedSlash', thrust: 'MountedStab', shoot: 'MountedShoot', cast: 'MountedCast' }
+function clipSet(info: RigInfo, kind: StrikeKind = info.kind): { idle: string; walk: string; attack: string; skill: string; death: string } {
+  if (info.mounted) {
+    // 말 위에서: 보병 무장은 찌르고, 궁병 무장은 활을 쏜다(동작이 없는 모델이면 베기)
+    const attack = info.clips.has(MOUNTED_ATTACK[kind]) ? MOUNTED_ATTACK[kind] : 'MountedSlash'
+    const skill = kind === 'thrust' && info.clips.has('MountedChargeStab') ? 'MountedChargeStab' : 'MountedChargeSlash'
+    return { idle: 'MountedIdle', walk: 'MountedMove', attack, skill, death: 'FallFromHorseDeath' }
+  }
+  if (kind === 'shoot') return { idle: 'ArcherIdle', walk: 'ArcherMove', attack: 'Shoot', skill: 'Shoot', death: 'Death' }
   return { idle: 'Idle', walk: 'Move', attack: 'Stab', skill: 'ChargeStab', death: 'Death' }
 }
 
@@ -86,13 +94,18 @@ export class SkeletalHero {
   private gait = 0
   private scene: THREE.Object3D | null = null
   private tianming: TianmingAura | null = null
+  private ornaments: Ornaments | null = null
+  private readonly body: THREE.MeshStandardMaterial[] = []
+  /** 장식을 붙일 뼈의 기본 자세(모델 좌표 → 뼈 좌표) */
+  private readonly rest = new Map<string, RestFrame>()
 
-  constructor(gltf: GLTF, weapon?: SignatureWeapon) {
+  constructor(gltf: GLTF, options: { weapon?: HandProp; kind?: StrikeKind } = {}) {
     const info = rigInfo(gltf)
     if (!info) throw new Error('rig missing')
+    const weapon = options.weapon
     this.info = info
-    this.kind = info.kind
-    this.names = clipSet(info)
+    this.kind = options.kind ?? info.kind
+    this.names = clipSet(info, this.kind)
     const scene = cloneSkinned(gltf.scene)
     scene.traverse(node => {
       const mesh = node as THREE.Mesh
@@ -101,10 +114,16 @@ export class SkeletalHero {
       mesh.frustumCulled = false
       const material = (mesh.material as THREE.MeshStandardMaterial).clone()
       mesh.material = material
-      if (material.isMeshStandardMaterial) this.materials.push(material)
+      if (material.isMeshStandardMaterial) { this.materials.push(material); this.body.push(material) }
     })
     this.root.add(scene)
     this.scene = scene
+    // 동작을 입히기 전(기본 자세)의 뼈 위치를 기억해 둔다: 장식은 모델 좌표로 만들어 뼈에 붙인다
+    scene.updateMatrixWorld(true)
+    for (const name of ['Head', 'HeadTop_End', 'Neck', 'Spine2']) {
+      const bone = scene.getObjectByName(name)
+      if (bone) this.rest.set(name, { bone, toLocal: bone.matrixWorld.clone().invert(), at: new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld) })
+    }
     // 손에 무기: 고유 무기가 있으면 원래 쥔 무기를 접어 숨기고 그 자리에 쥐여 준다
     const weaponBone = scene.getObjectByName('Weapon_R')
     const hand = scene.getObjectByName('RightHand')
@@ -218,20 +237,29 @@ export class SkeletalHero {
     }
     this.mixer.update(delta)
     this.tianming?.update(delta, !!this.death)
+    this.ornaments?.update(delta, g)
   }
 
-  /** 천명(5등급) 무장: 발밑 금빛 인장 · 피어오르는 불티 · 등의 천명 깃발 · 몸의 은은한 금빛 */
-  enableTianming(): void {
+  /** 무장 전용 의상 텍스처로 갈아입힌다(같은 UV 배치) */
+  setSkin(texture: THREE.Texture): void {
+    for (const material of this.body) { material.map = texture; material.needsUpdate = true }
+  }
+
+  /** 천명(5등급) 무장: 발밑 인장 · 피어오르는 불티 · 등 깃발 · 몸의 은은한 빛 + 무장마다의 망토 · 장식 */
+  enableTianming(look: TianmingLook = DEFAULT_LOOK): void {
     if (this.tianming || !this.scene) return
-    this.tianming = new TianmingAura(this.root, this.scene.getObjectByName('Spine2') ?? this.scene, this.info.mounted)
+    this.tianming = new TianmingAura(this.root, this.scene.getObjectByName('Spine2') ?? this.scene, this.info.mounted, look)
+    this.ornaments = buildOrnaments(look, this.rest)
+    for (const material of this.ornaments.materials) this.materials.push(material)
   }
 
   /** 피격 번쩍임(따뜻한 흰빛) + 스킬 기운(무장 색) */
   setFlash(amount: number, glow = 0, glowColor?: THREE.Color): void {
-    const gold = this.tianming ? this.tianming.glow : 0
-    const r = amount * 0.22 + (glowColor ? glowColor.r * glow * 0.16 : 0) + gold * 0.06
-    const g = amount * 0.12 + (glowColor ? glowColor.g * glow * 0.16 : 0) + gold * 0.04
-    const b = amount * 0.05 + (glowColor ? glowColor.b * glow * 0.16 : 0) + gold * 0.008
+    const aura = this.tianming ? this.tianming.glow : 0
+    const tint = this.tianming?.color
+    const r = amount * 0.22 + (glowColor ? glowColor.r * glow * 0.16 : 0) + (tint ? tint.r * aura * 0.022 : 0)
+    const g = amount * 0.12 + (glowColor ? glowColor.g * glow * 0.16 : 0) + (tint ? tint.g * aura * 0.022 : 0)
+    const b = amount * 0.05 + (glowColor ? glowColor.b * glow * 0.16 : 0) + (tint ? tint.b * aura * 0.022 : 0)
     for (const material of this.materials) material.emissive.setRGB(r, g, b)
   }
 
@@ -247,7 +275,7 @@ export class SkeletalHero {
 }
 
 // ── 천명 무장의 특색 ─────────────────────────────────────────────
-const GOLD = 0xffc65a
+const DEFAULT_LOOK: TianmingLook = { aura: 0xffc65a, banner: { text: '천명', cloth: ['#7a0f12', '#a3171a'], ink: '#f6d27a' } }
 
 function canvasTexture(w: number, h: number, draw: (c: CanvasRenderingContext2D) => void): THREE.Texture {
   const canvas = document.createElement('canvas')
@@ -263,8 +291,8 @@ function canvasTexture(w: number, h: number, draw: (c: CanvasRenderingContext2D)
 function sealTexture(): THREE.Texture {
   return canvasTexture(256, 256, c => {
     c.translate(128, 128)
-    c.strokeStyle = '#ffd98a'
-    c.shadowColor = '#ffb640'; c.shadowBlur = 10
+    c.strokeStyle = '#fff3dc' // 흰빛으로 그리고 무장마다의 기운 색을 곱한다
+    c.shadowColor = '#ffffff'; c.shadowBlur = 10
     for (const [r, w] of [[118, 5], [100, 2], [62, 3]] as const) { c.lineWidth = w; c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.stroke() }
     c.lineWidth = 3
     for (let i = 0; i < 24; i += 1) {
@@ -278,18 +306,24 @@ function sealTexture(): THREE.Texture {
   })
 }
 
-/** 등에 꽂는 천명 깃발(붉은 비단 · 금테 · 세로 글씨) */
-function flagTexture(): THREE.Texture {
+/** 등에 꽂는 깃발(무장마다의 비단 색 · 금테 · 세로 한글) */
+function flagTexture(banner: TianmingLook['banner']): THREE.Texture {
   return canvasTexture(128, 256, c => {
     const g = c.createLinearGradient(0, 0, 128, 0)
-    g.addColorStop(0, '#7a0f12'); g.addColorStop(1, '#a3171a')
+    g.addColorStop(0, banner.cloth[0]); g.addColorStop(1, banner.cloth[1])
     c.fillStyle = g; c.fillRect(0, 0, 128, 256)
     c.strokeStyle = '#e8b54a'; c.lineWidth = 8; c.strokeRect(6, 6, 116, 244)
     c.lineWidth = 2; c.strokeRect(16, 16, 96, 224)
-    c.fillStyle = '#f6d27a'
-    c.font = 'bold 64px "Gowun Batang", "Noto Serif KR", serif'
+    c.fillStyle = banner.ink
     c.textAlign = 'center'; c.textBaseline = 'middle'
-    c.fillText('천', 64, 88); c.fillText('명', 64, 172)
+    const chars = [...banner.text]
+    if (chars.length === 1) {
+      c.font = 'bold 92px "Gowun Batang", "Noto Serif KR", serif'
+      c.fillText(chars[0], 64, 128)
+    } else {
+      c.font = 'bold 64px "Gowun Batang", "Noto Serif KR", serif'
+      chars.slice(0, 2).forEach((ch, i) => c.fillText(ch, 64, i ? 172 : 88))
+    }
   })
 }
 
@@ -302,11 +336,14 @@ class TianmingAura {
   private readonly materials: Array<THREE.Material & { opacity: number }>
   private t = Math.random() * 10
   private fade = 0
-  /** 몸의 금빛 세기(0~1) */
+  /** 몸빛 세기(0~1) */
   glow = 0
+  readonly color: THREE.Color
 
-  constructor(root: THREE.Object3D, back: THREE.Object3D, mounted: boolean) {
-    const sealMat = new THREE.MeshBasicMaterial({ map: sealTexture(), color: GOLD, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+  constructor(root: THREE.Object3D, back: THREE.Object3D, mounted: boolean, look: TianmingLook) {
+    // 몸빛은 은은하게: 기운 색을 흰빛과 섞어(채도를 낮춰) 쓴다
+    this.color = new THREE.Color(look.aura).lerp(new THREE.Color(0xffffff), 0.45)
+    const sealMat = new THREE.MeshBasicMaterial({ map: sealTexture(), color: look.aura, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
     this.seal = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sealMat)
     this.seal.rotation.x = -Math.PI / 2
     this.seal.position.y = 0.05
@@ -324,7 +361,7 @@ class TianmingAura {
     }
     const emberGeo = new THREE.BufferGeometry()
     emberGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-    const emberMat = new THREE.PointsMaterial({ color: GOLD, size: 0.07, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
+    const emberMat = new THREE.PointsMaterial({ color: look.aura, size: 0.07, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
     this.embers = new THREE.Points(emberGeo, emberMat)
     this.embers.frustumCulled = false
     root.add(this.embers)
@@ -338,7 +375,7 @@ class TianmingAura {
     const flagGeo = new THREE.PlaneGeometry(0.36, 0.72, 8, 6)
     flagGeo.translate(0.18, 0.86, 0)
     flagGeo.rotateY(Math.PI / 2) // 폭이 등 뒤(-Z)로 펼쳐진다
-    const flagMat = new THREE.MeshStandardMaterial({ map: flagTexture(), side: THREE.DoubleSide, roughness: 0.85, emissive: 0x2a0806 })
+    const flagMat = new THREE.MeshStandardMaterial({ map: flagTexture(look.banner), side: THREE.DoubleSide, roughness: 0.85, emissive: new THREE.Color(look.banner.cloth[1]).multiplyScalar(0.25) })
     this.flag = new THREE.Mesh(flagGeo, flagMat)
     this.flag.castShadow = true
     this.flagRest = (flagGeo.getAttribute('position').array as Float32Array).slice()

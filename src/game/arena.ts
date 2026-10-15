@@ -9,8 +9,9 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
-import { AnimatedHero, heroModelFor, heroStrikeModel, loadModel, strikeModelFor, troopModelFor } from './battle-models'
-import { SIGNATURE_WEAPONS, STRIKE_FRAMES } from './battle-rig'
+import { AnimatedHero, heroStrikeModel, loadModel, loadSkin, strikeModelFor, troopModelFor } from './battle-models'
+import { heroLook } from './hero-style'
+import { STRIKE_FRAMES } from './battle-rig'
 import { SkeletalHero, bakeSquadModel, rigInfo } from './skeletal'
 import { tr } from '../i18n/translate'
 import { effectsSetting } from './settings'
@@ -496,10 +497,12 @@ export class Arena {
 
   /** 실사 모델을 불러와 도형 모델·병사와 바꾼다(불러오기 전에는 도형 모델로 바로 싸울 수 있다) */
   private attachRealModels(unit: BattleUnit): void {
-    const name = heroModelFor(unit.general)
-    unit.mounted = name === 'lubu' || name === 'caocao' || name === 'zhugeliang' || name === 'cavalry' || name === 'tianming'
+    // 선두 무장은 모두 말을 탄다(보병 무장은 말 위에서 찌르고, 궁병 무장은 말 위에서 활을 쏜다)
+    const look = heroLook(unit.general)
+    const name = look.model
+    unit.mounted = true
     // 뼈대가 심어진 모델이면 실제 뼈 애니메이션으로, 예전 모델이면 구운 자세(모프)로 움직인다
-    void loadModel(name).then(async (gltf): Promise<AnimatedHero | SkeletalHero> => rigInfo(gltf) ? new SkeletalHero(gltf, SIGNATURE_WEAPONS[unit.general.id]) : new AnimatedHero(await heroStrikeModel(unit.general))).then(hero => {
+    void loadModel(name).then(async (gltf): Promise<AnimatedHero | SkeletalHero> => rigInfo(gltf) ? new SkeletalHero(gltf, { weapon: look.weapon, kind: look.kind }) : new AnimatedHero(await heroStrikeModel(unit.general))).then(hero => {
       if (unit.hero || !unit.group.parent && !this.playerUnits.includes(unit)) return
       hero.root.rotation.y = Math.PI // 모델은 +Z를 본다 → 부대 앞(-Z)으로
       hero.root.scale.setScalar(1.18) // 무장은 병사보다 한눈에 띄게 조금 크게
@@ -507,7 +510,11 @@ export class Arena {
       unit.rig.root.visible = false
       unit.hero = hero
       // 천명(5등급) 무장: 선두에서 천명만의 금빛 인장 · 불티 · 깃발을 두른다
-      if (unit.general.grade === 5 && hero instanceof SkeletalHero) hero.enableTianming()
+      if (hero instanceof SkeletalHero) {
+        // 천명(5등급) 무장: 무장마다의 의상 · 망토 · 장식 · 기운 색 · 이름 깃발
+        if (look.tianming) hero.enableTianming(look.tianming)
+        if (look.skin) void loadSkin(look.skin).then(texture => hero.setSkin(texture)).catch(() => {})
+      }
     }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
     const troop = troopModelFor(unit.general.role)
     void loadModel(troop).then(gltf => {
