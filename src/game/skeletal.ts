@@ -84,6 +84,8 @@ export class SkeletalHero {
   private once: { action: THREE.AnimationAction; age: number; duration: number } | null = null
   private death: THREE.AnimationAction | null = null
   private gait = 0
+  private scene: THREE.Object3D | null = null
+  private tianming: TianmingAura | null = null
 
   constructor(gltf: GLTF, weapon?: SignatureWeapon) {
     const info = rigInfo(gltf)
@@ -102,6 +104,7 @@ export class SkeletalHero {
       if (material.isMeshStandardMaterial) this.materials.push(material)
     })
     this.root.add(scene)
+    this.scene = scene
     // 손에 무기: 고유 무기가 있으면 원래 쥔 무기를 접어 숨기고 그 자리에 쥐여 준다
     const weaponBone = scene.getObjectByName('Weapon_R')
     const hand = scene.getObjectByName('RightHand')
@@ -214,22 +217,169 @@ export class SkeletalHero {
       this.horse.gallop.timeScale = 0.85 + 0.3 * g
     }
     this.mixer.update(delta)
+    this.tianming?.update(delta, !!this.death)
+  }
+
+  /** 천명(5등급) 무장: 발밑 금빛 인장 · 피어오르는 불티 · 등의 천명 깃발 · 몸의 은은한 금빛 */
+  enableTianming(): void {
+    if (this.tianming || !this.scene) return
+    this.tianming = new TianmingAura(this.root, this.scene.getObjectByName('Spine2') ?? this.scene, this.info.mounted)
   }
 
   /** 피격 번쩍임(따뜻한 흰빛) + 스킬 기운(무장 색) */
   setFlash(amount: number, glow = 0, glowColor?: THREE.Color): void {
-    const r = amount * 0.22 + (glowColor ? glowColor.r * glow * 0.16 : 0)
-    const g = amount * 0.12 + (glowColor ? glowColor.g * glow * 0.16 : 0)
-    const b = amount * 0.05 + (glowColor ? glowColor.b * glow * 0.16 : 0)
+    const gold = this.tianming ? this.tianming.glow : 0
+    const r = amount * 0.22 + (glowColor ? glowColor.r * glow * 0.16 : 0) + gold * 0.06
+    const g = amount * 0.12 + (glowColor ? glowColor.g * glow * 0.16 : 0) + gold * 0.04
+    const b = amount * 0.05 + (glowColor ? glowColor.b * glow * 0.16 : 0) + gold * 0.008
     for (const material of this.materials) material.emissive.setRGB(r, g, b)
   }
 
   /** 쓰러짐: 투명하게 사라진다(0 = 보임, 1 = 사라짐) */
   setFade(amount: number): void {
+    this.tianming?.setFade(amount)
     for (const material of this.materials) {
       const fading = amount > 0
       if (material.transparent !== fading) { material.transparent = fading; material.needsUpdate = true }
       material.opacity = 1 - amount
+    }
+  }
+}
+
+// ── 천명 무장의 특색 ─────────────────────────────────────────────
+const GOLD = 0xffc65a
+
+function canvasTexture(w: number, h: number, draw: (c: CanvasRenderingContext2D) => void): THREE.Texture {
+  const canvas = document.createElement('canvas')
+  canvas.width = w; canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (ctx) draw(ctx)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
+
+/** 발밑 인장(천천히 도는 금빛 원과 눈금) */
+function sealTexture(): THREE.Texture {
+  return canvasTexture(256, 256, c => {
+    c.translate(128, 128)
+    c.strokeStyle = '#ffd98a'
+    c.shadowColor = '#ffb640'; c.shadowBlur = 10
+    for (const [r, w] of [[118, 5], [100, 2], [62, 3]] as const) { c.lineWidth = w; c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.stroke() }
+    c.lineWidth = 3
+    for (let i = 0; i < 24; i += 1) {
+      const a = (i / 24) * Math.PI * 2, long = i % 3 === 0
+      c.beginPath(); c.moveTo(Math.cos(a) * 100, Math.sin(a) * 100); c.lineTo(Math.cos(a) * (long ? 70 : 88), Math.sin(a) * (long ? 70 : 88)); c.stroke()
+    }
+    // 여덟 꼭짓점 별
+    c.lineWidth = 2.5; c.beginPath()
+    for (let i = 0; i <= 16; i += 1) { const a = (i / 16) * Math.PI * 2, r = i % 2 ? 26 : 58; c.lineTo(Math.cos(a) * r, Math.sin(a) * r) }
+    c.stroke()
+  })
+}
+
+/** 등에 꽂는 천명 깃발(붉은 비단 · 금테 · 세로 글씨) */
+function flagTexture(): THREE.Texture {
+  return canvasTexture(128, 256, c => {
+    const g = c.createLinearGradient(0, 0, 128, 0)
+    g.addColorStop(0, '#7a0f12'); g.addColorStop(1, '#a3171a')
+    c.fillStyle = g; c.fillRect(0, 0, 128, 256)
+    c.strokeStyle = '#e8b54a'; c.lineWidth = 8; c.strokeRect(6, 6, 116, 244)
+    c.lineWidth = 2; c.strokeRect(16, 16, 96, 224)
+    c.fillStyle = '#f6d27a'
+    c.font = 'bold 64px "Gowun Batang", "Noto Serif KR", serif'
+    c.textAlign = 'center'; c.textBaseline = 'middle'
+    c.fillText('천', 64, 88); c.fillText('명', 64, 172)
+  })
+}
+
+class TianmingAura {
+  private readonly seal: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
+  private readonly embers: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>
+  private readonly speeds: Float32Array
+  private readonly flag: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>
+  private readonly flagRest: Float32Array
+  private readonly materials: Array<THREE.Material & { opacity: number }>
+  private t = Math.random() * 10
+  private fade = 0
+  /** 몸의 금빛 세기(0~1) */
+  glow = 0
+
+  constructor(root: THREE.Object3D, back: THREE.Object3D, mounted: boolean) {
+    const sealMat = new THREE.MeshBasicMaterial({ map: sealTexture(), color: GOLD, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+    this.seal = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sealMat)
+    this.seal.rotation.x = -Math.PI / 2
+    this.seal.position.y = 0.05
+    this.seal.scale.setScalar(mounted ? 3.0 : 2.1)
+    this.seal.renderOrder = 2
+    root.add(this.seal)
+    // 불티: 원기둥 둘레에서 위로 피어오르며 사라진다
+    const n = 36, pos = new Float32Array(n * 3)
+    this.speeds = new Float32Array(n)
+    const radius = mounted ? 1.2 : 0.75
+    for (let i = 0; i < n; i += 1) {
+      const a = Math.random() * Math.PI * 2, r = radius * (0.5 + Math.random() * 0.6)
+      pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = Math.random() * 2.6; pos[i * 3 + 2] = Math.sin(a) * r
+      this.speeds[i] = 0.35 + Math.random() * 0.5
+    }
+    const emberGeo = new THREE.BufferGeometry()
+    emberGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    const emberMat = new THREE.PointsMaterial({ color: GOLD, size: 0.07, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
+    this.embers = new THREE.Points(emberGeo, emberMat)
+    this.embers.frustumCulled = false
+    root.add(this.embers)
+    // 등 깃발: 가슴 뼈에 붙어 몸과 함께 움직이고 바람에 나부낀다
+    const holder = new THREE.Group()
+    holder.position.set(0.1, 0.18, -0.2)
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 1.5, 6), new THREE.MeshStandardMaterial({ color: 0x3a2414, roughness: 0.7 }))
+    pole.position.y = 0.55
+    const finial = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.12, 8), new THREE.MeshStandardMaterial({ color: 0xd9a441, metalness: 0.8, roughness: 0.3 }))
+    finial.position.y = 1.36
+    const flagGeo = new THREE.PlaneGeometry(0.36, 0.72, 8, 6)
+    flagGeo.translate(0.18, 0.86, 0)
+    flagGeo.rotateY(Math.PI / 2) // 폭이 등 뒤(-Z)로 펼쳐진다
+    const flagMat = new THREE.MeshStandardMaterial({ map: flagTexture(), side: THREE.DoubleSide, roughness: 0.85, emissive: 0x2a0806 })
+    this.flag = new THREE.Mesh(flagGeo, flagMat)
+    this.flag.castShadow = true
+    this.flagRest = (flagGeo.getAttribute('position').array as Float32Array).slice()
+    holder.add(pole, finial, this.flag)
+    back.add(holder)
+    this.materials = [sealMat, emberMat, flagMat, pole.material as THREE.MeshStandardMaterial, finial.material as THREE.MeshStandardMaterial]
+  }
+
+  update(delta: number, dead: boolean): void {
+    this.t += delta
+    const t = this.t
+    this.glow = dead ? 0 : 0.55 + 0.45 * Math.sin(t * 2.2)
+    this.seal.rotation.z = t * 0.35
+    this.seal.material.opacity = (0.6 + 0.25 * Math.sin(t * 2.2)) * (1 - this.fade) * (dead ? 0.3 : 1)
+    const pos = this.embers.geometry.getAttribute('position') as THREE.BufferAttribute
+    const arr = pos.array as Float32Array
+    for (let i = 0; i < this.speeds.length; i += 1) {
+      arr[i * 3 + 1] += this.speeds[i] * delta
+      if (arr[i * 3 + 1] > 2.7) arr[i * 3 + 1] = 0.05
+    }
+    pos.needsUpdate = true
+    this.embers.material.opacity = 0.85 * (1 - this.fade) * (dead ? 0 : 1)
+    // 깃발: 깃대에서 멀수록 크게 나부낀다
+    const fp = this.flag.geometry.getAttribute('position') as THREE.BufferAttribute
+    const f = fp.array as Float32Array, rest = this.flagRest
+    for (let i = 0; i < f.length; i += 3) {
+      const u = -rest[i + 2] // 깃대로부터의 거리(0 ~ 0.36)
+      const wave = Math.sin(u * 14 - t * 6 + rest[i + 1] * 3) * 0.06 * (u / 0.36)
+      f[i] = rest[i] + wave
+      f[i + 1] = rest[i + 1] - u * u * 0.25
+    }
+    fp.needsUpdate = true
+    this.flag.geometry.computeVertexNormals()
+  }
+
+  setFade(amount: number): void {
+    this.fade = amount
+    for (const m of this.materials) {
+      if (m === this.seal.material || m === this.embers.material) continue
+      if (m.transparent !== amount > 0) { m.transparent = amount > 0; m.needsUpdate = true }
+      m.opacity = 1 - amount
     }
   }
 }

@@ -500,6 +500,8 @@ export class Arena {
       unit.actor.add(hero.root)
       unit.rig.root.visible = false
       unit.hero = hero
+      // 천명(5등급) 무장: 선두에서 천명만의 금빛 인장 · 불티 · 깃발을 두른다
+      if (unit.general.grade === 5 && hero instanceof SkeletalHero) hero.enableTianming()
     }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
     const troop = troopModelFor(unit.general.role)
     void loadModel(troop).then(gltf => {
