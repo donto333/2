@@ -190,6 +190,9 @@ interface BattleUnit {
   lean: { x: number; z: number }
   /** 히트스톱 동안 맞은 쪽이 떨리는 남은 시간(실제 초) */
   shake: number
+  /** 돌진 · 밀림처럼 무장 몸(actor)이 제자리에서 앞뒤로 움직일 때의 걸음 가중치(말 다리를 움직인다) */
+  dashGait: number
+  prevPz: number
   /** 동작이 바뀌는 순간의 자세 차이를 부드럽게 지우는 관성 블렌딩 */
   blend: PoseBlend
   /** 쓰러져 땅에 닿을 때 흙먼지를 이미 냈는가 */
@@ -968,10 +971,10 @@ export class Arena {
     }
   }
 
-  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'blend' | 'fallDust' | 'aim' | 'aimTo' | 'aimHold'> {
+  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'dashGait' | 'prevPz' | 'blend' | 'fallDust' | 'aim' | 'aimTo' | 'aimHold'> {
     return {
       actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0, strikeAge: -1,
-      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, fallDust: false, aim: 0, aimTo: 0, aimHold: 0,
+      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, dashGait: 0, prevPz: 0, fallDust: false, aim: 0, aimTo: 0, aimHold: 0,
       blend: { off: [0, 0, 0, 0, 0], vel: [0, 0, 0, 0, 0], prev: [0, 0, 0, 0, 1], prevVel: [0, 0, 0, 0, 0], motion: null },
     }
   }
@@ -1313,7 +1316,7 @@ export class Arena {
     const actionDelta = this.paused ? 0 : delta * this.speed
     if (unit.strikeAge >= 0) { unit.strikeAge += actionDelta; if (unit.strikeAge > 2.2) unit.strikeAge = -1 }
     const hitAmount = Math.max(0, unit.hit.x)
-    unit.squadCtl.update(elapsed + unit.motionPhase, unit.gait, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, hitAmount, unit.troops / Math.max(1, unit.maxTroops), unit.strikeAge)
+    unit.squadCtl.update(elapsed + unit.motionPhase, Math.max(unit.gait, unit.dashGait), unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, hitAmount, unit.troops / Math.max(1, unit.maxTroops), unit.strikeAge)
     // 몸 전체 동작: 공격 돌진 · 스킬 기 모으기/돌격 · 피격 젖힘
     if (unit.motion) {
       unit.motion.t += actionDelta
@@ -1336,6 +1339,10 @@ export class Arena {
       blend.prev[i] = shown
     }
     const [pz, py, ptilt, ptwist, pscale] = blend.prev
+    // 공격 돌진 · 스킬 돌격 · 피격 밀림으로 몸이 제자리에서 움직일 때도 말이 실제로 달리듯 다리를 움직인다
+    const dashSpeed = dt > 0 ? Math.abs(pz - unit.prevPz) / dt : 0
+    unit.prevPz = pz
+    unit.dashGait = damp(unit.dashGait, unit.troops > 0 ? clamp01((dashSpeed - 0.15) / 1.6) : 0, dashSpeed > 0.15 ? 0.04 : 0.14, dt)
     // 히트스톱 동안에는 그 자세로 잠깐 멈출 뿐 좌우로 떨지 않는다(무게감 있는 말 탄 무장에 떨림은 어색하다)
     unit.shake = Math.max(0, unit.shake - this.frameDelta)
     unit.aimHold = Math.max(0, unit.aimHold - dt)
@@ -1351,7 +1358,7 @@ export class Arena {
       if (unit.dying <= 0) { unit.group.visible = false; unit.squad.position.y = 0 }
     }
     if (unit.hero) {
-      unit.hero.update(actionDelta, unit.gait, unit.mounted)
+      unit.hero.update(actionDelta, Math.max(unit.gait, unit.dashGait), unit.mounted)
       unit.hero.setFlash(unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0, unit.glow, unit.glowColor)
     } else animateGeneral(unit.rig, elapsed + unit.motionPhase, moving, unit.attackMotion > 0 ? 1 - unit.attackMotion : 0, unit.skillPulse, unit.hitFlash > 0 ? unit.hitFlash / 0.18 : 0)
     unit.motionPulse -= delta
