@@ -100,7 +100,9 @@ class ThemePlayer {
     const ctx = this.e.ctx!
     while (this.next < ctx.currentTime + ahead) {
       if (this.s > 0 && this.s % (16 * 16) === 0) this.refreshMotifs()
+      this.e.musicDrum = true
       try { this.def.step(this, this.s, this.next) } catch { /* 한 음이 실패해도 곡은 이어진다 */ }
+      this.e.musicDrum = false
       this.next += this.stepDur
       this.s += 1
     }
@@ -602,6 +604,8 @@ export class SoundEngine {
     this.play_(buffer, out, t, vol, { rate, pan: opts.pan, send: opts.send })
   }
   drum(out: AudioNode, kind: 'taiko' | 'tom' | 'rim' | 'cymbal', t: number, vol: number, pan = 0, rate = 1, send?: AudioNode): void {
+    // 큰북은 효과음에서 쓰지 않는다(배경음으로 쓰는 만든 곡에서만)
+    if (kind === 'taiko' && !this.musicDrum) return
     this.play_(this.sample(kind), out, t, vol, { rate: rate * (0.98 + Math.random() * 0.04), pan, send })
   }
   gong(out: AudioNode, t: number, vol: number, rate = 1, send?: AudioNode): void { this.play_(this.sample('gong'), out, t, vol, { rate, send }) }
@@ -754,6 +758,9 @@ export class SoundEngine {
     n.start(t, Math.random() * 1.5); n.stop(t + dur + 0.02)
     n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
   }
+
+  /** 만든 배경음(ThemePlayer)이 북을 칠 때만 true — 큰북은 배경음에서만 울린다 */
+  musicDrum = false
 
   // ── 파일 효과음(짧은 녹음) ──
   private files = new Map<string, AudioBuffer | null | 'loading'>()
@@ -1168,7 +1175,6 @@ export class SoundEngine {
         if (!this.ctx || this.ctx.state !== 'running' || !this.ambienceBus) return
         const t = this.ctx.currentTime + Math.random() * 0.5, pan = (Math.random() - 0.5) * 1.6, roll = Math.random()
         if (roll < 0.45) this.play_(this.sample('metal'), this.ambienceBus, t, 0.035, { rate: 0.7 + Math.random() * 0.6, pan, filter: 1400 })
-        else if (roll < 0.75) this.play_(this.sample('taiko'), this.ambienceBus, t, 0.05, { rate: 0.8, pan, filter: 500 })
         else if (roll < 0.85) this.whoosh(this.ambienceBus, t, 0.5, 0.02, 400, 1100, pan)
       }, 900)
     } else {
