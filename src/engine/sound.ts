@@ -916,16 +916,26 @@ export class SoundEngine {
         if (opts.big) this.boom(out, t, 0.24, 90, 40, 0.4, pan)
         break
       }
-      case 'magic': { // 화염구가 터지는 "펑": 묵직한 저음 + 짧고 둥근 폭발음(날카로운 잡음 없이)
-        const ctx = this.ctx!
-        this.boom(out, t, 0.55 * big, 110 * rr, 36, 0.55, pan, send)
+      case 'magic': { // 화염구가 터지는 "펑": 땅을 울리는 깊은 저음 + 둥근 폭발 + 큰북 + 길게 퍼지는 울림(웅장하게)
+        const ctx = this.ctx!, hall = this.hallSend
+        this.boom(out, t, 0.75 * big, 95 * rr, 26, 1.4, pan, hall)
+        this.boom(out, t + 0.012, 0.35 * big, 180 * rr, 55, 0.5, -pan * 0.5)
+        this.drum(out, 'taiko', t, 0.6 * big, pan, 0.7 * rr, hall)
         const n = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), g = ctx.createGain()
         n.buffer = this.noise
-        lp.type = 'lowpass'; lp.frequency.setValueAtTime(1800, t); lp.frequency.exponentialRampToValueAtTime(180, t + 0.35)
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.55 * big, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4)
-        n.connect(lp).connect(g); this.route(out, g, pan, send)
-        n.start(t, Math.random() * 1.5); n.stop(t + 0.42)
+        lp.type = 'lowpass'; lp.frequency.setValueAtTime(2200, t); lp.frequency.exponentialRampToValueAtTime(160, t + 0.5)
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.65 * big, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55)
+        n.connect(lp).connect(g); this.route(out, g, pan, hall)
+        n.start(t, Math.random() * 1.5); n.stop(t + 0.58)
         n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
+        // 폭발 뒤 낮게 굴러가는 여운(우르릉)
+        const tail = ctx.createBufferSource(), tlp = ctx.createBiquadFilter(), tg = ctx.createGain()
+        tail.buffer = this.noise; tail.loop = true
+        tlp.type = 'lowpass'; tlp.frequency.value = 140; tlp.Q.value = 0.8
+        tg.gain.setValueAtTime(0.0001, t); tg.gain.exponentialRampToValueAtTime(0.5 * big, t + 0.08); tg.gain.exponentialRampToValueAtTime(0.0001, t + 1.8)
+        tail.connect(tlp).connect(tg); this.route(out, tg, 0, hall)
+        tail.start(t, Math.random()); tail.stop(t + 1.85)
+        tail.onended = () => { try { tg.disconnect() } catch { /* 끝 */ } }
         break
       }
     }
