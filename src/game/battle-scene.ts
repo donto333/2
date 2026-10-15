@@ -289,8 +289,9 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
     walkFrames = walk
     walkPeriod = period
     const cav = kind === 'cavalry'
-    const [c2, r2] = quality === 'low' ? (cav ? [2, 1] : [3, 2]) : (cav ? [2, 2] : [4, 3])
-    base = cav ? layout(c2, r2, 1.25, 3.0, 0.9, 1.4) : layout(c2, r2, 0.82, 0.86, 0.75, 0.75)
+    // 무장 뒤에 대열을 지어 선다(앞줄은 무장 바로 뒤, 가운데 열도 무장 뒤를 받친다)
+    const [c2, r2] = quality === 'low' ? (cav ? [3, 1] : [4, 2]) : (cav ? [3, 2] : [5, 3])
+    base = cav ? layout(c2, r2, 1.3, 2.6, 0.25, 2.3) : layout(c2, r2, 0.8, 0.95, 0.2, 1.45)
     count = base.length
     yaw = Math.PI // 실사 모델은 +Z를 보도록 맞춰 두었다 → 부대 앞(-Z)으로 돌린다
     bobScale = 1.6

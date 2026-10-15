@@ -322,6 +322,8 @@ export function bakeSquadModel(gltf: GLTF): SquadModel | null {
   geometry.morphTargetsRelative = true
   geometry.computeBoundingSphere()
   const materials = Array.isArray(body.material) ? body.material : [body.material]
+  // 재질 목록으로 그리려면 그룹이 있어야 한다(없으면 아무것도 그려지지 않는다)
+  if (!geometry.groups.length) geometry.addGroup(0, geometry.index ? geometry.index.count : count, 0)
   const model: SquadModel = { geometry, materials, duration: attack.duration, times, walkFrames: WALK_FRAMES, walkPeriod }
   squadCache.set(gltf, model)
   return model
