@@ -288,6 +288,7 @@ export class SoundEngine {
     this.unlocked = true
     this.applyVolumes()
     this.setTheme(this.wanted)
+    this.fileBuffer('click') // 버튼 효과음 미리 받기
     window.setInterval(() => this.tick(), 50)
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return
@@ -751,6 +752,23 @@ export class SoundEngine {
     n.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
   }
 
+  // ── 파일 효과음(짧은 녹음) ──
+  private files = new Map<string, AudioBuffer | null | 'loading'>()
+  /** 짧은 효과음 파일을 한 번만 받아 풀어 둔다(준비되기 전에는 null) */
+  private fileBuffer(name: 'click'): AudioBuffer | null {
+    const have = this.files.get(name)
+    if (have && have !== 'loading') return have
+    if (have === undefined && this.ctx) {
+      this.files.set(name, 'loading')
+      const ctx = this.ctx
+      fetch(`/assets/sfx/${name}.mp3`).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer() })
+        .then(data => new Promise<AudioBuffer>((resolve, reject) => { void ctx.decodeAudioData(data, resolve, reject) }))
+        .then(buffer => { this.files.set(name, buffer) })
+        .catch(() => { this.files.set(name, null) })
+    }
+    return null
+  }
+
   // ── 효과음 ──
   private allow(name: string, gap?: number, light = false): boolean {
     if (!this.ctx || !this.unlocked || this.ctx.state !== 'running') return false
@@ -768,8 +786,22 @@ export class SoundEngine {
     const pan = opts.pan ?? 0
     const run = (notes: number[], gap: number, vol: number, bright = 0.7, at = t) => notes.forEach((midi, i) => this.pluck(out, midi, at + i * gap, vol, { bright, dur: 1.4, pan: -0.3 + i * 0.6 / Math.max(1, notes.length - 1), send }))
     switch (name) {
-      case 'click': this.drum(out, 'rim', t, 0.22, 0, 1.3); break
-      case 'tab': this.pluck(out, 79, t, 0.2, { bright: 0.6, dur: 0.8, send }); this.drum(out, 'rim', t, 0.1, 0, 1.5); break
+      // 메뉴 · 버튼 누름: 녹음된 버튼 효과음(아직 못 불러왔으면 예전 소리)
+      case 'click': case 'tab': {
+        const clip = this.fileBuffer('click')
+        if (clip) this.play_(clip, out, t, 0.55)
+        else if (this.files.get('click') === 'loading') {
+          // 처음 누를 때 아직 받는 중이면 받는 대로(0.4초 안이면) 튼다
+          const asked = performance.now()
+          const wait = window.setInterval(() => {
+            const ready = this.files.get('click')
+            if (ready && ready !== 'loading' && this.ctx) { window.clearInterval(wait); if (performance.now() - asked < 400) this.play_(ready, this.sfxVol, this.ctx.currentTime, 0.55) }
+            else if (ready === null || performance.now() - asked > 400) window.clearInterval(wait)
+          }, 20)
+        } else if (name === 'click') this.drum(out, 'rim', t, 0.22, 0, 1.3)
+        else { this.pluck(out, 79, t, 0.2, { bright: 0.6, dur: 0.8, send }); this.drum(out, 'rim', t, 0.1, 0, 1.5) }
+        break
+      }
       case 'open': run([74, 79], 0.05, 0.2); break
       case 'close': run([79, 74], 0.05, 0.18); break
       case 'error': this.drum(out, 'tom', t, 0.38, 0, 0.75); this.drum(out, 'tom', t + 0.09, 0.32, 0, 0.7); this.metal(out, t, 0.06, 0.5); break
