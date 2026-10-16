@@ -950,8 +950,9 @@ export function createInitialState(): StrategyState {
   return state
 }
 
-export function mergeFactionTerritories(state: StrategyState, snapshots: FactionTerritorySnapshot[]): number {
-  const byCityId = new Map(snapshots.map(snapshot => [snapshot.cityId, snapshot]))
+/** skip: 서버 값으로 덮지 않을 도시(운영자 계정이 직접 공격해 본 도시 — 서버에 반영되지 않으므로 이 기기 진행을 유지) */
+export function mergeFactionTerritories(state: StrategyState, snapshots: FactionTerritorySnapshot[], skip: ReadonlySet<string> = new Set()): number {
+  const byCityId = new Map(snapshots.filter(snapshot => !skip.has(snapshot.cityId)).map(snapshot => [snapshot.cityId, snapshot]))
   let merged = 0
   state.cities.forEach(city => {
     const snapshot = byCityId.get(city.id)

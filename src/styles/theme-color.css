@@ -2026,3 +2026,4 @@ html body .game-data-row .admin-account-identity{position:static;background:none
 .game-data-group{align-content:start;align-items:start}
 .game-data-head .admin-account-identity b{white-space:nowrap}
 .updates-layout--single{grid-template-columns:1fr}
+.final-war-wait{margin:8px 0 0;color:#e8b98a;font-size:12px;line-height:1.5}

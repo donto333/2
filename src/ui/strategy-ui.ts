@@ -1573,9 +1573,11 @@ export class StrategyUI {
     const defeated = Math.min(garrisonCount, city.defendersDefeated ?? 0)
     const remaining = Math.max(0, garrisonCount - defeated)
     const finalReady = city.defense <= 0 && remaining === 0
+    // 버튼이 잠긴 까닭을 바로 보여 준다(방어도 · 남은 수비병)
+    const finalWait = [city.defense > 0 ? `성벽 방어도 ${formatNumber(city.defense)} 남음(0이 되어야 함)` : '', remaining > 0 ? `수비병 ${remaining}부대 남음` : ''].filter(Boolean).join(' · ') || '준비 완료'
     const honorCost = FACTION_WAR_HONOR_COST[city.level] ?? FACTION_WAR_HONOR_COST[5]
     const goldReward = FACTION_WAR_GOLD_REWARD[city.level] ?? FACTION_WAR_GOLD_REWARD[5]
-    const actions = eligibility.allowed ? `<div class="territory-actions"><button class="action-button action-button--primary conquest-button" data-action="conquer" data-city="${city.id}">공성 출정 <span>${costText}</span></button><button class="action-button action-button--outline conquest-button" data-action="faction-battle" data-city="${city.id}" ${finalReady ? '' : 'disabled'}>최종 세력전 <span>옥패 ${formatNumber(honorCost)} · 금화 +${goldReward}</span></button></div>` : `<div class="frontier-lock"><strong>진군 경로 차단</strong><span>${eligibility.reason}</span><small>국경 전선: ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '연결된 아군 도시 없음'}</small></div>`
+    const actions = eligibility.allowed ? `<div class="territory-actions"><button class="action-button action-button--primary conquest-button" data-action="conquer" data-city="${city.id}">공성 출정 <span>${costText}</span></button><button class="action-button action-button--outline conquest-button" data-action="faction-battle" data-city="${city.id}" ${finalReady ? '' : 'disabled'} title="${escapeHtml(finalWait)}">최종 세력전 <span>옥패 ${formatNumber(honorCost)} · 금화 +${goldReward}</span></button></div>${finalReady ? '' : `<p class="final-war-wait">최종 세력전 조건: ${escapeHtml(finalWait)}</p>`}` : `<div class="frontier-lock"><strong>진군 경로 차단</strong><span>${eligibility.reason}</span><small>국경 전선: ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '연결된 아군 도시 없음'}</small></div>`
     return `<div class="conquest-card"><div class="conquest-card-head"><div><span class="eyebrow">진영전 · ${city.owner}</span><h3>성벽 방어도 ${formatNumber(city.defense)} · 점령 진전 ${siege}%</h3></div><strong>${formatNumber(power)} 전투력</strong></div><div class="conquest-progress"><i style="width:${siege}%"></i></div><p>수비병 ${defeated}/${garrisonCount}부대 격파 · 덱 전투력에 따라 성벽 방어도가 감소합니다. 방어도 0·수비병 전멸 후 최종 세력전을 실행하십시오.</p>${actions}</div>`
   }
   private defenseCard(city: City, state: StrategyState): string {
@@ -2105,6 +2107,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.16', '최종 세력전 버튼', '최종 세력전 버튼이 잠겨 있으면 그 아래에 남은 조건(성벽 방어도 · 남은 수비병)을 보여 줍니다. 운영자 계정은 영토전에 반영되지 않는 대신, 직접 공격한 도시의 공성 진행을 이 기기에서 이어 갈 수 있어 최종 세력전까지 시험할 수 있습니다(연습 모드).', '완료', 'jade'],
       ['2026.10.16', '서버 보상 금화가 사라지던 문제', '매일 금화 · 시나리오 첫 클리어 금화 · 세력전 금화 · 대련 신화 조각 · 레이드와 낙양전 보상을 받는 순간 게임 저장이 겹치면 받은 보상이 사라질 수 있던 문제를 고쳤습니다. 이제 보상 지급과 저장이 차례대로 처리됩니다. 정식 출시 전 매일 금화 100개는 정식 출시 스위치를 켜면 자동으로 멈춥니다.', '완료', 'jade'],
       ['2026.10.16', '배경음 정리', '화면마다 곡이 따로 흐릅니다. 본영은 ‘강의 흐름’, 모집 메뉴와 천하영토는 각각 전용 곡, 시나리오 · 대련 전투와 주간 레이드도 각자의 곡을 씁니다. 전투에서 이기면 전투 곡이 꺼지고 원래 화면의 곡으로 돌아갑니다(공성 뒤에는 천하영토 곡).', '완료', 'jade'],
       ['2026.10.16', '효과음 정리', '버튼 · 스킬 효과음을 새 녹음으로 바꾸고, 승리 때 병사 함성, 전투 처음 3초 말발굽, 전투 초반 말 울음 한 번을 넣었습니다. 맞을 때 나던 소리와 큰북 · 징 · 뿔나팔 · 합성 함성은 뺐습니다. 무장 모집은 대박 획득 효과음만 들리고(그동안 다른 소리는 꺼짐), 뽑기 연출의 기 모으기 · 균열 · 징 · 팡파르 소리는 없앴습니다.', '완료', 'jade'],

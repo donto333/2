@@ -622,7 +622,7 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
       try {
         const retryPayload = { ...battle, damage: Math.max(0, Math.min(1_000_000, Math.trunc(battle.damage))) }
         const snapshots = await ManusAuth.mutate('territory.recordBattle', retryPayload) as FactionTerritorySnapshot[]
-        mergeFactionTerritories(state, snapshots)
+        mergeTerritories(snapshots)
         retried += 1
       } catch {
         remaining.push(battle)
@@ -630,7 +630,7 @@ async function refreshFactionTerritories(notify = false): Promise<void> {
     }
     writePendingTerritoryBattles(remaining)
     const snapshots = await ManusAuth.query('territory.list') as FactionTerritorySnapshot[]
-    const merged = mergeFactionTerritories(state, snapshots)
+    const merged = mergeTerritories(snapshots)
     await claimLuoyangReward()
     // 재기록된 세력전 점령이 있으면 서버가 적립한 금화를 받아 온다
     if (retried) await serverGrant('faction', undefined, researchMods(state).factionGold)
@@ -786,7 +786,7 @@ async function syncFactionGarrison(cityId: string, garrison: { id: string; power
   if (authView.status !== 'authenticated') return
   try {
     const snapshots = await ManusAuth.mutate('territory.deployGarrison', { cityId, garrisonId: garrison.id.slice(0, 96), power: Math.max(0, Math.min(2_000_000, Math.round(garrison.power))), averageLevel: Math.max(1, Math.min(999, Math.round(garrison.averageLevel))), label: garrison.label.slice(0, 40) }) as FactionTerritorySnapshot[]
-    mergeFactionTerritories(state, snapshots)
+    mergeTerritories(snapshots)
     persistLocalGame()
     ui.render(state)
   } catch (error) {
@@ -798,7 +798,7 @@ async function syncFactionDefense(cityId: string): Promise<void> {
   if (authView.status !== 'authenticated') return
   try {
     const response = await ManusAuth.mutate('territory.recordDefense', { cityId }) as { outcome: { attackerWon: boolean; damage: number } | null; territories: FactionTerritorySnapshot[] }
-    mergeFactionTerritories(state, response.territories)
+    mergeTerritories(response.territories)
     persistLocalGame()
     ui.render(state)
     if (response.outcome) {
@@ -809,12 +809,29 @@ async function syncFactionDefense(cityId: string): Promise<void> {
   }
 }
 
+/**
+ * 운영자 계정은 영토전에 영향을 주지 않는다(서버가 기록하지 않음). 대신 이 기기에서는 공성 진행을 이어 갈 수 있게
+ * 운영자가 공격한 도시는 서버 값으로 덮지 않는다(연습 모드).
+ */
+const OPERATOR_SANDBOX_KEY = 'cheonharo.operatorSandboxCities'
+function operatorSandbox(): Set<string> {
+  if (!isOperatorAccount()) return new Set()
+  try { const list = JSON.parse(window.localStorage.getItem(OPERATOR_SANDBOX_KEY) ?? '[]'); return new Set(Array.isArray(list) ? list.filter((id: unknown): id is string => typeof id === 'string') : []) } catch { return new Set() }
+}
+function markOperatorSandbox(cityId: string): void {
+  const set = operatorSandbox(); set.add(cityId)
+  try { window.localStorage.setItem(OPERATOR_SANDBOX_KEY, JSON.stringify([...set])) } catch { /* 이번 접속에만 */ }
+}
+const mergeTerritories = (snapshots: FactionTerritorySnapshot[]) => mergeFactionTerritories(state, snapshots, operatorSandbox())
+
 async function recordFactionTerritoryBattle(cityId: string, outcome: { damage: number; won: boolean; captured: boolean }): Promise<void> {
   if (authView.status !== 'authenticated') return
+  // 운영자: 서버에 기록하지 않고(영향 없음) 이 기기 진행만 유지한다
+  if (isOperatorAccount()) { markOperatorSandbox(cityId); persistLocalGame(); return }
   const payload = { cityId, damage: Math.max(0, Math.min(1_000_000, Math.trunc(outcome.damage))), won: outcome.won, captured: outcome.captured }
   try {
     const snapshots = await ManusAuth.mutate('territory.recordBattle', payload) as FactionTerritorySnapshot[]
-    mergeFactionTerritories(state, snapshots)
+    mergeTerritories(snapshots)
     persistLocalGame()
     ui.setTerritorySync(`서버 원장 · ${new Intl.DateTimeFormat(locale(), { hour: '2-digit', minute: '2-digit' }).format(new Date())}`)
     ui.render(state)
