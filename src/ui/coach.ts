@@ -1,3 +1,4 @@
+import { BATTLE_EFFECTS, type BattleEffectId } from '../game/battle-effects'
 // 따라하기 안내(코치): 화면의 한 곳을 밝게 비추고 말풍선으로 설명한다.
 // 메뉴 짚어 주기, 첫 전투 따라하기, 전투 규칙 도움말, 처음 접속 소개가 모두 여기 있다.
 import type { BattleSnapshot } from '../game/arena'
@@ -340,6 +341,16 @@ export class BattleCoach {
 // ───────────────────────── 전투 규칙 도움말 ─────────────────────────
 
 const svg = (body: string) => `<svg viewBox="0 0 320 150" class="guide-art" aria-hidden="true">${body}</svg>`
+/** 버프 · 디버프 목록 카드(전투 효과 카탈로그에서 그대로 만든다 — 효과가 바뀌면 설명도 함께 바뀐다) */
+const effectList = (ids: BattleEffectId[]) => `<ul class="guide-effects">${ids.map(id => {
+  const e = BATTLE_EFFECTS[id]
+  return `<li class="is-${e.kind}"><span class="guide-effects__icon">${e.icon}</span><div><b>${esc(e.name)}</b><small>${e.duration}초</small><p>${esc(e.description)}</p></div></li>`
+}).join('')}</ul>`
+const SELF_COST: BattleEffectId[] = ['heavy-step', 'hangover']
+const BUFF_IDS = (Object.keys(BATTLE_EFFECTS) as BattleEffectId[]).filter(id => BATTLE_EFFECTS[id].kind === 'buff' && !id.startsWith('e-') && !SELF_COST.includes(id))
+const DEBUFF_IDS = (Object.keys(BATTLE_EFFECTS) as BattleEffectId[]).filter(id => BATTLE_EFFECTS[id].kind === 'debuff' && !id.startsWith('p-'))
+const AGAINST_IDS: BattleEffectId[] = [...(Object.keys(BATTLE_EFFECTS) as BattleEffectId[]).filter(id => id.startsWith('p-') || id.startsWith('e-')), ...SELF_COST]
+
 const GUIDE_CARDS: Array<{ title: string; body: string; art: string }> = [
   {
     title: '적 사기를 꺾으십시오',
@@ -384,6 +395,21 @@ const GUIDE_CARDS: Array<{ title: string; body: string; art: string }> = [
       <circle cx="120" cy="112" r="24" class="ga-box"/><text x="120" y="117" text-anchor="middle" class="ga-s">궁병</text>
       <path d="M96 52 L108 88" class="ga-arrow"/><path d="M96 112 L64 112" class="ga-arrow"/><path d="M52 90 L66 54" class="ga-arrow"/></g>
       <text x="236" y="62" text-anchor="middle" class="ga-star">★★★</text><text x="236" y="96" text-anchor="middle" class="ga-t">승리 · 병력 · 막기</text>`),
+  },
+  {
+    title: '버프 · 아군 강화 효과',
+    body: '아군 무장의 스킬이 거는 강화입니다. 걸려 있는 효과는 전투 기록 칸 아래에 아이콘과 남은 시간으로 보이고, 시간이 지나면 사라집니다. 같은 효과가 다시 걸리면 남은 시간이 다시 채워집니다.',
+    art: effectList(BUFF_IDS),
+  },
+  {
+    title: '디버프 · 적 약화 효과',
+    body: '아군 스킬이 적에게 거는 약화입니다. 화계 · 공포 · 출혈은 매초 적 사기를 깎고, 갑주 균열 · 표적 낙인 · 분노는 적이 받는 피해를 늘립니다. 연환이 걸린 적에게 화계를 쓰면 특히 강합니다.',
+    art: effectList(DEBUFF_IDS),
+  },
+  {
+    title: '아군에게 불리한 효과',
+    body: '적장의 스킬이 아군에게 거는 약화와 적이 스스로 거는 강화, 그리고 일부 강한 스킬의 대가입니다. 철벽 태세 · 경고 막기로 피해를 줄이십시오.',
+    art: effectList(AGAINST_IDS),
   },
 ]
 
