@@ -236,6 +236,8 @@ const SKILL_SLOWMO_ENEMY = 0.18
 const ember = 0xff8066
 type TroopType = 'cavalry' | 'spearmen' | 'archer'
 export type CommanderArchetype = '무장형' | '책사형' | '지원형'
+const dashPose: Pose = { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }
+
 /** 타격 효과 도형(모든 타격이 함께 쓴다 — 타격마다 새로 만들어 GPU에 올리지 않게) */
 let impactGeo: { ring: THREE.RingGeometry; inner: THREE.RingGeometry; flash: THREE.SphereGeometry; shard: THREE.TetrahedronGeometry; shardBig: THREE.TetrahedronGeometry } | null = null
 function impactGeometries(): NonNullable<typeof impactGeo> {
@@ -1420,9 +1422,11 @@ export class Arena {
     }
     const [pz, py, ptilt, ptwist, pscale] = blend.prev
     // 공격 돌진 · 스킬 돌격 · 피격 밀림으로 몸이 제자리에서 움직일 때도 말이 실제로 달리듯 다리를 움직인다
-    const dashSpeed = dt > 0 ? Math.abs(pz - unit.prevPz) / dt : 0
-    unit.prevPz = pz
-    unit.dashGait = damp(unit.dashGait, unit.troops > 0 ? clamp01((dashSpeed - 0.15) / 1.6) : 0, dashSpeed > 0.15 ? 0.04 : 0.14, dt)
+    // (피격 밀림 · 자세 섞기 떨림은 빼고 동작 자체의 앞뒤 이동만 본다 — 맞을 때마다 다리가 부르르 떨지 않게)
+    const dashZ = unit.motion ? actorPose(unit.motion, 0, dashPose).z : 0
+    const dashSpeed = dt > 0 ? Math.abs(dashZ - unit.prevPz) / dt : 0
+    unit.prevPz = dashZ
+    unit.dashGait = damp(unit.dashGait, unit.troops > 0 ? clamp01((dashSpeed - 0.5) / 1.6) : 0, dashSpeed > 0.5 ? 0.05 : 0.16, dt)
     // 말발굽: 달리는 말의 빠르기를 모아 녹음된 말발굽 소리의 크기 · 빠르기로 쓴다(updateGallop)
     const run = Math.max(unit.gait, unit.dashGait)
     if (unit.mounted && run > 0.15 && unit.troops > 0 && this.battleActive) {

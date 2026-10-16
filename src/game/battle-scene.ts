@@ -230,8 +230,15 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
   let prevVisible = -1
   let fallAt: number[] = []
   const FALL_TIME = 0.9
+  // 걸음 시계: 걷는 빠르기가 바뀌어도 걸음 위상이 튀지 않게 시간을 쌓아 간다
+  // (예전에는 전체 경과 시간 × 빠르기로 위상을 구해, 빠르기가 조금만 흔들려도 다리가 앞뒤로 튀며 부르르 떨었다)
+  let walkClock = 0
+  let lastT = -1
   const update = (t: number, movingIn: boolean | number, attack: number, hit: number, alive: number, strike = -1) => {
     const g = Math.min(1, Math.max(0, Number(movingIn)))
+    const stepDt = lastT < 0 ? 0 : Math.min(0.1, Math.max(0, t - lastT))
+    lastT = t
+    walkClock += stepDt * (0.8 + 0.4 * g)
     const visible = Math.max(0, Math.min(count, Math.ceil(count * alive)))
     if (fallAt.length !== count) { fallAt = new Array(count).fill(-1); prevVisible = visible }
     if (visible < prevVisible) for (let i = visible; i < prevVisible; i += 1) fallAt[i] = t
@@ -253,7 +260,7 @@ export function createSquad(role: General['role'], team: Team, quality: SceneQua
         // 걷기: 병사마다 다른 걸음 위상으로 걷기 자세 두 장을 섞는다(공격 중에는 공격 자세가 우선)
         const wg = walkFrames ? g * Math.max(0, 1 - striking) : 0
         if (wg > 0.001) {
-          const phase = ((t / walkPeriod) * (0.8 + 0.4 * g) + base[i].phase / (Math.PI * 2)) % 1
+          const phase = (walkClock / walkPeriod + base[i].phase / (Math.PI * 2)) % 1
           const f = phase * walkFrames, i0 = Math.floor(f) % walkFrames, i1 = (i0 + 1) % walkFrames, a = f - Math.floor(f)
           influences[strikeCount + i0] += wg * (1 - a)
           influences[strikeCount + i1] += wg * a
