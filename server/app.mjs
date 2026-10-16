@@ -1,7 +1,8 @@
 import express from 'express'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createExpressMiddleware } from '@trpc/server/adapters/express'
-import { registerOAuthRoutes, createContext, webdevRouter, router, publicPlatformConfig, ENV, OAUTH_STATE_COOKIE, ONE_YEAR_MS, sdk } from './webdev-adapter.mjs'
+import { registerOAuthRoutes, createContext, webdevRouter, router, publicPlatformConfig, ENV, OAUTH_STATE_COOKIE, ONE_YEAR_MS, sdk, findUserByName, createGuestUser, getUserByOpenId, setSessionCookie } from './webdev-adapter.mjs'
+import { registerGuestAuthRoutes } from './guest-auth.mjs'
 import { registerDesktopAuthRoutes } from './desktop-auth.mjs'
 import { balanceAccess, isLaunched } from './launch.mjs'
 
@@ -49,6 +50,8 @@ export function createGameApp(gameRouter, { leaderboard } = {}) {
     sessionMaxAgeMs: ONE_YEAR_MS,
   })
   registerOAuthRoutes(app, { afterLogin: desktopAuth.afterLogin })
+  // 게스트 계정: 아이디만 정하면 서버 계정으로 모든 콘텐츠를 쓴다
+  registerGuestAuthRoutes(app, { json: express.json({ limit: '4kb' }), sdk, findUserByName, createGuestUser, getUserByOpenId, setSessionCookie })
   // Browser mutations use Webdev's JSON tRPC transport. Do not enable CORS or
   // accept form/text bodies: cross-origin forms must not create a Checkout or
   // mutate a player's save using the SameSite=None session cookie.

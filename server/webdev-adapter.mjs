@@ -258,6 +258,22 @@ async function updateUserName(openId, name) {
   await db.update(users).set({ name }).where(eq(users.openId, openId));
   return getUserByOpenId(openId);
 }
+/** 같은 이름(대소문자 무시)의 계정이 있는가(게스트 아이디 중복 확인) */
+async function findUserByName(name) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const rows = await db.select({ id: users.id }).from(users).where(sql`LOWER(${users.name}) = ${String(name).toLowerCase()}`).limit(1);
+  return rows[0] ?? null;
+}
+/** 게스트 계정 만들기(Manus 로그인 없이, openId는 guest_로 시작) */
+async function createGuestUser(openId, name) {
+  await upsertUser({ openId, name, email: null, loginMethod: "guest", lastSignedIn: new Date() });
+  return getUserByOpenId(openId);
+}
+/** 세션 쿠키(OAuth 로그인과 같은 설정) */
+function setSessionCookie(req, res, token) {
+  res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(req), maxAge: ONE_YEAR_MS });
+}
 async function listUsers() {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -1497,6 +1513,10 @@ function publicPlatformConfig(env = process.env) {
 }
 export {
   ENV,
+  findUserByName,
+  createGuestUser,
+  getUserByOpenId,
+  setSessionCookie,
   OAUTH_STATE_COOKIE,
   ONE_YEAR_MS,
   sdk,

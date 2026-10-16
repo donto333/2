@@ -293,6 +293,8 @@ export interface StrategyUiCallbacks {
   onDuelStart: (opponentId: string) => void
   onFactionSelect: (faction: Faction) => void
   onGuestLogin: () => void
+  /** 서버 없이 이 기기에만 저장하는 게스트(서버에 연결할 수 없을 때) */
+  onLocalGuestLogin: () => void
   onLogin: () => void
   onLogout: () => void
   onAccountRefresh: () => void
@@ -588,6 +590,32 @@ export class StrategyUI {
   showAccessGate(): void {
     this.renderedState = null
     this.root.innerHTML = this.accessGate()
+  }
+
+  /** 게스트: 처음 들어올 때 아이디(표시 이름)를 정한다. onSubmit이 오류 문구를 돌려주면 그대로 보여 준다 */
+  enterLocalGuest(): void { this.callbacks.onLocalGuestLogin() }
+
+  showGuestSignup(onSubmit: (name: string) => Promise<string | null>, onCancel?: () => void): void {
+    document.querySelector('.guest-signup')?.remove()
+    const layer = document.createElement('div')
+    layer.className = 'guest-signup'
+    layer.innerHTML = `<form class="guest-signup__panel glass-card"><span class="eyebrow">게스트 시작</span><h2>아이디를 정하십시오</h2><p>아이디만 정하면 회원처럼 서버에 저장되고 랭킹 · 영토전 · 대련 · 레이드 · 게시판을 모두 쓸 수 있습니다. 한글 · 영문 · 숫자 · 밑줄(_) 2~12자.</p><label><span>아이디</span><input name="name" maxlength="12" autocomplete="nickname" required placeholder="예: 상산조자룡"></label><small class="guest-signup__error" role="alert"></small><div class="guest-signup__actions">${onCancel ? '<button type="button" class="ghost-button" data-guest-cancel>뒤로</button>' : ''}<button type="submit" class="action-button action-button--primary">시작하기 <span>→</span></button></div><small class="guest-signup__note">이 기기에 게스트 계정 정보가 보관됩니다. 브라우저 데이터를 지우면 이 계정으로 다시 들어올 수 없습니다.</small></form>`
+    document.body.appendChild(layer)
+    const form = layer.querySelector('form')!
+    const input = form.querySelector<HTMLInputElement>('input')!
+    const error = form.querySelector<HTMLElement>('.guest-signup__error')!
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!
+    window.setTimeout(() => input.focus(), 50)
+    layer.querySelector('[data-guest-cancel]')?.addEventListener('click', () => { layer.remove(); onCancel?.() })
+    form.addEventListener('submit', event => {
+      event.preventDefault()
+      submit.disabled = true
+      error.textContent = ''
+      void onSubmit(input.value.trim()).then(message => {
+        if (message) { error.textContent = message; submit.disabled = false; return }
+        layer.remove()
+      })
+    })
   }
 
   showFactionSelection(): void {
@@ -946,7 +974,7 @@ export class StrategyUI {
 
   private accessGate(): string {
     const offline = this.auth.status === 'offline'
-    return `<section class="access-gate"><div class="access-gate__backdrop"></div><div class="access-gate__panel"><div class="access-gate__art" aria-hidden="true"></div><div class="access-gate__seal"><span>✦</span></div><span class="eyebrow">천하 · 패왕의 시대</span><h1>천하: 패왕의 시대</h1><p class="access-gate__lead">무장을 모으고, 진형을 지휘하고,<br>당신의 이름을 전장에 새기십시오.</p><div class="access-gate__divider"><i></i><span>접속 방식 선택</span><i></i></div><div class="access-gate__actions"><button class="access-choice access-choice--member" data-action="login"><strong>회원 로그인</strong><span>계정·전적·랭킹을 안전하게 저장합니다.</span><b>Manus 계정으로 계속 <em>→</em></b></button><button class="access-choice access-choice--guest" data-action="guest-login"><strong>게스트 로그인</strong><span>회원가입 없이 바로 시작합니다.</span><b>이 기기에서만 로컬 저장 <em>→</em></b></button></div><p class="access-gate__note">${offline ? '현재 회원 인증 서버에 연결할 수 없습니다. 게스트 모드로 플레이할 수 있습니다.' : '회원 로그인 후에도 기존 게스트 진행 데이터는 이 기기에 보존됩니다.'}</p><div class="setting-seg access-gate__lang" data-no-tr><button class="setting-seg__btn ${isEnglish() ? '' : 'is-active'}" data-action="set-lang" data-value="ko">한국어</button><button class="setting-seg__btn ${isEnglish() ? 'is-active' : ''}" data-action="set-lang" data-value="en">English</button></div></div></section>`
+    return `<section class="access-gate"><div class="access-gate__backdrop"></div><div class="access-gate__panel"><div class="access-gate__art" aria-hidden="true"></div><div class="access-gate__seal"><span>✦</span></div><span class="eyebrow">천하 · 패왕의 시대</span><h1>천하: 패왕의 시대</h1><p class="access-gate__lead">무장을 모으고, 진형을 지휘하고,<br>당신의 이름을 전장에 새기십시오.</p><div class="access-gate__divider"><i></i><span>접속 방식 선택</span><i></i></div><div class="access-gate__actions"><button class="access-choice access-choice--member" data-action="login"><strong>회원 로그인</strong><span>계정·전적·랭킹을 안전하게 저장합니다.</span><b>Manus 계정으로 계속 <em>→</em></b></button><button class="access-choice access-choice--guest" data-action="guest-login"><strong>게스트 로그인</strong><span>아이디만 정하고 바로 시작합니다.</span><b>${offline ? '이 기기에서만 로컬 저장' : '서버에 저장 · 모든 콘텐츠 이용'} <em>→</em></b></button></div><p class="access-gate__note">${offline ? '현재 회원 인증 서버에 연결할 수 없습니다. 게스트 모드로 플레이할 수 있습니다.' : '회원 로그인 후에도 기존 게스트 진행 데이터는 이 기기에 보존됩니다.'}</p><div class="setting-seg access-gate__lang" data-no-tr><button class="setting-seg__btn ${isEnglish() ? '' : 'is-active'}" data-action="set-lang" data-value="ko">한국어</button><button class="setting-seg__btn ${isEnglish() ? 'is-active' : ''}" data-action="set-lang" data-value="en">English</button></div></div></section>`
   }
 
   private factionSelection(): string {
@@ -2125,6 +2153,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.16', '게스트도 서버 계정', '게스트로 들어오면 처음에 아이디(한글 · 영문 · 숫자 · 밑줄 2~12자)를 정합니다. 그러면 서버에 계정이 생겨 회원과 똑같이 저장 · 천하 랭킹 · 영토전 · 유저 대련 · 주간 레이드 · 게시판을 모두 쓸 수 있습니다. 이 기기의 예전 게스트 진행은 새 계정으로 옮겨집니다(금화 · 신화 재료는 서버 기준). 서버에 연결할 수 없을 때만 예전처럼 이 기기에만 저장합니다.', '완료', 'jade'],
       ['2026.10.16', '도시 관리 버튼 정리', '영토의 도시 관리 칸에서 공성 출정 · 최종 세력전 버튼이 오른쪽으로 잘리던 것을 고쳤습니다. 좁은 칸에서는 비용이 아래 줄로 내려가고, 잠긴 버튼과 전투 기록의 어두운 글자를 밝게 바꿨습니다.', '완료', 'jade'],
       ['2026.10.16', '혼란 효과 변경', '혼란에 빠진 무장 1명은 5~6초 동안 일반 공격과 스킬로 같은 편을 공격합니다. 스킬은 준비되는 대로 저절로 쓰이며(직접 쓸 수 없음), 혼란이 풀리거나 해제되면 바로 돌아옵니다. 제갈량 · 초선 · 장각 · 장보의 스킬은 노린 적장 1명을, 적의 혼란 계략은 같은 레인의 아군 1명을 혼란에 빠뜨립니다. 예전 효과(위협도 증감 · 적 공격 감소)는 없앴습니다.', '완료', 'jade'],
       ['2026.10.16', '내정 건물 공사 시간 · 점령 시 초기화', '내정 건물 강화가 연구처럼 시간이 걸립니다(1→2단계 10분 · 2→3단계 30분 · 3→4단계 1시간 30분 · 4→5단계 4시간). 도시마다 한 번에 하나씩 지으며, 금화로 즉시 완공하거나(남은 10분마다 금화 1개) 취소하고 자원을 돌려받을 수 있습니다. 아군 도시를 상대에게 점령당하면 그 도시의 건물이 모두 1단계로 돌아가고 공사도 사라집니다.', '완료', 'jade'],

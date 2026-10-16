@@ -1442,7 +1442,8 @@ const ui = new StrategyUI(root, {
     if (authView.status === 'authenticated') queueAccountSave()
     void refreshFactionTerritories()
   },
-  onGuestLogin: () => {
+  onGuestLogin: () => { void enterGuest() },
+  onLocalGuestLogin: () => {
     restoreAccessState('guest')
     window.localStorage.setItem(GUEST_ACCESS_KEY, '1')
     if (state.factionConfirmed) ui.render(state)
@@ -1798,6 +1799,8 @@ void ManusAuth.prepare().then(session => {
     restoreAccessState('guest')
     if (state.factionConfirmed) ui.render(state)
     else ui.showFactionSelection()
+    // 서버에 연결되면 게스트도 아이디를 정해 서버 계정으로 옮긴다(예전 진행은 그대로 가져간다)
+    if (authView.status === 'logged_out') void restoreGuestSession().then(ok => { if (!ok) startGuestSignup(false) })
   } else {
     ui.showAccessGate()
   }
@@ -1806,6 +1809,55 @@ void ManusAuth.prepare().then(session => {
   authView = { status: 'offline', name: null }
   ui.setAuth(authView)
 })
+
+// ── 게스트 계정(서버) ─────────────────────────────────────────
+// 게스트도 처음 아이디를 정하면 서버 계정이 생겨 회원과 똑같이 저장 · 랭킹 · 영토전 · 대련 · 레이드 · 게시판을 쓴다.
+// 서버에 연결할 수 없을 때(미리보기 등)만 예전처럼 이 기기에만 저장하는 게스트로 들어간다.
+const GUEST_TOKEN_KEY = 'cheonharo.guestToken.v1'
+const GUEST_IMPORT_KEY = 'cheonharo.guestImport.v1'
+const readStore = (key: string) => { try { return window.localStorage.getItem(key) } catch { return null } }
+const writeStore = (key: string, value: string | null) => { try { if (value === null) window.localStorage.removeItem(key); else window.localStorage.setItem(key, value) } catch { /* 저장 불가 */ } }
+function apiPrefix(): string {
+  const path = window.location.pathname
+  const marker = path.indexOf('/__manus__/game-preview/')
+  return marker < 0 ? '' : path.slice(0, marker)
+}
+async function guestApi(path: string, body: unknown): Promise<{ ok: boolean; reason?: string; token?: string; name?: string; status: number }> {
+  try {
+    const response = await fetch(`${apiPrefix()}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', cache: 'no-store', body: JSON.stringify(body) })
+    const data = await response.json().catch(() => null) as { ok?: boolean; reason?: string; token?: string; name?: string } | null
+    return { ok: Boolean(data?.ok), reason: data?.reason ?? (response.ok ? undefined : `서버 오류(${response.status})`), token: data?.token, name: data?.name, status: response.status }
+  } catch {
+    return { ok: false, reason: '서버에 연결할 수 없습니다. 잠시 뒤 다시 시도하십시오.', status: 0 }
+  }
+}
+/** 이 기기에 보관한 게스트 토큰으로 다시 들어간다(성공하면 새로고침) */
+async function restoreGuestSession(): Promise<boolean> {
+  const token = readStore(GUEST_TOKEN_KEY)
+  if (!token) return false
+  const result = await guestApi('/api/guest/restore', { token })
+  if (result.ok) { writeStore(GUEST_ACCESS_KEY, null); window.location.reload(); return true }
+  if (result.status === 401 || result.status === 404) writeStore(GUEST_TOKEN_KEY, null)
+  return false
+}
+/** 아이디 정하기 창(성공하면 새로고침해 서버 계정으로 들어간다) */
+function startGuestSignup(cancelable: boolean): void {
+  ui.showGuestSignup(async name => {
+    const result = await guestApi('/api/guest/signup', { name })
+    if (!result.ok || !result.token) return result.reason ?? '계정을 만들지 못했습니다.'
+    writeStore(GUEST_TOKEN_KEY, result.token)
+    // 이 기기의 예전 게스트 진행(무장 · 편성 · 시나리오 등)을 새 계정으로 옮긴다
+    if (readStore(GUEST_GAME_SAVE_KEY)) writeStore(GUEST_IMPORT_KEY, '1')
+    writeStore(GUEST_ACCESS_KEY, null)
+    window.location.reload()
+    return null
+  }, cancelable ? () => ui.showAccessGate() : undefined)
+}
+async function enterGuest(): Promise<void> {
+  if (authView.status === 'offline') { ui.enterLocalGuest(); return }
+  if (await restoreGuestSession()) return
+  startGuestSignup(true)
+}
 
 async function refreshLeaderboard(): Promise<void> {
   const result = await leaderboard.list(10)
@@ -1873,6 +1925,18 @@ async function refreshAccount(): Promise<void> {
       ensureDuelDailyState(state)
       ensureEquipmentState(state)
       ensureSquads(state)
+      // 게스트 계정을 새로 만들었으면 이 기기의 게스트 진행을 옮긴다(금화 · 신화 조각 · 낙양 강화석은 서버 값)
+      if (readStore(GUEST_IMPORT_KEY) === '1') {
+        writeStore(GUEST_IMPORT_KEY, null)
+        if (!(Array.isArray(game.generals) && game.generals.length)) {
+          const ledger = { gold: state.gold, mythicFragments: state.mythicFragments, mythicStones: state.mythicStones }
+          restoreLocalGame(GUEST_GAME_SAVE_KEY)
+          Object.assign(state, ledger)
+          state.prelaunchGoldDayKey = ''
+          localSaveDirty = true
+          window.setTimeout(() => ui.notify('이 기기의 게스트 진행을 새 계정으로 옮겼습니다(금화 · 신화 재료는 서버 기준).', 'jade'), 1200)
+        }
+      }
       void serverGrant('daily')
       const migratedStarter = migrateLegacyStarterRoster(state)
       const regraded = migrateGeneralGrades(state).changed > 0
