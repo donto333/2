@@ -1147,14 +1147,13 @@ export class BattleCore {
     this.players.forEach(unit => {
       if (unit.troops <= 0 || !unit.skillOn || unit.cd > 0) { this.autoReady.delete(unit.lane); return }
       // 자동 전투: 준비되고 나서 한 박자(delay초) 기다렸다가 쓴다
-      if (delay > 0) {
-        const since = this.autoReady.get(unit.lane)
-        if (since === undefined) { this.autoReady.set(unit.lane, this.t); return }
-        if (this.t - since < delay) return
-      }
+      if (!this.autoReady.has(unit.lane)) { this.autoReady.set(unit.lane, this.t); if (delay > 0) return }
+      if (delay > 0 && this.t - (this.autoReady.get(unit.lane) ?? this.t) < delay) return
       const type = unit.def.type
-      if (type === '치유' && !hurt && this.playerDebuffs.length === 0) return
-      if (type === '수호' && !hurt && !warned) return
+      // 치유 · 수호는 필요할 때를 기다리되, 준비되고 오래(4초) 지나도 그때가 안 오면 그냥 쓴다(가운데 수호형이 끝까지 안 쓰던 문제)
+      const waited = this.t - (this.autoReady.get(unit.lane) ?? this.t) >= delay + 4
+      if (type === '치유' && !hurt && this.playerDebuffs.length === 0 && !(waited && this.players.some(other => other.troops > 0 && other.troops < other.maxTroops))) return
+      if (type === '수호' && !hurt && !warned && !waited) return
       if (this.castSkill(unit.lane)) this.autoReady.delete(unit.lane)
     })
   }

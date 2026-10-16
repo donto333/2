@@ -1326,7 +1326,7 @@ const ui = new StrategyUI(root, {
   onBattleAuto: on => {
     arena.setAutoPlay(on)
     ui.updateBattle(arena.getSnapshot())
-    ui.notify(on ? '자동 전투 켜짐 · 예고 대응 정확도 70%, 스킬은 한 박자 늦게 씁니다(직접 하는 것보다 약함)' : '자동 전투 꺼짐 · 직접 지휘합니다')
+    ui.notify(on ? '자동 전투 켜짐 · 다음 전투에도 유지됩니다 · 예고 대응 정확도 70%, 스킬은 한 박자 늦게(직접 하는 것보다 약함)' : '자동 전투 꺼짐 · 직접 지휘합니다')
   },
   onBattleAutoSkill: on => {
     arena.setAutoSkill(on)

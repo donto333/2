@@ -518,7 +518,12 @@ export class Arena {
     sound.setPausedDuck(this.paused)
   }
 
+  /** 자동 전투를 켜 두면 다음 전투에도 계속 켜진다(기기에 기억, 대련 · 튜토리얼 전투 제외) */
+  private autoPreferred = (() => { try { return window.localStorage.getItem('cheonharo.autoBattle') === '1' } catch { return false } })()
+
   setAutoPlay(on: boolean): void {
+    this.autoPreferred = on
+    try { window.localStorage.setItem('cheonharo.autoBattle', on ? '1' : '0') } catch { /* 이번 접속에만 */ }
     if (this.core) this.core.autoPilot = on ? { ...PLAYER_AUTO_PILOT } : null
   }
 
@@ -832,7 +837,7 @@ export class Arena {
     const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
     this.enemyDeck = deck
     this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
-    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, hardRule: this.hardRule, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: options.autoPlay ? { ...PLAYER_AUTO_PILOT } : null })
+    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, hardRule: this.hardRule, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: (options.autoPlay ?? (this.autoPreferred && this.mode !== 'duel' && !this.easyBattle)) ? { ...PLAYER_AUTO_PILOT } : null })
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()
