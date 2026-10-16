@@ -10,7 +10,7 @@ import { sound } from '../engine/sound'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
 import { growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
-import { SCENARIOS, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars } from '../game/scenarios'
+import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
 import { ARCHETYPE_META, recommendDecks, type ComboAdvice } from '../game/formation-advice'
 import { ensureIconSprite, icon, type IconName } from './icons'
@@ -250,7 +250,7 @@ export interface StrategyUiCallbacks {
   onEffectsSetting?: () => void
   onResearchRush: () => void
   onBattleStart: () => void
-  onScenarioStart: (id: string) => void
+  onScenarioStart: (id: string, difficulty?: ScenarioDifficulty) => void
   onBattleMove: (index: number) => void
   onBattleSkill: (index?: number) => void
   onBattleSpeed: (speed: number) => void
@@ -357,6 +357,8 @@ export class StrategyUI {
   /** 시나리오 화면에서 마지막으로 본 클리어 수(새로 깨면 다음 단계로 넘어간다). -1이면 처음 */
   private scenarioClearedSeen = -1
   private scenarioListOpen = false
+  /** 시나리오 난이도 보기(보통 · 어려움) */
+  private scenarioDifficulty: ScenarioDifficulty = 'normal'
   private lastSection = ''
   private boardComposeOpen = false
   private battleViewActive = false
@@ -769,7 +771,7 @@ export class StrategyUI {
     const set = (selector: string, raw: string) => { const node = q(selector); const text = tr(raw); if (node && node.textContent !== text) node.textContent = text }
     const width = (selector: string, value: number) => { const node = q(selector); if (node) node.style.width = `${Math.max(0, Math.min(100, value))}%` }
     set('[data-bt-status]', snapshot.status)
-    set('[data-bt-time]', snapshot.active || snapshot.result ? `남은 ${Math.ceil(snapshot.timeLeft)}초` : '제한 90초')
+    set('[data-bt-time]', snapshot.active || snapshot.result ? `남은 ${Math.ceil(snapshot.timeLeft)}초` : `제한 ${snapshot.hardRule === 'swift' ? 60 : 90}초`)
     if (snapshot.mode === 'raid') set('[data-bt-raid]', formatNumber(snapshot.raidDamage ?? 0))
     q('[data-bt-time]')?.classList.toggle('is-urgent', snapshot.active && snapshot.timeLeft <= 20)
     set('[data-bt-phase]', `${snapshot.phaseName}`)
@@ -1785,17 +1787,28 @@ export class StrategyUI {
 
   private scenarioSection(state: StrategyState): string {
     // 연대기를 한 단계씩: 지금 단계(다음 미완료)가 크게 보이고, 깨면 다음 단계로 넘어간다. 전체 목록은 접어 둔다
-    const next = this.nextScenario(state)
+    // 어려움: 보통을 깬 시나리오를 적 Lv+10 · 특수 규칙으로 다시(앞 단계 어려움을 깨야 다음이 열린다)
+    const normalCleared = SCENARIOS.filter(scenario => state.scenarioCleared.includes(scenario.id)).length
+    const hardOpen = normalCleared > 0
+    const hard = hardOpen && this.scenarioDifficulty === 'hard'
+    const difficulty: ScenarioDifficulty = hard ? 'hard' : 'normal'
+    const done = (id: string) => hard ? hardCleared(state.scenarioCleared, id) : state.scenarioCleared.includes(id)
+    const starsOf = (id: string) => hard ? hardScenarioStars(state.scenarioCleared, id) : scenarioStars(state.scenarioCleared, id)
+    const next = hard ? (SCENARIOS.find(scenario => !hardCleared(state.scenarioCleared, scenario.id)) ?? SCENARIOS[SCENARIOS.length - 1]) : this.nextScenario(state)
     const reachable = Math.max(0, SCENARIOS.findIndex(scenario => scenario.id === next?.id))
-    const cleared = SCENARIOS.filter(scenario => state.scenarioCleared.includes(scenario.id)).length
+    const cleared = SCENARIOS.filter(scenario => done(scenario.id)).length
     // 새로 깬 단계가 있으면 다음 단계로 자동 이동
-    if (cleared > this.scenarioClearedSeen) { if (this.scenarioClearedSeen >= 0) { this.scenarioSelectedId = next?.id ?? this.scenarioSelectedId; this.scenarioPicked = false } this.scenarioClearedSeen = cleared }
+    const seenKey = cleared + (hard ? 1000 : 0)
+    if (seenKey !== this.scenarioClearedSeen) { if (this.scenarioClearedSeen >= 0 && seenKey > this.scenarioClearedSeen && seenKey - this.scenarioClearedSeen < 1000) { this.scenarioSelectedId = next?.id ?? this.scenarioSelectedId; this.scenarioPicked = false } this.scenarioClearedSeen = seenKey }
     let index = SCENARIOS.findIndex(scenario => scenario.id === this.scenarioSelectedId)
     if (index < 0 || index > reachable) index = reachable
     const selected = SCENARIOS[index] ?? SCENARIOS[0]
-    const selectedCleared = Boolean(selected && state.scenarioCleared.includes(selected.id))
-    const reward = selected?.reward
-    const stars = selected ? scenarioStars(state.scenarioCleared, selected.id) : 0
+    const selectedCleared = Boolean(selected && done(selected.id))
+    // 어려움인데 이 시나리오의 보통을 아직 못 깼으면 출전할 수 없다
+    const blocked = Boolean(hard && selected && !hardUnlocked(state.scenarioCleared, selected))
+    const reward = selected ? (hard ? hardClearReward(selected, []) : selected.reward) : null
+    const stars = selected ? starsOf(selected.id) : 0
+    const rule = hard && selected ? scenarioHardRule(selected) : null
     const chapterNo = (selected?.chapterIndex ?? 0) + 1
     const inChapter = SCENARIOS.filter(scenario => scenario.chapter === selected?.chapter)
     const chapterPos = inChapter.findIndex(scenario => scenario.id === selected?.id) + 1
@@ -1806,13 +1819,19 @@ export class StrategyUI {
     const list = chapters.map(chapter => {
       const items = SCENARIOS.filter(scenario => scenario.chapter === chapter)
       const head = items[0]
-      return `<div class="scenario-mini-chapter"><div class="scenario-mini-head"><b>제${(head?.chapterIndex ?? 0) + 1}장</b><span>${escapeHtml(head?.era ?? '')}</span><small>${items.filter(scenario => state.scenarioCleared.includes(scenario.id)).length}/${items.length}</small></div>${items.map(scenario => { const at = SCENARIOS.indexOf(scenario); const locked = at > reachable; const done = state.scenarioCleared.includes(scenario.id); return `<button class="scenario-mini ${scenario.id === selected?.id ? 'is-selected' : ''} ${done ? 'is-cleared' : ''} ${locked ? 'is-locked' : ''}" data-action="scenario-select" data-scenario-id="${scenario.id}" ${locked ? 'disabled' : ''}><span>${scenario.year}</span><strong>${escapeHtml(scenario.title)}</strong><em>${locked ? '🔒' : done ? '★'.repeat(scenarioStars(state.scenarioCleared, scenario.id)) : '도전'}</em></button>` }).join('')}</div>`
+      return `<div class="scenario-mini-chapter"><div class="scenario-mini-head"><b>제${(head?.chapterIndex ?? 0) + 1}장</b><span>${escapeHtml(head?.era ?? '')}</span><small>${items.filter(scenario => done(scenario.id)).length}/${items.length}</small></div>${items.map(scenario => { const at = SCENARIOS.indexOf(scenario); const locked = at > reachable; const isDone = done(scenario.id); return `<button class="scenario-mini ${scenario.id === selected?.id ? 'is-selected' : ''} ${isDone ? 'is-cleared' : ''} ${locked ? 'is-locked' : ''}" data-action="scenario-select" data-scenario-id="${scenario.id}" ${locked ? 'disabled' : ''}><span>${scenario.year}</span><strong>${escapeHtml(scenario.title)}</strong><em>${locked ? '🔒' : isDone ? '★'.repeat(starsOf(scenario.id)) : '도전'}</em></button>` }).join('')}</div>`
     }).join('')
-    return `<section class="page-section page-section--scenario"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투 · 제${chapterNo}장 ${escapeHtml(selected?.era ?? '')}</span><h1>시나리오</h1></div><div class="section-counter"><button class="action-button action-button--outline scenario-guide-button" data-action="battle-guide">? 전투 규칙</button><span>연대기 진행</span><strong>${cleared}<small> / ${SCENARIOS.length}</small></strong></div></div>
+    const hardCount = hardClearedCount(state.scenarioCleared)
+    const toggle = `<div class="setting-seg scenario-difficulty" role="group" aria-label="난이도"><button class="setting-seg__btn ${hard ? '' : 'is-active'}" data-action="scenario-difficulty" data-difficulty="normal" aria-pressed="${!hard}">보통 <small>${normalCleared}/${SCENARIOS.length}</small></button><button class="setting-seg__btn ${hard ? 'is-active' : ''}" data-action="scenario-difficulty" data-difficulty="hard" aria-pressed="${hard}" ${hardOpen ? '' : 'disabled'} title="${hardOpen ? '적 Lv+10 · 별 +1 · 특수 규칙' : '보통 시나리오를 하나 깨면 열립니다'}">${hardOpen ? '' : '🔒 '}어려움 <small>${hardCount}/${SCENARIOS.length}</small></button></div>`
+    const ruleBox = rule ? `<div class="scenario-rule"><span class="eyebrow">어려움 특수 규칙</span><strong>${escapeHtml(HARD_RULE_INFO[rule].label)}</strong><small>${escapeHtml(HARD_RULE_INFO[rule].desc)} · 적 Lv+${HARD_LEVEL_BONUS} · 적 별 +1</small></div>` : ''
+    const rewardText = hard ? `옥패 +${formatNumber(reward?.honor ?? 0)} · 은전 +${formatNumber(reward?.silver ?? 0)} · 병서 +${formatNumber(reward?.manuals ?? 0)}` : `금화 +${formatNumber(reward?.gold ?? 0)} · 옥패 +${formatNumber(reward?.honor ?? 0)} · 은전 +${formatNumber(reward?.silver ?? 0)} · 병서 +${formatNumber(reward?.manuals ?? 0)}`
+    const startLabel = blocked ? '🔒 보통을 먼저 깨십시오' : selectedCleared ? '다시 전투하기' : hard ? '어려움 출전' : '시나리오 출전'
+    return `<section class="page-section page-section--scenario ${hard ? 'is-hard' : ''}"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투 · 제${chapterNo}장 ${escapeHtml(selected?.era ?? '')}${hard ? ' · 어려움' : ''}</span><h1>시나리오</h1></div><div class="section-counter"><button class="action-button action-button--outline scenario-guide-button" data-action="battle-guide">? 전투 규칙</button><span>${hard ? '어려움 진행' : '연대기 진행'}</span><strong>${cleared}<small> / ${SCENARIOS.length}</small></strong></div></div>
+      ${toggle}
       <div class="scenario-progress" aria-hidden="true"><i style="width:${(cleared / Math.max(1, SCENARIOS.length) * 100).toFixed(1)}%"></i></div>
       <div class="scenario-stepper"><button class="action-button action-button--outline" data-action="scenario-select" data-scenario-id="${prev?.id ?? ''}" ${prev ? '' : 'disabled'}>← 이전</button><div><strong>${index + 1} / ${SCENARIOS.length}</strong><small>제${chapterNo}장 ${chapterPos}/${inChapter.length}단계</small></div><button class="action-button action-button--outline" data-action="scenario-select" data-scenario-id="${after?.id ?? ''}" ${nextLocked ? 'disabled' : ''} title="${nextLocked && after ? '이번 단계를 깨면 열립니다' : ''}">${nextLocked && after ? '🔒 다음' : '다음 →'}</button></div>
-      <article class="scenario-detail scenario-main glass-card ${selectedCleared ? 'is-cleared' : 'is-current'}"><span class="pill pill--jade">${selected?.year ?? ''} · ${escapeHtml(selected?.era ?? '')}</span>${selectedCleared ? `<span class="scenario-main__done">완료 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span>` : '<span class="scenario-main__done is-new">이번 단계</span>'}<h2>${escapeHtml(selected?.title ?? '')}</h2><p class="scenario-story">${escapeHtml(selected?.story ?? '')}</p><div class="scenario-deck"><span class="eyebrow">추천 편성</span>${selected ? this.recommendedDeck(state, selected.deck) : '—'}</div><div class="scenario-deck scenario-enemy"><span class="eyebrow">적군 · 평균 Lv.${selected ? scenarioEnemyLevel(selected) : 1}</span><strong>${selected ? scenarioEnemyIds(selected, state.faction).map(id => escapeHtml(templateGeneral(id)?.name ?? id)).join(' · ') : '—'}</strong><small class="scenario-stars">${selected ? `최고 기록 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}` : ''}</small></div><div class="scenario-reward"><span class="eyebrow">최초 클리어 보상${selectedCleared ? ' · 획득 완료' : ''}</span><p>금화 +${formatNumber(reward?.gold ?? 0)} · 옥패 +${formatNumber(reward?.honor ?? 0)} · 은전 +${formatNumber(reward?.silver ?? 0)} · 병서 +${formatNumber(reward?.manuals ?? 0)}</p><small>식량 +${formatNumber(reward?.grain ?? 0)} · 목재 +${formatNumber(reward?.wood ?? 0)} · 철 +${formatNumber(reward?.iron ?? 0)} · 영향력 +${formatNumber(reward?.influence ?? 0)}</small></div>
-        <div class="scenario-main__actions"><button class="action-button action-button--primary scenario-start-button" data-action="scenario-start" data-scenario-id="${selected?.id ?? ''}">${selectedCleared ? '다시 전투하기' : '시나리오 출전'} <span>→</span></button>${selectedCleared && next && next.id !== selected?.id ? `<button class="action-button action-button--outline" data-action="scenario-select" data-scenario-id="${next.id}">이번 단계로 (${next.year} ${escapeHtml(next.title)}) →</button>` : ''}</div></article>
+      <article class="scenario-detail scenario-main glass-card ${selectedCleared ? 'is-cleared' : 'is-current'}"><span class="pill ${hard ? 'pill--ember' : 'pill--jade'}">${selected?.year ?? ''} · ${escapeHtml(selected?.era ?? '')}${hard ? ' · 어려움' : ''}</span>${selectedCleared ? `<span class="scenario-main__done">완료 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span>` : '<span class="scenario-main__done is-new">이번 단계</span>'}<h2>${escapeHtml(selected?.title ?? '')}</h2><p class="scenario-story">${escapeHtml(selected?.story ?? '')}</p>${ruleBox}<div class="scenario-deck"><span class="eyebrow">추천 편성</span>${selected ? this.recommendedDeck(state, selected.deck) : '—'}</div><div class="scenario-deck scenario-enemy"><span class="eyebrow">적군 · 평균 Lv.${selected ? scenarioEnemyLevelFor(selected, difficulty) : 1}</span><strong>${selected ? scenarioEnemyIds(selected, state.faction).map(id => escapeHtml(templateGeneral(id)?.name ?? id)).join(' · ') : '—'}</strong><small class="scenario-stars">${selected ? `최고 기록 ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}` : ''}</small></div><div class="scenario-reward"><span class="eyebrow">${hard ? '어려움 최초 클리어 보상' : '최초 클리어 보상'}${selectedCleared ? ' · 획득 완료' : ''}</span><p>${rewardText}</p><small>식량 +${formatNumber(reward?.grain ?? 0)} · 목재 +${formatNumber(reward?.wood ?? 0)} · 철 +${formatNumber(reward?.iron ?? 0)} · 영향력 +${formatNumber(reward?.influence ?? 0)}</small></div>
+        <div class="scenario-main__actions"><button class="action-button action-button--primary scenario-start-button" data-action="scenario-start" data-scenario-id="${selected?.id ?? ''}" data-difficulty="${difficulty}" ${blocked ? 'disabled' : ''}>${startLabel} <span>→</span></button>${selectedCleared && next && next.id !== selected?.id ? `<button class="action-button action-button--outline" data-action="scenario-select" data-scenario-id="${next.id}">이번 단계로 (${next.year} ${escapeHtml(next.title)}) →</button>` : ''}</div></article>
       <details class="scenario-all glass-card" ${this.scenarioListOpen ? 'open' : ''}><summary data-action="scenario-list-toggle">전체 시나리오 목록 <small>${cleared}/${SCENARIOS.length} 클리어 · 다시 전투할 단계를 고르십시오</small></summary><div class="scenario-mini-list">${list}</div></details></section>`
   }
 
@@ -1831,7 +1850,7 @@ export class StrategyUI {
       const detail = skillDetail(general)
       return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${gradeColor(general)}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span><span class="bt-unit-edge" data-bt-unit-edge hidden></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
     }).join('')
-    const modeLabel = battle?.mode === 'scenario' ? '시나리오 전투' : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : battle?.mode === 'raid' ? `주간 레이드${this.raidSquadLabel ? ` · ${this.raidSquadLabel}` : ''}` : '일반 전투'
+    const modeLabel = battle?.mode === 'scenario' ? (battle.hardRule ? `시나리오 어려움 · ${HARD_RULE_INFO[battle.hardRule].label}` : '시나리오 전투') : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : battle?.mode === 'raid' ? `주간 레이드${this.raidSquadLabel ? ` · ${this.raidSquadLabel}` : ''}` : '일반 전투'
     const tactic = (id: 'guard' | 'feint' | 'charge', icon: string, label: string, note: string) => `<button class="bt-tactic bt-tactic--${id}" title="${label} · ${note}" data-action="battle-tactic" data-tactic="${id}" ${id === 'guard' ? 'data-bt-guard' : ''} disabled><span>${icon}</span><strong>${label}</strong><small>${note}</small><em>${battle?.tacticCosts[id] ?? { guard: 35, feint: 50, charge: 65 }[id]}</em></button>`
     return `<section class="page-section page-section--battle">
 <div class="bt-top">
@@ -2038,6 +2057,7 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.16', '시나리오 어려움 단계', '시나리오 화면 위쪽에서 ‘보통 · 어려움’을 고를 수 있습니다. 보통으로 깬 시나리오 58개를 적 Lv+10 · 별 +1과 특수 규칙 하나(철벽: 적 사기 +20 · 속전: 제한 60초 · 짙은 안개: 예고 대응 시간 −0.5초 · 화공 금지: 적에게 화상이 걸리지 않음)로 다시 도전합니다. 앞 단계 어려움을 깨야 다음 단계가 열리고, 별 기록은 보통과 따로 남습니다. 첫 클리어 보상은 옥패 1.5배 · 은전과 병서 절반 · 자원(금화 없음)으로, 최고 레벨에 닿는 시간을 크게 줄이지 않게 맞췄습니다. 전투 규칙(? 버튼)에도 설명을 넣었습니다.', '완료', 'jade'],
       ['2026.10.16', '레인 명령 때 다른 레인도 반응', '전투에서 한 레인(좌·중·우)에 명령하면, 나머지 두 레인의 무장과 병사 대열이 그 레인의 적 쪽으로 몸을 틀고 조금 다가섭니다. 2초쯤 지나면 원래 방향으로 돌아옵니다. 자동 전투가 대응할 때도 똑같이 움직입니다. 보이는 움직임만 바뀌고 전투 결과는 그대로입니다.', '완료', 'jade'],
       ['2026.10.16', '자동 전투', '모든 전투(유저 대련 제외)에서 위쪽 ‘자동’ 버튼으로 자동 전투를 켤 수 있습니다(예전에는 별 3개 시나리오만). 대신 직접 하는 것보다 약합니다: 예고 대응 정확도 70%, 스킬은 준비된 뒤 한 박자(1.5초) 늦게 씁니다. 전투 규칙(? 버튼) 마지막 장에 설명을 넣었습니다.', '완료', 'jade'],
       ['2026.10.15', '전투 적 예고 칸 간결하게', '전투 화면의 적 전술 예고 칸에서 설명 문장을 없애고 칸 높이를 줄였습니다(예고 이름 · 좌중우 표시 · 남은 시간 막대만). 적장 스킬 예고도 장수와 스킬 이름만 짧게 보여 줍니다.', '완료', 'jade'],
@@ -2286,7 +2306,7 @@ export class StrategyUI {
     }
     if (action === 'nav-more') { this.root.querySelector('.sidebar')?.classList.toggle('is-more-open'); return }
     if (action === 'section') { this.root.querySelector('.sidebar')?.classList.remove('is-more-open') }
-    if (action === 'section') { if (button.dataset.scenarioId) { this.scenarioSelectedId = button.dataset.scenarioId; this.scenarioPicked = true } this.callbacks.onSection((button.dataset.section ?? 'overview') as Section) }
+    if (action === 'section') { if (button.dataset.scenarioId) { this.scenarioSelectedId = button.dataset.scenarioId; this.scenarioPicked = true; this.scenarioDifficulty = 'normal' } this.callbacks.onSection((button.dataset.section ?? 'overview') as Section) }
     else if (action === 'summon-tab') {
       this.summonTab = button.dataset.summonTab === 'equipment' ? 'equipment' : 'generals'
       if (this.renderedState) this.render(this.renderedState)
@@ -2403,7 +2423,8 @@ export class StrategyUI {
     else if (action === 'research-rush') this.callbacks.onResearchRush()
     else if (action === 'scenario-select') { if (!button.dataset.scenarioId) return; this.scenarioSelectedId = button.dataset.scenarioId; this.scenarioPicked = true; if (this.renderedState) this.render(this.renderedState); this.root.querySelector('.scenario-main')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
     else if (action === 'scenario-list-toggle') { event.preventDefault(); this.scenarioListOpen = !this.scenarioListOpen; if (this.renderedState) this.render(this.renderedState) }
-    else if (action === 'scenario-start') this.callbacks.onScenarioStart(button.dataset.scenarioId ?? '')
+    else if (action === 'scenario-start') this.callbacks.onScenarioStart(button.dataset.scenarioId ?? '', button.dataset.difficulty === 'hard' ? 'hard' : 'normal')
+    else if (action === 'scenario-difficulty') { this.scenarioDifficulty = button.dataset.difficulty === 'hard' ? 'hard' : 'normal'; this.scenarioPicked = false; this.scenarioSelectedId = ''; if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'battle-start') this.callbacks.onBattleStart()
     else if (action === 'battle-unit' || action === 'move') { if (Date.now() >= this.suppressMoveUntil) this.callbacks.onBattleMove(Number(button.dataset.index ?? 0)) }
     else if (action === 'battle-skill') this.callbacks.onBattleSkill(button.dataset.index === undefined ? undefined : Number(button.dataset.index))

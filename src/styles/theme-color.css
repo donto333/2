@@ -1993,3 +1993,15 @@ body .bt-stage .bt-enemy-warn { padding: 5px 10px; font-size: 13px; }
 .battle-guide .guide-effects small { margin-left: 6px; font-size: 11px; color: #b7a684; }
 .battle-guide .guide-effects p { margin: 2px 0 0; min-height: 0; font-size: 12px; line-height: 1.45; color: #d9caa9; }
 @media (max-width: 520px) { .battle-guide .guide-effects { grid-template-columns: 1fr; } }
+
+/* 시나리오 난이도(보통 · 어려움) */
+.scenario-difficulty{width:max-content;max-width:100%;margin:0 0 12px}
+.scenario-difficulty .setting-seg__btn{padding:8px 16px;font-size:13px}
+.scenario-difficulty .setting-seg__btn small{margin-left:4px;opacity:.72;font-size:11px}
+.scenario-difficulty .setting-seg__btn:disabled{opacity:.5;cursor:not-allowed}
+.scenario-difficulty .setting-seg__btn[data-difficulty="hard"].is-active{background:rgba(255,128,102,.2);color:#ffb39e}
+.page-section--scenario.is-hard .scenario-progress i{background:linear-gradient(90deg,#ff8066,#f6c56d)}
+.scenario-rule{margin:12px 0;padding:10px 12px;border:1px solid rgba(255,128,102,.42);background:rgba(255,128,102,.08)}
+.scenario-rule strong{display:block;margin:4px 0 2px;color:#ffb39e;font-size:15px}
+.scenario-rule small{color:#d9c6b3;font-size:12px;line-height:1.5}
+.scenario-rule .eyebrow{color:#ff9f86}

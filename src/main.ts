@@ -60,7 +60,7 @@ import {
 } from './game/strategy'
 import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
-import { SCENARIOS, clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, type ScenarioDefinition } from './game/scenarios'
+import { HARD_RULE_INFO, SCENARIOS, clearedScenarioCount, firstClearReward, hardClearReward, hardUnlocked, markHardCleared, recordHardStars, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevelFor, scenarioEnemyStars, scenarioHardRule, type ScenarioDefinition, type ScenarioDifficulty } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
 import { raidBossDeck } from './game/raid'
 import { RaidRunner } from './game/raid-run'
@@ -270,6 +270,7 @@ const duelTiers = new Map<string, DuelTier>()
 let duelTier: DuelTier = 'normal'
 let scenarioActive = false
 let activeScenario: ScenarioDefinition | null = null
+let activeDifficulty: ScenarioDifficulty = 'normal'
 /** 회원 진행(서버)을 불러왔는가: 튜토리얼은 이것을 기다린다 */
 let accountLoaded = false
 let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
@@ -1186,29 +1187,36 @@ const ui = new StrategyUI(root, {
     if (result.ok) playSfx('research')
     if (result.ok) queueAccountSave(true)
   },
-  onScenarioStart: id => {
+  onScenarioStart: (id, difficulty = 'normal') => {
     const scenario = scenarioById(id)
     if (!scenario) return
+    // 어려움: 그 시나리오의 보통을 깼고 앞 단계 어려움을 깼을 때만
+    const hard = difficulty === 'hard'
+    if (hard && !hardUnlocked(state.scenarioCleared, scenario)) { ui.notify('보통 시나리오와 앞 단계 어려움을 먼저 깨십시오.', 'ember'); return }
     scenarioActive = true
     activeScenario = scenario
+    activeDifficulty = hard ? 'hard' : 'normal'
     duelActive = false
     state.section = 'battle'
-    // 적 덱: 그 시대에 실제로 맞섰던 상대(진영별), 장 안에서 뒤 사건일수록 강해진다.
-    const enemyLevel = scenarioEnemyLevel(scenario)
+    // 적 덱: 그 시대에 실제로 맞섰던 상대(진영별), 장 안에서 뒤 사건일수록 강해진다. 어려움은 Lv+10 · 별 +1
+    const enemyLevel = scenarioEnemyLevelFor(scenario, activeDifficulty)
+    const enemyStars = scenarioEnemyStars(scenario, activeDifficulty)
     const deck = scenarioEnemyIds(scenario, state.faction).map((id, index) => {
       const base = templateGeneral(id) ?? allGenerals()[index]
-      return { ...scaleGeneral({ ...base, level: 1, stars: 1 }, enemyLevel + index - 1, Math.min(5, 1 + Math.floor(enemyLevel / 12))), skillUnlocked: enemyLevel >= 6 }
+      return { ...scaleGeneral({ ...base, level: 1, stars: 1 }, Math.min(MAX_GENERAL_LEVEL, enemyLevel + index - 1), enemyStars), skillUnlocked: enemyLevel >= 6 }
     })
     arena.setOpponentDeck(deck, 'scenario')
     // 튜토리얼의 첫 시나리오는 쉬운 전투로
-    arena.setEasyBattle(onboarding.at('scenario'))
+    arena.setEasyBattle(!hard && onboarding.at('scenario'))
+    const rule = hard ? scenarioHardRule(scenario) : null
+    arena.setHardRule(rule)
     arena.setGenerals(battleGenerals())
     arena.startBattle()
     ui.setBattleAutoAvailable(true)
     ui.updateBattle(arena.getSnapshot())
     ui.render(state)
     ui.updateBattle(arena.getSnapshot())
-    ui.notify(`${scenario.year}년 ${scenario.title} · 시나리오 전투를 시작합니다.`, 'jade')
+    ui.notify(rule ? `${scenario.year}년 ${scenario.title} · 어려움 · ${HARD_RULE_INFO[rule].label}: ${HARD_RULE_INFO[rule].desc}` : `${scenario.year}년 ${scenario.title} · 시나리오 전투를 시작합니다.`, rule ? 'ember' : 'jade')
   },
   onBattleStart: () => {
     // 레이드 진행 중이면 다음 군 출전으로 이어 간다(일반 전투를 열지 않는다)
@@ -1501,7 +1509,17 @@ arena = new Arena(canvas, {
         if (isMember()) void serverGrant('duel', `duel-${duelTier}`)
         else state.mythicFragments += DUEL_TIER_FRAGMENTS[duelTier]
       }
-      if (scenarioActive && activeScenario) {
+      if (scenarioActive && activeScenario && activeDifficulty === 'hard') {
+        // 어려움: 금화 없이 옥패 1.5배 · 은전·병서 절반 · 자원(서버 장부 재화가 아니라 서버 변경 없음)
+        recordHardStars(state.scenarioCleared, activeScenario.id, result.stars)
+        const reward = hardClearReward(activeScenario, state.scenarioCleared)
+        if (reward) {
+          markHardCleared(state.scenarioCleared, activeScenario.id)
+          state.honor += Math.round(reward.honor * honorBoost); state.silver += reward.silver; state.manuals += Math.round(reward.manuals * (1 + researchMods(state).manuals))
+          state.resources = { ...state.resources, grain: state.resources.grain + reward.grain, silver: state.resources.silver + reward.silver, wood: state.resources.wood + reward.wood, iron: state.resources.iron + reward.iron, influence: state.resources.influence + reward.influence }
+          state.lastNotice = `어려움 ${activeScenario.year}년 ${activeScenario.title} 클리어 · 별 ${result.stars}개 · 옥패 +${Math.round(reward.honor * honorBoost)} · 어려움 보상 획득`
+        } else state.lastNotice = `어려움 ${activeScenario.year}년 ${activeScenario.title} 재전투 승리 · 별 ${result.stars}개`
+      } else if (scenarioActive && activeScenario) {
         const improved = recordScenarioStars(state.scenarioCleared, activeScenario.id, result.stars)
         const starText = `별 ${result.stars}개${improved && result.stars >= 3 ? ' · 자동 전투 해금' : ''}`
         const reward = firstClearReward(activeScenario, state.scenarioCleared)
@@ -1519,6 +1537,7 @@ arena = new Arena(canvas, {
     }
     scenarioActive = false
     activeScenario = null
+    activeDifficulty = 'normal'
     duelActive = false
     if (wasScenario) queueAccountSave(true)
     // Arena가 비활성 상태가 된 것을 먼저 UI에 전달한다. 시나리오·대련처럼

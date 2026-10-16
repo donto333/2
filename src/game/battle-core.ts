@@ -176,7 +176,13 @@ export interface CoreConfig {
   research?: BattleResearch | null
   /** 튜토리얼 전투: 적 사기 절반, 예고를 받을 시간 넉넉히, 실수의 대가(위협도·병력 피해) 크게 줄임 */
   easy?: boolean
+  /** 시나리오 어려움 단계의 특수 규칙 */
+  hardRule?: HardRule | null
 }
+
+/** 시나리오 어려움 특수 규칙: iron 적 사기 +20 · swift 제한 시간 60초 · nofire 화상 금지 · fog 대응 시간 −0.5초 */
+export type HardRule = 'iron' | 'swift' | 'nofire' | 'fog'
+export const HARD_RULE_EFFECT = { ironMorale: 20, swiftTime: 60, fogWindow: 0.5 } as const
 
 interface OpenPattern { def: PatternDef; at: number; deadline: number; judged: boolean; inputs: Set<number>; reactAt: number }
 
@@ -256,6 +262,9 @@ export class BattleCore {
   readonly levelGap: number
   private timeWarned = false
   private readonly moraleBonus: number
+  /** 이 전투의 제한 시간(초). 어려움 '속전' 규칙이면 60초 */
+  readonly timeLimit: number
+  readonly hardRule: HardRule | null
   private readonly rng: () => number
   readonly research: BattleResearch
   private collapseSaved = false
@@ -274,7 +283,9 @@ export class BattleCore {
     this.rng = config.rng ?? Math.random
     this.autoPilot = config.autoPilot ?? null
     this.autoSkill = Boolean(config.autoSkill)
-    this.moraleBonus = clamp(Math.round(config.moraleBonus ?? 0), 0, 50)
+    this.hardRule = config.hardRule ?? null
+    this.moraleBonus = clamp(Math.round(config.moraleBonus ?? 0), 0, 50) + (this.hardRule === 'iron' ? HARD_RULE_EFFECT.ironMorale : 0)
+    this.timeLimit = this.hardRule === 'swift' ? HARD_RULE_EFFECT.swiftTime : BATTLE_RULES.timeLimit
     this.research = config.research ?? {}
     this.players = players.slice(0, 3).map((general, lane) => this.makeUnit(general, 'player', lane))
     // 오부 훈련: 아군 최대 병력 증가
@@ -370,6 +381,8 @@ export class BattleCore {
   addEffect(kind: 'buff' | 'debuff' | 'pdebuff' | 'ebuff', id: BattleEffectId, seconds?: number, value?: number): void {
     const definition = BATTLE_EFFECTS[id]
     const collection = this.list(kind)
+    // 어려움 '화공 금지': 적에게 화상이 걸리지 않는다
+    if (kind === 'debuff' && id === 'burning' && this.hardRule === 'nofire') return
     const duration = Math.max(0.5, seconds ?? definition.duration)
     const existing = collection.find(effect => effect.id === id)
     if (existing) {
@@ -641,7 +654,7 @@ export class BattleCore {
     this.patternsSeen += 1
     const early = this.players.some(unit => this.passive(unit) === 'earlyWarning') ? 0.5 : 0
     const interval = BATTLE_RULES.patternInterval[this.phase] + (hasBattleEffect(this.debuffs, 'slow') || hasBattleEffect(this.debuffs, 'flood') ? 0.6 : 0) + (this.easy ? 1.5 : 0)
-    const window = Math.min(interval - 0.2, BATTLE_RULES.responseWindow[this.phase] + early + (this.research.window ?? 0) + (this.easy ? 1.5 : 0))
+    const window = Math.min(interval - 0.2, BATTLE_RULES.responseWindow[this.phase] + early + (this.research.window ?? 0) + (this.easy ? 1.5 : 0) - (this.hardRule === 'fog' ? HARD_RULE_EFFECT.fogWindow : 0))
     const [low, high] = this.autoPilot?.reaction ?? [0.6, 1.2]
     this.pattern = { def, at: this.t, deadline: this.t + window, judged: false, inputs: new Set(), reactAt: this.t + low + this.rng() * (high - low) }
     this.nextPatternAt = this.t + interval
@@ -1036,7 +1049,7 @@ export class BattleCore {
       + (hasBattleEffect(this.debuffs, 'fear') ? 1.5 : 0)
       + (hasBattleEffect(this.debuffs, 'bleed') ? 1.3 : 0)
     this.drainMorale(drain * dt)
-    if (!this.timeWarned && this.t >= BATTLE_RULES.timeLimit - BATTLE_RULES.timeWarnAt) {
+    if (!this.timeWarned && this.t >= this.timeLimit - BATTLE_RULES.timeWarnAt) {
       this.timeWarned = true
       this.events.push({ kind: 'timeWarn', left: BATTLE_RULES.timeWarnAt })
       this.log(`남은 시간 ${BATTLE_RULES.timeWarnAt}초 · 적 사기를 서둘러 무너뜨리십시오`, 'ember')
@@ -1077,7 +1090,7 @@ export class BattleCore {
     if (enemyTroops <= 0 && this.mode !== 'raid') return this.finish(true, 'wipe')
     if (playerTroops <= 0) return this.finish(false, 'troops')
     if (this.collapses >= BATTLE_RULES.collapsesToLose) return this.finish(false, 'collapse')
-    if (this.t >= BATTLE_RULES.timeLimit) {
+    if (this.t >= this.timeLimit) {
       if (this.mode === 'raid') return this.finish(true, 'raid')
       if (this.mode === 'duel') {
         const mine = playerTroops / Math.max(1, this.players.reduce((sum, unit) => sum + unit.maxTroops, 0))
@@ -1101,7 +1114,7 @@ export class BattleCore {
       + this.players.reduce((sum, unit) => sum + unit.general.level * 41 + unit.general.leadership + unit.general.martial + unit.general.stratagem + unit.general.speed, 0)))
     this.result = { won, reason, stars, score, durationMs: Math.round(this.t * 1000), breaks: this.breaks, patterns: this.patternsSeen, maxCombo: this.maxCombo, troopRatio, collapses: this.collapses, ...(this.mode === 'raid' ? { raidDamage: Math.round(this.raidDamage) } : {}) }
     this.events.push({ kind: 'end', result: this.result })
-    const why = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '제한 시간 종료 · 남은 병력 비율로 판정했습니다', raid: `레이드 종료 · 누적 피해 ${Math.round(this.raidDamage).toLocaleString('ko-KR')}` }[reason]
+    const why = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: `${this.timeLimit}초 안에 끝내지 못했습니다`, troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '제한 시간 종료 · 남은 병력 비율로 판정했습니다', raid: `레이드 종료 · 누적 피해 ${Math.round(this.raidDamage).toLocaleString('ko-KR')}` }[reason]
     this.log(`${won ? '전투 승리' : '전투 패배'} · ${why}${won ? ` · 별 ${stars}개` : ''}`, won ? 'jade' : 'ember')
   }
 
@@ -1158,7 +1171,7 @@ export class BattleCore {
 /** 빠른 자동 전투(테스트·밸런스 확인용) */
 export function simulateBattle(players: General[], enemies: General[], config: CoreConfig = {}, step = 0.05): BattleResult {
   const core = new BattleCore(players, enemies, config)
-  while (core.active && core.t < BATTLE_RULES.timeLimit + 5) {
+  while (core.active && core.t < core.timeLimit + 5) {
     core.tick(step)
     core.drainEvents()
   }

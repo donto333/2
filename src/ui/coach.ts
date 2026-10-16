@@ -418,6 +418,12 @@ const GUIDE_CARDS: Array<{ title: string; body: string; art: string }> = [
       <g transform="translate(170,18)"><rect width="130" height="44" rx="6" class="ga-box"/><text x="65" y="28" text-anchor="middle" class="ga-n">정확도 70%</text></g>
       <text x="20" y="96" class="ga-t">직접</text><rect x="80" y="86" width="220" height="12" rx="3" class="ga-track"/><rect x="80" y="86" width="210" height="12" rx="3" class="ga-jade"/>
       <text x="20" y="128" class="ga-t">자동</text><rect x="80" y="118" width="220" height="12" rx="3" class="ga-track"/><rect x="80" y="118" width="130" height="12" rx="3" class="ga-amber"/>`),
+  },  {
+    title: '시나리오 어려움',
+    body: '보통으로 깬 시나리오는 ‘어려움’으로 다시 도전할 수 있습니다. 적이 Lv+10 · 별 +1로 강해지고, 단계마다 특수 규칙이 하나 붙습니다. 철벽(적 사기 +20) · 속전(제한 60초) · 짙은 안개(예고 대응 시간 −0.5초) · 화공 금지(적에게 화상이 걸리지 않음). 앞 단계 어려움을 깨야 다음 단계가 열리고, 첫 클리어 때 옥패 · 은전 · 병서 · 자원을 받습니다(금화는 없음).',
+    art: svg(`<g transform="translate(20,20)"><rect width="130" height="40" rx="6" class="ga-box"/><text x="65" y="26" text-anchor="middle" class="ga-n">보통</text></g>
+      <g transform="translate(170,20)"><rect width="130" height="40" rx="6" class="ga-amber"/><text x="65" y="26" text-anchor="middle" class="ga-n">어려움</text></g>
+      <text x="20" y="100" class="ga-t">적 Lv+10 · 별 +1</text><text x="20" y="130" class="ga-t">특수 규칙 하나</text>`),
   },
 ]
 

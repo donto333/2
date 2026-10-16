@@ -1,4 +1,5 @@
-import { frontLineOrder, templateGeneral } from './strategy'
+import { MAX_GENERAL_LEVEL, frontLineOrder, templateGeneral } from './strategy'
+import { BATTLE_RULES, HARD_RULE_EFFECT, type HardRule } from './battle-core'
 import { SCENARIO_HONOR_BY_CHAPTER, SCENARIO_MANUALS_BY_CHAPTER, SCENARIO_SILVER_BY_CHAPTER, scenarioGold } from '../../server/economy.mjs'
 export interface ScenarioReward {
   gold: number
@@ -258,5 +259,82 @@ export function recordScenarioStars(cleared: string[], id: string, stars: number
 }
 
 export function clearedScenarioCount(cleared: readonly string[]): number {
-  return cleared.filter(item => !item.startsWith(STAR_PREFIX)).length
+  // 보통 첫 클리어만 센다(별·어려움 기록은 ':'가 들어 있다)
+  return cleared.filter(item => !item.includes(':')).length
+}
+
+// ── 어려움 단계: 보통을 깬 시나리오를 적 Lv+10 · 별 +1 · 특수 규칙 하나로 다시 도전 ──
+// 기록은 같은 scenarioCleared 목록에 'hard:<id>'(첫 클리어)와 'hstars:<별>:<id>'로 남긴다(DB 변경 없음).
+export type ScenarioDifficulty = 'normal' | 'hard'
+export const HARD_LEVEL_BONUS = 10
+const HARD_PREFIX = 'hard:'
+const HARD_STAR_PREFIX = 'hstars:'
+const HARD_RULE_ORDER: HardRule[] = ['iron', 'swift', 'fog', 'nofire']
+
+export const HARD_RULE_INFO: Record<HardRule, { label: string; desc: string }> = {
+  iron: { label: '철벽', desc: `적 사기 최대치가 막마다 +${HARD_RULE_EFFECT.ironMorale}` },
+  swift: { label: '속전', desc: `제한 시간 ${HARD_RULE_EFFECT.swiftTime}초(보통 ${BATTLE_RULES.timeLimit}초)` },
+  fog: { label: '짙은 안개', desc: `적 예고에 대응할 시간이 ${HARD_RULE_EFFECT.fogWindow}초 짧음` },
+  nofire: { label: '화공 금지', desc: '적에게 화상을 걸 수 없음(화공 스킬은 피해만 줌)' },
+}
+
+/** 시나리오마다 정해진 어려움 규칙(순서대로 돌아가며) */
+export function scenarioHardRule(scenario: ScenarioDefinition): HardRule {
+  const index = SCENARIOS.findIndex(item => item.id === scenario.id)
+  return HARD_RULE_ORDER[Math.max(0, index) % HARD_RULE_ORDER.length]
+}
+
+/** 적 평균 레벨(어려움은 +10, 최대 레벨까지) */
+export function scenarioEnemyLevelFor(scenario: ScenarioDefinition, difficulty: ScenarioDifficulty): number {
+  const base = scenarioEnemyLevel(scenario)
+  return difficulty === 'hard' ? Math.min(MAX_GENERAL_LEVEL, base + HARD_LEVEL_BONUS) : base
+}
+
+/** 적 무장 별(보통은 레벨 12마다 +1, 어려움은 보통보다 별 하나 더, 최대 5) */
+export function scenarioEnemyStars(scenario: ScenarioDefinition, difficulty: ScenarioDifficulty): number {
+  const base = Math.min(5, 1 + Math.floor(scenarioEnemyLevel(scenario) / 12))
+  return difficulty === 'hard' ? Math.min(5, base + 1) : base
+}
+
+export function hardCleared(cleared: readonly string[], id: string): boolean {
+  return cleared.includes(`${HARD_PREFIX}${id}`)
+}
+
+/** 어려움은 그 시나리오의 보통을 깼고, 바로 앞 시나리오의 어려움도 깼을 때 열린다 */
+export function hardUnlocked(cleared: readonly string[], scenario: ScenarioDefinition): boolean {
+  if (!cleared.includes(scenario.id)) return false
+  const index = SCENARIOS.findIndex(item => item.id === scenario.id)
+  return index <= 0 || hardCleared(cleared, SCENARIOS[index - 1].id)
+}
+
+export function hardScenarioStars(cleared: readonly string[], id: string): number {
+  const entry = cleared.find(item => item.startsWith(HARD_STAR_PREFIX) && item.endsWith(`:${id}`))
+  return entry ? Number(entry.split(':')[1]) || 0 : 0
+}
+
+export function recordHardStars(cleared: string[], id: string, stars: number): boolean {
+  const best = hardScenarioStars(cleared, id)
+  if (stars <= best) return false
+  const index = cleared.findIndex(item => item.startsWith(HARD_STAR_PREFIX) && item.endsWith(`:${id}`))
+  if (index >= 0) cleared.splice(index, 1)
+  cleared.push(`${HARD_STAR_PREFIX}${Math.min(3, stars)}:${id}`)
+  return true
+}
+
+/**
+ * 어려움 첫 클리어 보상: 금화 없음(서버 장부 재화라 서버 변경이 필요), 옥패 1.5배,
+ * 은전·병서는 절반(최대 레벨 도달을 너무 앞당기지 않게), 자원은 보통과 같음.
+ */
+export function hardClearReward(scenario: ScenarioDefinition, cleared: readonly string[]): ScenarioReward | null {
+  if (hardCleared(cleared, scenario.id)) return null
+  const base = scenario.reward
+  return { ...base, gold: 0, honor: Math.round(base.honor * 1.5), silver: Math.round(base.silver * 0.5), manuals: Math.round(base.manuals * 0.5) }
+}
+
+export function markHardCleared(cleared: string[], id: string): void {
+  if (!hardCleared(cleared, id)) cleared.push(`${HARD_PREFIX}${id}`)
+}
+
+export function hardClearedCount(cleared: readonly string[]): number {
+  return cleared.filter(item => item.startsWith(HARD_PREFIX)).length
 }

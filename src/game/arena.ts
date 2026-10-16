@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { disposeOwned, markShared } from './gpu-shared'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
 import { sound, type WeaponSound } from '../engine/sound'
-import { PLAYER_AUTO_PILOT, BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
+import { PLAYER_AUTO_PILOT, BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent, type HardRule } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import { GENERAL_SKILLS, type SkillType } from './skills'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -67,6 +67,8 @@ export interface BattleSnapshot {
   raidDamage?: number
   elapsed: number
   timeLeft: number
+  /** 시나리오 어려움 특수 규칙(없으면 null) */
+  hardRule?: HardRule | null
   /** 이번 막 적 사기 % (0~100) */
   morale: number
   moraleValue: number
@@ -272,6 +274,8 @@ export class Arena {
   private moraleBonus = 0
   /** 다음 전투를 튜토리얼 난이도로 */
   private easyBattle = false
+  /** 시나리오 어려움 특수 규칙(한 전투만) */
+  private hardRule: HardRule | null = null
   private speed = 1
   private paused = false
   private winStreak = 0
@@ -394,14 +398,18 @@ export class Arena {
     this.mode = this.configuredEnemyDeck?.length ? mode : 'normal'
     this.moraleBonus = 0
     this.easyBattle = false
+    this.hardRule = null
   }
 
   /** 튜토리얼 전투(덱을 정한 뒤에 켠다) */
   setEasyBattle(on: boolean): void { this.easyBattle = on }
+  /** 시나리오 어려움 규칙(덱을 정한 뒤에 켠다, 다음 전투 한 번만) */
+  setHardRule(rule: HardRule | null): void { this.hardRule = rule }
   setSiegeDeck(generals: General[] | null, moraleBonus = 0): void {
     this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
     this.mode = 'siege'
     this.moraleBonus = moraleBonus
+    this.hardRule = null
   }
   isDuelBattle(): boolean {
     return this.mode === 'duel'
@@ -824,7 +832,7 @@ export class Arena {
     const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
     this.enemyDeck = deck
     this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
-    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: options.autoPlay ? { ...PLAYER_AUTO_PILOT } : null })
+    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, hardRule: this.hardRule, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: options.autoPlay ? { ...PLAYER_AUTO_PILOT } : null })
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()
@@ -1585,7 +1593,8 @@ export class Arena {
       active: this.battleActive,
       mode: this.mode,
       elapsed,
-      timeLeft: Math.max(0, BATTLE_RULES.timeLimit - elapsed),
+      timeLeft: Math.max(0, (core?.timeLimit ?? BATTLE_RULES.timeLimit) - elapsed),
+      hardRule: core?.hardRule ?? null,
       morale: Math.round(moraleValue / Math.max(1, moraleMax) * 100),
       moraleValue: Math.round(moraleValue),
       moraleMax,
