@@ -127,13 +127,15 @@ export interface CoreUnit {
   guarding: { ward: number; until: number } | null
   firstAttackDone: boolean
   warned: boolean
+  /** 혼란: 이 시각까지 같은 편을 공격하고 스킬도 저절로 같은 편에게 쓴다 */
+  confusedUntil?: number
 }
 
 export type CoreEvent =
   | { kind: 'log'; text: string; tone?: 'jade' | 'ember' }
   | { kind: 'hit'; side: Side; lane: number; amount: number; source: string; edge?: 'adv' | 'dis' }
   | { kind: 'heal'; side: Side; lane: number; amount: number }
-  | { kind: 'attack'; side: Side; lane: number; target: number }
+  | { kind: 'attack'; side: Side; lane: number; target: number; friendly?: boolean }
   | { kind: 'skill'; side: Side; lane: number; name: string; morale: number; type: SkillType; target: number }
   | { kind: 'pattern'; pattern: PatternDef }
   | { kind: 'answer'; lane: number; success: boolean }
@@ -556,12 +558,48 @@ export class BattleCore {
     this.morale -= amount
   }
 
+  /** 혼란에 빠진 무장인가(혼란 효과가 풀리거나 해제되면 바로 끝난다) */
+  isConfused(unit: CoreUnit): boolean {
+    if (!unit.confusedUntil || unit.confusedUntil <= this.t || unit.troops <= 0) return false
+    return unit.side === 'enemy' ? hasBattleEffect(this.debuffs, 'confusion') : hasBattleEffect(this.playerDebuffs, 'p-confuse')
+  }
+
+  /** 혼란 대상의 같은 편(자기 자신 제외) 중 칠 무장 */
+  private confusedTarget(unit: CoreUnit): CoreUnit | undefined {
+    const allies = (unit.side === 'player' ? this.players : this.enemies).filter(other => other !== unit && other.troops > 0)
+    if (!allies.length) return undefined
+    return allies.find(other => Math.abs(other.lane - unit.lane) === 1 && this.rng() < 0.5) ?? allies[Math.floor(this.rng() * allies.length)]
+  }
+
+  /** 무장 1명을 혼란에 빠뜨린다 */
+  private confuse(unit: CoreUnit | undefined, seconds: number): void {
+    if (!unit || unit.troops <= 0) return
+    unit.confusedUntil = Math.max(unit.confusedUntil ?? 0, this.t + seconds)
+    this.log(`${unit.side === 'enemy' ? '적장' : '아군'} ${unit.general.name} 혼란 · ${Math.round(seconds)}초 동안 같은 편을 공격합니다`, unit.side === 'enemy' ? 'jade' : 'ember')
+  }
+
+  /** 혼란 중 스킬: 준비되면 저절로 같은 편 무장을 친다 */
+  private confusedSkill(unit: CoreUnit): void {
+    const target = this.confusedTarget(unit)
+    unit.cd = unit.cdMax
+    unit.warned = false
+    const name = unit.def.active.name
+    this.events.push({ kind: 'skill', side: unit.side, lane: unit.lane, name, morale: 0, type: unit.def.type, target: target?.lane ?? unit.lane })
+    if (target) {
+      const power = Math.min(SKILL_MORALE_CAP, baseMoraleDamage(this.growth(unit), unit.base))
+      this.dealDamage(target, Math.max(40, power * BATTLE_RULES.enemySkillTroopPerMorale), `${name}(혼란)`, null)
+    }
+    this.log(`${unit.side === 'enemy' ? '적장' : '아군'} ${unit.general.name} · 혼란에 빠져 ‘${name}’을(를) ${target ? `${target.general.name}에게` : '허공에'} 썼습니다`, unit.side === 'enemy' ? 'jade' : 'ember')
+  }
+
   private autoCombat(delta: number): void {
     const swing = (attacker: CoreUnit, defenders: CoreUnit[]) => {
       if (attacker.troops <= 0) return
       attacker.attackTimer -= delta
       if (attacker.attackTimer > 0) return
-      const target = this.targetFor(defenders, attacker.lane)
+      // 혼란: 같은 편 무장을 친다
+      const confused = this.isConfused(attacker)
+      const target = confused ? this.confusedTarget(attacker) : this.targetFor(defenders, attacker.lane)
       if (!target) return
       const g = attacker.general
       // 공격 간격: 빠를수록 짧아지되 갑자기 멈추지 않고 서서히 덜 줄어든다(속도 66 ≈ 1.32초, 200 ≈ 0.78초, 400 ≈ 0.49초)
@@ -575,7 +613,7 @@ export class BattleCore {
       let multiplier = 1 + this.attackBonus(attacker)
       if (attacker.side === 'enemy') {
         multiplier *= this.pressure() * this.gapScale() * (this.mode === 'duel' ? BATTLE_RULES.duelDamage : 1)
-        if (hasBattleEffect(this.debuffs, 'confusion') || hasBattleEffect(this.debuffs, 'blind')) multiplier *= 0.9
+        if (hasBattleEffect(this.debuffs, 'blind')) multiplier *= 0.9
         if (hasBattleEffect(this.debuffs, 'rage')) multiplier *= 1.1
       }
       // 유형의 주 능력치로 친다: 무력형·수호형=무력, 책사·치유형=모략, 통솔형=통솔(병사를 부려 싸운다)
@@ -584,8 +622,8 @@ export class BattleCore {
       // 성장분이 유형별로 나뉘어 공격·주 능력치 비중이 예전(54%)보다 낮아졌으므로 계수를 올려 레벨당 피해 증가를 예전과 맞춘다(Lv1 피해는 그대로)
       const raw = (8 + g.attack * 0.42 + mainStat * 0.3 + g.leadership * 0.1) * 120 / (120 + target.general.defense) * matchup(g.role, target.general.role) * Math.max(0.1, multiplier)
       attacker.firstAttackDone = true
-      this.events.push({ kind: 'attack', side: attacker.side, lane: attacker.lane, target: target.lane })
-      this.dealDamage(target, raw, g.name, attacker)
+      this.events.push({ kind: 'attack', side: attacker.side, lane: attacker.lane, target: target.lane, ...(confused ? { friendly: true } : {}) })
+      this.dealDamage(target, raw, confused ? `${g.name}(혼란)` : g.name, confused ? null : attacker)
     }
     this.players.forEach(unit => swing(unit, this.enemies))
     this.enemies.forEach(unit => swing(unit, this.players))
@@ -597,10 +635,8 @@ export class BattleCore {
     if (cause !== 'raw') {
       if (this.guardTimer > 0) value *= 0.3
       if (hasBattleEffect(this.buffs, 'phoenix-guard')) value *= 0.75
-      if (cause !== 'skill' && hasBattleEffect(this.playerDebuffs, 'p-confuse')) value *= 1.5
       if (cause === 'wrong') {
         if (hasBattleEffect(this.buffs, 'jade-command')) value *= 0.65
-        if (hasBattleEffect(this.debuffs, 'confusion')) value *= 0.65
         if (hasBattleEffect(this.debuffs, 'blind')) value *= 0.8
         if (this.players.some(unit => this.passive(unit) === 'failThreatCut')) value *= 0.75
       }
@@ -843,6 +879,7 @@ export class BattleCore {
     if (!unit || unit.troops <= 0) return false
     if (!unit.skillOn) { this.log(`${unit.general.name}의 스킬은 아직 해금되지 않았습니다.`, 'ember'); return false }
     if (unit.cd > 0) { this.log(`${unit.general.name} 스킬 재사용 대기 · ${unit.cd.toFixed(1)}초`, 'ember'); return false }
+    if (this.isConfused(unit)) { this.log(`${unit.general.name}은(는) 혼란 중이라 지휘를 따르지 않습니다`, 'ember'); return false }
     const fx = this.skillFx(unit)
     const name = this.skillName(unit)
     const morale = this.skillMorale(unit, fx)
@@ -915,7 +952,10 @@ export class BattleCore {
         if (unit.general.stars >= 4 && unit.def.type !== '돌격') seconds += 1
         // 천책 세트: 착용 무장이 거는 디버프가 더 오래 간다
         if (hasGearSet(unit, 'stratagem')) seconds *= 1 + BATTLE_RULES.sageDebuff
-        this.addEffect('debuff', effect.id, Math.min(hasGearSet(unit, 'stratagem') ? 12 : 10, seconds))
+        const debuffSeconds = Math.min(hasGearSet(unit, 'stratagem') ? 12 : 10, seconds)
+        this.addEffect('debuff', effect.id, debuffSeconds)
+        // 혼란: 스킬이 노린 적장 1명(없으면 같은 레인 적)이 그동안 같은 편을 공격한다
+        if (effect.id === 'confusion') this.confuse((this.lastSkillTarget !== null ? this.enemies[this.lastSkillTarget] : undefined)?.troops ? this.enemies[this.lastSkillTarget!] : this.targetFor(this.enemies, unit.lane), debuffSeconds)
         return [BATTLE_EFFECTS[effect.id].name]
       }
       case 'buff': {
@@ -985,6 +1025,8 @@ export class BattleCore {
     for (const unit of this.enemies) {
       if (!unit.skillOn || unit.troops <= 0 || silenced) continue
       unit.cd -= delta
+      // 혼란: 예고 없이 준비되는 대로 같은 편에게 쓴다
+      if (this.isConfused(unit)) { if (unit.cd <= 0) this.confusedSkill(unit); continue }
       if (!unit.warned && unit.cd <= BATTLE_RULES.enemySkillWarning + (this.research.enemyWarn ?? 0)) {
         unit.warned = true
         this.events.push({ kind: 'enemySkillWarn', lane: unit.lane, name: unit.def.active.name })
@@ -1011,7 +1053,10 @@ export class BattleCore {
       if (target) this.dealDamage(target, Math.max(40, power * BATTLE_RULES.enemySkillTroopPerMorale) * (guarded ? 0.5 : 1) * (this.mode === 'duel' ? BATTLE_RULES.duelDamage : 1), name, unit)
     } else if (type === '계략') {
       const id: PlayerDebuffId = FIRE_IDS.has(unit.general.id) ? 'p-burn' : unit.general.id === 'zhang-jiao' || unit.general.id === 'zhang-bo' || unit.def.active.fx.some(effect => effect.k === 'debuff' && (effect.id === 'confusion' || effect.id === 'blind')) ? 'p-confuse' : 'p-fear'
-      this.addEffect('pdebuff', id, (6 - shortDebuff) * (guarded ? 0.5 : 1))
+      const seconds = (6 - shortDebuff) * (guarded ? 0.5 : 1)
+      this.addEffect('pdebuff', id, seconds)
+      // 아군 혼란: 같은 레인(없으면 병력이 가장 많은) 무장 1명이 같은 편을 공격한다
+      if (id === 'p-confuse') this.confuse(this.players[unit.lane]?.troops ? this.players[unit.lane] : [...this.alive(this.players)].sort((left, right) => right.troops - left.troops)[0], seconds)
     } else if (type === '치유') {
       this.alive(this.enemies).forEach(other => this.heal(other, other.maxTroops * 0.08))
     } else {
@@ -1032,6 +1077,8 @@ export class BattleCore {
     this.threat = Math.max(0, this.threat - dt * (BATTLE_RULES.threatDecay + (hasBattleEffect(this.buffs, 'iron-wall') ? 4 : 0)))
     const cdRate = hasBattleEffect(this.buffs, 'swift-step') ? 1.25 : 1
     this.players.forEach(unit => { if (unit.troops > 0 && unit.skillOn) unit.cd = Math.max(0, unit.cd - dt * cdRate) })
+    // 아군 혼란: 스킬이 준비되면 저절로 같은 편에게 쓴다
+    this.players.forEach(unit => { if (unit.skillOn && unit.cd <= 0 && this.isConfused(unit)) this.confusedSkill(unit) })
     if (this.hot && this.hot.until > this.t) this.alive(this.players).forEach(unit => this.heal(unit, unit.maxTroops * this.hot!.perSec / 100 * dt))
     if (hasBattleEffect(this.playerDebuffs, 'p-burn')) this.alive(this.players).forEach(unit => this.dealDamage(unit, unit.maxTroops * 0.006 * dt * (unit.def.weakness?.id === 'weakToFire' ? 1.2 : 1), '화상', null))
     if (this.t >= this.nextPatternAt) {

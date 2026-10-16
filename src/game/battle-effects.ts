@@ -85,7 +85,7 @@ export const BATTLE_EFFECTS: Record<BattleEffectId, BattleEffectDefinition> = {
   'armor-break': { id: 'armor-break', kind: 'debuff', name: '갑주 균열', icon: '🪓', duration: 6, description: '받는 스킬 피해 +22%' },
   burning: { id: 'burning', kind: 'debuff', name: '화계', icon: '🔥', duration: 6, description: '매초 적 사기 −2.2' },
   fear: { id: 'fear', kind: 'debuff', name: '공포', icon: '😨', duration: 5, description: '매초 적 사기 −1.5' },
-  confusion: { id: 'confusion', kind: 'debuff', name: '혼란', icon: '🌀', duration: 5, description: '틀린 대응의 위협도 상승 −35%, 적 공격 −10%' },
+  confusion: { id: 'confusion', kind: 'debuff', name: '혼란', icon: '🌀', duration: 5, description: '적장 1명이 정해진 시간 동안 같은 편을 공격하고, 스킬도 준비되는 대로 저절로 같은 편에게 쓴다' },
   slow: { id: 'slow', kind: 'debuff', name: '둔화', icon: '🐢', duration: 6, description: '적 전술 예고 주기 지연' },
   bleed: { id: 'bleed', kind: 'debuff', name: '출혈', icon: '🩸', duration: 6, description: '매초 적 사기 −1.3' },
   fracture: { id: 'fracture', kind: 'debuff', name: '진형 붕괴', icon: '💥', duration: 6, description: '다음 막 적 사기 최대치 −15%' },
@@ -96,7 +96,7 @@ export const BATTLE_EFFECTS: Record<BattleEffectId, BattleEffectDefinition> = {
   flood: { id: 'flood', kind: 'debuff', name: '수공', icon: '🌊', duration: 5, description: '둔화 + 적이 받는 피해 +15%' },
   rage: { id: 'rage', kind: 'debuff', name: '분노', icon: '💢', duration: 6, description: '적 공격 +10%, 적이 받는 피해 +25%' },
   'p-burn': { id: 'p-burn', kind: 'debuff', name: '아군 화상', icon: '🔥', duration: 6, description: '매초 아군 병력 −0.6%' },
-  'p-confuse': { id: 'p-confuse', kind: 'debuff', name: '아군 혼란', icon: '🌀', duration: 6, description: '틀린 대응·무응답 위협도 +50%' },
+  'p-confuse': { id: 'p-confuse', kind: 'debuff', name: '아군 혼란', icon: '🌀', duration: 6, description: '아군 무장 1명이 정해진 시간 동안 같은 편을 공격하고, 스킬이 준비되면 저절로 아군에게 쓴다(직접 쓸 수 없음)' },
   'p-fear': { id: 'p-fear', kind: 'debuff', name: '아군 위축', icon: '😰', duration: 6, description: '아군 공격 −15%' },
   'e-guard': { id: 'e-guard', kind: 'buff', name: '적 방진', icon: '🛡', duration: 6, description: '적이 받는 피해 −20%' },
 }
