@@ -383,7 +383,7 @@ export class SoundEngine {
   private trackRetry: (() => void) | null = null
   private trackVolume(): number {
     if (muteSetting()) return 0
-    const duck = this.duckTimer ? 0.3 : this.pausedDuck ? 0.5 : 1
+    const duck = this.soloing ? 0 : this.duckTimer ? 0.3 : this.pausedDuck ? 0.5 : 1
     return SOUND_LEVEL_VALUE[musicSetting()] * 0.55 * duck
   }
   /** 곡을 튼다(이미 틀고 있으면 이어서), 다른 곡은 서서히 멈춘다. 그 곡을 못 쓰면 false */
@@ -464,7 +464,7 @@ export class SoundEngine {
   }
   private updateDuck(force?: number): void {
     if (!this.ctx) return
-    const level = force ?? (this.duckTimer ? 0.22 : this.pausedDuck ? 0.4 : 1)
+    const level = this.soloing ? 0 : force ?? (this.duckTimer ? 0.22 : this.pausedDuck ? 0.4 : 1)
     this.duckNode.gain.setTargetAtTime(level, this.ctx.currentTime, 0.15)
   }
 
@@ -787,6 +787,7 @@ export class SoundEngine {
   // ── 효과음 ──
   private allow(name: string, gap?: number, light = false): boolean {
     if (!this.ctx || !this.unlocked || this.ctx.state !== 'running') return false
+    if (this.soloing) return false
     if (light && this.voices > 36) return false
     const now = performance.now()
     if (gap && now - (this.last.get(name) ?? -1e9) < gap) return false
@@ -1489,10 +1490,27 @@ export class SoundEngine {
   recruitJingle(): void {
     if (!this.ceremonyReady()) return
     const buffer = this.fileBuffer('recruit')
-    if (!buffer) return
-    this.duckFor(Math.round(buffer.duration * 1000) + 300)
-    this.play_(buffer, this.sfxVol, this.ctx!.currentTime + 0.02, 0.9)
+    // 곡이 울리는 동안은 이 곡만 들린다(배경음 · 환경음 · 다른 효과음 모두 끔)
+    this.solo(Math.round((buffer?.duration ?? 8.4) * 1000) + 200)
+    if (buffer) this.play_(buffer, this.sfxVol, this.ctx!.currentTime + 0.02, 0.9)
   }
+  private soloUntil = 0
+  private soloTimer = 0
+  /** 이 곡만 들리게(ms 동안): 배경음 · 환경음을 0으로, 다른 효과음은 막는다 */
+  private solo(ms: number): void {
+    if (!this.ctx) return
+    window.clearTimeout(this.soloTimer)
+    this.soloUntil = performance.now() + ms
+    const t = this.ctx.currentTime
+    this.duckNode.gain.setTargetAtTime(0, t, 0.08)
+    this.ambienceBus?.gain.setTargetAtTime(0, t, 0.08)
+    this.soloTimer = window.setTimeout(() => {
+      this.soloUntil = 0
+      this.updateDuck()
+      if (this.ctx) this.ambienceBus?.gain.setTargetAtTime(1, this.ctx.currentTime, 0.6)
+    }, ms)
+  }
+  private get soloing(): boolean { return performance.now() < this.soloUntil }
   /** 섬광: 5성이면 징 · 큰북 · 금관 팡파르 · 합창 · 쏟아지는 방울과 현 */
   fanfare(level: number): void {
     if (level < 4 || !this.ceremonyReady()) return
