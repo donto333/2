@@ -1466,26 +1466,6 @@ export class SoundEngine {
     this.applyVolumes()
     return true
   }
-  /** 최고 등급이 정해진 순간(균열): 북이 빨라지고 소리가 부풀어 오른다. level 5 = 5성 무장 · 신화 장비 */
-  rise(level: number, seconds = 1.3): void {
-    if (level < 4 || !this.ceremonyReady()) return
-    this.duckFor(7000)
-    const out = this.sfxVol, t = this.ctx!.currentTime + 0.01
-    this.swell(out, t, seconds, level >= 5 ? 0.28 : 0.18)
-    // 점점 빨라지는 북
-    let at = 0, gap = 0.22
-    for (let i = 0; at < seconds - 0.05; i += 1) { this.drum(out, i % 3 === 2 ? 'taiko' : 'tom', t + at, 0.18 + (at / seconds) * 0.35); gap = Math.max(0.05, gap * 0.82); at += gap }
-    // 올라가는 낮은 소리
-    if (level >= 5) {
-      const o = this.ctx!.createOscillator(), g = this.ctx!.createGain()
-      o.type = 'sawtooth'; o.frequency.setValueAtTime(55, t); o.frequency.exponentialRampToValueAtTime(220, t + seconds)
-      const lp = this.ctx!.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(200, t); lp.frequency.exponentialRampToValueAtTime(1800, t + seconds)
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + seconds); g.gain.linearRampToValueAtTime(0.0001, t + seconds + 0.05)
-      o.connect(lp).connect(g); this.route(out, g, 0, this.hallSend)
-      o.start(t); o.stop(t + seconds + 0.1)
-      o.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
-    }
-  }
   /** 무장 모집: 대박 아이템 획득 곡(녹음 파일, 약 8초). 그동안 배경음은 낮춘다 */
   recruitJingle(): void {
     if (!this.ceremonyReady()) return
@@ -1511,33 +1491,6 @@ export class SoundEngine {
     }, ms)
   }
   private get soloing(): boolean { return performance.now() < this.soloUntil }
-  /** 섬광: 5성이면 징 · 큰북 · 금관 팡파르 · 합창 · 쏟아지는 방울과 현 */
-  fanfare(level: number): void {
-    if (level < 4 || !this.ceremonyReady()) return
-    this.duckFor(level >= 5 ? 7500 : 5000)
-    const out = this.sfxVol, hall = this.hallSend, t = this.ctx!.currentTime + 0.01
-    const grand = level >= 5
-    this.gong(out, t, grand ? 0.55 : 0.38, 0.9, hall)
-    this.drum(out, 'taiko', t, 0.8); this.drum(out, 'taiko', t, 0.6, 0, 0.6)
-    this.drum(out, 'cymbal', t, grand ? 0.35 : 0.25)
-    // 금관 팡파르: 짧게 · 짧게 · 길게(사 장조 화음)
-    const triad = [55, 59, 62, 67]
-    this.brass(out, triad, t + 0.05, 0.16, grand ? 0.09 : 0.07, hall)
-    this.brass(out, triad, t + 0.25, 0.16, grand ? 0.09 : 0.07, hall)
-    this.brass(out, grand ? [55, 62, 67, 71, 74] : triad, t + 0.45, grand ? 2.4 : 1.5, grand ? 0.11 : 0.08, hall)
-    if (grand) { this.drum(out, 'taiko', t + 0.25, 0.5); this.drum(out, 'taiko', t + 0.45, 0.7); this.drum(out, 'taiko', t + 0.45, 0.5, 0, 0.6) }
-    // 현을 세 옥타브 쓸어 올림
-    const sweep = pent(55, MAJOR_P).concat(pent(91, MAJOR_P).slice(0, grand ? 5 : 0))
-    sweep.forEach((midi, i) => this.pluck(out, midi, t + 0.45 + i * 0.026, 0.16 + Math.min(0.1, i * 0.006), { bright: 0.8, dur: 2.2, pan: -0.7 + (i / sweep.length) * 1.4, send: hall }))
-    // 쏟아지는 방울
-    const bells = grand ? 16 : 8
-    const notes = [79, 81, 83, 86, 88, 91, 93, 95, 98]
-    for (let i = 0; i < bells; i += 1) {
-      const midi = notes[Math.floor(Math.random() * notes.length)]
-      this.bell(out, t + 0.5 + i * 0.075 + Math.random() * 0.03, 0.09, mtof(midi) / 1046.5, (Math.random() - 0.5) * 1.4, hall)
-    }
-    if (grand) this.choir(out, [55, 62, 67, 71], t + 0.4, 3.2, 0.12)
-  }
   /** 등장 연출(5성 ‘천명 강림’ · 전설/신화 장비): 합창이 열리고 맑은 오음계가 올라간다 */
   heaven(level: number): void {
     if (!this.ceremonyReady()) return

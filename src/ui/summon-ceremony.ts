@@ -10,34 +10,6 @@ const esc = (value: string) => value.replace(/[&<>"']/g, ch => ({ '&': '&amp;', 
 const NEUTRAL = '#e9dcb8'
 const wait = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms))
 
-// ── 소리 ─────────────────────────────────────────────────
-/** 효과음 크기 설정을 따르는 공용 출력. 연출 동안 배경음악은 낮춘다 */
-function output(): { ctx: AudioContext; out: AudioNode } | null {
-  const target = sound.sfxOutput()
-  if (target) sound.duckFor(4500)
-  return target
-}
-function tone(freq: number, start: number, duration: number, volume: number, type: OscillatorType = 'sine', glideTo?: number): void {
-  const target = output()
-  if (!target) return
-  const ac = target.ctx
-  const t = ac.currentTime + start
-  const osc = ac.createOscillator(), gain = ac.createGain()
-  osc.type = type
-  osc.frequency.setValueAtTime(freq, t)
-  if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t + duration)
-  gain.gain.setValueAtTime(0.0001, t)
-  gain.gain.exponentialRampToValueAtTime(volume, t + 0.02)
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + duration)
-  osc.connect(gain).connect(target.out)
-  osc.start(t)
-  osc.stop(t + duration + 0.05)
-}
-/** 기를 모으는 낮은 울림 */
-const soundCharge = () => { tone(55, 0, 1.6, 0.18, 'sine', 110); tone(110, 0.2, 1.4, 0.06, 'triangle', 220) }
-/** 징 소리(섬광) */
-const soundGong = (strong: boolean) => { [82, 164, 247, 329].forEach((f, i) => tone(f, 0, strong ? 3.2 : 2, (strong ? 0.22 : 0.14) / (i + 1), 'sine')); tone(1200, 0, 0.25, 0.05, 'triangle', 300) }
-
 // ── 연출 ─────────────────────────────────────────────────
 function particles(count: number, color: string): string {
   return Array.from({ length: count }, () => {
@@ -67,19 +39,17 @@ async function ritual(level: number, color: string, centerpiece = '/assets/curre
   let skipped = false
   layer.addEventListener('click', () => { skipped = true })
   requestAnimationFrame(() => layer.classList.add('is-on'))
-  // 무장 모집은 녹음된 대박 획득 곡만 들린다(장비 뽑기는 예전 소리)
-  const quiet = kind === 'summon'
-  if (quiet) sound.recruitJingle(); else soundCharge()
+  // 무장 모집은 녹음된 대박 획득 곡만 들린다(기 모으기 · 균열 · 징 · 팡파르 소리는 없앰)
+  if (kind === 'summon') sound.recruitJingle()
   // 대기(기 모으기) → 균열(여기서 등급 색이 드러남) → 섬광
   const steps: Array<[string, number]> = reduced ? [['is-charge', 900], ['is-crack', 500], ['is-flash', 350]] : [['is-charge', 1700], ['is-crack', 900], ['is-flash', 450]]
   for (const [cls, ms] of steps) {
     if (skipped) break
     layer.classList.add(cls)
-    if (cls === 'is-crack') { layer.style.setProperty('--glow', color); layer.classList.add(`is-g${top}`); if (!quiet) sound.rise(top, (ms + (reduced ? 350 : 450)) / 1000) }
-    if (cls === 'is-flash' && !quiet) { soundGong(top >= 5); sound.fanfare(top) }
+    if (cls === 'is-crack') { layer.style.setProperty('--glow', color); layer.classList.add(`is-g${top}`); }
     await wait(ms)
   }
-  if (skipped) { layer.style.setProperty('--glow', color); if (!quiet) { soundGong(top >= 5); sound.fanfare(top) } }
+  if (skipped) layer.style.setProperty('--glow', color)
   // 뒤이어 등장 연출이 있으면 화면이 비지 않게 이 층을 남겨 두었다가 그쪽이 뜬 뒤에 걷는다
   if (keep) return layer
   layer.classList.add('is-out')
