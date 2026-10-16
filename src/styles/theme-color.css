@@ -2025,3 +2025,4 @@ html body .game-data-row .admin-account-identity{position:static;background:none
 .operator-note{display:inline-block;margin:8px 0 0;padding:5px 10px;border:1px solid rgba(255,128,102,.45);background:rgba(255,128,102,.1);color:#ffb39e;font-size:12px;line-height:1.5}
 .game-data-group{align-content:start;align-items:start}
 .game-data-head .admin-account-identity b{white-space:nowrap}
+.updates-layout--single{grid-template-columns:1fr}
