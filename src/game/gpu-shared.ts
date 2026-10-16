@@ -32,7 +32,11 @@ export function disposeOwned(root: THREE.Object3D): void {
   root.traverse(node => {
     const mesh = node as THREE.Mesh
     if ((node as THREE.InstancedMesh).isInstancedMesh) (node as THREE.InstancedMesh).dispose() // 인스턴스 행렬 버퍼
-    const geometry = mesh.geometry as THREE.BufferGeometry | undefined
+    // 뼈 애니메이션 모델: 뼈대마다 뼈 행렬 텍스처가 하나씩 있다(망토는 몸과 같은 뼈대를 쓴다)
+    const skeleton = (node as THREE.SkinnedMesh).isSkinnedMesh ? (node as THREE.SkinnedMesh).skeleton : null
+    if (skeleton && !shared.has(skeleton) && !seen.has(skeleton)) { seen.add(skeleton); skeleton.dispose() }
+    // 스프라이트는 three가 모든 스프라이트에 같은 도형 하나를 쓴다
+    const geometry = (node as THREE.Sprite).isSprite ? undefined : mesh.geometry as THREE.BufferGeometry | undefined
     if (geometry && !shared.has(geometry) && !seen.has(geometry)) { seen.add(geometry); geometry.dispose() }
     const materials = mesh.material ? (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) : []
     for (const material of materials) {

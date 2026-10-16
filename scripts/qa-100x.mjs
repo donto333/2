@@ -24,6 +24,8 @@ async function openGame(query = '') {
   page.on('console', m => {
     const t = m.text()
     if (/GL Driver|swiftshader|GroupMarker|WebGL-|GPU stall|Automatic fallback/i.test(t)) return
+    // 미리보기 서버에는 온라인 기능(/api) 서버가 없어 502가 난다: 게임 오류가 아니다
+    if (m.type() === 'error' && /status of 50[234]/.test(t)) return
     if (m.type() === 'error') report.errors.push({ where: page.url(), text: t.slice(0, 400) })
     else if (m.type() === 'warning') report.warnings.push(t.slice(0, 300))
   })
