@@ -1,5 +1,5 @@
 import type { MissionState } from './missions'
-import { createResearch, normalizeResearch, researchMods, researchCostText, startResearch } from './research'
+import { createResearch, formatDuration, normalizeResearch, researchMods, researchCostText, rushCost, startResearch } from './research'
 import cityRoutes from '../../server/city-routes.json'
 import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, GENERAL_SKILLS, GROWTH_OWN_SHARE, GROWTH_PROFILE, GROWTH_STATS, levelBudget, starBudget, type GrowthStat, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
@@ -43,6 +43,9 @@ export interface CityBuilding {
   level: number
   maxLevel: number
   description: string
+  /** 공사 중이면 시작 · 완공 시각(완공되면 level +1) */
+  startedAt?: number
+  endsAt?: number
 }
 
 export interface City {
@@ -959,6 +962,8 @@ export function mergeFactionTerritories(state: StrategyState, snapshots: Faction
     if (!snapshot) return
     const wasAlly = city.owner === state.faction
     city.owner = snapshot.owner
+    // 상대에게 점령당하면 내정 건물이 초기화된다
+    if (wasAlly && city.owner !== state.faction) resetCityBuildings(city)
     city.conquestProgress = Math.max(0, Math.min(100, Math.trunc(snapshot.conquestProgress)))
     city.defense = Math.max(0, Math.min(cityDefenseForLevel(city.level), Math.trunc(snapshot.defense)))
     city.prosperity = Math.max(0, Math.min(100, Math.trunc(snapshot.prosperity)))
@@ -1899,21 +1904,90 @@ export function buildingCost(building: CityBuilding, state?: StrategyState): Par
   }
 }
 
-export function upgradeBuilding(state: StrategyState, cityId: string, buildingId: string): { ok: boolean; message: string } {
+/** 내정 건물 공사 시간(분): 현재 단계 → 다음 단계. 1→2 10분 · 2→3 30분 · 3→4 1시간 30분 · 4→5 4시간 */
+export const BUILD_MINUTES = [10, 30, 90, 240] as const
+export function buildingDurationMs(building: Pick<CityBuilding, 'level'>): number {
+  return (BUILD_MINUTES[Math.max(0, building.level - 1)] ?? BUILD_MINUTES[BUILD_MINUTES.length - 1]) * 60_000
+}
+/** 도시마다 공사는 한 번에 하나 */
+export function cityConstruction(city: City): CityBuilding | undefined {
+  return city.buildings.find(building => building.endsAt !== undefined)
+}
+
+/** 공사 시작(연구처럼 시간이 걸린다). 완공 때 단계가 오르고 효과가 붙는다 */
+export function upgradeBuilding(state: StrategyState, cityId: string, buildingId: string, now = Date.now()): { ok: boolean; message: string } {
+  settleBuildings(state, now)
   const city = findCity(state, cityId)
   if (!city) return { ok: false, message: '도시를 찾을 수 없습니다.' }
   if (city.owner !== state.faction) return { ok: false, message: '아군 영토의 도시만 내정을 지휘할 수 있습니다.' }
   const building = city.buildings.find(item => item.id === buildingId)
   if (!building) return { ok: false, message: '건물을 찾을 수 없습니다.' }
   if (building.level >= building.maxLevel) return { ok: false, message: `${building.name}은(는) 이미 최고 단계입니다.` }
+  const busy = cityConstruction(city)
+  if (busy) return { ok: false, message: busy.id === building.id ? `${building.name}은(는) 이미 공사 중입니다.` : `${city.name}에서는 ${busy.name} 공사가 진행 중입니다. 도시마다 한 번에 하나씩 지을 수 있습니다.` }
   const cost = buildingCost(building, state)
   if (!spendResources(state, cost)) return { ok: false, message: `내정 자원이 부족합니다. 은전 ${formatNumber(cost.silver ?? 0)} · 목재 ${formatNumber(cost.wood ?? 0)} · 철 ${formatNumber(cost.iron ?? 0)} 필요` }
-  building.level += 1
+  const duration = buildingDurationMs(building)
+  building.startedAt = now
+  building.endsAt = now + duration
+  state.selectedCityId = city.id
+  state.lastNotice = `${city.name} · ${building.name} ${building.level + 1}단계 공사 시작 · ${formatDuration(duration)} 후 완공`
+  return { ok: true, message: state.lastNotice }
+}
+
+function completeBuilding(city: City, building: CityBuilding): void {
+  building.level = Math.min(building.maxLevel, building.level + 1)
+  building.startedAt = undefined
+  building.endsAt = undefined
   city.prosperity = Math.min(100, city.prosperity + (building.kind === 'agriculture' || building.kind === 'commerce' ? 4 : 2))
   if (building.kind === 'barracks') city.defense = Math.min(100, city.defense + 7)
-  state.selectedCityId = city.id
-  state.lastNotice = `${city.name} · ${building.name} ${building.level}단계 완공`
+}
+
+/** 시간이 다 된 공사를 완공한다(아군 도시만). 완공된 '도시 · 건물' 이름 목록 */
+export function settleBuildings(state: StrategyState, now = Date.now()): string[] {
+  const done: string[] = []
+  for (const city of state.cities) {
+    for (const building of city.buildings) {
+      if (building.endsAt === undefined || now < building.endsAt) continue
+      if (city.owner !== state.faction) { building.startedAt = undefined; building.endsAt = undefined; continue }
+      completeBuilding(city, building)
+      done.push(`${city.name} ${building.name} ${building.level}단계`)
+    }
+  }
+  if (done.length) state.lastNotice = `내정 완공 · ${done.join(' · ')}`
+  return done
+}
+
+/** 공사 취소: 자원을 모두 돌려준다 */
+export function cancelBuilding(state: StrategyState, cityId: string): { ok: boolean; message: string } {
+  const city = findCity(state, cityId)
+  const building = city ? cityConstruction(city) : undefined
+  if (!city || !building) return { ok: false, message: '진행 중인 공사가 없습니다.' }
+  const cost = buildingCost(building, state)
+  state.silver += cost.silver ?? 0
+  state.resources = { ...state.resources, silver: state.silver, wood: state.resources.wood + (cost.wood ?? 0), iron: state.resources.iron + (cost.iron ?? 0) }
+  building.startedAt = undefined
+  building.endsAt = undefined
+  state.lastNotice = `${city.name} · ${building.name} 공사 취소 · 자원을 모두 돌려받았습니다.`
   return { ok: true, message: state.lastNotice }
+}
+
+/** 즉시 완공: 남은 10분마다 금화 1개(연구와 같음) */
+export function rushBuilding(state: StrategyState, cityId: string, now = Date.now()): { ok: boolean; message: string } {
+  const city = findCity(state, cityId)
+  const building = city ? cityConstruction(city) : undefined
+  if (!city || !building || building.endsAt === undefined) return { ok: false, message: '진행 중인 공사가 없습니다.' }
+  const cost = rushCost(building.endsAt - now)
+  if (state.gold < cost) return { ok: false, message: `금화가 부족합니다. 즉시 완공에 금화 ${cost}개가 필요합니다.` }
+  state.gold -= cost
+  completeBuilding(city, building)
+  state.lastNotice = `즉시 완공 · ${city.name} ${building.name} ${building.level}단계 (금화 −${cost})`
+  return { ok: true, message: state.lastNotice }
+}
+
+/** 상대에게 점령당한 도시: 내정 건물이 모두 1단계로 돌아가고 공사도 사라진다 */
+export function resetCityBuildings(city: City): void {
+  city.buildings = createBuildings(1)
 }
 
 export function researchCost(node: ResearchNode): string {

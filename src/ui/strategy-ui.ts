@@ -8,7 +8,7 @@ import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResou
 import { effectsSetting, muteSetting, musicSetting, qualitySetting, setEffectsSetting, setMusicSetting, setMuteSetting, setQualitySetting, setSfxSetting, sfxSetting, type EffectsSetting, type QualitySetting, type SoundLevel } from '../game/settings'
 import { sound } from '../engine/sound'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
-import { growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
+import { growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot } from '../game/arena'
 import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
@@ -263,6 +263,8 @@ export interface StrategyUiCallbacks {
   onFactionBattle: (id: string) => void
   onCollectIncome: () => void
   onBuildingUpgrade: (cityId: string, buildingId: string) => void
+  onBuildingRush: (cityId: string) => void
+  onBuildingCancel: (cityId: string) => void
   onResearch: (id: string) => void
   onResearchCancel: () => void
   onMissionClaim: (id: string) => void
@@ -419,6 +421,14 @@ export class StrategyUI {
   }
 
   /** 연구 화면의 남은 시간·진행 막대·즉시 완료 비용만 고친다(전체 다시 그리기 없음) */
+  /** 내정 공사 남은 시간만 갱신(1초마다) */
+  updateBuildTimers(): void {
+    const now = Date.now()
+    this.root.querySelectorAll<HTMLElement>('[data-build-left]').forEach(el => { el.textContent = formatDuration(Math.max(0, Number(el.dataset.buildLeft) - now)) })
+    this.root.querySelectorAll<HTMLElement>('[data-build-bar]').forEach(el => { const left = Math.max(0, Number(el.dataset.buildBar) - now); el.style.width = `${Math.min(100, (1 - left / Math.max(1, Number(el.dataset.buildTotal))) * 100).toFixed(1)}%` })
+    this.root.querySelectorAll<HTMLElement>('[data-build-rush]').forEach(el => { el.textContent = `즉시 완공 · 금화 ${rushCost(Math.max(0, Number(el.dataset.buildRush) - now))}` })
+  }
+
   updateResearchTimer(state: StrategyState): void {
     const active = activeResearch(state)
     if (!active || active.endsAt === undefined) return
@@ -1591,7 +1601,15 @@ export class StrategyUI {
     const cost = buildingCost(building, this.renderedState ?? undefined)
     const costText = `${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('wood', 'gi--inline')} ${formatNumber(cost.wood ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
     const maxed = building.level >= building.maxLevel
-    return `<div class="building-row"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed ? 'disabled' : ''}>${maxed ? '최고 단계' : `강화 · ${costText}`}</button></div>`
+    // 공사 중: 남은 시간 · 즉시 완공(금화) · 취소, 같은 도시의 다른 건물은 기다린다
+    const busyBuilding = city.buildings.find(item => item.endsAt !== undefined)
+    if (building.endsAt !== undefined) {
+      const left = Math.max(0, building.endsAt - Date.now())
+      const total = Math.max(1, building.endsAt - (building.startedAt ?? building.endsAt - 1))
+      return `<div class="building-row is-building"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name} <em class="building-next">→ ${building.level + 1}단계 공사 중</em></strong><small>남은 시간 <b data-build-left="${building.endsAt}">${formatDuration(left)}</b></small><span class="building-progress"><i data-build-bar="${building.endsAt}" data-build-total="${total}" style="width:${Math.min(100, (1 - left / total) * 100).toFixed(1)}%"></i></span></div><div class="building-actions"><button class="mini-action" data-action="building-rush" data-city="${city.id}" data-build-rush="${building.endsAt}" ${canManage ? '' : 'disabled'}>즉시 완공 · 금화 ${rushCost(left)}</button><button class="mini-action" data-action="building-cancel" data-city="${city.id}" ${canManage ? '' : 'disabled'}>취소</button></div></div>`
+    }
+    const waitOther = Boolean(busyBuilding && !maxed)
+    return `<div class="building-row"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed || waitOther ? 'disabled' : ''} title="${waitOther ? '이 도시는 다른 건물을 짓는 중입니다' : ''}">${maxed ? '최고 단계' : waitOther ? `다른 공사 중 · ${costText}` : `강화 · ${formatDuration(buildingDurationMs(building))} · ${costText}`}</button></div>`
   }
 
   private researchSection(state: StrategyState): string {
@@ -2107,6 +2125,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.16', '내정 건물 공사 시간 · 점령 시 초기화', '내정 건물 강화가 연구처럼 시간이 걸립니다(1→2단계 10분 · 2→3단계 30분 · 3→4단계 1시간 30분 · 4→5단계 4시간). 도시마다 한 번에 하나씩 지으며, 금화로 즉시 완공하거나(남은 10분마다 금화 1개) 취소하고 자원을 돌려받을 수 있습니다. 아군 도시를 상대에게 점령당하면 그 도시의 건물이 모두 1단계로 돌아가고 공사도 사라집니다.', '완료', 'jade'],
       ['2026.10.16', '최종 세력전 버튼', '최종 세력전 버튼이 잠겨 있으면 그 아래에 남은 조건(성벽 방어도 · 남은 수비병)을 보여 줍니다. 운영자 계정은 영토전에 반영되지 않는 대신, 직접 공격한 도시의 공성 진행을 이 기기에서 이어 갈 수 있어 최종 세력전까지 시험할 수 있습니다(연습 모드).', '완료', 'jade'],
       ['2026.10.16', '서버 보상 금화가 사라지던 문제', '매일 금화 · 시나리오 첫 클리어 금화 · 세력전 금화 · 대련 신화 조각 · 레이드와 낙양전 보상을 받는 순간 게임 저장이 겹치면 받은 보상이 사라질 수 있던 문제를 고쳤습니다. 이제 보상 지급과 저장이 차례대로 처리됩니다. 정식 출시 전 매일 금화 100개는 정식 출시 스위치를 켜면 자동으로 멈춥니다.', '완료', 'jade'],
       ['2026.10.16', '배경음 정리', '화면마다 곡이 따로 흐릅니다. 본영은 ‘강의 흐름’, 모집 메뉴와 천하영토는 각각 전용 곡, 시나리오 · 대련 전투와 주간 레이드도 각자의 곡을 씁니다. 전투에서 이기면 전투 곡이 꺼지고 원래 화면의 곡으로 돌아갑니다(공성 뒤에는 천하영토 곡).', '완료', 'jade'],
@@ -2325,6 +2344,8 @@ export class StrategyUI {
     else if (action === 'faction-battle') this.callbacks.onFactionBattle(button.dataset.city ?? '')
     else if (action === 'collect-income') this.callbacks.onCollectIncome()
     else if (action === 'building-upgrade') this.callbacks.onBuildingUpgrade(button.dataset.city ?? '', button.dataset.building ?? '')
+    else if (action === 'building-rush') this.callbacks.onBuildingRush(button.dataset.city ?? '')
+    else if (action === 'building-cancel') this.callbacks.onBuildingCancel(button.dataset.city ?? '')
     else if (action === 'research') this.callbacks.onResearch(button.dataset.research ?? '')
     else if (action === 'battle-guide') this.callbacks.onBattleGuide()
     else if (action === 'coach-reset') this.callbacks.onCoachReset()

@@ -51,6 +51,9 @@ import {
   unlockSkill,
   upgrade,
   upgradeBuilding,
+  settleBuildings,
+  rushBuilding,
+  cancelBuilding,
   type Section,
   type StrategyState,
   type FactionTerritorySnapshot,
@@ -1218,6 +1221,19 @@ const ui = new StrategyUI(root, {
     if (result.ok) playSfx('build')
     if (result.ok) queueAccountSave()
   },
+  onBuildingRush: cityId => {
+    const result = rushBuilding(state, cityId)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('build')
+    if (result.ok) queueAccountSave(true)
+  },
+  onBuildingCancel: cityId => {
+    const result = cancelBuilding(state, cityId)
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) queueAccountSave()
+  },
   onResearch: id => {
     const result = unlockResearch(state, id)
     if (result.ok) { mission('researchStart'); askNotificationOnce() }
@@ -1666,6 +1682,13 @@ window.setInterval(() => {
     if (state.section === 'research' || state.section === 'territory') ui.render(state)
     return
   }
+  // 내정 공사: 완공되면 알리고 저장, 영토 화면이면 남은 시간만 갱신
+  const built = settleBuildings(state)
+  if (built.length) {
+    ui.notify(`내정 완공 · ${built.join(' · ')}`, 'jade')
+    queueAccountSave(true)
+    if (state.section === 'territory') ui.render(state)
+  } else if (state.section === 'territory') ui.updateBuildTimers()
   if (state.section === 'research') ui.updateResearchTimer(state)
 }, 1000)
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CITY_DEFENSE_BY_LEVEL, CITY_INCOME_REWARD_MULTIPLIER, CITY_PRODUCTION_MULTIPLIER, cityBreachThreshold, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, resolveConquestBattle, unlockResearch, upgradeBuilding } from '../src/game/strategy'
+import { CITY_DEFENSE_BY_LEVEL, CITY_INCOME_REWARD_MULTIPLIER, CITY_PRODUCTION_MULTIPLIER, cityBreachThreshold, CONQUEST_COOLDOWN_MS, DEFENSE_COOLDOWN_MS, DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL, FACTION_BATTLE_COOLDOWN_MS, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, INCOME_COOLDOWN_MS, MAX_CITY_GARRISONS, cityIncome, collectIncome, conquestCost, conquestEligibility, conquestPower, createInitialState, defendCity, deployCityGarrison, ensureCityRoster, findCity, isLuoyangSiegeWindow, launchConquest, launchFactionBattle, mergeFactionTerritories, normalizeInitialSeasonTerritories, resolveConquestBattle, unlockResearch, upgradeBuilding, settleBuildings, buildingDurationMs, cancelBuilding, rushBuilding } from '../src/game/strategy'
 
 describe('territory and governance', () => {
   it('starts with only the three faction capitals owned', () => {
@@ -115,13 +115,40 @@ describe('territory and governance', () => {
     expect(income).toEqual({ grain: 4900, silver: 3450, wood: 2000, iron: 1270, influence: 1070 })
   })
 
-  it('upgrades a selected allied building and rejects enemy cities', () => {
+  it('upgrades a selected allied building over time and rejects enemy cities', () => {
     const state = createInitialState()
     const city = findCity(state, 'chengdu')!
-    const beforeLevel = city.buildings.find(building => building.id === 'farm')!.level
-    expect(upgradeBuilding(state, 'chengdu', 'farm').ok).toBe(true)
-    expect(city.buildings.find(building => building.id === 'farm')!.level).toBe(beforeLevel + 1)
+    const farm = () => city.buildings.find(building => building.id === 'farm')!
+    const beforeLevel = farm().level
+    expect(upgradeBuilding(state, 'chengdu', 'farm', 1000).ok).toBe(true)
+    // 공사 중: 단계는 아직 그대로, 같은 도시의 다른 건물은 기다린다
+    expect(farm().level).toBe(beforeLevel)
+    expect(upgradeBuilding(state, 'chengdu', 'market', 1000).ok).toBe(false)
+    expect(settleBuildings(state, 1000 + buildingDurationMs({ level: beforeLevel }) - 1)).toEqual([])
+    expect(settleBuildings(state, 1000 + buildingDurationMs({ level: beforeLevel })).length).toBe(1)
+    expect(farm().level).toBe(beforeLevel + 1)
+    expect(farm().endsAt).toBeUndefined()
     expect(upgradeBuilding(state, 'xuchang', 'farm').ok).toBe(false)
+  })
+
+  it('cancels with a refund, rushes with gold, and resets buildings when the city is lost', () => {
+    const state = createInitialState()
+    state.gold = 100
+    const city = findCity(state, 'chengdu')!
+    const wood = state.resources.wood
+    expect(upgradeBuilding(state, 'chengdu', 'farm', 0).ok).toBe(true)
+    expect(state.resources.wood).toBeLessThan(wood)
+    expect(cancelBuilding(state, 'chengdu').ok).toBe(true)
+    expect(state.resources.wood).toBe(wood)
+    expect(upgradeBuilding(state, 'chengdu', 'market', 0).ok).toBe(true)
+    const level = city.buildings.find(building => building.id === 'market')!.level
+    expect(rushBuilding(state, 'chengdu', 0).ok).toBe(true)
+    expect(city.buildings.find(building => building.id === 'market')!.level).toBe(level + 1)
+    expect(state.gold).toBeLessThan(100)
+    // 상대에게 점령당하면 건물이 모두 1단계로
+    expect(upgradeBuilding(state, 'chengdu', 'farm', 0).ok).toBe(true)
+    mergeFactionTerritories(state, [{ cityId: 'chengdu', owner: '위나라', conquestProgress: 0, defense: 100, prosperity: 50 } as never])
+    expect(city.buildings.every(building => building.level === 1 && building.endsAt === undefined)).toBe(true)
   })
 
   it('requires a tier-one research before starting its tier-two research', () => {

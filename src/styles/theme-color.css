@@ -2027,3 +2027,9 @@ html body .game-data-row .admin-account-identity{position:static;background:none
 .game-data-head .admin-account-identity b{white-space:nowrap}
 .updates-layout--single{grid-template-columns:1fr}
 .final-war-wait{margin:8px 0 0;color:#e8b98a;font-size:12px;line-height:1.5}
+/* 내정 공사 중 */
+.building-row.is-building{border-color:rgba(224,177,82,.45);background:rgba(224,177,82,.07)}
+.building-next{font-style:normal;font-weight:500;font-size:12px;color:#e0b152;margin-left:6px}
+.building-progress{display:block;height:4px;margin-top:6px;background:rgba(220,208,184,.14)}
+.building-progress i{display:block;height:100%;background:linear-gradient(90deg,#b98b2e,#edc471)}
+.building-actions{display:flex;flex-direction:column;gap:6px}
