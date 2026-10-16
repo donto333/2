@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { disposeOwned } from './gpu-shared'
+import { disposeOwned, markShared } from './gpu-shared'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
 import { sound, type WeaponSound } from '../engine/sound'
 import { BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
@@ -236,6 +236,16 @@ const SKILL_SLOWMO_ENEMY = 0.18
 const ember = 0xff8066
 type TroopType = 'cavalry' | 'spearmen' | 'archer'
 export type CommanderArchetype = '무장형' | '책사형' | '지원형'
+/** 타격 효과 도형(모든 타격이 함께 쓴다 — 타격마다 새로 만들어 GPU에 올리지 않게) */
+let impactGeo: { ring: THREE.RingGeometry; inner: THREE.RingGeometry; flash: THREE.SphereGeometry; shard: THREE.TetrahedronGeometry; shardBig: THREE.TetrahedronGeometry } | null = null
+function impactGeometries(): NonNullable<typeof impactGeo> {
+  if (!impactGeo) {
+    impactGeo = { ring: new THREE.RingGeometry(0.25, 0.72, 32), inner: new THREE.RingGeometry(0.12, 0.3, 24), flash: new THREE.SphereGeometry(0.22, 12, 8), shard: new THREE.TetrahedronGeometry(0.08, 0), shardBig: new THREE.TetrahedronGeometry(0.12, 0) }
+    markShared(...Object.values(impactGeo))
+  }
+  return impactGeo
+}
+
 export class Arena {
   private readonly renderer: THREE.WebGLRenderer
   private readonly scene = new THREE.Scene()
@@ -608,14 +618,15 @@ export class Arena {
     })
   }
 
-  private makeTextSprite(rawText: string, color: string, scale = 2.2): THREE.Sprite {
+  /** res: 글 그림 해상도 배율(타격 숫자처럼 작고 짧게 뜨는 글은 0.5로 — 타격마다 올리는 텍스처를 1/4로) */
+  private makeTextSprite(rawText: string, color: string, scale = 2.2, res = 1): THREE.Sprite {
     const text = tr(rawText)
     const canvas = document.createElement('canvas')
-    canvas.width = 512
-    canvas.height = 160
+    canvas.width = Math.round(512 * res)
+    canvas.height = Math.round(160 * res)
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Canvas 2D context is unavailable')
-    context.clearRect(0, 0, canvas.width, canvas.height)
+    context.scale(res, res) // 아래 그리기는 512×160 기준
     context.font = '700 76px Pretendard, sans-serif'
     // 영어처럼 긴 글은 폭에 맞게 글자를 줄인다
     const width = context.measureText(text).width
@@ -624,11 +635,11 @@ export class Arena {
     context.textBaseline = 'middle'
     context.strokeStyle = 'rgba(4, 12, 14, .86)'
     context.lineWidth = 13
-    context.strokeText(text, canvas.width / 2, canvas.height / 2)
+    context.strokeText(text, 256, 80)
     context.fillStyle = color
     context.shadowColor = color
-    context.shadowBlur = 22
-    context.fillText(text, canvas.width / 2, canvas.height / 2)
+    context.shadowBlur = 22 * res // 그림자 흐림은 변환 배율을 따르지 않는다
+    context.fillText(text, 256, 80)
     const texture = new THREE.CanvasTexture(canvas)
     texture.colorSpace = THREE.SRGBColorSpace
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false })
@@ -640,15 +651,18 @@ export class Arena {
   private spawnImpact(position: THREE.Vector3, damage: number, color = 0xf6c56d, showNumber = true, felt = damage): void {
     const group = new THREE.Group()
     const intensity = Math.min(1.65, 0.82 + felt / 180)
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.72, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
-    const innerRing = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.3, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+    const geo = impactGeometries()
+    const ring = new THREE.Mesh(geo.ring, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+    const innerRing = new THREE.Mesh(geo.inner, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
     ring.rotation.x = -Math.PI / 2
     innerRing.rotation.x = -Math.PI / 2
-    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }))
+    const flash = new THREE.Mesh(geo.flash, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }))
     flash.position.y = 0.7
     const shards: THREE.Mesh[] = []
+    // 조각 8개는 도형(모든 타격 공유)과 재질(이 타격 하나) 하나를 함께 쓴다: 타격마다 GPU에 새로 올리는 양을 줄인다
+    const shardMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending, depthWrite: false })
     for (let index = 0; index < 8; index += 1) {
-      const shard = new THREE.Mesh(new THREE.TetrahedronGeometry(0.08 + (index % 2) * 0.04, 0), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending, depthWrite: false }))
+      const shard = new THREE.Mesh(index % 2 ? geo.shardBig : geo.shard, shardMaterial)
       const angle = (index / 8) * Math.PI * 2
       shard.position.set(Math.cos(angle) * 0.34, 0.42 + (index % 3) * 0.1, Math.sin(angle) * 0.34)
       shard.userData.velocity = new THREE.Vector3(Math.cos(angle) * (1.2 + (index % 3) * 0.18), 0.45 + (index % 2) * 0.25, Math.sin(angle) * (1.2 + (index % 3) * 0.18))
@@ -658,7 +672,7 @@ export class Arena {
     group.add(ring, innerRing, flash)
     group.position.copy(position)
     // 숫자는 큰 타격·스킬에만(모든 타격에 띄우면 화면이 어지럽다)
-    const label = showNumber ? this.makeTextSprite(`-${damage}`, color === 0x4cdfff ? '#8deaff' : '#ffe5a4', 1.15) : null
+    const label = showNumber ? this.makeTextSprite(`-${damage}`, color === 0x4cdfff ? '#8deaff' : '#ffe5a4', 1.15, 0.5) : null
     if (label) { label.position.set(0, 1.35, 0); group.add(label) }
     this.addEffect({
       object: group,
@@ -676,19 +690,14 @@ export class Arena {
           shard.position.addScaledVector(shard.userData.velocity as THREE.Vector3, delta)
           shard.rotation.x += delta * 8
           shard.rotation.y += delta * 11
-          ;(shard.material as THREE.MeshBasicMaterial).opacity = 0.92 * (1 - progress)
         })
+        shardMaterial.opacity = 0.92 * (1 - progress)
         if (label) { label.position.y = 1.35 + progress * 1.2; label.material.opacity = 1 - progress }
         group.rotation.y += delta * 3
       },
       dispose: () => {
-        // 타격마다 만든 도형·재질을 모두 버린다(전투가 길어져도 메모리가 쌓이지 않게)
-        group.traverse(node => {
-          const mesh = node as THREE.Mesh
-          if (mesh.isMesh) mesh.geometry.dispose()
-          const material = mesh.material
-          if (material && !Array.isArray(material)) material.dispose()
-        })
+        // 타격마다 만든 재질을 버린다(도형은 모든 타격이 함께 쓴다)
+        ring.material.dispose(); innerRing.material.dispose(); flash.material.dispose(); shardMaterial.dispose()
         if (label) { label.material.map?.dispose(); label.material.dispose() }
       },
     })
