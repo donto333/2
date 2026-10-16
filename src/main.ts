@@ -60,7 +60,7 @@ import {
 } from './game/strategy'
 import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
-import { clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
+import { SCENARIOS, clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
 import { raidBossDeck } from './game/raid'
 import { RaidRunner } from './game/raid-run'
@@ -2003,4 +2003,4 @@ async function saveAdminGameData(data: GameAccountView['game']): Promise<void> {
   }
 }
 
-;(window as unknown as { __strategy: { state: StrategyState; arena: Arena; ui: StrategyUI } }).__strategy = { state, arena, ui }
+;(window as unknown as { __strategy: { state: StrategyState; arena: Arena; ui: StrategyUI; catalog: { generals: () => ReturnType<typeof allGenerals>; scenarios: string[] } } }).__strategy = { state, arena, ui, catalog: { generals: allGenerals, scenarios: SCENARIOS.map(s => s.id) } } // 점검 · 자동 테스트용(scripts/qa-100x.mjs)
