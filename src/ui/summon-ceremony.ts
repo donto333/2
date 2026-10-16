@@ -67,7 +67,7 @@ function dropLater(layer: HTMLElement | null): void {
 interface Spotlight { stamp: string; grade: string; name: string; sub: string; extra: string; portrait?: string; image?: string; color: string }
 
 /** 최고 등급 등장 연출(5등급 무장 ‘천명 강림’, 전설·신화 장비). 계속을 누르거나 잠시 뒤 넘어간다 */
-async function spotlight(item: Spotlight, level = 5, quiet = false): Promise<void> {
+async function spotlight(item: Spotlight, level = 5, hero = false): Promise<void> {
   const reduced = effectsSetting() === 'reduced'
   const layer = document.createElement('div')
   layer.className = `heaven-descends ${item.image ? 'heaven-descends--item' : ''}`
@@ -86,7 +86,8 @@ async function spotlight(item: Spotlight, level = 5, quiet = false): Promise<voi
       <button class="action-button action-button--primary hd-continue" type="button">계속</button>
     </div>`
   document.body.appendChild(layer)
-  if (!quiet) sound.heaven(level)
+  // 5성 무장은 모집 곡과 같은 조로 어우러지는 등장음, 장비는 천명 강림
+  if (hero) sound.heroReveal(); else sound.heaven(level)
   requestAnimationFrame(() => layer.classList.add('is-on'))
   await new Promise<void>(resolve => {
     let done = false
