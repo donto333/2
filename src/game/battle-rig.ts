@@ -529,3 +529,39 @@ export function handProp(kind: HandProp): Prop {
   if (kind === 'fan') return fanProp()
   return WEAPON_PROPS[kind]()
 }
+
+/**
+ * 기병 장도(병사용): 길고 살짝 휜 외날 + 두손 손잡이(노끈 감김) + 쇠고리 + 붉은 술. 손잡이 원점, 날은 +Y.
+ * 한 재질로 그리도록 부분마다 꼭짓점 색(강철 · 쇠 · 노끈 · 붉은 술)을 칠한다. 위치 · 노멀 · 색만 남긴다.
+ */
+export function cavalrySaberGeometry(): THREE.BufferGeometry {
+  const parts: Array<[THREE.BufferGeometry, number]> = []
+  // 날: 등은 곧게, 날 쪽은 끝으로 갈수록 살짝 좁아지며 끝 15%에서 비스듬히 휜 칼끝
+  const length = 1.02, width = 0.04, back = 0.009, tipLen = 0.13, curve = 0.05, n = 24
+  const shape = new THREE.Shape()
+  shape.moveTo(-back, 0)
+  for (let i = 0; i <= n; i += 1) { const t = i / n; shape.lineTo(-back + curve * t * t, t * (length - tipLen)) }
+  shape.lineTo(curve * 0.9, length)
+  for (let i = n; i >= 0; i -= 1) { const t = i / n; shape.lineTo(width * (1 - 0.18 * t) + curve * t * t, t * (length - tipLen)) }
+  const blade = new THREE.ExtrudeGeometry(shape, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1, steps: 1 })
+  blade.translate(0, 0.11, -0.003)
+  parts.push([blade, 0xc8ccd2])
+  const guard = new THREE.CylinderGeometry(0.038, 0.038, 0.016, 16); guard.scale(1.25, 1, 0.75); guard.translate(0, 0.105, 0)
+  parts.push([guard, 0x3a3634])
+  const grip = new THREE.CylinderGeometry(0.016, 0.017, 0.3, 10); grip.translate(0, -0.05, 0)
+  parts.push([grip, 0x1e1612])
+  for (let i = 0; i < 10; i += 1) { const w = new THREE.TorusGeometry(0.018, 0.003, 5, 12); w.rotateX(Math.PI / 2); w.translate(0, -0.18 + i * 0.03, 0); parts.push([w, 0x3a2a20]) }
+  const ring = new THREE.TorusGeometry(0.03, 0.007, 8, 20); ring.translate(0, -0.225, 0)
+  parts.push([ring, 0x3a3634])
+  const tassel = new THREE.ConeGeometry(0.02, 0.16, 8, 1, true); tassel.rotateZ(0.25); tassel.translate(0.02, -0.33, 0)
+  parts.push([tassel, 0xa81e18])
+  const list = parts.map(([g, color]) => {
+    const flat = g.index ? g.toNonIndexed() : g
+    for (const name of Object.keys(flat.attributes)) if (name !== 'position' && name !== 'normal') flat.deleteAttribute(name)
+    const c = new THREE.Color(color), colors: number[] = []
+    for (let v = 0; v < flat.getAttribute('position').count; v += 1) colors.push(c.r, c.g, c.b)
+    flat.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+    return flat
+  })
+  return mergeGeometries(list)!
+}

@@ -4,6 +4,7 @@
 //  - 병사(InstancedMesh)는 뼈 애니메이션을 한 번 구워 공격 자세 + 걷기 자세를 모프로 쓴다(수십 명이 같은 그리기 한 번)
 import * as THREE from 'three'
 import { markShared } from './gpu-shared'
+import { cavalrySaberGeometry } from './battle-rig'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { STRIKE_FRAMES, handProp, type HandProp, type StrikeKind } from './battle-rig'
@@ -443,6 +444,15 @@ export interface SquadModel {
 
 const squadCache = new WeakMap<GLTF, SquadModel>()
 
+/** 몸 메시에 무기 뼈(Weapon_R)에 붙은 꼭짓점이 있는지(창병 · 궁병은 무기가 몸에 들어 있다) */
+function hasWeaponVerts(body: THREE.SkinnedMesh): boolean {
+  const wi = body.skeleton.bones.findIndex(b => b.name === 'Weapon_R')
+  if (wi < 0) return false
+  const si = body.geometry.getAttribute('skinIndex') as THREE.BufferAttribute, sw = body.geometry.getAttribute('skinWeight') as THREE.BufferAttribute
+  for (let i = 0; i < si.count; i += 1) for (let k = 0; k < 4; k += 1) if (si.getComponent(i, k) === wi && sw.getComponent(i, k) > 0.5) return true
+  return false
+}
+
 /**
  * 병사용 모델: 공격 자세 STRIKE_FRAMES장(0번은 기본 자세) + 걷기 WALK_FRAMES장을 모프 타깃으로 굽는다.
  * 원본 장면을 건드리지 않도록 복제본에서 굽는다.
@@ -479,6 +489,26 @@ export function bakeSquadModel(gltf: GLTF): SquadModel | null {
       body.applyBoneTransform(i, tmpV)
       out[i * 3] = tmpV.x; out[i * 3 + 1] = tmpV.y; out[i * 3 + 2] = tmpV.z
     }
+    return placeSaber(out)
+  }
+  // 기병 병사: 모델에 무기가 없으니(손만 있다) 기병 장도를 오른손에 쥐여 같이 굽는다(베기 · 달리기 때 팔을 따라 움직인다)
+  const saber = info.mounted && !hasWeaponVerts(body) ? cavalrySaberGeometry() : null
+  const hand = saber ? scene.getObjectByName('RightHand') : null
+  const weaponBone = saber ? scene.getObjectByName('Weapon_R') : null
+  const saberPos = saber?.getAttribute('position') as THREE.BufferAttribute | undefined
+  const saberCount = saber && hand ? saberPos!.count : 0
+  const total = count + saberCount
+  const grip = new THREE.Matrix4(), toMesh = new THREE.Matrix4()
+  const local = new THREE.Matrix4().makeTranslation(weaponBone?.position.x ?? 0, weaponBone?.position.y ?? 0, weaponBone?.position.z ?? 0).multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2))
+  const placeSaber = (out: Float32Array) => {
+    if (!saberCount || !hand) return out
+    // 손 뼈(장면 좌표) → 몸 메시 좌표(applyBoneTransform과 같은 공간)
+    toMesh.copy(body.bindMatrixInverse).multiply(grip.copy(hand.matrixWorld).multiply(local))
+    for (let i = 0; i < saberCount; i += 1) {
+      tmpV.fromBufferAttribute(saberPos!, i).applyMatrix4(toMesh)
+      const o = (count + i) * 3
+      out[o] = tmpV.x; out[o + 1] = tmpV.y; out[o + 2] = tmpV.z
+    }
     return out
   }
   const horse = (time: number, name = 'HorseIdle'): Array<[string, number]> => info.mounted ? [[name, time]] : []
@@ -487,34 +517,63 @@ export function bakeSquadModel(gltf: GLTF): SquadModel | null {
   const times = Array.from({ length: STRIKE_FRAMES }, (_, f) => f / (STRIKE_FRAMES - 1) * 0.999)
   // 0번(기본 자세) = 대기 첫 자세
   pose([[names.idle, 0], ...horse(0)])
-  const base = skinned(new Float32Array(count * 3))
+  const base = skinned(new Float32Array(total * 3))
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(base, 3))
   for (const key of ['normal', 'uv', 'tangent'] as const) {
     const attr = body.geometry.getAttribute(key)
-    if (attr) geometry.setAttribute(key, attr.clone())
+    if (!attr) continue
+    if (!saberCount) { geometry.setAttribute(key, attr.clone()); continue }
+    // 칼 꼭짓점: 노멀은 기본 자세의 손 방향으로 돌려 두고, uv · 접선은 비운다
+    const size = attr.itemSize, data = new Float32Array(total * size)
+    for (let i = 0; i < count * size; i += 1) data[i] = (attr.array as ArrayLike<number>)[i]
+    if (key === 'normal') {
+      const nm = new THREE.Matrix3().getNormalMatrix(toMesh), sn = saber!.getAttribute('normal') as THREE.BufferAttribute
+      for (let i = 0; i < saberCount; i += 1) { tmpV.fromBufferAttribute(sn, i).applyMatrix3(nm).normalize(); data.set([tmpV.x, tmpV.y, tmpV.z], (count + i) * 3) }
+    }
+    geometry.setAttribute(key, new THREE.BufferAttribute(data, size))
   }
-  if (body.geometry.index) geometry.setIndex(body.geometry.index.clone())
+  if (saberCount) {
+    // 몸은 모두 흰색(원래 색 그대로), 칼은 부분마다 칠한 색 — 몸 재질은 꼭짓점 색을 쓰지 않으니 칼 재질만 이 색을 쓴다
+    const colors = new Float32Array(total * 3).fill(1)
+    const sc = saber!.getAttribute('color') as THREE.BufferAttribute
+    for (let i = 0; i < saberCount; i += 1) colors.set([sc.getX(i), sc.getY(i), sc.getZ(i)], (count + i) * 3)
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  }
+  const bodyIndex = body.geometry.index
+  if (bodyIndex || saberCount) {
+    const idx: number[] = []
+    if (bodyIndex) for (let i = 0; i < bodyIndex.count; i += 1) idx.push(bodyIndex.getX(i))
+    else for (let i = 0; i < count; i += 1) idx.push(i)
+    for (let i = 0; i < saberCount; i += 1) idx.push(count + i)
+    geometry.setIndex(idx)
+  }
   const targets: THREE.BufferAttribute[] = []
   const relative = (abs: Float32Array) => { for (let i = 0; i < abs.length; i += 1) abs[i] -= base[i]; return new THREE.BufferAttribute(abs, 3) }
   for (let f = 1; f < STRIKE_FRAMES; f += 1) {
     const clipTime = attack.start + times[f] * attack.duration * attack.scale
     pose([[names.attack, Math.min(clipTime, (attackClip?.duration ?? 1) - 1e-3)], ...horse(0)])
-    targets.push(relative(skinned(new Float32Array(count * 3))))
+    targets.push(relative(skinned(new Float32Array(total * 3))))
   }
   const walkClip = info.clips.get(names.walk)
   const walkPeriod = walkClip?.duration ?? 1
   for (let f = 0; f < WALK_FRAMES; f += 1) {
     const time = f / WALK_FRAMES * walkPeriod
     pose([[names.walk, time], ...horse(time, 'HorseGallop')])
-    targets.push(relative(skinned(new Float32Array(count * 3))))
+    targets.push(relative(skinned(new Float32Array(total * 3))))
   }
   geometry.morphAttributes.position = targets
   geometry.morphTargetsRelative = true
   geometry.computeBoundingSphere()
-  const materials = Array.isArray(body.material) ? body.material : [body.material]
+  const materials = [...(Array.isArray(body.material) ? body.material : [body.material])]
   // 재질 목록으로 그리려면 그룹이 있어야 한다(없으면 아무것도 그려지지 않는다)
-  if (!geometry.groups.length) geometry.addGroup(0, geometry.index ? geometry.index.count : count, 0)
+  const bodyDrawCount = bodyIndex ? bodyIndex.count : count
+  if (body.geometry.groups.length) for (const g of body.geometry.groups) geometry.addGroup(g.start, g.count, g.materialIndex ?? 0)
+  else geometry.addGroup(0, bodyDrawCount, 0)
+  if (saberCount) {
+    geometry.addGroup(bodyDrawCount, saberCount, materials.length)
+    materials.push(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.75, roughness: 0.35 }))
+  }
   const model: SquadModel = { geometry, materials, duration: attack.duration, times, walkFrames: WALK_FRAMES, walkPeriod }
   squadCache.set(gltf, model)
   markShared(geometry)
