@@ -1260,7 +1260,7 @@ export class SoundEngine {
    */
   weapon(kind: WeaponSound, phase: 'swing' | 'hit', opts: { pan?: number; big?: boolean } = {}): void {
     if (phase === 'hit') return // 맞을 때 소리는 모두 뺐다
-    if (!this.allow(`${kind}:${phase}`, phase === 'hit' ? 70 : 90, true)) return
+    if (!this.allow(`${kind}:${phase}`, 90, true)) return
     const out = this.sfxVol, send = this.sfxSend
     const t = this.ctx!.currentTime + 0.005
     const pan = opts.pan ?? 0, big = opts.big ? 1.6 : 1
