@@ -10,7 +10,7 @@ export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | 
 export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
 type TrackName = 'home' | 'battle' | 'raid'
 /** 녹음된 짧은 효과음 파일(public/assets/sfx) */
-type SfxFile = 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard' | 'victory-cry' | 'gallop'
+type SfxFile = 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard' | 'victory-cry' | 'gallop' | 'neigh'
 export type Sfx =
   | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
   | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
@@ -296,7 +296,7 @@ export class SoundEngine {
     this.applyVolumes()
     this.setTheme(this.wanted)
     // 버튼 · 스킬 효과음 미리 받기
-    for (const name of ['click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard', 'victory-cry', 'gallop'] as const) this.fileBuffer(name)
+    for (const name of ['click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard', 'victory-cry', 'gallop', 'neigh'] as const) this.fileBuffer(name)
     window.setInterval(() => this.tick(), 50)
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return
@@ -832,7 +832,8 @@ export class SoundEngine {
       case 'build': [0, 0.13, 0.26].forEach((d, i) => { this.drum(out, i === 2 ? 'tom' : 'rim', t + d, i === 2 ? 0.3 : 0.24, 0, i === 2 ? 1 : 0.85); this.metal(out, t + d, 0.06, 0.9) }); break
       case 'research': this.whoosh(out, t, 0.2, 0.12, 2000, 5200); this.bell(out, t + 0.12, 0.1, 1.5, 0, send); break
       case 'formation': this.drum(out, 'taiko', t, 0.3); this.drum(out, 'rim', t + 0.1, 0.12); break
-      case 'battleStart': [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.drum(out, 'taiko', t + 0.84, 0.6, 0, 0.85); break
+      case 'battleStart': { const neigh = this.fileBuffer('neigh'); if (neigh) this.play_(neigh, out, t + 0.6, 0.7, { send }) } // 전투 초반: 녹음된 말 울음 한 번
+        [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.drum(out, 'taiko', t + 0.84, 0.6, 0, 0.85); break
       case 'attack': this.whoosh(out, t, 0.13, 0.08, 1200, 3200, pan); break
       // 타격: 짧은 파열음(딱) + 몸에 닿는 둔탁한 소리 + 작은 저음(쿵)
       case 'hit': { const rr = 0.85 + Math.random() * 0.3; this.thump(out, t, 0.3, pan, undefined, rr); this.drum(out, 'tom', t, 0.22, pan, 0.75 * rr); break }
