@@ -2033,3 +2033,16 @@ html body .game-data-row .admin-account-identity{position:static;background:none
 .building-progress{display:block;height:4px;margin-top:6px;background:rgba(220,208,184,.14)}
 .building-progress i{display:block;height:100%;background:linear-gradient(90deg,#b98b2e,#edc471)}
 .building-actions{display:flex;flex-direction:column;gap:6px}
+
+/* 영토 · 도시 관리: 공성 출정 / 최종 세력전 버튼이 좁은 칸에서 잘리지 않게, 어두운 버튼의 글자도 보이게 */
+html body .conquest-card .territory-actions{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+html body .conquest-card .conquest-button{min-width:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;white-space:normal;text-align:left;padding:10px 12px;line-height:1.35}
+html body .conquest-card .conquest-button span{font-size:12px;white-space:normal;overflow-wrap:anywhere}
+html body .conquest-card .action-button--outline.conquest-button span{color:#f4d99f}
+html body .conquest-card .conquest-button:disabled{opacity:.62}
+html body .conquest-card .conquest-button:disabled span{color:#d9c9a8}
+html body .city-battle-log-entry small{color:#cfc3ad}
+html body .city-battle-log-entry time{color:#b9ab94}
+.final-war-wait{color:#f0c9a0}
+html body .conquest-card .action-button--primary.conquest-button span{color:#ffe9c9}
+html body .conquest-card .final-war-wait{margin-top:10px}
