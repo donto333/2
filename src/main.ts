@@ -892,7 +892,9 @@ function openSection(section: Section): void {
   if (section === 'raid') void refreshRaid()
   // 모집 메뉴에서는 모집 곡(shop.mp3, 예전 상점 곡), 나오면 본영 곡으로. 상점은 본영 곡
   if (section === 'recruit') sound.setTheme('shop')
-  else if (sound.currentTheme === 'shop') sound.setTheme('home')
+  // 천하영토(영토 · 내정)에서는 영토 곡
+  else if (section === 'territory') sound.setTheme('territory')
+  else if (sound.currentTheme === 'shop' || sound.currentTheme === 'territory') sound.setTheme('home')
   if (section === 'board') void refreshBoard()
   if (section === 'territory') void refreshCityDamageRankings(state.selectedCityId)
   ui.render(state)

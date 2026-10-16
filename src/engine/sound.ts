@@ -6,10 +6,10 @@
 import { assetUrl } from '../asset-url'
 import { muteSetting, musicSetting, sfxSetting, SOUND_LEVEL_VALUE } from '../game/settings'
 
-export type MusicTheme = 'home' | 'shop' | 'battle' | 'duel' | 'raid' | 'none'
+export type MusicTheme = 'home' | 'shop' | 'territory' | 'battle' | 'duel' | 'raid' | 'none'
 export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | '치유'
 export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
-type TrackName = 'home' | 'shop' | 'battle' | 'raid'
+type TrackName = 'home' | 'shop' | 'territory' | 'battle' | 'raid'
 /** 녹음된 짧은 효과음 파일(public/assets/sfx) */
 type SfxFile = 'recruit' | 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard' | 'victory-cry' | 'gallop' | 'neigh'
 export type Sfx =
@@ -259,7 +259,7 @@ const RAID: ThemeDef = {
   },
 }
 
-const THEMES: Record<Exclude<MusicTheme, 'none'>, ThemeDef> = { home: HOME, shop: HOME, battle: BATTLE, duel: DUEL, raid: RAID }
+const THEMES: Record<Exclude<MusicTheme, 'none'>, ThemeDef> = { home: HOME, shop: HOME, territory: HOME, battle: BATTLE, duel: DUEL, raid: RAID }
 
 // ── 소리 엔진 ───────────────────────────────────────────
 /** 빼 버린 전투 효과음: 맞을 때 · 토벌전 부대 · 회복 · 대응 성공/실패 · 막 전환 · 부대 쓰러짐 · 시간 경고 · 적 전술 예고 */
@@ -368,10 +368,10 @@ export class SoundEngine {
     // 본영 · 시나리오 · 대련은 녹음된 곡을 되풀이해 튼다(곡을 못 불러오면 예전처럼 만든 곡으로)
     const recorded = this.track(this.trackFor(theme))
     if (theme !== 'none') {
-      if (theme === 'home' || theme === 'shop') this.intensity = 0
+      if (theme === 'home' || theme === 'shop' || theme === 'territory') this.intensity = 0
       if (!recorded) this.player = new ThemePlayer(this, THEMES[theme], theme, Math.floor(Math.random() * 1e9))
     }
-    this.setAmbience(theme === 'none' ? 'none' : theme === 'home' || theme === 'shop' ? 'home' : 'battle')
+    this.setAmbience(theme === 'none' ? 'none' : theme === 'home' || theme === 'shop' || theme === 'territory' ? 'home' : 'battle')
   }
 
   // ── 녹음된 배경음(파일) ──
@@ -426,6 +426,7 @@ export class SoundEngine {
   private trackFor(theme: MusicTheme): TrackName | null {
     if (theme === 'home') return 'home'
     if (theme === 'shop') return 'shop'
+    if (theme === 'territory') return 'territory'
     if (theme === 'battle' || theme === 'duel') return 'battle'
     if (theme === 'raid') return 'raid'
     return null
