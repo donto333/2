@@ -907,6 +907,17 @@ async function updateGameState(userId, input) {
   // (including large JSON inventories) after every write.
   return { ok: true, userId, gold: values.gold, mythicFragments: values.mythicFragments, mythicStones: values.mythicStones, ...(adminPatch ? { adminPatch } : {}) };
 }
+/**
+ * 게스트 계정 진행 초기화: 이 계정의 게임 저장(무장 · 재화 · 임무 · 튜토리얼 · 출석 · 보상 장부)을 지워 처음 상태로 돌린다.
+ * 아이디(사용자 행)는 그대로 둔다. 회원(Manus 로그인) 계정은 지울 수 없다.
+ */
+async function resetGuestGameState(user) {
+  if (!user || typeof user.openId !== "string" || !user.openId.startsWith("guest_")) throw new Error("게스트 계정만 초기화할 수 있습니다.");
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(gameAccountStates).where(eq(gameAccountStates.userId, user.id));
+  return { ok: true };
+}
 /** 관리자 편집 가능 항목(숫자 최대치 · 진영) */
 const ADMIN_EDITABLE = { honor: 1, silver: 1, gold: 1, manuals: 1, wins: 1, battleScore: 1, grain: 1, wood: 1, iron: 1, influence: 1, mythicFragments: 1, mythicStones: 1, factionWarScore: 1, luoyangBoxes: 1, faction: 1 };
 /**
@@ -1555,6 +1566,7 @@ export {
   protectedProcedure,
   updateGameState,
   adminUpdateGameState,
+  resetGuestGameState,
   adminGameView,
   isOperatorUser,
   clearOperatorCache,

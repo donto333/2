@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, getRaidInfo, startRaid, submitRaid, getRaidRanking, claimRaidReward, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole, adminUpdateGameState, adminGameView, isOperatorUser } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, getRaidInfo, startRaid, submitRaid, getRaidRanking, claimRaidReward, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole, adminUpdateGameState, adminGameView, isOperatorUser, resetGuestGameState } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -104,6 +104,8 @@ export const gameRouter = router({
     me: protectedProcedure.query(({ ctx }) => ({ ...accountView(ctx.user), operator: isOperatorUser(ctx.user) })),
     gameState: protectedProcedure.query(({ ctx }) => getGameState(ctx.user.id)),
     luoyangReward: protectedProcedure.query(({ ctx }) => getLuoyangReward(ctx.user.id)),
+    // 게스트 계정의 진행을 처음으로 되돌린다(아이디는 유지)
+    resetGuest: protectedProcedure.mutation(({ ctx }) => resetGuestGameState(ctx.user)),
     grant: protectedProcedure.input(z.object({
       kind: z.enum(['daily', 'scenario', 'faction', 'duel', 'attendance']),
       key: z.string().max(96).optional(),

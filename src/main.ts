@@ -740,6 +740,34 @@ function withLedger<T>(task: () => Promise<T>): Promise<T> {
   return run
 }
 
+/** 게스트 기록 초기화: 서버 게스트 계정이면 서버 저장도 지우고(아이디 유지), 이 기기의 게스트 진행 · 안내 기록을 지운 뒤 새로 불러온다 */
+async function resetGuestProgress(): Promise<void> {
+  const serverGuest = authView.status === 'authenticated' && Boolean(accountView?.openId?.startsWith('guest_'))
+  if (authView.status === 'authenticated' && !serverGuest) { ui.notify('회원 계정은 여기서 초기화할 수 없습니다.', 'ember'); return }
+  // 지우는 동안과 지운 뒤에 저장이 옛 진행을 다시 쓰지 않게 막는다
+  guestResetting = true
+  localSaveDirty = false
+  if (saveTimer !== null) { window.clearTimeout(saveTimer); saveTimer = null }
+  window.removeEventListener('pagehide', flushPendingSaveOnHide)
+  if (serverGuest) {
+    try {
+      await ledgerChain.catch(() => undefined)
+      await ManusAuth.mutate('account.resetGuest', {})
+    } catch {
+      guestResetting = false
+      window.addEventListener('pagehide', flushPendingSaveOnHide)
+      ui.notify('서버의 게스트 기록을 지우지 못했습니다. 잠시 뒤 다시 시도하십시오.', 'ember')
+      return
+    }
+  }
+  // 언어 · 화면 설정과 게스트 아이디(서버 계정 열쇠)는 남긴다
+  const keep = new Set([PENDING_TERRITORY_BATTLES_KEY, GUEST_TOKEN_KEY, 'cheonharo.lang', 'cheonharo.quality', 'cheonharo.effects', 'cheonharo.balance.config.v1', ...(serverGuest ? [] : [LOCAL_GAME_SAVE_KEY])])
+  try {
+    Object.keys(window.localStorage).filter(key => key.startsWith('cheonharo.') && !keep.has(key)).forEach(key => window.localStorage.removeItem(key))
+  } catch { /* 저장소를 못 쓰면 지울 것도 없다 */ }
+  window.location.reload()
+}
+
 /** 서버에 연결할 수 없는 게스트: 이 기기에서 오늘 출석을 처리하고 바로 저장한다(같은 날 두 번 받지 않게) */
 function claimLocalGuestAttendance(): boolean {
   if (authView.status !== 'offline') return false
@@ -1395,18 +1423,7 @@ const ui = new StrategyUI(root, {
     if (resume) { arena.setPaused(true); ui.updateBattle(arena.getSnapshot()) }
     openBattleGuide(() => { if (resume) { arena.setPaused(false); ui.updateBattle(arena.getSnapshot()) } })
   },
-  onGuestReset: () => {
-    // 게스트 진행·안내 기록만 지운다(회원 저장, 언어·화면 설정은 남김). 지운 뒤 저장이 다시 쓰지 않게 막고 새로 불러온다.
-    guestResetting = true
-    localSaveDirty = false
-    if (saveTimer !== null) { window.clearTimeout(saveTimer); saveTimer = null }
-    window.removeEventListener('pagehide', flushPendingSaveOnHide)
-    const keep = new Set([LOCAL_GAME_SAVE_KEY, PENDING_TERRITORY_BATTLES_KEY, 'cheonharo.lang', 'cheonharo.quality', 'cheonharo.effects', 'cheonharo.balance.config.v1'])
-    try {
-      Object.keys(window.localStorage).filter(key => key.startsWith('cheonharo.') && !keep.has(key)).forEach(key => window.localStorage.removeItem(key))
-    } catch { /* 저장소를 못 쓰면 지울 것도 없다 */ }
-    window.location.reload()
-  },
+  onGuestReset: () => { void resetGuestProgress() },
   onCoachReset: () => {
     resetCoaching()
     battleCoach.reload()
@@ -2077,6 +2094,7 @@ function describeSaveError(message: string): string {
 }
 
 function queueAccountSave(immediate = false): void {
+  if (guestResetting) return
   persistLocalGame()
   localSaveDirty = true
   saveRevision += 1
@@ -2099,6 +2117,7 @@ function queueAccountSave(immediate = false): void {
 }
 
 async function flushAccountSave(): Promise<void> {
+  if (guestResetting) return
   if (authView.status !== 'authenticated') return
   if (saveInFlight) {
     saveQueued = true
