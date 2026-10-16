@@ -284,6 +284,7 @@ export class Arena {
   private gallopSum = 0
   private gallopPan = 0
   private gallopPeak = 0
+  private gallopUntil = 0
   private hitStop = 0
   /** 최근 히트스톱 사용량(초): 1초에 0.15초씩 줄어든다. 0.2초를 넘으면 더 멈추지 않는다(고레벨에서 계속 멈춰 렉처럼 보이던 문제) */
   private hitStopSpent = 0
@@ -786,6 +787,7 @@ export class Arena {
     sound.setPausedDuck(false)
     sound.setTheme(this.mode === 'duel' ? 'duel' : this.mode === 'raid' ? 'raid' : 'battle')
     sound.play('battleStart')
+    this.gallopUntil = this.clock.getElapsed() + 3 // 말발굽 소리는 전투 처음 3초만
     this.lastCombatLog = 0
     this.enemyWarning = null
     this.logLines.splice(0)
@@ -1585,7 +1587,9 @@ export class Arena {
       this.updateUnitMotion(unit, delta, this.clock.getElapsed() + index * 0.4, ember)
     })
     // 말발굽 소리: 이번 프레임에 달린 말들을 모아 한 번에(말이 많고 빠를수록 크게 · 빠르게)
-    sound.gallop(this.battleActive ? Math.min(1, this.gallopSum / 3.5) : 0, this.gallopSum > 0 ? this.gallopPan / this.gallopSum : 0, 0.9 + 0.25 * this.gallopPeak)
+    // 말발굽은 전투 처음 3초만(진격하며 달려 나가는 소리), 그 뒤에는 서서히 꺼진다
+    const charging = this.battleActive && this.clock.getElapsed() < this.gallopUntil
+    sound.gallop(charging ? Math.max(0.6, Math.min(1, this.gallopSum / 3.5)) : 0, this.gallopSum > 0 ? this.gallopPan / this.gallopSum : 0, 0.95 + 0.2 * this.gallopPeak)
     this.gallopSum = 0; this.gallopPan = 0; this.gallopPeak = 0
     this.updateCamera(realDelta)
     if (!this.battleActive || !this.core || this.paused) return
