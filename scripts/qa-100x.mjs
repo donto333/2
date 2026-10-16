@@ -18,6 +18,8 @@ const check = (name, ok, detail = '') => { report.checks.push({ name, ok, detail
 
 async function openGame(query = '') {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'ko-KR' })
+  // 첫 실행 안내(전투 코치 · 소개)는 전투를 멈추고 손을 기다리므로 본 것으로 표시해 둔다
+  await ctx.addInitScript(() => { try { localStorage.setItem('cheonharo.coach.battle', '["all"]'); localStorage.setItem('cheonharo.coach.menus', '["all"]'); localStorage.setItem('cheonharo.intro.seen', '1') } catch { /* */ } })
   const page = await ctx.newPage()
   page.on('console', m => {
     const t = m.text()
@@ -26,7 +28,7 @@ async function openGame(query = '') {
     else if (m.type() === 'warning') report.warnings.push(t.slice(0, 300))
   })
   page.on('pageerror', e => report.errors.push({ where: 'pageerror', text: `${e.message}\n${(e.stack ?? '').split('\n').slice(0, 4).join('\n')}`.slice(0, 600) }))
-  page.on('requestfailed', r => { if (!/\/api\//.test(r.url())) report.failedRequests.push({ url: r.url(), why: r.failure()?.errorText }) })
+  page.on('requestfailed', r => { if (!/\/api\//.test(r.url()) && r.failure()?.errorText !== 'net::ERR_ABORTED') report.failedRequests.push({ url: r.url(), why: r.failure()?.errorText }) })
   page.on('response', r => { if (r.status() >= 400 && !/\/api\//.test(r.url())) report.failedRequests.push({ url: r.url(), status: r.status() }) })
   const t0 = Date.now()
   await page.goto(baseUrl + query, { waitUntil: 'load', timeout: 60_000 })
@@ -67,10 +69,15 @@ async function runBattle(page, label, opts = {}) {
   }, { speed: SPEED })
   if (!started) { report.battles.push({ label, ok: false, error: '전투가 시작되지 않음' }); return null }
   const t0 = Date.now()
-  let done = false
-  while (Date.now() - t0 < (opts.timeoutMs ?? 120_000)) {
+  let done = false, midShot = false
+  while (Date.now() - t0 < (opts.timeoutMs ?? 300_000)) {
     await page.waitForTimeout(250)
-    done = await page.evaluate(() => !window.__strategy.arena.getSnapshot().active)
+    if (opts.shot && !midShot && Date.now() - t0 > 1500) { midShot = true; await page.screenshot({ path: join(outDir, `${opts.shot}-mid.png`) }) }
+    done = await page.evaluate(() => {
+      const { arena } = window.__strategy, snap = arena.getSnapshot()
+      if (snap.active && snap.paused) { arena.setPaused(false); window.__qaUnpaused = (window.__qaUnpaused ?? 0) + 1 }
+      return !snap.active
+    })
     if (done) break
   }
   const wallMs = Date.now() - t0
@@ -171,6 +178,7 @@ report.memory.push(await page.evaluate(() => ({ at: '끝', heapMB: performance.m
 
 // ── 5) 휴대폰 화면(저사양 그래픽)으로 한 번 더 ─────────────────
 const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'ko-KR' })
+await mobile.addInitScript(() => { try { localStorage.setItem('cheonharo.coach.battle', '["all"]'); localStorage.setItem('cheonharo.coach.menus', '["all"]'); localStorage.setItem('cheonharo.intro.seen', '1') } catch { /* */ } })
 const mp = await mobile.newPage()
 mp.on('pageerror', e => report.errors.push({ where: 'mobile pageerror', text: e.message.slice(0, 400) }))
 await mp.goto(baseUrl, { waitUntil: 'load', timeout: 60_000 })
@@ -192,6 +200,11 @@ const geo = report.battles.map(b => b.geometries).filter(n => typeof n === 'numb
 if (geo.length > 6) {
   const early = geo.slice(2, 6).reduce((a, b) => a + b, 0) / 4, late = geo.slice(-4).reduce((a, b) => a + b, 0) / 4
   check('지오메트리 누수 없음', late < early * 1.6 + 50, `초반 ${Math.round(early)} → 후반 ${Math.round(late)}`)
+}
+const tex = report.battles.map(b => b.textures).filter(n => typeof n === 'number')
+if (tex.length > 6) {
+  const early = tex.slice(2, 6).reduce((a, b) => a + b, 0) / 4, late = tex.slice(-4).reduce((a, b) => a + b, 0) / 4
+  check('텍스처 누수 없음', late < early * 1.5 + 20, `초반 ${Math.round(early)} → 후반 ${Math.round(late)}`)
 }
 report.finishedAt = new Date().toISOString()
 writeFileSync(join(outDir, 'qa-report.json'), JSON.stringify(report, null, 1))

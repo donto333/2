@@ -2,13 +2,15 @@
 // 모델은 미리 크기·방향을 맞춰 두었다(모두 +Z를 보고, 발/말 몸통 중심이 원점, 사람 키 약 1.8 · 말 등 높이 약 1.45).
 import { assetUrl } from '../asset-url'
 import * as THREE from 'three'
+import { markShared, markTreeShared } from './gpu-shared'
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import type { General } from './strategy'
 import { SIGNATURE_WEAPONS, STRIKE_FRAMES, strikeInfluences, strikeModel, type SignatureWeapon, type StrikeKind, type StrikeModel } from './battle-rig'
 import { bakeSquadModel, rigInfo } from './skeletal'
 import { heroLook } from './hero-style'
 
-export type ModelName = 'lubu' | 'caocao' | 'zhugeliang' | 'cavalry' | 'tianming' | 'lancer' | 'archer' | 'battlefield'
+export type ModelName = 'lubu' | 'caocao' | 'zhugeliang' | 'cavalry' | 'tianming' | 'lancer' | 'archer' | 'battlefield' | 'cavalry-lod' | 'lancer-lod' | 'archer-lod'
 const BASE = '/assets/models/'
 const cache = new Map<ModelName, Promise<GLTF>>()
 let loader: GLTFLoader | null = null
@@ -16,7 +18,15 @@ let loader: GLTFLoader | null = null
 export function loadModel(name: ModelName): Promise<GLTF> {
   const cached = cache.get(name)
   if (cached) return cached
-  loader ??= new GLTFLoader()
+  if (!loader) {
+    // 모델 메시는 Draco로 압축되어 있다(용량 약 1/3). 해제기(wasm)는 처음 한 번만 받는다.
+    const draco = new DRACOLoader()
+    draco.setDecoderPath('/assets/draco/')
+    draco.setDecoderConfig({ type: 'wasm' })
+    draco.setWorkerLimit(2)
+    loader = new GLTFLoader()
+    loader.setDRACOLoader(draco)
+  }
   const pending: Promise<GLTF> = loader.loadAsync(assetUrl(`${BASE}${name}.glb`)).then((gltf: GLTF) => {
     gltf.scene.traverse((node: THREE.Object3D) => {
       const mesh = node as THREE.Mesh
@@ -27,6 +37,7 @@ export function loadModel(name: ModelName): Promise<GLTF> {
       const material = mesh.material as THREE.MeshStandardMaterial
       if (material?.map) material.map.anisotropy = 4
     })
+    markTreeShared(gltf.scene) // 모든 부대가 함께 쓰므로 전투가 바뀌어도 남긴다
     return gltf
   })
   pending.catch(() => cache.delete(name))
@@ -48,6 +59,7 @@ export function loadSkin(name: string): Promise<THREE.Texture> {
     texture.flipY = false // glTF 텍스처와 같은 방향
     texture.colorSpace = THREE.SRGBColorSpace
     texture.anisotropy = 4
+    markShared(texture)
     return texture
   })
   pending.catch(() => skins.delete(name))
@@ -55,7 +67,12 @@ export function loadSkin(name: string): Promise<THREE.Texture> {
   return pending
 }
 
-export function troopModelFor(role: General['role']): ModelName {
+/** 병사용 간략 모델(삼각형 약 1/4, 같은 뼈대 · 동작). 없으면 원본을 쓴다. 병사는 화면에 작게 수십 명이 그려진다. */
+export function loadTroopModel(name: 'cavalry' | 'lancer' | 'archer'): Promise<GLTF> {
+  return loadModel(`${name}-lod`).catch(() => loadModel(name))
+}
+
+export function troopModelFor(role: General['role']): 'cavalry' | 'lancer' | 'archer' {
   if (role === '기병') return 'cavalry'
   if (role === '궁병') return 'archer'
   return 'lancer'
@@ -77,7 +94,12 @@ export function preloadStrikeModels(names: ModelName[] = ['lancer', 'cavalry', '
     const name = names[index++]
     if (!name) return
     // 뼈대 모델: 병사용 자세(공격·걷기)를 미리 굽는다. 예전 모델은 예전처럼 공격 자세를 굽는다
-    void loadModel(name).then(gltf => { if (rigInfo(gltf)) { if (name === 'lancer' || name === 'cavalry' || name === 'archer') bakeSquadModel(gltf) } else return strikeModelFor(name) }).catch(() => {}).finally(() => idle(next))
+    // 병사(창병 · 궁병 · 기병)는 간략 모델로 자세를 굽고, 무장 모델(기병 포함)은 불러만 둔다
+    const troop = name === 'lancer' || name === 'cavalry' || name === 'archer'
+    const work = troop
+      ? loadTroopModel(name).then(gltf => { if (rigInfo(gltf)) bakeSquadModel(gltf) }).then(() => name === 'cavalry' ? loadModel(name).then(() => undefined) : undefined)
+      : loadModel(name).then(gltf => { if (!rigInfo(gltf)) return strikeModelFor(name).then(() => undefined) })
+    void work.catch(() => {}).finally(() => idle(next))
   }
   idle(next)
 }

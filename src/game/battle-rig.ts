@@ -7,6 +7,7 @@
 // 그래서 꼭짓점 위치로 상체·팔·무기 영역을 나눠 간단한 가상 뼈를 만들고, 동작을 몇 장의 자세로 구워
 // 모프 타깃으로 담는다. 병사(InstancedMesh)는 병사마다 다른 시각의 자세를, 무장은 한 메시로 같은 자세를 쓴다.
 import * as THREE from 'three'
+import { markShared } from './gpu-shared'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -496,6 +497,7 @@ export function strikeModel(name: ModelName, gltf: GLTF, weapon?: SignatureWeapo
   const spec = variant ?? SPECS[name]
   const model = name === 'archer' ? buildArcher(gltf) : spec ? buildFromRig(gltf, spec) : buildFromRig(gltf, { kind: 'slash', bones: [{ name: 'torso', parent: -1, pivot: [0, 1, 0] }], weights: () => [0], keys: [{ t: 0, b: {} }] })
   cache.set(key, model)
+  markShared(model.geometry)
   return model
 }
 

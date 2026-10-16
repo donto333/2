@@ -1,6 +1,7 @@
 // 전투 장면 그래픽: 하늘·원경 산·성채·지형·풀·깃발·연기·후방 대군, 무장·병사 모델.
 // 외부 3D 파일 없이 도형과 직접 그린 질감으로 만든다. 전투 규칙(battle-core)과는 무관하다.
 import * as THREE from 'three'
+import { markShared } from './gpu-shared'
 import { easeIn2, easeInOut, track } from './motion-math'
 import { strikeInfluences } from './battle-rig'
 import type { General } from './strategy'
@@ -62,6 +63,7 @@ function softSprite(): THREE.CanvasTexture {
     ctx.fillStyle = g; ctx.fillRect(0, 0, s, s)
   })
   softSpriteCache.wrapS = softSpriteCache.wrapT = THREE.ClampToEdgeWrapping
+  markShared(softSpriteCache)
   return softSpriteCache
 }
 let lamellarCache: THREE.CanvasTexture | null = null
@@ -81,6 +83,7 @@ function lamellarTexture(): THREE.CanvasTexture {
       }
     }
   }, 1)
+  markShared(lamellarCache)
   return lamellarCache
 }
 
@@ -162,6 +165,7 @@ export function soldierGeometry(kind: 'infantry' | 'archer' | 'cavalry' | 'pike'
   }
   const geometry = mergeColored(parts)
   soldierCache.set(key, geometry)
+  markShared(geometry)
   return geometry
 }
 

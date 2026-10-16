@@ -3,6 +3,7 @@
 //  - 말 탄 모델은 말 뼈대 위에 사람 뼈대가 얹혀 있어 사람 동작과 말 동작을 동시에 재생한다
 //  - 병사(InstancedMesh)는 뼈 애니메이션을 한 번 구워 공격 자세 + 걷기 자세를 모프로 쓴다(수십 명이 같은 그리기 한 번)
 import * as THREE from 'three'
+import { markShared } from './gpu-shared'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { STRIKE_FRAMES, handProp, type HandProp, type StrikeKind } from './battle-rig'
@@ -516,5 +517,6 @@ export function bakeSquadModel(gltf: GLTF): SquadModel | null {
   if (!geometry.groups.length) geometry.addGroup(0, geometry.index ? geometry.index.count : count, 0)
   const model: SquadModel = { geometry, materials, duration: attack.duration, times, walkFrames: WALK_FRAMES, walkPeriod }
   squadCache.set(gltf, model)
+  markShared(geometry)
   return model
 }

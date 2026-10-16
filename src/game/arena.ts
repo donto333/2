@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { disposeOwned } from './gpu-shared'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
 import { sound, type WeaponSound } from '../engine/sound'
 import { BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
@@ -9,7 +10,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
-import { AnimatedHero, heroStrikeModel, loadModel, loadSkin, strikeModelFor, troopModelFor } from './battle-models'
+import { AnimatedHero, heroStrikeModel, loadModel, loadSkin, loadTroopModel, strikeModelFor, troopModelFor } from './battle-models'
 import { heroLook } from './hero-style'
 import { STRIKE_FRAMES } from './battle-rig'
 import { SkeletalHero, bakeSquadModel, rigInfo } from './skeletal'
@@ -493,7 +494,7 @@ export class Arena {
     if (sound.currentTheme !== 'none') sound.setTheme('home')
     this.paused = false
     this.core = null
-    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
+    this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
     this.enemyDeck = []
     this.configuredEnemyDeck = null
     this.mode = 'normal'
@@ -542,16 +543,22 @@ export class Arena {
       }
     }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
     const troop = troopModelFor(unit.general.role)
-    void loadModel(troop).then(gltf => {
+    void loadTroopModel(troop).then(gltf => {
       const baked = bakeSquadModel(gltf)
       if (baked) { unit.squadCtl.upgrade(baked.geometry, baked.materials, baked.duration, STRIKE_FRAMES, baked.times, baked.walkFrames, baked.walkPeriod); return }
       return strikeModelFor(troop).then(model => unit.squadCtl.upgrade(model.geometry, model.materials, model.duration, STRIKE_FRAMES, model.times))
     }).catch(() => {})
   }
 
+  /** 부대를 장면에서 빼고, 그 부대만 쓰던 도형 · 텍스처를 GPU에서 내린다(전투를 거듭해도 메모리가 쌓이지 않게) */
+  private removeUnit(unit: BattleUnit): void {
+    this.scene.remove(unit.group)
+    disposeOwned(unit.group)
+  }
+
   private clearUnits(): void {
-    this.playerUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
-    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
+    this.playerUnits.splice(0).forEach(unit => this.removeUnit(unit))
+    this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
     if (this.selectionRing) this.scene.remove(this.selectionRing)
     if (this.commandMarker) this.scene.remove(this.commandMarker)
     this.clearEffects()
@@ -777,7 +784,7 @@ export class Arena {
   startBattle(options: { autoPlay?: boolean } = {}): void {
     const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
     this.enemyDeck = deck
-    this.enemyUnits.splice(0).forEach(unit => this.scene.remove(unit.group))
+    this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
     this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: options.autoPlay ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null })
     this.battleActive = true
     this.paused = false
