@@ -261,6 +261,9 @@ const RAID: ThemeDef = {
 const THEMES: Record<Exclude<MusicTheme, 'none'>, ThemeDef> = { home: HOME, battle: BATTLE, duel: DUEL, raid: RAID }
 
 // ── 소리 엔진 ───────────────────────────────────────────
+/** 빼 버린 전투 효과음: 맞을 때 · 토벌전 부대 · 회복 · 대응 성공/실패 · 막 전환 · 부대 쓰러짐 · 시간 경고 · 적 전술 예고 */
+const MUTED_SFX = new Set<string>(['hit', 'hitBig', 'raidSquad', 'heal', 'answerGood', 'answerBad', 'phase', 'unitDown', 'timeWarn', 'pattern'])
+
 export class SoundEngine {
   ctx: AudioContext | null = null
   musicIn!: GainNode
@@ -790,6 +793,7 @@ export class SoundEngine {
   }
 
   play(name: Sfx, opts: { pan?: number } = {}): void {
+    if (MUTED_SFX.has(name)) return
     if (!this.allow(name, MIN_GAP[name], LIGHT[name])) return
     const out = this.sfxVol, send = this.sfxSend
     const t = this.ctx!.currentTime + 0.005
@@ -847,7 +851,7 @@ export class SoundEngine {
       case 'tactic': this.drum(out, 'taiko', t, 0.32); break
       case 'move': this.whoosh(out, t, 0.18, 0.07, 500, 1400, pan); this.drum(out, 'rim', t, 0.08); break
       case 'raidSquad': this.boom(out, t, 0.4, 80, 30, 0.8, 0, send); this.drum(out, 'taiko', t, 0.45); break
-      case 'victory': { this.stinger(true); const cry = this.fileBuffer('victory-cry'); if (cry) this.play_(cry, out, t, 0.8, { send }); break } // 승리: 병사들의 함성(앞 1초)
+      case 'victory': { const cry = this.fileBuffer('victory-cry'); if (cry) this.play_(cry, out, t, 0.8, { send }); break } // 승리: 병사들의 함성(앞 1초)
       case 'defeat': this.stinger(false); break
     }
   }
@@ -1255,6 +1259,7 @@ export class SoundEngine {
    * 칼은 "쉭 → 서걱 · 쨍", 창은 "슉 → 퍽(깊고 둔탁)", 활은 "팅 · 휘이 → 탁", 책사 화염구는 "슈욱 → 펑".
    */
   weapon(kind: WeaponSound, phase: 'swing' | 'hit', opts: { pan?: number; big?: boolean } = {}): void {
+    if (phase === 'hit') return // 맞을 때 소리는 모두 뺐다
     if (!this.allow(`${kind}:${phase}`, phase === 'hit' ? 70 : 90, true)) return
     const out = this.sfxVol, send = this.sfxSend
     const t = this.ctx!.currentTime + 0.005
