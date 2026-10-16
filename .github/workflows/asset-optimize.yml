@@ -1,0 +1,34 @@
+name: 3D 모델 압축 (Draco)
+
+# 손으로 실행: public/assets/models/*.glb의 메시를 Draco로 압축해 asset-opt 브랜치에 올린다.
+# (애니메이션 · 뼈 이름 · 텍스처는 그대로. 게임은 DRACOLoader로 푼다.) 확인 뒤 main에 합친다.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  draco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 압축
+        run: |
+          mkdir -p /tmp/opt
+          for f in public/assets/models/*.glb; do
+            npx -y @gltf-transform/cli@4.1.1 draco "$f" "/tmp/opt/$(basename "$f")" --quantize-position 14 --quantize-normal 10 --quantize-texcoord 12 --quantize-generic 12
+          done
+          ls -la public/assets/models/*.glb /tmp/opt/*.glb
+          cp /tmp/opt/*.glb public/assets/models/
+      - name: 올리기
+        run: |
+          git config user.name "asset-bot"; git config user.email "asset-bot@users.noreply.github.com"
+          git checkout -b asset-opt
+          git add public/assets/models/*.glb
+          git commit -qm "3D 모델 Draco 압축"
+          git push -f origin asset-opt
