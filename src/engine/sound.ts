@@ -6,12 +6,12 @@
 import { assetUrl } from '../asset-url'
 import { muteSetting, musicSetting, sfxSetting, SOUND_LEVEL_VALUE } from '../game/settings'
 
-export type MusicTheme = 'home' | 'battle' | 'duel' | 'raid' | 'none'
+export type MusicTheme = 'home' | 'shop' | 'battle' | 'duel' | 'raid' | 'none'
 export type SkillSound = '돌격' | '사격' | '계략' | '통솔' | '수호' | '치유'
 export type WeaponSound = 'sword' | 'spear' | 'arrow' | 'magic'
-type TrackName = 'home' | 'battle' | 'raid'
+type TrackName = 'home' | 'shop' | 'battle' | 'raid'
 /** 녹음된 짧은 효과음 파일(public/assets/sfx) */
-type SfxFile = 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard' | 'victory-cry' | 'gallop' | 'neigh'
+type SfxFile = 'recruit' | 'click' | 'skill-attack' | 'skill-heal' | 'skill-buff' | 'skill-guard' | 'victory-cry' | 'gallop' | 'neigh'
 export type Sfx =
   | 'click' | 'tab' | 'open' | 'close' | 'error' | 'success' | 'coin' | 'levelUp' | 'unlock' | 'forge' | 'equip' | 'unequip'
   | 'dismantle' | 'lock' | 'reward' | 'build' | 'research' | 'formation' | 'battleStart' | 'attack' | 'hit' | 'hitBig' | 'unitDown'
@@ -259,7 +259,7 @@ const RAID: ThemeDef = {
   },
 }
 
-const THEMES: Record<Exclude<MusicTheme, 'none'>, ThemeDef> = { home: HOME, battle: BATTLE, duel: DUEL, raid: RAID }
+const THEMES: Record<Exclude<MusicTheme, 'none'>, ThemeDef> = { home: HOME, shop: HOME, battle: BATTLE, duel: DUEL, raid: RAID }
 
 // ── 소리 엔진 ───────────────────────────────────────────
 /** 빼 버린 전투 효과음: 맞을 때 · 토벌전 부대 · 회복 · 대응 성공/실패 · 막 전환 · 부대 쓰러짐 · 시간 경고 · 적 전술 예고 */
@@ -297,7 +297,7 @@ export class SoundEngine {
     this.applyVolumes()
     this.setTheme(this.wanted)
     // 버튼 · 스킬 효과음 미리 받기
-    for (const name of ['click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard', 'victory-cry', 'gallop', 'neigh'] as const) this.fileBuffer(name)
+    for (const name of ['recruit', 'click', 'skill-attack', 'skill-heal', 'skill-buff', 'skill-guard', 'victory-cry', 'gallop', 'neigh'] as const) this.fileBuffer(name)
     window.setInterval(() => this.tick(), 50)
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return
@@ -368,10 +368,10 @@ export class SoundEngine {
     // 본영 · 시나리오 · 대련은 녹음된 곡을 되풀이해 튼다(곡을 못 불러오면 예전처럼 만든 곡으로)
     const recorded = this.track(this.trackFor(theme))
     if (theme !== 'none') {
-      if (theme === 'home') this.intensity = 0
+      if (theme === 'home' || theme === 'shop') this.intensity = 0
       if (!recorded) this.player = new ThemePlayer(this, THEMES[theme], theme, Math.floor(Math.random() * 1e9))
     }
-    this.setAmbience(theme === 'none' ? 'none' : theme === 'home' ? 'home' : 'battle')
+    this.setAmbience(theme === 'none' ? 'none' : theme === 'home' || theme === 'shop' ? 'home' : 'battle')
   }
 
   // ── 녹음된 배경음(파일) ──
@@ -425,6 +425,7 @@ export class SoundEngine {
   /** 화면(곡 주제)에 쓰는 녹음 곡 */
   private trackFor(theme: MusicTheme): TrackName | null {
     if (theme === 'home') return 'home'
+    if (theme === 'shop') return 'shop'
     if (theme === 'battle' || theme === 'duel') return 'battle'
     if (theme === 'raid') return 'raid'
     return null
@@ -1483,6 +1484,14 @@ export class SoundEngine {
       o.start(t); o.stop(t + seconds + 0.1)
       o.onended = () => { try { g.disconnect() } catch { /* 끝 */ } }
     }
+  }
+  /** 무장 모집: 대박 아이템 획득 곡(녹음 파일, 약 8초). 그동안 배경음은 낮춘다 */
+  recruitJingle(): void {
+    if (!this.ceremonyReady()) return
+    const buffer = this.fileBuffer('recruit')
+    if (!buffer) return
+    this.duckFor(Math.round(buffer.duration * 1000) + 300)
+    this.play_(buffer, this.sfxVol, this.ctx!.currentTime + 0.02, 0.9)
   }
   /** 섬광: 5성이면 징 · 큰북 · 금관 팡파르 · 합창 · 쏟아지는 방울과 현 */
   fanfare(level: number): void {

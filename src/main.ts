@@ -890,6 +890,9 @@ function openSection(section: Section): void {
     void refreshDuelOpponents()
   }
   if (section === 'raid') void refreshRaid()
+  // 상점에서는 상점 곡, 나오면 본영 곡으로
+  if (section === 'shop') sound.setTheme('shop')
+  else if (sound.currentTheme === 'shop') sound.setTheme('home')
   if (section === 'board') void refreshBoard()
   if (section === 'territory') void refreshCityDamageRankings(state.selectedCityId)
   ui.render(state)

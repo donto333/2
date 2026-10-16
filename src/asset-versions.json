@@ -18,6 +18,7 @@
  "/assets/sfx/click.mp3": "d9075a759a",
  "/assets/sfx/gallop.mp3": "f1f9c056d7",
  "/assets/sfx/neigh.mp3": "be4cb83ca7",
+ "/assets/sfx/recruit.mp3": "1f635cf16f",
  "/assets/sfx/skill-attack.mp3": "ec7e69eb26",
  "/assets/sfx/skill-buff.mp3": "aa7e2198c3",
  "/assets/sfx/skill-guard.mp3": "2056c6ca04",
@@ -25,5 +26,6 @@
  "/assets/sfx/victory-cry.mp3": "da9825846d",
  "/assets/music/battle.mp3": "6335065feb",
  "/assets/music/home.mp3": "48893e1ee6",
- "/assets/music/raid.mp3": "c95c9b7a79"
+ "/assets/music/raid.mp3": "c95c9b7a79",
+ "/assets/music/shop.mp3": "44578bba33"
 }
