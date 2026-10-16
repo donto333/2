@@ -2,6 +2,7 @@ import { createRequire as createCityRoutesRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from "./duel-match.mjs";
 import { neutralRaidPower, resolveNeutralRaid } from './neutral-raid.mjs';
+import { isLaunched } from './launch.mjs';
 import { RAID_DAILY_LIMIT, RAID_SQUADS, previousRaidWeekKey, raidBossLevel, raidDamageCap, raidDayKey, raidRewardFor, raidWeekKey } from "./raid.mjs";
 const cityRoutes = createCityRoutesRequire(import.meta.url)('./city-routes.json');
 // starters/web-db-user-v1/shared/const.ts
@@ -561,7 +562,7 @@ async function getFactionTerritories(userId) {
   if (!db) throw new Error("Database is not available");
   await ensureFactionTerritories(db);
   await advanceNeutralTerritoryAi(db);
-  if (userId) await grantLuoyangBox(db, userId);
+  // 낙양전 보상은 account.luoyangReward에서만 지급한다(게임이 받은 금화를 바로 반영하게)
   const rows = await db.select().from(factionTerritoryStates);
   const byCityId = new Map(rows.map(row => [row.cityId, row]));
   const logs = await db.select().from(neutralAiBattleLogs).where(inArray(neutralAiBattleLogs.cityId, FACTION_TERRITORY_SEED.map(city => city.cityId))).orderBy(asc(neutralAiBattleLogs.occurredAt));
@@ -930,6 +931,7 @@ function adminGameView(row) {
 }
 
 const PRELAUNCH_DAILY_GOLD = 100;
+// 정식 출시(launch.mjs의 OFFICIAL_LAUNCH 또는 환경 변수 OFFICIAL_LAUNCH=1)가 되면 매일 금화는 자동으로 멈춘다.
 const PRELAUNCH_GOLD_ENABLED = true;
 const FACTION_WAR_GOLD = { 1: 20, 2: 40, 3: 60, 4: 80, 5: 100 };
 const DUEL_DAILY_LIMIT = 5;
@@ -954,7 +956,7 @@ async function grantCurrency(userId, input) {
     const today = seoulDayKey();
     let gold = 0, fragments = 0, reason = "";
     if (input.kind === "daily") {
-      if (!PRELAUNCH_GOLD_ENABLED) reason = "일일 금화 지급 기간이 아닙니다.";
+      if (!PRELAUNCH_GOLD_ENABLED || isLaunched()) reason = "일일 금화 지급 기간이 아닙니다.";
       else if (ledger.daily === today) reason = "오늘 금화를 이미 받았습니다.";
       else { gold = PRELAUNCH_DAILY_GOLD; ledger.daily = today; }
     } else if (input.kind === "scenario") {

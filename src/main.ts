@@ -451,7 +451,7 @@ async function beginRaidAsIs(): Promise<void> {
     try {
       // 서버는 저장된 1·2·3군 전력으로 피해 상한을 잡으므로 먼저 지금 편성을 저장한다
       persistLocalGame()
-      applyAdminPatch(await ManusAuth.mutate('account.saveGameState', accountStatePayload()))
+      applyAdminPatch(await withLedger(() => ManusAuth.mutate('account.saveGameState', accountStatePayload())))
       const started = await ManusAuth.mutate('raid.start') as { ok: boolean; reason?: string; token?: string; weekKey?: string; bossLevel?: number }
       if (!started.ok || !started.token) { ui.notify(started.reason ?? '레이드를 시작하지 못했습니다.', 'ember'); void refreshRaid(); return }
       raidRun = { token: started.token, weekKey: started.weekKey ?? weekKey, bossLevel: started.bossLevel ?? RAID_DEFAULT_LEVEL, runner: new RaidRunner(squads) }
@@ -518,10 +518,12 @@ async function finishRaidRun(): Promise<void> {
 
 async function claimRaidReward(): Promise<void> {
   try {
-    const result = await ManusAuth.mutate('raid.claim') as { ok: boolean; reason?: string; rank?: number; gold: number; stones: number }
+    const result = await withLedger(async () => {
+      const claimed = await ManusAuth.mutate('raid.claim') as { ok: boolean; reason?: string; rank?: number; gold: number; stones: number }
+      if (claimed.ok) { state.gold += claimed.gold; state.mythicStones += claimed.stones }
+      return claimed
+    })
     if (!result.ok) { ui.notify(result.reason ?? '받을 보상이 없습니다.', 'ember'); return }
-    state.gold += result.gold
-    state.mythicStones += result.stones
     queueAccountSave(true)
     ui.render(state)
     ui.notify(`지난주 레이드 ${result.rank}위 보상 · 금화 +${result.gold}${result.stones ? ` · 낙양 강화석 +${result.stones}` : ''} (서버 지급)`, 'jade')
@@ -719,13 +721,29 @@ function isMember(): boolean {
  * 금화·신화 조각은 서버 원장이 기준이다(저장은 줄이는 것만 반영된다).
  * 회원이 받을 보상은 서버에 요청해 서버가 확인·지급한 만큼만 화면에 더한다.
  */
+/**
+ * 서버 원장 재화(금화 · 신화 조각 · 낙양 강화석)를 바꾸는 요청과 게임 저장을 한 줄로 세운다.
+ * 서버는 저장값이 서버 값보다 적으면 '쓴 것'으로 보고 줄이므로, 보상 지급과 옛 금화를 담은 저장이 엇갈리면
+ * 받은 보상이 사라진다. 한 줄로 세우면 저장은 늘 보상을 반영한 뒤의 값을 보낸다(응답이 15초 넘게 없으면 다음으로 넘어감).
+ */
+let ledgerChain: Promise<unknown> = Promise.resolve()
+function withLedger<T>(task: () => Promise<T>): Promise<T> {
+  const run = ledgerChain.then(task, task)
+  ledgerChain = Promise.race([run.catch(() => undefined), new Promise(resolve => window.setTimeout(resolve, 15000))])
+  return run
+}
+
 async function serverGrant(kind: 'daily' | 'scenario' | 'faction' | 'duel', key?: string, bonus?: number): Promise<void> {
   if (!isMember()) return
   try {
-    const result = await ManusAuth.mutate('account.grant', { kind, ...(key ? { key } : {}), ...(bonus ? { bonus: Math.min(1, Math.max(0, bonus)) } : {}) }) as { granted: number; fragments: number; reason: string }
+    // 지급 결과를 상태에 반영할 때까지 저장을 기다리게 한다
+    const result = await withLedger(async () => {
+      const granted = await ManusAuth.mutate('account.grant', { kind, ...(key ? { key } : {}), ...(bonus ? { bonus: Math.min(1, Math.max(0, bonus)) } : {}) }) as { granted: number; fragments: number; reason: string }
+      state.gold += Math.max(0, Math.trunc(granted.granted || 0))
+      state.mythicFragments += Math.max(0, Math.trunc(granted.fragments || 0))
+      return granted
+    })
     if (!result.granted && !result.fragments) return
-    state.gold += Math.max(0, Math.trunc(result.granted))
-    state.mythicFragments += Math.max(0, Math.trunc(result.fragments))
     if (kind === 'daily') state.prelaunchGoldDayKey = dayKey()
     queueAccountSave(true)
     ui.render(state)
@@ -743,14 +761,19 @@ async function serverGrant(kind: 'daily' | 'scenario' | 'faction' | 'duel', key?
 async function claimLuoyangReward(): Promise<void> {
   if (authView.status !== 'authenticated') return
   try {
-    const reward = await ManusAuth.query('account.luoyangReward') as { weekKey: string | null; reward: number }
-    if (!reward.weekKey || reward.weekKey === state.luoyangRewardWeekKey) return
-    const gold = Math.max(0, Math.trunc(reward.reward ?? 0))
-    state.luoyangRewardWeekKey = reward.weekKey
-    state.lastLuoyangReward = gold
-    state.gold += gold
-    state.luoyangBoxes += 1
-    state.mythicStones += 1
+    const reward = await withLedger(async () => {
+      const value = await ManusAuth.query('account.luoyangReward') as { weekKey: string | null; reward: number }
+      if (!value.weekKey || value.weekKey === state.luoyangRewardWeekKey) return null
+      const gold = Math.max(0, Math.trunc(value.reward ?? 0))
+      state.luoyangRewardWeekKey = value.weekKey
+      state.lastLuoyangReward = gold
+      state.gold += gold
+      state.luoyangBoxes += 1
+      state.mythicStones += 1
+      return gold
+    })
+    if (reward === null) return
+    const gold = reward
     queueAccountSave(true)
     ui.notify(`낙양전 승리 보상 · 금화 ${gold}개 · 낙양 상자 1개 · 낙양 강화석 1개 (신화장비 강화 1회)`, 'jade')
   } catch {
@@ -1763,7 +1786,8 @@ async function refreshAccount(): Promise<void> {
   const requestGeneration = authGeneration
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; mythicStones?: number; missions?: StrategyState['missions'] | null; reserveSquads?: string[][] | null; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null; adminPatchId?: string | null }
+    // 지급 · 저장과 같은 줄에서 읽는다(지급 도중에 읽으면 금화를 두 번 더하게 된다)
+    const game = await withLedger(() => ManusAuth.query('account.gameState')) as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; mythicStones?: number; missions?: StrategyState['missions'] | null; reserveSquads?: string[][] | null; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null; adminPatchId?: string | null }
     // 계정이 바뀐 동안 도착한 이전 계정 응답은 현재 상태에 적용하지 않는다.
     if (requestGeneration !== authGeneration || authView.status !== 'authenticated') return
     {
@@ -1930,7 +1954,8 @@ async function flushAccountSave(): Promise<void> {
   const revisionAtStart = saveRevision
   saveInFlight = true
   try {
-    applyAdminPatch(await ManusAuth.mutate('account.saveGameState', accountStatePayload()))
+    // 저장 값은 차례가 왔을 때 만든다(앞선 보상 지급이 반영된 금화)
+    applyAdminPatch(await withLedger(() => ManusAuth.mutate('account.saveGameState', accountStatePayload())))
     saveRetryCount = 0
     if (saveRevision === revisionAtStart) localSaveDirty = false
   } catch (error) {

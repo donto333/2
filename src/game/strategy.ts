@@ -4,6 +4,7 @@ import cityRoutes from '../../server/city-routes.json'
 import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, GENERAL_SKILLS, GROWTH_OWN_SHARE, GROWTH_PROFILE, GROWTH_STATS, levelBudget, starBudget, type GrowthStat, SKILL_MORALE_CAP, SKILL_TYPE_META, activeSkillName, baseMoraleDamage, bondFor, isAwakened, skillCooldownFor, skillDefFor, type SkillType } from './skills'
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 import { MANUAL_PACKAGE_AMOUNTS } from '../../server/economy.mjs'
+import { isLaunched } from '../../server/launch.mjs'
 import { locale } from '../i18n/lang'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'raid' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
@@ -333,7 +334,8 @@ export function ensurePrelaunchDailyGold(state: StrategyState, now = Date.now())
   if (typeof state.gold !== 'number' || !Number.isFinite(state.gold)) state.gold = 0
   if (typeof state.prelaunchGoldDayKey !== 'string') state.prelaunchGoldDayKey = ''
   const today = dayKey(now)
-  if (!PRELAUNCH_GOLD_ENABLED || state.prelaunchGoldDayKey === today) return false
+  // 정식 출시 뒤에는 자동으로 멈춘다(서버와 같은 스위치)
+  if (!PRELAUNCH_GOLD_ENABLED || isLaunched() || state.prelaunchGoldDayKey === today) return false
   state.gold += PRELAUNCH_DAILY_GOLD
   state.prelaunchGoldDayKey = today
   state.lastNotice = `정식 출시 전 매일 금화 ${PRELAUNCH_DAILY_GOLD}개를 지급했습니다.`
