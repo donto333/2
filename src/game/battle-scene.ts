@@ -6,6 +6,7 @@ import { easeIn2, easeInOut, track } from './motion-math'
 import { strikeInfluences } from './battle-rig'
 import type { General } from './strategy'
 import { loadModel } from './battle-models'
+import { grassTexture, grassTuftGeometry, mountainMaterial, pineTrees, rockGeometry } from './scenery'
 
 export type Team = 'player' | 'enemy'
 export type SceneQuality = 'low' | 'high'
@@ -665,15 +666,16 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
   scene.add(fill)
 
   // 원경 산맥 3겹(멀수록 하늘색에 묻힌다)
-  const ridge = (radius: number, height: number, color: number, seed: number, from = -Math.PI * 0.98, to = -Math.PI * 0.02) => {
-    const segments = 240
+  const ridge = (radius: number, height: number, color: number, seed: number, hazeAmount: number, from = -Math.PI * 0.98, to = -Math.PI * 0.02) => {
+    const segments = 600
     const positions: number[] = []
     const r = rng(seed)
     const offsets = Array.from({ length: 6 }, () => r() * 10)
     for (let i = 0; i <= segments; i += 1) {
       const a = from + (to - from) * (i / segments)
       const x = Math.cos(a) * radius, z = Math.sin(a) * radius
-      const n = Math.sin(a * 5 + offsets[0]) * 0.38 + Math.sin(a * 11 + offsets[1]) * 0.2 + Math.abs(Math.sin(a * 19 + offsets[2])) * 0.16 + Math.sin(a * 37 + offsets[3]) * 0.04
+      // 봉우리 · 능선: 큰 굴곡 위에 날카로운 능선(절댓값 사인)과 잔 굴곡을 겹친다
+      const n = Math.sin(a * 5 + offsets[0]) * 0.38 + Math.sin(a * 11 + offsets[1]) * 0.2 + (1 - Math.abs(Math.sin(a * 19 + offsets[2]))) * 0.18 + Math.sin(a * 37 + offsets[3]) * 0.06 + Math.sin(a * 83 + offsets[4]) * 0.025 + Math.sin(a * 171 + offsets[5]) * 0.012
       const y = height * (0.55 + n)
       positions.push(x, -4, z, x, y, z)
     }
@@ -682,16 +684,14 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
     geometry.setIndex(index)
-    const haze = new THREE.Color(0xc89a86), baseColor = new THREE.Color(color), vc: number[] = []
-    for (let i = 0; i < positions.length / 3; i += 1) { const top = i % 2 === 1; const c = top ? baseColor.clone().lerp(haze, 0.35) : baseColor.clone().multiplyScalar(0.85); vc.push(c.r, c.g, c.b) }
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(vc, 3))
-    const ridgeMesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }))
+    // 바위 결 · 골짜기 그늘 · 공기 원근(멀수록 하늘빛에 묻힌다)은 셰이더가 그린다
+    const ridgeMesh = new THREE.Mesh(geometry, mountainMaterial(color, 0xc89a86, hazeAmount))
     ridgeMesh.renderOrder = -15
     scene.add(ridgeMesh)
   }
-  ridge(140, 26, 0x8a7484, 3)
-  ridge(110, 18, 0x625464, 7)
-  ridge(82, 11, 0x433a3e, 11)
+  ridge(140, 26, 0x7a6a74, 3, 0.5)
+  ridge(110, 18, 0x5a5058, 7, 0.32)
+  ridge(82, 11, 0x3e3834, 11, 0.16)
 
   // 적 뒤의 성채: 성벽·성가퀴·문루(2층 기와지붕)·등불
   const fort = new THREE.Group()
@@ -740,6 +740,8 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
     fort.add(tower)
   }
   fort.position.set(0, 0, -112); fort.scale.setScalar(1.6)
+  // 먼 성채는 아지랑이에 반쯤 묻힌 실루엣으로(가까이서 보이는 상자 모양이 도드라지지 않게)
+  for (const material of [stone, roofMat, timber]) material.color.lerp(new THREE.Color(0x9a7a70), 0.7)
   scene.add(fort)
   const fortGlow = new THREE.PointLight(0xff9a4a, 30, 30, 2)
   fortGlow.position.set(0, 14, -104)
@@ -793,12 +795,8 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
 
   // 풀 덤불(인스턴스) — 전장 가운데는 비운다
   const tuftCount = quality === 'high' ? 2600 : 900
-  const tuftGeo = mergeColored([
-    { geometry: new THREE.ConeGeometry(0.06, 0.42, 3), color: 0x8a8a3a, matrix: M(0, 0.2, 0, 0, 0, 0.25) },
-    { geometry: new THREE.ConeGeometry(0.06, 0.36, 3), color: 0x6a7a30, matrix: M(0.06, 0.17, 0.03, 0, 1, -0.3) },
-    { geometry: new THREE.ConeGeometry(0.05, 0.3, 3), color: 0xa08a44, matrix: M(-0.05, 0.14, -0.03, 0.2, 2, 0.1) },
-  ])
-  const tufts = new THREE.InstancedMesh(tuftGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }), tuftCount)
+  // 가는 풀잎을 그린 그림 두 장을 열십자로(원뿔 풀 대신)
+  const tufts = new THREE.InstancedMesh(grassTuftGeometry(), new THREE.MeshStandardMaterial({ map: grassTexture(), alphaTest: 0.4, roughness: 1 }), tuftCount)
   const tr = rng(9)
   const dummy = new THREE.Object3D()
   let placed = 0
@@ -818,8 +816,8 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
   scene.add(tufts)
 
   // 바위
-  const rockGeo = new THREE.DodecahedronGeometry(1, 0)
-  const rocks = new THREE.InstancedMesh(rockGeo, new THREE.MeshStandardMaterial({ color: 0x5a5048, roughness: 0.92, flatShading: true }), 40)
+  // 울퉁불퉁하게 일그러진 둥근 돌(이끼 · 흙 얼룩) — 각진 다면체 대신
+  const rocks = new THREE.InstancedMesh(rockGeometry(23), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), 40)
   for (let i = 0; i < 40; i += 1) {
     const a = tr() * Math.PI * 2, rr = 15 + tr() * 30
     let rx = Math.cos(a) * rr, rz = Math.sin(a) * rr * 0.8 - 8
@@ -833,21 +831,13 @@ export function buildEnvironment(scene: THREE.Scene, quality: SceneQuality): Env
   scene.add(rocks)
 
   // 소나무(양옆 언덕)
-  const pine = mergeColored([
-    { geometry: new THREE.CylinderGeometry(0.12, 0.2, 2.2, 6), color: 0x3a2618, matrix: M(0, 1.1, 0) },
-    { geometry: new THREE.ConeGeometry(1.2, 2.2, 7), color: 0x2a3a24, matrix: M(0, 2.6, 0) },
-    { geometry: new THREE.ConeGeometry(0.95, 1.9, 7), color: 0x32462a, matrix: M(0, 3.5, 0) },
-    { geometry: new THREE.ConeGeometry(0.6, 1.5, 7), color: 0x3a522e, matrix: M(0, 4.3, 0) },
-  ])
-  const pines = new THREE.InstancedMesh(pine, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), 46)
-  for (let i = 0; i < 46; i += 1) {
-    const side = i % 2 ? 1 : -1
+  // 그림으로 그린 소나무를 열십자로 세운다(원뿔을 쌓은 장난감 나무 대신)
+  const pines = pineTrees(46, (_i, d) => {
+    const side = _i % 2 ? 1 : -1
     const x = side * (30 + tr() * 30), z = -50 + tr() * 50
-    dummy.position.set(x, terrainHeight(x, z) - 0.2, z)
-    dummy.rotation.set(0, tr() * 6, 0); dummy.scale.setScalar(0.9 + tr() * 1.1)
-    dummy.updateMatrix(); pines.setMatrixAt(i, dummy.matrix)
-  }
-  pines.castShadow = quality === 'high'
+    d.position.set(x, terrainHeight(x, z) - 0.2, z)
+    d.rotation.set(0, tr() * 6, 0); d.scale.setScalar(0.6 + tr() * 0.7)
+  }, quality === 'high')
   scene.add(pines)
 
   // 깃발 줄(양 진영 뒤) — 천은 바람에 흔들린다

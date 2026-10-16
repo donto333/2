@@ -618,6 +618,8 @@ export class Arena {
       this.scene.remove(effect.object)
       effect.dispose()
     })
+    this.labelSlots.clear()
+    this.liveLabels = 0
   }
 
   /** res: 글 그림 해상도 배율(타격 숫자처럼 작고 짧게 뜨는 글은 0.5로 — 타격마다 올리는 텍스처를 1/4로) */
@@ -674,8 +676,10 @@ export class Arena {
     group.add(ring, innerRing, flash)
     group.position.copy(position)
     // 숫자는 큰 타격·스킬에만(모든 타격에 띄우면 화면이 어지럽다)
-    const label = showNumber ? this.makeTextSprite(`-${damage}`, color === 0x4cdfff ? '#8deaff' : '#ffe5a4', 1.15, 0.5) : null
-    if (label) { label.position.set(0, 1.35, 0); group.add(label) }
+    // 숫자 자리: 같은 곳에 글이 겹쳐 있으면 위로 올리고, 너무 많으면 이번 숫자는 생략한다
+    const lift = showNumber ? this.labelSlot(position, true) : null
+    const label = lift !== null ? this.makeTextSprite(`-${damage}`, color === 0x4cdfff ? '#8deaff' : '#ffe5a4', 1.15, 0.5) : null
+    if (label) { label.position.set(0, 1.35 + (lift ?? 0), 0); group.add(label); this.liveLabels += 1 }
     this.addEffect({
       object: group,
       age: 0,
@@ -694,13 +698,13 @@ export class Arena {
           shard.rotation.y += delta * 11
         })
         shardMaterial.opacity = 0.92 * (1 - progress)
-        if (label) { label.position.y = 1.35 + progress * 1.2; label.material.opacity = 1 - progress }
+        if (label) { label.position.y = 1.35 + (lift ?? 0) + progress * 1.2; label.material.opacity = 1 - progress }
         group.rotation.y += delta * 3
       },
       dispose: () => {
         // 타격마다 만든 재질을 버린다(도형은 모든 타격이 함께 쓴다)
         ring.material.dispose(); innerRing.material.dispose(); flash.material.dispose(); shardMaterial.dispose()
-        if (label) { label.material.map?.dispose(); label.material.dispose() }
+        if (label) { this.liveLabels = Math.max(0, this.liveLabels - 1); label.material.map?.dispose(); label.material.dispose() }
       },
     })
   }
@@ -1032,19 +1036,33 @@ export class Arena {
   }
 
   private readonly edgeShownAt = new WeakMap<BattleUnit, number>()
+  /** 떠오르는 글 자리: 같은 곳(레인)에 0.7초 안에 또 뜨면 위로 한 칸씩 올린다. 이미 두 칸 찼으면 숫자는 건너뛴다 */
+  private readonly labelSlots = new Map<number, { at: number; n: number }>()
+  private liveLabels = 0
+  private labelSlot(position: THREE.Vector3, optional: boolean): number | null {
+    const key = Math.round(position.x / 2.5) * 100 + Math.round(position.z / 4)
+    const now = this.clock.getElapsed()
+    const slot = this.labelSlots.get(key)
+    const n = slot && now - slot.at < 0.7 ? slot.n + 1 : 0
+    if (optional && (n >= 2 || this.liveLabels >= 6)) return null
+    this.labelSlots.set(key, { at: now, n: Math.min(n, 3) })
+    return Math.min(n, 3) * 0.55
+  }
 
   /** 머리 위로 떠오르다 사라지는 글자 */
   private floatText(position: THREE.Vector3, text: string, color: string, scale = 1): void {
+    const lift = this.labelSlot(position, false) ?? 0
     const sprite = this.makeTextSprite(text, color, scale)
     sprite.position.copy(position)
+    this.liveLabels += 1
     this.addEffect({
       object: sprite, age: 0, life: 1.2,
       tick: effect => {
         const k = effect.age / effect.life
-        sprite.position.y = position.y + k * 0.8
+        sprite.position.y = position.y + lift + k * 0.8
         sprite.material.opacity = k < 0.15 ? k / 0.15 : 1 - Math.max(0, k - 0.6) / 0.4
       },
-      dispose: () => { sprite.material.map?.dispose(); sprite.material.dispose() },
+      dispose: () => { this.liveLabels = Math.max(0, this.liveLabels - 1); sprite.material.map?.dispose(); sprite.material.dispose() },
     })
   }
 
@@ -1104,7 +1122,7 @@ export class Arena {
   private showHit(unit: BattleUnit, side: 'player' | 'enemy', amount: number, edge?: 'adv' | 'dis'): void {
     if (unit.dying > 0 && unit.troops <= 0) return
     // 병종 상성: 유리하면 "상성 우위"가 뜨고 더 세게 흔들린다(같은 무장 위에는 3.5초에 한 번)
-    if (edge === 'adv' && this.clock.getElapsed() - (this.edgeShownAt.get(unit) ?? -99) > 3.5) {
+    if (edge === 'adv' && this.clock.getElapsed() - (this.edgeShownAt.get(unit) ?? -99) > 6) {
       this.edgeShownAt.set(unit, this.clock.getElapsed())
       this.floatText(unit.group.position.clone().add(new THREE.Vector3(0, 3.1, 0)), edge === 'adv' ? '상성 우위!' : '상성 열세', edge === 'adv' ? '#ffd27a' : '#b9c2c9', edge === 'adv' ? 1.05 : 0.8)
       if (edge === 'adv') { this.cameraShake = Math.min(0.62, this.cameraShake + 0.08); if (side === 'enemy') this.kick(unit, 0.25) }
@@ -1124,7 +1142,8 @@ export class Arena {
     const stop = felt >= 160 ? Math.min(0.11, 0.05 + (felt - 160) / 3000) : felt >= 110 ? 0.03 : 0
     if (stop > 0) { this.addHitStop(stop); if (side === 'enemy') unit.shake = Math.max(unit.shake, stop + 0.05) }
     if (!this.reducedFx) this.fx(hitSpark(unit.group.position.clone().add(new THREE.Vector3(0, 1.1, side === 'enemy' ? 0.6 : -0.6)), side === 'enemy' ? 0xfff0c0 : 0xffb08a, felt >= 120 ? 1.3 : 0.9))
-    if (felt >= 20) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember, felt >= 120 || amount >= unit.maxTroops * 0.05 || edge === 'adv', felt)
+    // 작은 타격은 불꽃만, 제법 센 타격부터 고리 · 조각 효과, 숫자는 큰 타격에만(화면이 숫자로 덮이지 않게)
+    if (felt >= 50) this.spawnImpact(unit.group.position.clone(), Math.round(amount), side === 'enemy' ? jade : ember, felt >= 140 || amount >= unit.maxTroops * 0.08, felt)
   }
 
   /** 일반 공격: 근접은 튀어나가 베고, 궁병은 화살·책사는 기탄을 날린다 */

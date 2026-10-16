@@ -1941,3 +1941,45 @@ body .bt-stage .bt-enemy-warn { padding: 5px 10px; font-size: 13px; }
   body .bt-stage .bt-callout .bt-lanes span { padding: 1px 0; font-size: 11px; }
   body .bt-stage .bt-enemy-warn { padding: 4px 8px; font-size: 12px; }
 }
+
+/* 휴대폰 전투 화면 정리: 위 · 아래 판을 줄여 전장이 더 넓게 보이게(글자는 11px 아래로 줄이지 않는다) */
+@media (max-width: 760px) {
+  html body .page-section--battle .bt-top { gap: 4px; }
+  html body .page-section--battle .bt-hud { padding: 6px 10px 6px; }
+  html body .page-section--battle .bt-hud .bt-hud-row { font-size: 12.5px; gap: 8px; }
+  html body .page-section--battle .bt-hud .bt-hud-row:first-child { padding-right: 0; }
+  html body .page-section--battle .bt-hud .bt-bar { height: 5px; margin: 3px 0; }
+  html body .page-section--battle .bt-hud-row--threat { margin-top: 1px; }
+  html body .page-section--battle .bt-hud-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; gap: 10px; margin-top: 2px; font-size: 11.5px; }
+  html body .page-section--battle .bt-hud-meta [data-bt-pressure], html body .page-section--battle .bt-hud-meta [data-bt-bond], html body .page-section--battle .bt-hud-meta [data-bt-status] { display: none; }
+  html body .page-section--battle .bt-enemies { padding: 4px 8px; }
+  html body .page-section--battle .bt-enemies-label { display: none; }
+  html body .page-section--battle .bt-enemy-row { gap: 6px; }
+  html body .page-section--battle .bt-enemy { gap: 6px; padding: 2px 4px; align-items: center; }
+  html body .page-section--battle .bt-enemy-portrait { width: 24px; height: 24px; min-width: 24px; border-radius: 6px; }
+  html body .page-section--battle .bt-enemy strong { font-size: 12px; line-height: 1.2; }
+  html body .page-section--battle .bt-enemy small { display: none; }
+  html body .page-section--battle .bt-enemy-troops { height: 3px; margin-top: 2px; }
+  html body .page-section--battle .bt-controls { padding: 6px 8px 8px; }
+  html body .page-section--battle .bt-units { gap: 5px; }
+  html body .page-section--battle .bt-unit { padding: 5px; gap: 4px; border-radius: 10px; }
+  html body .page-section--battle .bt-unit-main { grid-template-columns: 30px 1fr; grid-template-rows: auto auto; column-gap: 6px; text-align: left; justify-items: start; }
+  html body .page-section--battle .bt-unit-main .bt-portrait { grid-row: 1 / 3; width: 30px; height: 30px; border-radius: 7px; }
+  html body .page-section--battle .bt-unit-lane { font-size: 11px; line-height: 1.15; }
+  html body .page-section--battle .bt-unit-main strong { font-size: 13px; line-height: 1.2; }
+  html body .page-section--battle .bt-unit-troops { grid-column: 1 / 3; width: 100%; height: 4px; margin-top: 3px; }
+  html body .page-section--battle .bt-unit-skill { padding: 4px 4px; text-align: center; }
+  html body .page-section--battle .bt-unit-skill b { font-size: 11.5px; }
+  html body .page-section--battle .bt-unit-skill small { font-size: 11px; line-height: 1.15; }
+  html body .page-section--battle .bt-tactic-row { margin-top: 6px; gap: 5px; }
+  html body .page-section--battle .bt-gauge { font-size: 11px; }
+  html body .page-section--battle .bt-gauge .bt-bar { height: 4px; margin-top: 2px; }
+  html body .page-section--battle .bt-tactic { padding: 5px 4px; gap: 0; }
+  html body .page-section--battle .bt-tactic span, html body .page-section--battle .bt-tactic small { display: none; }
+  html body .page-section--battle .bt-tactic strong { font-size: 12px; }
+  html body .page-section--battle .bt-tactic em { top: 2px; right: 4px; font-size: 11px; }
+  /* 상성 표시는 카드 위 테두리에 걸친 작은 꼬리표로(이름 · 레인 글자를 가리지 않게) */
+  html body .page-section--battle .bt-unit { overflow: visible; }
+  html body .page-section--battle .bt-unit-main { position: static; }
+  html body .page-section--battle .bt-unit-edge { top: -8px; right: 6px; font-size: 11px; line-height: 15px; padding: 0 5px; border-radius: 4px; }
+}
