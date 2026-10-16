@@ -5,6 +5,8 @@ import { COMMAND_BUFF_GRADE, COMMAND_BUFF_SEC, GENERAL_SKILLS, GROWTH_OWN_SHARE,
 import { neutralRaidPower, resolveNeutralRaid } from '../../server/neutral-raid.mjs'
 import { MANUAL_PACKAGE_AMOUNTS } from '../../server/economy.mjs'
 import { isLaunched } from '../../server/launch.mjs'
+import { ATTENDANCE_DAYS, attendanceReward, nextAttendanceDay } from '../../server/attendance.mjs'
+import { seoulDay } from './missions'
 import { locale } from '../i18n/lang'
 export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research' | 'battle' | 'duel' | 'raid' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin'
 export type Role = '기병' | '궁병' | '책사' | '보병'
@@ -1376,9 +1378,13 @@ export function purchaseMythicEquipment(state: StrategyState, equipmentId: strin
 
 export function drawEquipment(state: StrategyState, count = 1): EquipmentDrawResult {
   ensureEquipmentState(state)
-  const cost = count === 10 ? 2200 : 240
+  // 출석 보상 무료 뽑기권이 있으면 먼저 쓴다
+  const tickets = state.missions?.freeDraws ?? 0
+  const useTickets = tickets >= count
+  const cost = useTickets ? 0 : count === 10 ? 2200 : 240
   if (state.honor < cost) return { ok: false, message: `옥패가 부족합니다. 장비 뽑기에는 ${formatNumber(cost)} 옥패가 필요합니다.`, rewards: [] }
   state.honor -= cost
+  if (useTickets && state.missions) state.missions.freeDraws = tickets - count
   const legendaryBonus = researchMods(state).legendaryRate
   const rewards = Array.from({ length: count }, (_, index) => createDrawnEquipment(index, legendaryBonus))
   rewards.forEach(item => addEquipmentToInventory(state, item))
@@ -1426,7 +1432,11 @@ export interface RecruitOptions {
 }
 
 export function recruit(state: StrategyState, count = 1, options: RecruitOptions = {}): RecruitResult {
-  const cost = options.free ? 0 : recruitCost(state, count)
+  // 출석 보상 무료 모집권이 있으면 먼저 쓴다
+  const tickets = state.missions?.freeRecruits ?? 0
+  const useTickets = !options.free && tickets >= count
+  const cost = options.free || useTickets ? 0 : recruitCost(state, count)
+  if (useTickets && state.missions) state.missions.freeRecruits = tickets - count
   const boosted = researchMods(state).recruitRate
   if (state.honor < cost) return { ok: false, message: '옥패가 부족합니다. 전투에서 옥패를 모아 다시 시도하십시오.', general: null, rewards: [] }
   state.honor -= cost
@@ -2127,3 +2137,70 @@ export function autoFormation(state: StrategyState): AutoResult {
   state.lastNotice = `자동 편성 완료 · ${ordered.map(general => general.name).join(' · ')}${bond ? ` · 인연 ‘${bond.name}’` : ''} · 편성 전투력 ${formatNumber(totalPower(state))}`
   return { ok: true, message: state.lastNotice, changed }
 }
+
+
+// ── 출석 체크 ───────────────────────────────────────────────
+/** 무장 지급: 없으면 1레벨 1성으로 합류, 있으면 성급 +1(5성이면 병서) — 모집 중복과 같은 규칙 */
+export function grantGeneral(state: StrategyState, id: string): General | null {
+  const owned = findGeneral(state, id)
+  if (owned) {
+    if (owned.stars < 5) {
+      const previousStars = owned.stars
+      owned.stars += 1
+      const template = templateGeneral(owned.id)
+      if (template) Object.assign(owned, statsAt(template, owned.level, owned.stars))
+      owned.skillRank = Math.min(5, (owned.skillRank ?? previousStars) + 1)
+      owned.skillPower = (owned.skillPower ?? 100) + 18
+    } else state.manuals += 8
+    return owned
+  }
+  const template = LIBRARY.find(general => general.id === id)
+  if (!template) return null
+  const general = { ...copyGeneral(template), level: 1, stars: 1, skillUnlocked: false, skillRank: 1, skillPower: 100 }
+  state.generals.push(general)
+  if (state.formation.length < 3) state.formation = [...state.formation, general.id]
+  return general
+}
+
+export interface AttendanceClaim { day: number; label: string; general: General | null }
+
+/**
+ * 그날 출석 보상을 지급한다. includeLedger: 금화 · 신화 조각 · 낙양 강화석까지(게스트 로컬).
+ * 회원은 서버가 장부 재화를 더하고 날짜를 정하므로 false로 부른다.
+ */
+export function applyAttendanceReward(state: StrategyState, day: number, includeLedger: boolean, now = Date.now()): AttendanceClaim | null {
+  const reward = attendanceReward(day)
+  if (!reward) return null
+  const missions = state.missions
+  let general: General | null = null
+  if (reward.general) general = grantGeneral(state, reward.general)
+  if (reward.randomLegend) {
+    const legends = LIBRARY.filter(item => item.grade === 5)
+    const fresh = legends.filter(item => !findGeneral(state, item.id))
+    const pool = fresh.length ? fresh : legends
+    general = grantGeneral(state, pool[Math.floor(Math.random() * pool.length)].id)
+  }
+  if (missions) {
+    if (reward.freeRecruits) missions.freeRecruits = (missions.freeRecruits ?? 0) + reward.freeRecruits
+    if (reward.freeDraws) missions.freeDraws = (missions.freeDraws ?? 0) + reward.freeDraws
+    missions.attendance = { count: day, last: seoulDay(now) }
+  }
+  if (reward.silver) { state.silver += reward.silver; state.resources.silver = state.silver }
+  if (reward.honor) state.honor += reward.honor
+  if (reward.manuals) state.manuals += reward.manuals
+  if (reward.resources) state.resources = { ...state.resources, grain: state.resources.grain + reward.resources, wood: state.resources.wood + reward.resources, iron: state.resources.iron + reward.resources }
+  if (includeLedger) {
+    state.gold += reward.gold ?? 0
+    state.mythicFragments += reward.fragments ?? 0
+    state.mythicStones += reward.stones ?? 0
+  }
+  return { day, label: general && reward.randomLegend ? `천명 무장 ${general.name} 획득` : reward.label, general }
+}
+
+/** 게스트(서버 없음): 이 기기에서 오늘 출석을 처리한다 */
+export function claimLocalAttendance(state: StrategyState, now = Date.now()): AttendanceClaim | null {
+  const day = nextAttendanceDay(state.missions?.attendance, seoulDay(now))
+  return day === null ? null : applyAttendanceReward(state, day, true, now)
+}
+
+export { ATTENDANCE_DAYS }

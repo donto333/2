@@ -51,6 +51,8 @@ import {
   unlockSkill,
   upgrade,
   upgradeBuilding,
+  applyAttendanceReward,
+  claimLocalAttendance,
   settleBuildings,
   rushBuilding,
   cancelBuilding,
@@ -320,6 +322,10 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   ensureSquads(state)
   // 회원의 일일 금화는 서버가 지급한다(serverGrant('daily')).
   const receivedDailyGold = mode === 'guest' ? ensurePrelaunchDailyGold(state) : false
+  // 출석 체크: 서버에 연결할 수 없는 게스트만 이 기기에서 처리한다(서버 계정은 서버가 날짜를 정한다)
+  ensureMissions(state)
+  const attended = mode === 'guest' && authView.status === 'offline' ? claimLocalAttendance(state) : null
+  if (attended) window.setTimeout(() => { ui.showAttendance(attended.day, attended.label); ui.render(state) }, 1500)
   const migratedStarter = migrateLegacyStarterRoster(state)
   // 무장 등급 재설정(2026.10): 보유 무장을 새 등급으로 옮기고 내려간 무장은 옥패로 보상
   const regraded = migrateGeneralGrades(state).changed > 0
@@ -328,8 +334,8 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   // 최고 레벨 60(2026.10.15): 넘은 무장은 60으로, 넘은 만큼의 은전·병서는 돌려준다
   const capped = noticeLevelCap()
   const regrown = normalizeGeneralStats(state) > 0 || capped
-  if (receivedDailyGold || migratedStarter || normalizedTerritories || regraded || regrown) persistLocalGame()
-  localSaveDirty = (receivedDailyGold || migratedStarter || normalizedTerritories || regraded || regrown) && mode === 'guest'
+  if (receivedDailyGold || attended || migratedStarter || normalizedTerritories || regraded || regrown) persistLocalGame()
+  localSaveDirty = (receivedDailyGold || attended || migratedStarter || normalizedTerritories || regraded || regrown) && mode === 'guest'
 }
 
 function resetAccountSavePipeline(): void {
@@ -734,6 +740,29 @@ function withLedger<T>(task: () => Promise<T>): Promise<T> {
   const run = ledgerChain.then(task, task)
   ledgerChain = Promise.race([run.catch(() => undefined), new Promise(resolve => window.setTimeout(resolve, 15000))])
   return run
+}
+
+/** 출석 체크(회원 · 서버 게스트): 서버가 날짜와 장부 재화를 정하고, 나머지 보상은 게임이 준다 */
+async function claimAttendance(): Promise<void> {
+  if (!isMember()) return
+  try {
+    const claim = await withLedger(async () => {
+      const result = await ManusAuth.mutate('account.grant', { kind: 'attendance' }) as { granted: number; fragments: number; stones?: number; day?: number; reason: string }
+      if (!result.day) return null
+      state.gold += Math.max(0, Math.trunc(result.granted || 0))
+      state.mythicFragments += Math.max(0, Math.trunc(result.fragments || 0))
+      state.mythicStones += Math.max(0, Math.trunc(result.stones || 0))
+      ensureMissions(state)
+      return applyAttendanceReward(state, result.day, false)
+    })
+    if (!claim) return
+    queueAccountSave(true)
+    ui.render(state)
+    ui.showAttendance(claim.day, claim.label)
+    playSfx('reward')
+  } catch {
+    // 서버가 아직 출석 체크를 모르면(배포 전) 조용히 넘어간다
+  }
 }
 
 async function serverGrant(kind: 'daily' | 'scenario' | 'faction' | 'duel', key?: string, bonus?: number): Promise<void> {
@@ -1938,6 +1967,7 @@ async function refreshAccount(): Promise<void> {
         }
       }
       void serverGrant('daily')
+      void claimAttendance()
       const migratedStarter = migrateLegacyStarterRoster(state)
       const regraded = migrateGeneralGrades(state).changed > 0
       if (regraded) { const message = state.lastNotice; window.setTimeout(() => ui.notify(message), 1800) }

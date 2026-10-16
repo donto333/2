@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, pickDuelMatches } from "./duel-match.mjs";
 import { neutralRaidPower, resolveNeutralRaid } from './neutral-raid.mjs';
 import { isLaunched } from './launch.mjs';
+import { attendanceLedger, nextAttendanceDay } from './attendance.mjs';
 import { RAID_DAILY_LIMIT, RAID_SQUADS, previousRaidWeekKey, raidBossLevel, raidDamageCap, raidDayKey, raidRewardFor, raidWeekKey } from "./raid.mjs";
 const cityRoutes = createCityRoutesRequire(import.meta.url)('./city-routes.json');
 // starters/web-db-user-v1/shared/const.ts
@@ -965,12 +966,17 @@ async function grantCurrency(userId, input) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   return db.transaction(async tx => {
-    const rows = await tx.select().from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1).for("update");
+    let rows = await tx.select().from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1).for("update");
+    // 막 만든 계정(첫 저장 전)도 보상을 받을 수 있게 기본 줄을 먼저 만든다
+    if (!rows[0]) {
+      await tx.insert(gameAccountStates).values({ userId, ...defaultGameState }).onDuplicateKeyUpdate({ set: { userId } });
+      rows = await tx.select().from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1).for("update");
+    }
     const account = rows[0];
     if (!account) return { granted: 0, kind: input.kind, reason: "계정 정보를 찾을 수 없습니다." };
     const ledger = parseStateJson(account.grantLedger) ?? {};
     const today = seoulDayKey();
-    let gold = 0, fragments = 0, reason = "";
+    let gold = 0, fragments = 0, stones = 0, day = 0, reason = "";
     if (input.kind === "daily") {
       if (!PRELAUNCH_GOLD_ENABLED || isLaunched()) reason = "일일 금화 지급 기간이 아닙니다.";
       else if (ledger.daily === today) reason = "오늘 금화를 이미 받았습니다.";
@@ -989,16 +995,26 @@ async function grantCurrency(userId, input) {
         gold = Math.round(pending * (1 + bonus));
         ledger.factionPending = 0;
       }
+    } else if (input.kind === "attendance") {
+      // 출석 체크: 한국 날짜로 하루 한 번, 다음 날짜의 보상(장부 재화만 서버가 더한다)
+      const next = nextAttendanceDay(ledger.attendance, today);
+      if (next === null) reason = (Number(ledger.attendance?.count) || 0) >= 37 ? "출석 체크 이벤트를 모두 마쳤습니다." : "오늘 출석 보상을 이미 받았습니다.";
+      else {
+        day = next;
+        ledger.attendance = { count: next, last: today };
+        ({ gold, fragments, stones } = attendanceLedger(next));
+        await tx.update(gameAccountStates).set({ grantLedger: JSON.stringify(ledger) }).where(eq(gameAccountStates.userId, userId));
+      }
     } else if (input.kind === "duel") {
       const count = ledger.duelDay === today ? Number(ledger.duelCount) || 0 : 0;
       if (count >= DUEL_DAILY_LIMIT) reason = "오늘 받을 수 있는 대련 보상을 모두 받았습니다.";
       // 난이도별 조각: key "duel-easy|normal|hard" (옛 게임은 key 없이 보낸다 → 1개)
       else { const tier = String(input.key ?? "").replace(/^duel-/, ""); fragments = DUEL_TIER_FRAGMENTS[tier] ?? 1; ledger.duelDay = today; ledger.duelCount = count + 1; }
     }
-    if (gold || fragments) {
-      await tx.update(gameAccountStates).set({ gold: sql`${gameAccountStates.gold} + ${gold}`, mythicFragments: sql`${gameAccountStates.mythicFragments} + ${fragments}`, grantLedger: JSON.stringify(ledger) }).where(eq(gameAccountStates.userId, userId));
+    if (gold || fragments || stones) {
+      await tx.update(gameAccountStates).set({ gold: sql`${gameAccountStates.gold} + ${gold}`, mythicFragments: sql`${gameAccountStates.mythicFragments} + ${fragments}`, mythicStones: sql`${gameAccountStates.mythicStones} + ${stones}`, grantLedger: JSON.stringify(ledger) }).where(eq(gameAccountStates.userId, userId));
     }
-    return { kind: input.kind, granted: gold, fragments, reason };
+    return { kind: input.kind, granted: gold, fragments, stones, day, reason };
   });
 }
 

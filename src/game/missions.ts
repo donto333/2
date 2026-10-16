@@ -30,6 +30,10 @@ export interface MissionState {
   tutorial?: string[]; tutorialDone?: boolean
   /** 첫 입장 튜토리얼(강제): 지금 단계 번호, 끝났는지 */
   onboardStep?: number; onboardDone?: boolean
+  /** 출석 체크: 받은 날 수 · 마지막으로 받은 날(한국 날짜) */
+  attendance?: { count: number; last: string }
+  /** 무료 뽑기권(출석 보상): 무장 모집 · 장비 뽑기 */
+  freeRecruits?: number; freeDraws?: number
 }
 
 /** 처음 시작 안내 6단계 */

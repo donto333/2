@@ -105,7 +105,7 @@ export const gameRouter = router({
     gameState: protectedProcedure.query(({ ctx }) => getGameState(ctx.user.id)),
     luoyangReward: protectedProcedure.query(({ ctx }) => getLuoyangReward(ctx.user.id)),
     grant: protectedProcedure.input(z.object({
-      kind: z.enum(['daily', 'scenario', 'faction', 'duel']),
+      kind: z.enum(['daily', 'scenario', 'faction', 'duel', 'attendance']),
       key: z.string().max(96).optional(),
       bonus: z.number().min(0).max(1).optional(),
     })).mutation(({ ctx, input }) => {
