@@ -204,6 +204,10 @@ interface BattleUnit {
   aim: number
   aimTo: number
   aimHold: number
+  /** 다른 레인에 명령했을 때 병사 대열이 그쪽으로 몸을 트는 각도 · 목표 · 남은 시간 */
+  squadAim: number
+  squadAimTo: number
+  squadAimHold: number
 }
 
 /** 관성 블렌딩: [z, y, tilt, twist, scale] 차이와 그 속도, 직전 화면 자세 */
@@ -229,6 +233,10 @@ const LANE_GAP_PORTRAIT = 4.4
 /** 세로 화면에서 좌·우 부대가 서는 화면 가로 위치(-1~1): 아래 좌·우 카드의 가운데(±2/3)에 맞춘다 */
 const PORTRAIT_LANE_NDC = 0.66
 const MIN_LINE_GAP = 3.6
+/** 레인 명령 때 다른 레인 병사 대열: 최대로 트는 각도(라디안), 유지 시간(초), 그쪽으로 다가서는 거리 */
+const RALLY_MAX_TURN = 0.75
+const RALLY_HOLD = 2.2
+const RALLY_STEP = 0.9
 const jade = 0x52e0c4
 /** 스킬 시전 직후 짧은 슬로모션(실제 초) */
 const SKILL_SLOWMO_PLAYER = 0.3
@@ -407,6 +415,22 @@ export class Arena {
    * 측면 지원: 한쪽 부대가 무너지면 그 레인의 상대 부대가 가장 가까운 살아 있는 적 레인 쪽으로 옮겨 가 협공한다.
    * (전투 계산은 이미 살아 있는 적을 노리므로 화면만 맞춘다)
    */
+  /** 한 레인에 명령하면 나머지 레인의 아군(무장 · 병사 대열)이 그 레인의 적 쪽으로 몸을 틀고 조금 다가선다 */
+  private rallyToward(lane: number): void {
+    const focus = this.enemyUnits[lane]?.troops ? this.enemyUnits[lane] : this.playerUnits[lane]
+    if (!focus) return
+    const point = focus.group.position
+    this.playerUnits.forEach((unit, index) => {
+      if (index === lane || unit.troops <= 0 || unit.dying > 0) return
+      const d = point.clone().sub(unit.group.position)
+      const yaw = unit.group.rotation.y === 0 ? Math.atan2(-d.x, -d.z) : Math.atan2(d.x, d.z)
+      unit.squadAimTo = THREE.MathUtils.clamp(yaw, -RALLY_MAX_TURN, RALLY_MAX_TURN)
+      unit.squadAimHold = RALLY_HOLD
+      unit.aimTo = THREE.MathUtils.clamp(yaw, -0.9, 0.9)
+      unit.aimHold = Math.max(unit.aimHold, RALLY_HOLD)
+    })
+  }
+
   private laneSupport(fallenSide: 'player' | 'enemy', lane: number): void {
     const movers = fallenSide === 'enemy' ? this.playerUnits : this.enemyUnits
     const foes = fallenSide === 'enemy' ? this.enemyUnits : this.playerUnits
@@ -857,6 +881,7 @@ export class Arena {
     if (!this.battleActive || !this.core || this.paused) return
     this.selectUnit(index)
     sound.play('move', { pan: this.lanePan(index) })
+    this.rallyToward(index)
     const unit = this.playerUnits[index]
     if (unit && unit.troops > 0) {
       const target = new THREE.Vector3(-5 + index * 5, 0, -1 - index * 1.2)
@@ -958,6 +983,8 @@ export class Arena {
         break
       case 'answer':
         sound.play(event.success ? 'answerGood' : 'answerBad')
+        // 자동 전투가 대응한 레인에도 같은 움직임(직접 누르면 commandMove에서 이미 했다)
+        if (core.autoPilot && event.lane >= 0) this.rallyToward(event.lane)
         if (event.success) {
           const enemy = this.unitAt('enemy', Math.max(0, event.lane))
           this.spawnImpact((enemy?.group.position ?? new THREE.Vector3(0, 0, -6)).clone(), 12, jade)
@@ -1021,10 +1048,10 @@ export class Arena {
     }
   }
 
-  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'dashGait' | 'prevPz' | 'hoofPhase' | 'blend' | 'fallDust' | 'aim' | 'aimTo' | 'aimHold'> {
+  private motionFields(actor: THREE.Group): Pick<BattleUnit, 'actor' | 'motion' | 'pose' | 'squadAim' | 'squadAimTo' | 'squadAimHold' | 'glow' | 'glowColor' | 'dying' | 'strikeAge' | 'hit' | 'vel' | 'gait' | 'lean' | 'shake' | 'dashGait' | 'prevPz' | 'hoofPhase' | 'blend' | 'fallDust' | 'aim' | 'aimTo' | 'aimHold'> {
     return {
       actor, motion: null, pose: { z: 0, y: 0, tilt: 0, twist: 0, scale: 1 }, glow: 0, glowColor: new THREE.Color(1, 1, 1), dying: 0, strikeAge: -1,
-      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, dashGait: 0, prevPz: 0, hoofPhase: Math.random(), fallDust: false, aim: 0, aimTo: 0, aimHold: 0,
+      hit: { x: 0, v: 0 }, vel: new THREE.Vector3(), gait: 0, lean: { x: 0, z: 0 }, shake: 0, dashGait: 0, prevPz: 0, hoofPhase: Math.random(), fallDust: false, aim: 0, aimTo: 0, aimHold: 0, squadAim: 0, squadAimTo: 0, squadAimHold: 0,
       blend: { off: [0, 0, 0, 0, 0], vel: [0, 0, 0, 0, 0], prev: [0, 0, 0, 0, 1], prevVel: [0, 0, 0, 0, 0], motion: null },
     }
   }
@@ -1456,6 +1483,14 @@ export class Arena {
     unit.shake = Math.max(0, unit.shake - this.frameDelta)
     unit.aimHold = Math.max(0, unit.aimHold - dt)
     unit.aim = damp(unit.aim, unit.aimHold > 0 ? unit.aimTo : 0, 0.09, dt)
+    // 병사 대열: 명령한 레인 쪽으로 틀고 조금 다가섰다가, 시간이 지나면 제자리 방향으로
+    unit.squadAimHold = Math.max(0, unit.squadAimHold - dt)
+    unit.squadAim = damp(unit.squadAim, unit.squadAimHold > 0 ? unit.squadAimTo : 0, 0.16, dt)
+    const lean = Math.abs(unit.squadAim) / RALLY_MAX_TURN * RALLY_STEP
+    unit.squad.rotation.y = unit.squadAim
+    // 부대 앞은 로컬 −Z: 튼 방향(−sin, −cos)으로 다가선다
+    unit.squad.position.x = -lean * Math.sin(unit.squadAim)
+    unit.squad.position.z = -lean * Math.cos(unit.squadAim)
     // 돌진도 돌린 방향으로
     unit.actor.position.set(pz * Math.sin(unit.aim), py, pz * Math.cos(unit.aim))
     unit.actor.rotation.set(ptilt + unit.lean.x, ptwist + unit.aim, unit.lean.z)
