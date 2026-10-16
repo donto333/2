@@ -1,5 +1,6 @@
 // 사용자 제공 실사풍 3D 모델(GLB) 불러오기·복제·동작 재생.
 // 모델은 미리 크기·방향을 맞춰 두었다(모두 +Z를 보고, 발/말 몸통 중심이 원점, 사람 키 약 1.8 · 말 등 높이 약 1.45).
+import { assetUrl } from '../asset-url'
 import * as THREE from 'three'
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { General } from './strategy'
@@ -16,7 +17,7 @@ export function loadModel(name: ModelName): Promise<GLTF> {
   const cached = cache.get(name)
   if (cached) return cached
   loader ??= new GLTFLoader()
-  const pending: Promise<GLTF> = loader.loadAsync(`${BASE}${name}.glb`).then((gltf: GLTF) => {
+  const pending: Promise<GLTF> = loader.loadAsync(assetUrl(`${BASE}${name}.glb`)).then((gltf: GLTF) => {
     gltf.scene.traverse((node: THREE.Object3D) => {
       const mesh = node as THREE.Mesh
       if (!mesh.isMesh) return
@@ -43,7 +44,7 @@ const skins = new Map<string, Promise<THREE.Texture>>()
 export function loadSkin(name: string): Promise<THREE.Texture> {
   const cached = skins.get(name)
   if (cached) return cached
-  const pending = new THREE.TextureLoader().loadAsync(`${BASE}skins/${name}.jpg`).then(texture => {
+  const pending = new THREE.TextureLoader().loadAsync(assetUrl(`${BASE}skins/${name}.jpg`)).then(texture => {
     texture.flipY = false // glTF 텍스처와 같은 방향
     texture.colorSpace = THREE.SRGBColorSpace
     texture.anisotropy = 4

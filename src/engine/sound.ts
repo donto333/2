@@ -3,6 +3,7 @@
 // - 피리(적)·호궁(얼후)·뿔나팔·바람 소리는 그때그때 합성한다
 // - 배경음악은 화면마다 다른 곡(본영 · 전투 · 대련 · 레이드)을 16분음표 단위로 앞서 예약해 끊김 없이 흐른다
 // - 브라우저는 사용자가 한 번 누르기 전에는 소리를 막으므로, 첫 터치/클릭에서 unlock()한다
+import { assetUrl } from '../asset-url'
 import { muteSetting, musicSetting, sfxSetting, SOUND_LEVEL_VALUE } from '../game/settings'
 
 export type MusicTheme = 'home' | 'battle' | 'duel' | 'raid' | 'none'
@@ -391,7 +392,7 @@ export class SoundEngine {
     if (!name) { this.fadeTrack(); return false }
     let t = this.tracks.get(name)
     if (!t) {
-      const el = new Audio(`/assets/music/${name}.mp3`)
+      const el = new Audio(assetUrl(`/assets/music/${name}.mp3`))
       el.loop = true
       el.preload = 'auto'
       el.volume = 0
@@ -774,7 +775,7 @@ export class SoundEngine {
     if (have === undefined && this.ctx) {
       this.files.set(name, 'loading')
       const ctx = this.ctx
-      fetch(`/assets/sfx/${name}.mp3`).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer() })
+      fetch(assetUrl(`/assets/sfx/${name}.mp3`)).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer() })
         .then(data => new Promise<AudioBuffer>((resolve, reject) => { void ctx.decodeAudioData(data, resolve, reject) }))
         .then(buffer => { this.files.set(name, buffer) })
         .catch(() => { this.files.set(name, null) })
