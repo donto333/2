@@ -2005,3 +2005,23 @@ body .bt-stage .bt-enemy-warn { padding: 5px 10px; font-size: 13px; }
 .scenario-rule strong{display:block;margin:4px 0 2px;color:#ffb39e;font-size:15px}
 .scenario-rule small{color:#d9c6b3;font-size:12px;line-height:1.5}
 .scenario-rule .eyebrow{color:#ff9f86}
+
+/* 관리자 · 게임 계정 데이터 편집(카드형, 칸 묶음) */
+html body .game-data-row{display:grid;grid-template-columns:1fr;gap:12px;padding:16px;overflow:visible}
+html body .game-data-row .admin-account-identity{position:static;background:none;min-width:0}
+.game-data-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.game-data-head .admin-account-identity b small{color:#9d8f7c;font-weight:400;margin-left:4px}
+.game-data-chips{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.game-data-chips span{padding:4px 8px;border:1px solid rgba(220,208,184,.18);background:rgba(220,208,184,.05);color:#d2c8b3;font-size:12px}
+.game-data-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.game-data-group{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin:0;padding:10px;border:1px solid rgba(220,208,184,.12);background:rgba(0,0,0,.12);min-width:0}
+.game-data-group legend{padding:0 6px;color:#e0b152;font-size:12px;letter-spacing:.06em}
+.game-data-group label{display:grid;gap:4px;min-width:0}
+.game-data-group label span{font-size:12px;color:#9d8f7c;white-space:nowrap}
+.game-data-group input,.game-data-group select{width:100%;box-sizing:border-box;min-height:38px;padding:8px 7px;border:1px solid rgba(220,208,184,.2);background:#29180e;color:#faf5ec;border-radius:4px;font:inherit;font-variant-numeric:tabular-nums}
+.game-data-group input.is-changed,.game-data-group select.is-changed{border-color:#e0b152;background:#3a2410;box-shadow:0 0 0 1px rgba(224,177,82,.35)}
+.game-data-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.game-data-foot small{margin-right:auto;color:#9d8f7c;font-size:12px}
+.operator-note{display:inline-block;margin:8px 0 0;padding:5px 10px;border:1px solid rgba(255,128,102,.45);background:rgba(255,128,102,.1);color:#ffb39e;font-size:12px;line-height:1.5}
+.game-data-group{align-content:start;align-items:start}
+.game-data-head .admin-account-identity b{white-space:nowrap}

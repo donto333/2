@@ -118,7 +118,19 @@ export interface AccountView {
   createdAt: string | Date
   updatedAt: string | Date
   lastSignedIn: string | Date
+  /** 운영자(관리자 권한) 계정: 랭킹 · 영토전에 반영되지 않는다 */
+  operator?: boolean
 }
+
+/** 관리자가 고칠 수 있는 숫자 칸 */
+export const ADMIN_GAME_FIELDS = [
+  ['재화', [['honor', '옥패'], ['silver', '은전'], ['gold', '금화'], ['manuals', '병서']]],
+  ['신화 장비', [['mythicFragments', '신화 조각'], ['mythicStones', '낙양 강화석']]],
+  ['전적 · 세력전', [['wins', '승리'], ['battleScore', '최고 점수'], ['factionWarScore', '세력전 공헌도'], ['luoyangBoxes', '낙양 상자']]],
+  ['내정 자원', [['grain', '식량'], ['wood', '목재'], ['iron', '철'], ['influence', '영향력']]],
+] as const
+export type AdminGameField = typeof ADMIN_GAME_FIELDS[number][1][number][0]
+export type AdminGameEdit = { userId: number; faction?: '촉한' | '위나라' | '오나라' } & Partial<Record<AdminGameField, number>>
 
 export interface GameAccountView extends AccountView {
   game: {
@@ -133,6 +145,16 @@ export interface GameAccountView extends AccountView {
     wood: number
     iron: number
     influence: number
+    mythicFragments?: number
+    mythicStones?: number
+    factionWarScore?: number
+    luoyangBoxes?: number
+    faction?: '촉한' | '위나라' | '오나라'
+    factionChosen?: boolean
+    generalCount?: number
+    maxLevel?: number
+    scenarioCleared?: number
+    hardCleared?: number
     updatedAt: string | Date
   }
 }
@@ -286,7 +308,7 @@ export interface StrategyUiCallbacks {
   onAdminAccountsRefresh: (search?: string) => void
   onAdminRoleChange: (id: number, role: 'user' | 'admin') => void
   onAdminGameDataRefresh: () => void
-  onAdminGameDataSave: (data: GameAccountView['game']) => void
+  onAdminGameDataSave: (data: AdminGameEdit) => void
   onAdminBoardRefresh: () => void
   onAdminBoardPostingToggle: (enabled: boolean) => void
   onAdminBoardDelete: (id: number) => void
@@ -317,6 +339,7 @@ export class StrategyUI {
   private adminAccountSearch = ''
   private adminGameAccounts: GameAccountView[] = []
   private adminGameDataError: string | null = null
+  private adminGameSearch = ''
   private adminBoard: AdminBoardState = { postingEnabled: true, posts: [] }
   private cityDamageRankings: CityDamageRanking[] = []
   private luoyangHistory: LuoyangHistory | null = null
@@ -561,6 +584,13 @@ export class StrategyUI {
     this.renderedState = null
     this.root.innerHTML = this.factionSelection()
     maybeShowIntro()
+  }
+
+  /** 운영자 계정이면 랭킹 · 영토전에 반영되지 않는다는 안내 */
+  private operatorNote(where: string): string {
+    const account = this.account
+    if (!account || !(account.operator || account.role === 'admin')) return ''
+    return `<p class="operator-note">운영자 계정 · ${where}</p>`
   }
 
   setAccount(account: AccountView | null): void {
@@ -1379,7 +1409,7 @@ export class StrategyUI {
     const contested = state.cities.filter(city => city.owner !== state.faction).length
     const incomeWait = incomeCooldownRemaining(state)
     const incomeLabel = incomeWait ? `오늘 수확 완료 · ${Math.ceil(incomeWait / 3600000)}시간 후` : '오늘의 내정 수확'
-    return `<section class="page-section page-section--territory${this.citySheetOpen ? ' is-sheet-open' : ''}"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p></div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">영토 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="conquest-overview glass-card"><div><span class="eyebrow">공략 전선</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">삼국 영토</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div>${this.mapViewport(state)}<div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div>${this.mobileCitySelector(state)}</div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
+    return `<section class="page-section page-section--territory${this.citySheetOpen ? ' is-sheet-open' : ''}"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p>${this.operatorNote('공성 · 점령 · 수비병 · 도시 피해 순위가 영토전에 반영되지 않습니다.')}</div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">영토 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="conquest-overview glass-card"><div><span class="eyebrow">공략 전선</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">삼국 영토</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div>${this.mapViewport(state)}<div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div>${this.mobileCitySelector(state)}</div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
   }
 
   private mapCities(state: StrategyState): MapCity[] {
@@ -1453,6 +1483,15 @@ export class StrategyUI {
   private handleInput = (event: Event): void => {
     const input = event.target as HTMLInputElement
     if (input.matches('[data-codex-search]')) { this.codexQuery = input.value; this.applyCodexSearch(); return }
+    if (input.matches('[data-game-field]')) {
+      // 관리자 게임 데이터: 바꾼 칸 표시
+      input.classList.toggle('is-changed', input.value !== input.dataset.original)
+      const row = input.closest<HTMLElement>('[data-game-user]')
+      const changed = row?.querySelectorAll('[data-game-field].is-changed').length ?? 0
+      const note = row?.querySelector<HTMLElement>('[data-game-changed]')
+      if (note) note.textContent = changed ? `바꾼 칸 ${changed}개 · 저장을 눌러 반영하십시오` : '바꾼 칸만 저장됩니다.'
+      return
+    }
     if (!input.matches('[data-city-search]')) return
     this.cityQuery = input.value
     this.applyCityFinder()
@@ -1931,8 +1970,16 @@ export class StrategyUI {
       const boardRows = this.adminBoard.posts.map(post => `<article class="admin-board-row"><div><span class="pill pill--jade">${escapeHtml(post.board)}</span><strong>${ugc(post.title)}</strong><small>${ugc(post.authorName)} · ${escapeHtml(post.authorFaction)}</small></div><button class="mini-action" data-action="admin-board-delete" data-post-id="${post.id}">관리자 삭제</button></article>`).join('')
       body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">게시판 관리</span><h3>게시판 운영 관리</h3><p>관리자는 모든 게시글을 삭제할 수 있고, 일반 사용자의 새 글 작성을 제한할 수 있습니다.</p></div><button class="ghost-button" data-action="admin-board-refresh">게시판 새로고침 ↻</button></div><div class="admin-board-control"><div><strong>일반 사용자 글 작성</strong><small>${this.adminBoard.postingEnabled ? '현재 허용 중입니다.' : '현재 제한 중입니다.'}</small></div><button class="action-button ${this.adminBoard.postingEnabled ? 'action-button--outline' : 'action-button--primary'}" data-action="admin-board-posting" data-enabled="${this.adminBoard.postingEnabled ? 'false' : 'true'}">${this.adminBoard.postingEnabled ? '작성 제한하기' : '작성 허용하기'}</button></div><div class="admin-board-list">${boardRows || '<div class="admin-empty-row">현재 게시글이 없습니다.</div>'}</div></div>`
     } else if (this.adminTab === 'game-data') {
-      const stateRows = this.adminGameAccounts.map(account => `<div class="game-data-row" data-game-user="${account.id}"><div class="admin-account-identity"><span class="admin-account-avatar">${escapeHtml((account.name || '장').slice(0, 1))}</span><span><b>${escapeHtml(account.name || '이름 없음')}</b><small>${escapeHtml(account.email || account.openId)}</small></span></div>${[['honor', '옥패'], ['silver', '은전'], ['gold', '금화'], ['manuals', '병서'], ['wins', '승리'], ['battleScore', '최고 점수'], ['grain', '식량'], ['wood', '목재'], ['iron', '철'], ['influence', '영향력']].map(([field, label]) => `<label><span>${label}</span><input type="number" min="0" data-game-field="${field}" value="${account.game[field as keyof typeof account.game]}"></label>`).join('')}<button class="action-button action-button--primary game-data-save" data-action="admin-game-save" data-account-id="${account.id}">저장</button></div>`).join('')
-      body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">계정 진행 상황</span><h3>게임 계정 데이터 편집</h3><p>계정별 재화·전적·내정 자원을 수정합니다. 모든 값은 관리자 권한으로 서버에 저장됩니다.</p></div><button class="ghost-button" data-action="admin-game-refresh">데이터 새로고침 ↻</button></div>${this.adminGameDataError ? `<div class="admin-account-gate"><div class="account-gate-mark">◎</div><h3>관리자 권한이 필요합니다</h3><p>${escapeHtml(this.adminGameDataError)}</p></div>` : `<div class="game-data-legend"><span>편집 가능 항목</span><b>재화 5종 · 전적 2종 · 내정 자원 4종</b><small>장수 도감·진형 원본은 무결성 보호를 위해 별도 승인 없이 수정하지 않습니다.</small></div><div class="game-data-list">${stateRows || '<div class="admin-empty-row">게임 계정 데이터가 없습니다.</div>'}</div>`}</div>`
+      const search = this.adminGameSearch.toLocaleLowerCase('ko-KR')
+      const shown = this.adminGameAccounts.filter(account => !search || `${account.name} ${account.email} ${account.openId} #${account.id}`.toLocaleLowerCase('ko-KR').includes(search))
+      const stateRows = shown.map(account => {
+        const game = account.game
+        const chips = [`진영 ${game.faction ?? '—'}${game.factionChosen === false ? '(미선택)' : ''}`, `무장 ${formatNumber(game.generalCount ?? 0)}명`, `최고 Lv.${game.maxLevel ?? 0}`, `시나리오 ${game.scenarioCleared ?? 0}/${SCENARIOS.length}`, `어려움 ${game.hardCleared ?? 0}/${SCENARIOS.length}`]
+        const groups = ADMIN_GAME_FIELDS.map(([title, fields]) => `<fieldset class="game-data-group"><legend>${title}</legend>${fields.map(([field, label]) => { const value = Number(game[field as keyof typeof game] ?? 0); return `<label><span>${label}</span><input type="number" min="0" step="1" inputmode="numeric" data-game-field="${field}" data-original="${value}" value="${value}"></label>` }).join('')}</fieldset>`).join('')
+        const faction = `<fieldset class="game-data-group"><legend>진영</legend><label><span>소속</span><select data-game-field="faction" data-original="${game.faction ?? '촉한'}">${(['촉한', '위나라', '오나라'] as const).map(option => `<option value="${option}" ${game.faction === option ? 'selected' : ''}>${option}</option>`).join('')}</select></label></fieldset>`
+        return `<article class="game-data-row" data-game-user="${account.id}"><header class="game-data-head"><div class="admin-account-identity"><span class="admin-account-avatar">${escapeHtml((account.name || '장').slice(0, 1))}</span><span><b>${escapeHtml(account.name || '이름 없음')} <small>#${account.id}</small></b><small>${escapeHtml(account.email || account.openId)}</small></span></div>${account.operator ? '<span class="admin-role admin-role--admin" title="랭킹 · 영토전 · 레이드 순위 · 대련 상대에 반영되지 않습니다">운영자 · 순위 제외</span>' : ''}<div class="game-data-chips">${chips.map(chip => `<span>${escapeHtml(chip)}</span>`).join('')}</div></header><div class="game-data-fields">${groups}${faction}</div><footer class="game-data-foot"><small data-game-changed>바꾼 칸만 저장됩니다.</small><button class="ghost-button" data-action="admin-game-reset">되돌리기</button><button class="action-button action-button--primary game-data-save" data-action="admin-game-save" data-account-id="${account.id}">저장</button></footer></article>`
+      }).join('')
+      body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">계정 진행 상황</span><h3>게임 계정 데이터 편집</h3><p>계정별 재화 · 신화 장비 재료 · 전적 · 내정 자원 · 진영을 고칩니다. 금화 · 신화 조각 · 낙양 강화석(서버 원장)도 적은 값 그대로 저장됩니다.</p></div><button class="ghost-button" data-action="admin-game-refresh">데이터 새로고침 ↻</button></div>${this.adminGameDataError ? `<div class="admin-account-gate"><div class="account-gate-mark">◎</div><h3>관리자 권한이 필요합니다</h3><p>${escapeHtml(this.adminGameDataError)}</p></div>` : `<div class="game-data-legend"><span>저장 방식</span><b>바꾼 칸만 서버에 저장</b><small>그 유저가 접속 중이면 다음 저장 때 게임 화면에도 바로 반영됩니다(10분 안). 운영자 계정은 랭킹 · 영토전 · 레이드 순위 · 대련 상대에서 빠집니다.</small></div><div class="admin-account-toolbar"><label><span>계정 검색</span><input data-admin-game-search value="${escapeHtml(this.adminGameSearch)}" placeholder="이름 · 이메일 · #번호"></label><button class="action-button action-button--outline" data-action="admin-game-search">검색</button><span class="admin-directory-count">${shown.length} / ${this.adminGameAccounts.length}명</span></div><div class="game-data-list">${stateRows || '<div class="admin-empty-row">게임 계정 데이터가 없습니다.</div>'}</div>`}</div>`
     } else if (this.adminTab === 'season') {
       body = `<div class="admin-grid"><div class="glass-card admin-panel season-control"><div class="card-header"><div><span class="eyebrow">시즌 관리</span><h3>시즌 01 · 황혼의 관문</h3></div><span class="admin-state-chip ${this.adminPublished ? 'is-on' : 'is-off'}">${this.adminPublished ? '게시 중' : '비공개'}</span></div><div class="season-banner"><span>시즌 1</span><strong>황혼의 관문</strong><small>실시간 전술 전략 캠페인</small></div><div class="season-meta"><span>시작일 <b>2026.10.01</b></span><span>콘텐츠 <b>정상</b></span><span>모집 풀 <b>${allGenerals().length}명</b></span></div><button class="action-button action-button--primary admin-action" data-action="admin-toggle-publish">${this.adminPublished ? '시즌 비공개 전환' : '시즌 게시 재개'} <span>→</span></button></div><div class="glass-card admin-panel"><div class="card-header"><div><span class="eyebrow">공지</span><h3>운영 공지</h3></div><span class="rate-note">시즌 배너</span></div><label class="admin-field"><span>현재 공지 문구</span><input value="황혼의 관문 · 삼국지 장수 50명 업데이트" readonly></label><button class="action-button action-button--outline admin-action" data-action="admin-announce">공지 미리보기 표시</button><p class="admin-note">이 화면의 시즌 변경은 로컬 관리자 미리보기 상태이며 서버 게시 권한을 대신하지 않습니다.</p></div></div>`
     } else {
@@ -2057,6 +2104,8 @@ export class StrategyUI {
 
   private updatesSection(): string {
     const completed = [
+      ['2026.10.16', '운영자 계정은 순위 · 영토전에서 제외', '관리자 권한 계정의 기록은 천하 랭킹 · 레이드 순위(순위 보상 포함) · 도시 피해 순위에 나오지 않고, 공성 · 점령 · 수비병 · 방어전이 영토전에 반영되지 않습니다. 대련 상대와 레이드 보스 레벨 계산에서도 빠집니다. 운영자 계정으로 접속하면 해당 화면에 안내가 보입니다.', '완료', 'jade'],
+      ['2026.10.16', '관리자 · 게임 계정 데이터 편집 개선', '관리자 화면의 게임 데이터 탭을 계정별 카드로 바꿨습니다. 재화(옥패 · 은전 · 금화 · 병서), 신화 조각 · 낙양 강화석, 세력전 공헌도 · 낙양 상자, 내정 자원, 진영을 고칠 수 있고, 무장 수 · 최고 레벨 · 시나리오 진행은 요약으로 보입니다. 바꾼 칸만 표시되어 저장되며, 금화처럼 서버가 관리하는 재화도 적은 값 그대로 저장됩니다(전에는 늘린 금화가 저장되지 않았습니다). 그 유저가 접속 중이면 다음 저장 때 게임에도 바로 반영됩니다.', '완료', 'jade'],
       ['2026.10.16', '시나리오 어려움 단계', '시나리오 화면 위쪽에서 ‘보통 · 어려움’을 고를 수 있습니다. 보통으로 깬 시나리오 58개를 적 Lv+10 · 별 +1과 특수 규칙 하나(철벽: 적 사기 +20 · 속전: 제한 60초 · 짙은 안개: 예고 대응 시간 −0.5초 · 화공 금지: 적에게 화상이 걸리지 않음)로 다시 도전합니다. 앞 단계 어려움을 깨야 다음 단계가 열리고, 별 기록은 보통과 따로 남습니다. 첫 클리어 보상은 옥패 1.5배 · 은전과 병서 절반 · 자원(금화 없음)으로, 최고 레벨에 닿는 시간을 크게 줄이지 않게 맞췄습니다. 전투 규칙(? 버튼)에도 설명을 넣었습니다.', '완료', 'jade'],
       ['2026.10.16', '레인 명령 때 다른 레인도 반응', '전투에서 한 레인(좌·중·우)에 명령하면, 나머지 두 레인의 무장과 병사 대열이 그 레인의 적 쪽으로 몸을 틀고 조금 다가섭니다. 2초쯤 지나면 원래 방향으로 돌아옵니다. 자동 전투가 대응할 때도 똑같이 움직입니다. 보이는 움직임만 바뀌고 전투 결과는 그대로입니다.', '완료', 'jade'],
       ['2026.10.16', '자동 전투', '모든 전투(유저 대련 제외)에서 위쪽 ‘자동’ 버튼으로 자동 전투를 켤 수 있습니다(예전에는 별 3개 시나리오만). 대신 직접 하는 것보다 약합니다: 예고 대응 정확도 70%, 스킬은 준비된 뒤 한 박자(1.5초) 늦게 씁니다. 전투 규칙(? 버튼) 마지막 장에 설명을 넣었습니다.', '완료', 'jade'],
@@ -2221,7 +2270,7 @@ export class StrategyUI {
   private rankSection(state: StrategyState): string {
     const loggedIn = this.auth.status === 'authenticated'
     const me = this.ranks.find(entry => entry.displayName === this.auth.name)
-    return `<section class="page-section page-section--rank"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>천하 랭킹</h1><p class="heading-copy">전투에서 얻은 전적 점수로 순위를 다툽니다.</p></div><button class="ghost-button" data-action="rank-refresh">순위 새로고침 ↻</button></div><div class="rank-layout"><div class="glass-card rank-hero"><div class="rank-hero-bg">★</div><span class="pill pill--jade">이번 시즌 전적</span><h2>나의 기록</h2><p>전투에서 이길수록, 높은 별로 이길수록 점수가 오릅니다.<br>로그인하면 순위표에 이름이 올라갑니다.</p><div class="my-record"><span>나의 전적 점수</span><strong>${state.battleScore ? formatNumber(state.battleScore) : '기록 없음'}</strong><small>${state.wins}승${me ? ` · 현재 ${me.rank}위` : loggedIn ? ' · 순위표 밖' : ''}</small></div><div class="auth-status" data-auth-status>${loggedIn ? '로그인 중 · 전적이 순위표에 기록됩니다.' : '로그인하면 순위표에 이름을 올릴 수 있습니다.'}</div></div><div class="glass-card rank-table"><div class="card-header"><div><span class="eyebrow">순위표</span><h3>상위 지휘관</h3></div><span class="sync-label">${this.ranks.length ? `${this.ranks.length}명` : ''}</span></div><div data-rank-list>${this.rankRows()}</div><div class="rank-footnote">* 순위는 들어올 때와 새로고침할 때 서버에서 받아 옵니다.</div></div></div></section>`
+    return `<section class="page-section page-section--rank"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>천하 랭킹</h1><p class="heading-copy">전투에서 얻은 전적 점수로 순위를 다툽니다.</p>${this.operatorNote('전적이 순위표에 기록되지 않습니다.')}</div><button class="ghost-button" data-action="rank-refresh">순위 새로고침 ↻</button></div><div class="rank-layout"><div class="glass-card rank-hero"><div class="rank-hero-bg">★</div><span class="pill pill--jade">이번 시즌 전적</span><h2>나의 기록</h2><p>전투에서 이길수록, 높은 별로 이길수록 점수가 오릅니다.<br>로그인하면 순위표에 이름이 올라갑니다.</p><div class="my-record"><span>나의 전적 점수</span><strong>${state.battleScore ? formatNumber(state.battleScore) : '기록 없음'}</strong><small>${state.wins}승${me ? ` · 현재 ${me.rank}위` : loggedIn ? ' · 순위표 밖' : ''}</small></div><div class="auth-status" data-auth-status>${loggedIn ? '로그인 중 · 전적이 순위표에 기록됩니다.' : '로그인하면 순위표에 이름을 올릴 수 있습니다.'}</div></div><div class="glass-card rank-table"><div class="card-header"><div><span class="eyebrow">순위표</span><h3>상위 지휘관</h3></div><span class="sync-label">${this.ranks.length ? `${this.ranks.length}명` : ''}</span></div><div data-rank-list>${this.rankRows()}</div><div class="rank-footnote">* 순위는 들어올 때와 새로고침할 때 서버에서 받아 옵니다.</div></div></div></section>`
   }
 
   private boardSection(state: StrategyState): string {
@@ -2248,7 +2297,7 @@ export class StrategyUI {
     const ranking = info?.offline ? '<div class="rank-empty">연습 모드에서는 순위가 기록되지 않습니다.</div>' : view.ranking.length ? `<ol class="raid-ranking">${view.ranking.map(row => `<li class="${row.isMe ? 'is-me' : ''}"><b>${row.rank}</b><span>${ugc(row.displayName)}</span><em>${fmt(row.totalDamage)}</em><small>${row.attempts}회</small></li>`).join('')}</ol>` : '<div class="rank-empty">이번 주 기록이 아직 없습니다. 첫 기록의 주인공이 되십시오.</div>'
     const last = info?.lastWeek
     const claim = last ? `<div class="raid-claim glass-card"><div><span class="eyebrow">지난주 결과</span><strong>${last.rank}위 · 피해 ${fmt(last.totalDamage)}</strong><small>보상 · 금화 ${last.reward.gold}${last.reward.stones ? ` · 낙양 강화석 ${last.reward.stones}` : ''}</small></div><button class="action-button action-button--primary" data-action="raid-claim" ${last.claimed ? 'disabled' : ''}>${last.claimed ? '받음' : '보상 받기'}</button></div>` : ''
-    return `<section class="page-section page-section--raid"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>주간 레이드</h1><p class="heading-copy">끝없는 병력의 보스에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화 · 하루 ${info?.dailyLimit ?? 3}회.</p></div><button class="ghost-button" data-action="raid-refresh">새로고침 ↻</button></div>
+    return `<section class="page-section page-section--raid"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>주간 레이드</h1><p class="heading-copy">끝없는 병력의 보스에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화 · 하루 ${info?.dailyLimit ?? 3}회.</p>${this.operatorNote('레이드 순위와 순위 보상에서 빠집니다.')}</div><button class="ghost-button" data-action="raid-refresh">새로고침 ↻</button></div>
       ${view.message ? `<p class="raid-message">${escapeHtml(view.message)}</p>` : ''}${claim}
       <div class="raid-layout"><div class="raid-main">
         <div class="raid-boss glass-card"><div class="raid-boss__head"><div><span class="pill pill--ember">이번 주 보스 · 무한 병력</span><h2>${escapeHtml(boss.name)}</h2><p>${escapeHtml(boss.desc)} · 보스 Lv.${level}${info && !info.offline ? (info.registered > 20 ? ` (상위 지휘관 평균)` : ' (기본 레벨)') : ''}</p></div><div class="raid-boss__reset"><small>초기화까지</small><strong>${days}일 ${hours}시간</strong></div></div><div class="raid-boss__units">${bossCards}</div><p class="raid-boss__note">보스의 병력은 줄지 않습니다. 3막 사기를 무너뜨릴 때마다 큰 피해 보너스가 붙고 보스가 사기를 다시 세웁니다. 아군이 전멸하거나 전열이 두 번 무너지면 그 군의 전투가 끝납니다.</p></div>
@@ -2494,13 +2543,27 @@ export class StrategyUI {
     } else if (action === 'admin-board-delete') {
       const id = Number(button.dataset.postId ?? 0)
       if (id && window.confirm(tr('이 게시글을 관리자 권한으로 삭제하시겠습니까?'))) this.callbacks.onAdminBoardDelete(id)
+    } else if (action === 'admin-game-search') {
+      this.adminGameSearch = this.root.querySelector<HTMLInputElement>('[data-admin-game-search]')?.value.trim() ?? ''
+      if (this.renderedState) this.render(this.renderedState)
+    } else if (action === 'admin-game-reset') {
+      button.closest<HTMLElement>('[data-game-user]')?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-game-field]').forEach(input => { input.value = input.dataset.original ?? input.value; input.classList.remove('is-changed') })
     } else if (action === 'admin-game-save') {
       const row = button.closest<HTMLElement>('[data-game-user]')
       const userId = Number(button.dataset.accountId)
-      const values = Object.fromEntries(Array.from(row?.querySelectorAll<HTMLInputElement>('[data-game-field]') ?? []).map(input => [input.dataset.gameField, Number(input.value)])) as Record<string, number>
-      if (Number.isInteger(userId) && userId > 0 && Object.values(values).every(value => Number.isInteger(value) && value >= 0)) {
-        this.callbacks.onAdminGameDataSave({ userId, honor: values.honor, silver: values.silver, gold: values.gold, manuals: values.manuals, wins: values.wins, battleScore: values.battleScore, grain: values.grain, wood: values.wood, iron: values.iron, influence: values.influence, updatedAt: new Date() })
-      }
+      const edit: AdminGameEdit = { userId }
+      let bad = ''
+      row?.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-game-field]').forEach(input => {
+        const field = input.dataset.gameField ?? ''
+        if (input.value === input.dataset.original) return
+        if (field === 'faction') { edit.faction = input.value as AdminGameEdit['faction']; return }
+        const value = Number(input.value)
+        if (!Number.isInteger(value) || value < 0 || value > 2_000_000_000) { bad = input.closest('label')?.querySelector('span')?.textContent ?? field; return }
+        ;(edit as unknown as Record<string, number>)[field] = value
+      })
+      if (bad) { this.notify(`${bad}: 0 이상 20억 이하의 정수만 저장할 수 있습니다.`, 'ember'); return }
+      if (Object.keys(edit).length <= 1) { this.notify('바꾼 칸이 없습니다.'); return }
+      if (Number.isInteger(userId) && userId > 0) this.callbacks.onAdminGameDataSave(edit)
     } else if (action === 'admin-role') {
       const id = Number(button.dataset.accountId)
       const role = button.dataset.accountRole === 'admin' ? 'admin' : 'user'

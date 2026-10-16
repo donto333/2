@@ -5,6 +5,8 @@ export const fail = (status, code) => {
 };
 export const idPattern = /^[a-zA-Z0-9_-]{1,64}$/;
 export const uuidPattern = /^[0-9a-f-]{36}$/;
+// 운영자(관리자 권한) 계정의 기록은 순위에서 뺀다(같은 DB의 users 표)
+const OPERATOR_FILTER = (alias) => `${alias}.player_id NOT IN (SELECT a.player_id FROM game_lb_accounts a JOIN users u ON u.id=a.user_id WHERE a.namespace=${alias}.namespace AND (u.role='admin' OR LOWER(TRIM(u.email))='donto333@gmail.com'))`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 
 // Both transports share transactions, validation, receipts and quotas.
@@ -126,7 +128,7 @@ export function createLeaderboardService(db, namespace = 'production') {
       const rules = await board(conn, boardId);
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) fail(400, 'invalid_limit');
       const [entries] = await conn.query(
-        `SELECT b.player_id AS playerId,p.display_name AS displayName,b.score,b.achieved_at AS achievedAt FROM game_lb_best b JOIN game_lb_players p ON p.namespace=b.namespace AND p.id=b.player_id WHERE b.namespace=? AND b.board_id=? ORDER BY b.rank_value,b.achieved_at,b.player_id LIMIT ?`,
+        `SELECT b.player_id AS playerId,p.display_name AS displayName,b.score,b.achieved_at AS achievedAt FROM game_lb_best b JOIN game_lb_players p ON p.namespace=b.namespace AND p.id=b.player_id WHERE b.namespace=? AND b.board_id=? AND ${OPERATOR_FILTER('b')} ORDER BY b.rank_value,b.achieved_at,b.player_id LIMIT ?`,
         [namespace, boardId, limit],
       );
       let myRank = null;
@@ -138,7 +140,7 @@ export function createLeaderboardService(db, namespace = 'production') {
         ]);
         if (own) {
           const [[rank]] = await conn.execute(
-            'SELECT COUNT(*)+1 AS ordinal FROM game_lb_best WHERE namespace=? AND board_id=? AND (rank_value<? OR (rank_value=? AND (achieved_at<? OR (achieved_at=? AND player_id<?))))',
+            `SELECT COUNT(*)+1 AS ordinal FROM game_lb_best b WHERE b.namespace=? AND b.board_id=? AND ${OPERATOR_FILTER('b')} AND (rank_value<? OR (rank_value=? AND (achieved_at<? OR (achieved_at=? AND player_id<?))))`,
             [namespace, boardId, own.rank_value, own.rank_value, own.achieved_at, own.achieved_at, player.id],
           );
           myRank = { rank: Number(rank.ordinal), score: Number(own.score) };

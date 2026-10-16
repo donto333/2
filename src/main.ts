@@ -59,7 +59,7 @@ import {
   MAX_GENERAL_LEVEL,
 } from './game/strategy'
 import { applyCombo } from './game/formation-advice'
-import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
+import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView, type AdminGameEdit } from './ui/strategy-ui'
 import { HARD_RULE_INFO, SCENARIOS, clearedScenarioCount, firstClearReward, hardClearReward, hardUnlocked, markHardCleared, recordHardStars, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevelFor, scenarioEnemyStars, scenarioHardRule, type ScenarioDefinition, type ScenarioDifficulty } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
 import { raidBossDeck } from './game/raid'
@@ -255,6 +255,30 @@ let arena: Arena
 let pendingTicket: RunTicket | null = null
 let authView: AuthView = { status: 'logged_out', name: null }
 let accountView: AccountView | null = null
+/** 운영자(관리자 권한) 계정: 랭킹 · 영토전 · 레이드 순위에 반영되지 않는다(서버가 판정) */
+const isOperatorAccount = (): boolean => Boolean(accountView && (accountView.operator || accountView.role === 'admin'))
+/** 관리자가 고친 값을 받아들였다는 표시(다음 저장 때 서버에 알린다) */
+let adminPatchAck: string | undefined
+type AdminPatch = { id: string; values: Partial<Record<string, number | string>> }
+/** 저장 응답에 관리자 수정값이 오면 지금 게임에 반영한다(접속 중인 게임이 옛 값으로 덮어쓰지 않게) */
+function applyAdminPatch(response: unknown): void {
+  const patch = (response as { adminPatch?: AdminPatch } | null)?.adminPatch
+  if (!patch?.id || adminPatchAck === patch.id) return
+  const values = patch.values ?? {}
+  const num = (key: string) => typeof values[key] === 'number' ? Math.max(0, Math.trunc(values[key] as number)) : undefined
+  const set = <K extends keyof StrategyState>(key: K, value: StrategyState[K] | undefined) => { if (value !== undefined) state[key] = value }
+  set('honor', num('honor')); set('gold', num('gold')); set('manuals', num('manuals')); set('wins', num('wins')); set('battleScore', num('battleScore'))
+  set('mythicFragments', num('mythicFragments')); set('mythicStones', num('mythicStones')); set('factionWarScore', num('factionWarScore')); set('luoyangBoxes', num('luoyangBoxes'))
+  const silver = num('silver')
+  if (silver !== undefined) state.silver = silver
+  state.resources = { ...state.resources, silver: state.silver, grain: num('grain') ?? state.resources.grain, wood: num('wood') ?? state.resources.wood, iron: num('iron') ?? state.resources.iron, influence: num('influence') ?? state.resources.influence }
+  if (values.faction === '촉한' || values.faction === '위나라' || values.faction === '오나라') state.faction = values.faction
+  adminPatchAck = patch.id
+  persistLocalGame()
+  ui.render(state)
+  ui.notify('운영자가 계정 정보를 고쳤습니다 · 바뀐 값을 반영했습니다.', 'jade')
+  queueAccountSave()
+}
 let saveTimer: number | null = null
 let saveInFlight = false
 let saveQueued = false
@@ -427,7 +451,7 @@ async function beginRaidAsIs(): Promise<void> {
     try {
       // 서버는 저장된 1·2·3군 전력으로 피해 상한을 잡으므로 먼저 지금 편성을 저장한다
       persistLocalGame()
-      await ManusAuth.mutate('account.saveGameState', accountStatePayload())
+      applyAdminPatch(await ManusAuth.mutate('account.saveGameState', accountStatePayload()))
       const started = await ManusAuth.mutate('raid.start') as { ok: boolean; reason?: string; token?: string; weekKey?: string; bossLevel?: number }
       if (!started.ok || !started.token) { ui.notify(started.reason ?? '레이드를 시작하지 못했습니다.', 'ember'); void refreshRaid(); return }
       raidRun = { token: started.token, weekKey: started.weekKey ?? weekKey, bossLevel: started.bossLevel ?? RAID_DEFAULT_LEVEL, runner: new RaidRunner(squads) }
@@ -1728,10 +1752,12 @@ async function refreshAccount(): Promise<void> {
   const requestGeneration = authGeneration
   try {
     const account = await ManusAuth.query('account.me') as AccountView
-    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; mythicStones?: number; missions?: StrategyState['missions'] | null; reserveSquads?: string[][] | null; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null }
+    const game = await ManusAuth.query('account.gameState') as { honor: number; silver: number; gold?: number; manuals: number; wins: number; battleScore: number; grain: number; wood: number; iron: number; influence: number; faction?: StrategyState['faction']; factionChosen?: boolean | number; factionWarScore?: number; generals?: StrategyState['generals'] | null; formation?: string[] | null; cities?: StrategyState['cities'] | null; research?: StrategyState['research'] | null; equipmentInventory?: StrategyState['equipmentInventory'] | null; equipmentLoadouts?: StrategyState['equipmentLoadouts'] | null; selectedEquipmentGeneralId?: string | null; mythicFragments?: number; mythicStones?: number; missions?: StrategyState['missions'] | null; reserveSquads?: string[][] | null; duelAttemptsToday?: number; duelDayKey?: string; prelaunchGoldDayKey?: string | null; selectedCityId?: string | null; lastIncomeCollectedAt?: number; lastConquestAt?: number; luoyangBoxes?: number; lastLuoyangReward?: number; luoyangRewardWeekKey?: string | null; scenarioCleared?: string[] | null; adminPatchId?: string | null }
     // 계정이 바뀐 동안 도착한 이전 계정 응답은 현재 상태에 적용하지 않는다.
     if (requestGeneration !== authGeneration || authView.status !== 'authenticated') return
     {
+      // 서버에서 막 불러온 값에는 관리자 수정이 이미 들어 있다: 받아들였다고 표시
+      if (game.adminPatchId) adminPatchAck = game.adminPatchId
       Object.assign(state, { honor: game.honor, silver: game.silver, gold: typeof game.gold === 'number' ? game.gold : state.gold, manuals: game.manuals, wins: game.wins, battleScore: game.battleScore })
       if (game.faction) state.faction = game.faction
       state.factionConfirmed = game.factionChosen === true || game.factionChosen === 1
@@ -1785,9 +1811,11 @@ async function refreshAccount(): Promise<void> {
       }
       persistLocalGame()
     }
+    const wasOperator = isOperatorAccount()
     accountView = account
     accountLoaded = true
     ui.setAccount(accountView)
+    if (isOperatorAccount() && !wasOperator) window.setTimeout(() => ui.notify('운영자 계정입니다 · 랭킹 · 영토전 · 레이드 순위에 반영되지 않습니다.', 'ember'), 2400)
     if (!state.factionConfirmed) {
       ui.showFactionSelection()
       return
@@ -1844,6 +1872,7 @@ function accountStatePayload() {
     scenarioData: JSON.stringify(state.scenarioCleared),
     missionData: JSON.stringify(ensureMissions(state)),
     squadData: JSON.stringify(packSquads(state)),
+    ...(adminPatchAck ? { adminPatchAck } : {}),
   }
 }
 
@@ -1890,7 +1919,7 @@ async function flushAccountSave(): Promise<void> {
   const revisionAtStart = saveRevision
   saveInFlight = true
   try {
-    await ManusAuth.mutate('account.saveGameState', accountStatePayload())
+    applyAdminPatch(await ManusAuth.mutate('account.saveGameState', accountStatePayload()))
     saveRetryCount = 0
     if (saveRevision === revisionAtStart) localSaveDirty = false
   } catch (error) {
@@ -2011,7 +2040,7 @@ async function refreshAdminGameData(): Promise<void> {
   }
 }
 
-async function saveAdminGameData(data: GameAccountView['game']): Promise<void> {
+async function saveAdminGameData(data: AdminGameEdit): Promise<void> {
   try {
     await ManusAuth.mutate('admin.updateGameState', data)
     await refreshAccount()

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, getRaidInfo, startRaid, submitRaid, getRaidRanking, claimRaidReward, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, getRaidInfo, startRaid, submitRaid, getRaidRanking, claimRaidReward, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole, adminUpdateGameState, adminGameView, isOperatorUser } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -35,13 +35,21 @@ export const gameRouter = router({
       if (!updated) throw new Error('해당 계정을 찾을 수 없습니다.')
       return accountView(updated)
     }),
-    listGameStates: adminProcedure.query(async () => (await listGameStates()).map(user => ({ ...accountView(user), game: { userId: user.id, honor: user.honor, silver: user.silver, gold: user.gold, manuals: user.manuals, wins: user.wins, battleScore: user.battleScore, grain: user.grain, wood: user.wood, iron: user.iron, influence: user.influence, updatedAt: user.updatedAt } }))),
-    updateGameState: adminProcedure.input(z.object({ userId: z.number().int().positive(), honor: z.number().int().min(0).max(SAVE_INT_MAX), silver: z.number().int().min(0).max(SAVE_INT_MAX), gold: z.number().int().min(0).max(SAVE_INT_MAX), manuals: z.number().int().min(0).max(SAVE_INT_MAX), wins: z.number().int().min(0).max(SAVE_INT_MAX), battleScore: z.number().int().min(0).max(SAVE_INT_MAX), grain: z.number().int().min(0).max(SAVE_INT_MAX), wood: z.number().int().min(0).max(SAVE_INT_MAX), iron: z.number().int().min(0).max(SAVE_INT_MAX), influence: z.number().int().min(0).max(SAVE_INT_MAX) })).mutation(async ({ input }) => ({ userId: input.userId, game: await updateGameState(input.userId, { honor: input.honor, silver: input.silver, gold: input.gold, manuals: input.manuals, wins: input.wins, battleScore: input.battleScore, grain: input.grain, wood: input.wood, iron: input.iron, influence: input.influence }) })),
+    listGameStates: adminProcedure.query(async () => (await listGameStates()).map(user => ({ ...accountView(user), operator: Boolean(user.operator), game: adminGameView(user) }))),
+    // 관리자 편집: 보낸 칸만 바꾼다. 금화 · 신화 조각 · 낙양 강화석(서버 원장)도 그대로 정하고, 접속 중인 게임이 덮어쓰지 않게 한다.
+    updateGameState: adminProcedure.input(z.object({
+      userId: z.number().int().positive(),
+      ...Object.fromEntries(['honor', 'silver', 'gold', 'manuals', 'wins', 'battleScore', 'grain', 'wood', 'iron', 'influence', 'mythicFragments', 'mythicStones', 'factionWarScore', 'luoyangBoxes'].map(key => [key, z.number().int().min(0).max(SAVE_INT_MAX).optional()])),
+      faction: z.enum(['촉한', '위나라', '오나라']).optional(),
+    }).strict()).mutation(async ({ input }) => {
+      const { userId, ...values } = input
+      return { userId, game: await adminUpdateGameState(userId, values) }
+    }),
     boardSettings: adminProcedure.query(async () => ({ settings: await getBoardSettings(), posts: await listAdminBoardPosts() })),
     deleteBoardPost: adminProcedure.input(z.object({ id: z.number().int().positive() }).strict()).mutation(({ input }) => deleteBoardPostAsAdmin(input.id)),
     setBoardPosting: adminProcedure.input(z.object({ enabled: z.boolean() }).strict()).mutation(({ input }) => setBoardPostingEnabled(input.enabled)),
   }),
-  leaderboard: createLeaderboardRouter({ router, publicProcedure, protectedProcedure }, leaderboard),
+  leaderboard: createLeaderboardRouter({ router, publicProcedure, protectedProcedure, isOperator: isOperatorUser }, leaderboard),
   duel: router({
     // power(내 덱 전력)를 보내면 비슷한 실력의 유저를 고르고, 덱을 저장한 지휘관이 20명 미만이면 훈련 상대 모드를 알려 준다
     listOpponents: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(12), power: z.number().min(0).max(10_000_000).optional() }).strict()).query(({ ctx, input }) => listDuelOpponents(ctx.user.id, input.limit, input.power)),
@@ -67,7 +75,7 @@ export const gameRouter = router({
       captured: z.boolean(),
     }).strict()).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 영토 전투를 기록할 수 없습니다.')
-      return recordFactionTerritoryBattle(ctx.user.id, input)
+      return recordFactionTerritoryBattle(ctx.user.id, input, { operator: isOperatorUser(ctx.user) })
     }),
     deployGarrison: protectedProcedure.input(z.object({
       cityId: z.string().trim().min(1).max(64),
@@ -77,13 +85,13 @@ export const gameRouter = router({
       label: z.string().trim().min(1).max(40),
     }).strict()).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 수비병을 세울 수 없습니다.')
-      return deployFactionGarrison(ctx.user.id, input)
+      return deployFactionGarrison(ctx.user.id, input, { operator: isOperatorUser(ctx.user) })
     }),
     recordDefense: protectedProcedure.input(z.object({
       cityId: z.string().trim().min(1).max(64),
     }).strict()).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 방어전을 지휘할 수 없습니다.')
-      return recordFactionDefense(ctx.user.id, input)
+      return recordFactionDefense(ctx.user.id, input, { operator: isOperatorUser(ctx.user) })
     }),
     damageRanking: protectedProcedure.input(z.object({ cityId: z.string().trim().min(1).max(64) }).strict()).query(({ input }) => getCityDamageRankings(input.cityId)),
   }),
@@ -93,7 +101,7 @@ export const gameRouter = router({
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => deleteBoardPost(ctx.user, input.id, input.password)),
   }),
   account: router({
-    me: protectedProcedure.query(({ ctx }) => accountView(ctx.user)),
+    me: protectedProcedure.query(({ ctx }) => ({ ...accountView(ctx.user), operator: isOperatorUser(ctx.user) })),
     gameState: protectedProcedure.query(({ ctx }) => getGameState(ctx.user.id)),
     luoyangReward: protectedProcedure.query(({ ctx }) => getLuoyangReward(ctx.user.id)),
     grant: protectedProcedure.input(z.object({
@@ -140,6 +148,8 @@ export const gameRouter = router({
       scenarioData: z.string().max(100000).optional(),
       missionData: z.string().max(20000).optional(),
       squadData: z.string().max(4000).optional(),
+      // 관리자 수정값을 받아들였다는 표시(account.gameState의 adminPatchId 또는 저장 응답의 adminPatch.id)
+      adminPatchAck: z.string().max(64).optional(),
     })).mutation(async ({ ctx, input }) => {
       if (ctx.user.isCron) throw new Error('예약 실행 계정은 게임 상태를 저장할 수 없습니다.')
       return updateGameState(ctx.user.id, input)

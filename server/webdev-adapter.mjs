@@ -269,6 +269,7 @@ async function updateUserRole(id, role, actorOpenId) {
   if (!target[0]) return void 0;
   if (target[0].openId === actorOpenId && role !== "admin") throw new Error("현재 관리자 계정의 관리자 권한은 스스로 해제할 수 없습니다.");
   await db.update(users).set({ role }).where(eq(users.id, id));
+  clearOperatorCache();
   return getUserByOpenId(target[0].openId);
 }
 const defaultGameState = { honor: 2480, silver: 12500, gold: 0, manuals: 180, wins: 0, battleScore: 0, grain: 18200, wood: 8200, iron: 3900, influence: 2480, faction: "촉한", factionChosen: 0 };
@@ -338,10 +339,33 @@ function parseStateJson(value) {
     return null;
   }
 }
+// ── 운영자 계정: 랭킹 · 영토전 · 레이드 순위 · 대련 상대 · 레이드 보스 레벨에 영향을 주지 않는다 ──
+function isOperatorUser(user) {
+  if (!user) return false;
+  return user.role === "admin" || Boolean(ENV.adminEmail && String(user.email ?? "").trim().toLowerCase() === ENV.adminEmail);
+}
+let operatorCache = { at: 0, ids: new Set() };
+/** 운영자 계정 id 목록(1분 캐시) */
+async function operatorUserIds(db) {
+  if (Date.now() - operatorCache.at < 60 * 1000) return operatorCache.ids;
+  const rows = await db.select({ id: users.id, role: users.role, email: users.email }).from(users).where(sql`${users.role} = 'admin' OR LOWER(TRIM(${users.email})) = ${ENV.adminEmail}`);
+  operatorCache = { at: Date.now(), ids: new Set(rows.filter(isOperatorUser).map(row => row.id)) };
+  return operatorCache.ids;
+}
+function clearOperatorCache() { operatorCache = { at: 0, ids: new Set() }; }
+/** 관리자가 고친 값: 접속 중인 클라이언트가 옛 값으로 덮어쓰지 않게 10분 동안 저장값을 이 값으로 바꾸고, 클라이언트가 받아들였다고(ack) 알리면 지운다 */
+const ADMIN_PATCH_TTL_MS = 10 * 60 * 1000;
+function activeAdminPatch(ledger, now = Date.now()) {
+  const patch = ledger?.adminPatch;
+  if (!patch || typeof patch !== "object" || !patch.id || !patch.values) return null;
+  return now - Number(patch.at || 0) < ADMIN_PATCH_TTL_MS ? patch : null;
+}
 function gameStateView(row) {
-  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, missionData, squadData, grantLedger: _grantLedger, ...base } = row;
+  const { generalData, formationData, citiesData, researchData, equipmentData, equipmentLoadoutsData, scenarioData, missionData, squadData, grantLedger, ...base } = row;
+  const patch = activeAdminPatch(parseStateJson(grantLedger));
   return {
     ...base,
+    adminPatchId: patch?.id ?? null,
     generals: parseStateJson(generalData),
     formation: parseStateJson(formationData),
     cities: parseStateJson(citiesData),
@@ -549,9 +573,11 @@ async function getFactionTerritories(userId) {
   }
   return FACTION_TERRITORY_SEED.map(city => factionTerritoryView(byCityId.get(city.cityId) ?? city, logsByCityId.get(city.cityId) ?? []));
 }
-async function recordFactionTerritoryBattle(userId, input) {
+async function recordFactionTerritoryBattle(userId, input, { operator = false } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  // 운영자 계정의 전투는 영토(공성 진행 · 점령 · 세력전 금화 · 도시 피해 순위)에 반영하지 않는다
+  if (operator) return getFactionTerritories(userId);
   if (!FACTION_TERRITORY_IDS.has(input.cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
   await ensureFactionTerritories(db);
   await advanceNeutralTerritoryAi(db);
@@ -617,9 +643,10 @@ async function userFaction(db, userId) {
   return account[0]?.faction ?? "촉한";
 }
 /** 아군 도시에 수비대를 세운다(진영 공용). 클라이언트의 deployCityGarrison과 같은 규칙: 새로 세우면 격파 기록이 초기화된다. */
-async function deployFactionGarrison(userId, input) {
+async function deployFactionGarrison(userId, input, { operator = false } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  if (operator) throw new Error("운영자 계정은 영토전에 수비병을 세울 수 없습니다(영토전 결과에 영향 없음).");
   if (!FACTION_TERRITORY_IDS.has(input.cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
   await ensureFactionTerritories(db);
   const faction = await userFaction(db, userId);
@@ -637,9 +664,10 @@ async function deployFactionGarrison(userId, input) {
   return getFactionTerritories(userId);
 }
 /** 유저가 지휘한 방어전: 서버가 직접 판정한다(클라이언트 결과를 믿지 않음). 방어전으로는 도시를 잃지 않는다. */
-async function recordFactionDefense(userId, input) {
+async function recordFactionDefense(userId, input, { operator = false } = {}) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  if (operator) return { outcome: null, operator: true, territories: await getFactionTerritories(userId) };
   if (!FACTION_TERRITORY_IDS.has(input.cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
   await ensureFactionTerritories(db);
   await advanceNeutralTerritoryAi(db);
@@ -662,7 +690,9 @@ async function getCityDamageRankings(cityId) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   if (!FACTION_TERRITORY_IDS.has(cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
-  return db.select({ userId: cityDamageRankings.userId, faction: cityDamageRankings.faction, displayName: cityDamageRankings.displayName, totalDamage: cityDamageRankings.totalDamage, battleCount: cityDamageRankings.battleCount, updatedAt: cityDamageRankings.updatedAt }).from(cityDamageRankings).where(eq(cityDamageRankings.cityId, cityId)).orderBy(desc(cityDamageRankings.totalDamage), asc(cityDamageRankings.updatedAt)).limit(10);
+  const operators = await operatorUserIds(db);
+  const rows = await db.select({ userId: cityDamageRankings.userId, faction: cityDamageRankings.faction, displayName: cityDamageRankings.displayName, totalDamage: cityDamageRankings.totalDamage, battleCount: cityDamageRankings.battleCount, updatedAt: cityDamageRankings.updatedAt }).from(cityDamageRankings).where(eq(cityDamageRankings.cityId, cityId)).orderBy(desc(cityDamageRankings.totalDamage), asc(cityDamageRankings.updatedAt)).limit(10 + operators.size);
+  return rows.filter(row => !operators.has(row.userId)).slice(0, 10);
 }
 async function listGameStates() {
   const db = await getDb();
@@ -670,7 +700,7 @@ async function listGameStates() {
   const accounts = await db.select().from(users).limit(200);
   const states = await db.select().from(gameAccountStates);
   const byUser = new Map(states.map(state => [state.userId, state]));
-  return accounts.map(user => ({ ...user, ...(byUser.get(user.id) ?? { userId: user.id, ...defaultGameState, updatedAt: new Date() }) }));
+  return accounts.map(user => ({ ...user, ...(byUser.get(user.id) ?? { userId: user.id, ...defaultGameState, updatedAt: new Date() }), operator: isOperatorUser(user) }));
 }
 /**
  * 유저 대련 상대: 덱을 저장한 지휘관(나 포함)이 DUEL_USER_THRESHOLD명 이상이면 내 덱 전력과 비슷한 실제 유저 덱,
@@ -678,7 +708,8 @@ async function listGameStates() {
  * power를 보내지 않은 옛 게임은 전적 점수 순 목록(배열)을 받는다.
  */
 async function listDuelOpponents(viewerId, limit = 12, power) {
-  const accounts = await listGameStates();
+  // 운영자 덱(관리자가 고친 계정)은 대련 상대로 나오지 않는다
+  const accounts = (await listGameStates()).filter(account => !account.operator);
   const decks = accounts.map(account => {
     const generals = parseStateJson(account.generalData);
     const formation = parseStateJson(account.formationData);
@@ -719,7 +750,7 @@ let raidLevelCache = { at: 0, weekKey: "", level: 0, registered: 0 };
 async function currentRaidBossLevel(now = Date.now()) {
   const weekKey = raidWeekKey(now);
   if (raidLevelCache.weekKey === weekKey && now - raidLevelCache.at < 10 * 60 * 1000) return raidLevelCache;
-  const accounts = await listGameStates();
+  const accounts = (await listGameStates()).filter(account => !account.operator);
   const decks = accounts.map(account => savedSquadDecks(account)[0] ?? []).filter(deck => deck.length);
   const ranked = decks.map(deck => ({ power: duelDeckPower(deck), level: deck.reduce((sum, general) => sum + Math.min(60, Number(general.level) || 1), 0) / deck.length })).sort((left, right) => right.power - left.power);
   raidLevelCache = { at: now, weekKey, level: raidBossLevel(ranked.map(entry => entry.level)), registered: ranked.length };
@@ -729,10 +760,13 @@ async function raidRow(db, weekKey, userId) {
   const rows = await db.select().from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${userId}`).limit(1);
   return rows[0] ?? null;
 }
-async function raidRankOf(db, weekKey, totalDamage) {
+/** 운영자를 뺀 순위(운영자 본인은 0 = 순위 없음) */
+async function raidRankOf(db, weekKey, totalDamage, userId = null) {
   if (!(totalDamage > 0)) return 0;
-  const rows = await db.select({ count: sql`COUNT(*)` }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > ${totalDamage}`);
-  return Number(rows[0]?.count ?? 0) + 1;
+  const operators = await operatorUserIds(db);
+  if (userId !== null && operators.has(userId)) return 0;
+  const rows = await db.select({ userId: raidWeeklyScores.userId }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > ${totalDamage}`);
+  return rows.filter(row => !operators.has(row.userId)).length + 1;
 }
 async function getRaidInfo(userId, now = Date.now()) {
   const db = await getDb();
@@ -741,14 +775,17 @@ async function getRaidInfo(userId, now = Date.now()) {
   const boss = await currentRaidBossLevel(now);
   const mine = await raidRow(db, weekKey, userId);
   const last = await raidRow(db, lastWeekKey, userId);
-  const lastRank = last ? await raidRankOf(db, lastWeekKey, Number(last.totalDamage)) : 0;
-  const participants = await db.select({ count: sql`COUNT(*)` }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > 0`);
+  const lastRank = last ? await raidRankOf(db, lastWeekKey, Number(last.totalDamage), userId) : 0;
+  const operators = await operatorUserIds(db);
+  const participantRows = await db.select({ userId: raidWeeklyScores.userId }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > 0`);
+  const participants = [{ count: participantRows.filter(row => !operators.has(row.userId)).length }];
   const usedToday = mine && mine.dayKey === today ? Number(mine.dayAttempts) || 0 : 0;
   return {
     weekKey, bossLevel: boss.level, registered: boss.registered, participants: Number(participants[0]?.count ?? 0),
     attemptsLeft: Math.max(0, RAID_DAILY_LIMIT - usedToday), dailyLimit: RAID_DAILY_LIMIT,
     totalDamage: Number(mine?.totalDamage ?? 0), bestDamage: Number(mine?.bestDamage ?? 0), attempts: Number(mine?.attempts ?? 0),
-    rank: mine ? await raidRankOf(db, weekKey, Number(mine.totalDamage)) : 0,
+    rank: mine ? await raidRankOf(db, weekKey, Number(mine.totalDamage), userId) : 0,
+    operator: operators.has(userId),
     lastWeek: last && Number(last.totalDamage) > 0 ? { weekKey: lastWeekKey, totalDamage: Number(last.totalDamage), rank: lastRank, reward: raidRewardFor(lastRank), claimed: Boolean(last.rewardClaimed) } : null,
   };
 }
@@ -791,13 +828,15 @@ async function submitRaid(userId, input, now = Date.now()) {
     return { ok: true, added, capped: claimed > cap, totalDamage: total };
   });
   if (!result.ok) return result;
-  return { ...result, rank: await raidRankOf(db, weekKey, result.totalDamage) };
+  return { ...result, rank: await raidRankOf(db, weekKey, result.totalDamage, userId) };
 }
 async function getRaidRanking(userId, limit = 100, now = Date.now()) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const weekKey = raidWeekKey(now);
-  const rows = await db.select({ userId: raidWeeklyScores.userId, displayName: raidWeeklyScores.displayName, totalDamage: raidWeeklyScores.totalDamage, attempts: raidWeeklyScores.attempts }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > 0`).orderBy(desc(raidWeeklyScores.totalDamage), asc(raidWeeklyScores.updatedAt)).limit(Math.max(1, Math.min(100, limit)));
+  const operators = await operatorUserIds(db);
+  const size = Math.max(1, Math.min(100, limit));
+  const rows = (await db.select({ userId: raidWeeklyScores.userId, displayName: raidWeeklyScores.displayName, totalDamage: raidWeeklyScores.totalDamage, attempts: raidWeeklyScores.attempts }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > 0`).orderBy(desc(raidWeeklyScores.totalDamage), asc(raidWeeklyScores.updatedAt)).limit(size + operators.size)).filter(row => !operators.has(row.userId)).slice(0, size);
   return { weekKey, rows: rows.map((row, index) => ({ rank: index + 1, displayName: row.displayName, totalDamage: Number(row.totalDamage), attempts: Number(row.attempts), isMe: row.userId === userId })) };
 }
 /** 지난주 순위 보상 받기(금화·낙양 강화석은 서버 원장에 바로 더한다) */
@@ -810,7 +849,8 @@ async function claimRaidReward(userId, now = Date.now()) {
     const row = rows[0];
     if (!row || !(Number(row.totalDamage) > 0)) return { ok: false, reason: "지난주 레이드 기록이 없습니다.", gold: 0, stones: 0 };
     if (row.rewardClaimed) return { ok: false, reason: "지난주 레이드 보상을 이미 받았습니다.", gold: 0, stones: 0 };
-    const rank = await raidRankOf(tx, weekKey, Number(row.totalDamage));
+    const rank = await raidRankOf(tx, weekKey, Number(row.totalDamage), userId);
+    if (!rank) return { ok: false, reason: "운영자 계정은 레이드 순위 보상이 없습니다.", gold: 0, stones: 0 };
     const reward = raidRewardFor(rank);
     await tx.update(raidWeeklyScores).set({ rewardClaimed: 1 }).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.userId} = ${userId}`);
     await tx.update(gameAccountStates).set({ gold: sql`${gameAccountStates.gold} + ${reward.gold}`, mythicStones: sql`${gameAccountStates.mythicStones} + ${reward.stones}` }).where(eq(gameAccountStates.userId, userId));
@@ -824,17 +864,69 @@ async function updateGameState(userId, input) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   // 낙양 보상 주차는 서버만 정한다: 클라이언트가 옛 주차로 덮어써 보상이 두 번 나가지 않게 한다.
-  const { luoyangRewardWeekKey: _ignoredWeekKey, ...values } = input;
-  const current = await db.select({ gold: gameAccountStates.gold, mythicFragments: gameAccountStates.mythicFragments, mythicStones: gameAccountStates.mythicStones }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
+  const { luoyangRewardWeekKey: _ignoredWeekKey, adminPatchAck, ...values } = input;
+  const current = await db.select({ gold: gameAccountStates.gold, mythicFragments: gameAccountStates.mythicFragments, mythicStones: gameAccountStates.mythicStones, grantLedger: gameAccountStates.grantLedger }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
+  // 관리자가 고친 값이 있으면: 클라이언트가 받아들이기(ack) 전까지 저장값을 관리자 값으로 바꾸고, 응답으로 알려 준다
+  const ledger = parseStateJson(current[0]?.grantLedger) ?? {};
+  let adminPatch = null, clearPatch = false;
+  if (ledger.adminPatch) {
+    const patch = activeAdminPatch(ledger);
+    if (!patch || adminPatchAck === ledger.adminPatch.id) clearPatch = true;
+    else {
+      for (const [key, value] of Object.entries(patch.values)) if (key in ADMIN_EDITABLE) values[key] = value;
+      adminPatch = { id: patch.id, values: patch.values };
+    }
+  }
   for (const key of SERVER_LEDGER_KEYS) {
     if (values[key] === undefined) continue;
     const serverValue = current[0] ? Number(current[0][key] ?? 0) : 0;
     values[key] = Math.max(0, Math.min(Number(values[key]), serverValue));
   }
   await db.insert(gameAccountStates).values({ userId, ...values }).onDuplicateKeyUpdate({ set: values });
+  // 받아들인(또는 시간이 지난) 관리자 수정 표시는 장부의 그 칸만 지운다(같은 때 들어온 보상 기록은 그대로)
+  if (clearPatch) await db.update(gameAccountStates).set({ grantLedger: sql`JSON_REMOVE(${gameAccountStates.grantLedger}, '$.adminPatch')` }).where(eq(gameAccountStates.userId, userId));
   // The client already owns the canonical state. Avoid a second full-row read
   // (including large JSON inventories) after every write.
-  return { ok: true, userId, gold: values.gold, mythicFragments: values.mythicFragments, mythicStones: values.mythicStones };
+  return { ok: true, userId, gold: values.gold, mythicFragments: values.mythicFragments, mythicStones: values.mythicStones, ...(adminPatch ? { adminPatch } : {}) };
+}
+/** 관리자 편집 가능 항목(숫자 최대치 · 진영) */
+const ADMIN_EDITABLE = { honor: 1, silver: 1, gold: 1, manuals: 1, wins: 1, battleScore: 1, grain: 1, wood: 1, iron: 1, influence: 1, mythicFragments: 1, mythicStones: 1, factionWarScore: 1, luoyangBoxes: 1, faction: 1 };
+/**
+ * 관리자 편집: 서버 원장 재화(금화 · 신화 조각 · 낙양 강화석)도 그대로 정한다(사용자 저장의 '줄이기만' 규칙을 거치지 않음).
+ * 은전은 자원 칸(resources.silver)과 같이 쓴다. 접속 중인 클라이언트가 덮어쓰지 않게 adminPatch를 남긴다.
+ */
+async function adminUpdateGameState(userId, input) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const values = Object.fromEntries(Object.entries(input).filter(([key, value]) => key in ADMIN_EDITABLE && value !== undefined));
+  if (!Object.keys(values).length) throw new Error("바꿀 값이 없습니다.");
+  return db.transaction(async tx => {
+    const rows = await tx.select({ grantLedger: gameAccountStates.grantLedger }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1).for("update");
+    const ledger = parseStateJson(rows[0]?.grantLedger) ?? {};
+    const previous = activeAdminPatch(ledger)?.values ?? {};
+    ledger.adminPatch = { id: randomUUID(), at: Date.now(), values: { ...previous, ...values } };
+    const set = { ...values, grantLedger: JSON.stringify(ledger) };
+    if (rows[0]) await tx.update(gameAccountStates).set(set).where(eq(gameAccountStates.userId, userId));
+    else await tx.insert(gameAccountStates).values({ userId, ...defaultGameState, ...set });
+    const after = await tx.select().from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
+    return adminGameView(after[0]);
+  });
+}
+/** 관리자 화면용 계정 게임 정보(편집 칸 + 읽기 전용 진행 요약) */
+function adminGameView(row) {
+  const generals = parseStateJson(row?.generalData);
+  const scenarios = parseStateJson(row?.scenarioData);
+  const list = Array.isArray(generals) ? generals : [];
+  const cleared = Array.isArray(scenarios) ? scenarios.filter(item => typeof item === "string") : [];
+  return {
+    userId: row?.userId, honor: row?.honor ?? 0, silver: row?.silver ?? 0, gold: row?.gold ?? 0, manuals: row?.manuals ?? 0, wins: row?.wins ?? 0, battleScore: row?.battleScore ?? 0,
+    grain: row?.grain ?? 0, wood: row?.wood ?? 0, iron: row?.iron ?? 0, influence: row?.influence ?? 0,
+    mythicFragments: row?.mythicFragments ?? 0, mythicStones: row?.mythicStones ?? 0, factionWarScore: row?.factionWarScore ?? 0, luoyangBoxes: row?.luoyangBoxes ?? 0,
+    faction: row?.faction ?? "촉한", factionChosen: Boolean(row?.factionChosen),
+    generalCount: list.length, maxLevel: list.reduce((max, general) => Math.max(max, Number(general?.level) || 0), 0),
+    scenarioCleared: cleared.filter(item => !item.includes(":")).length, hardCleared: cleared.filter(item => item.startsWith("hard:")).length,
+    updatedAt: row?.updatedAt ?? null,
+  };
 }
 
 const PRELAUNCH_DAILY_GOLD = 100;
@@ -1424,6 +1516,10 @@ export {
   listUsers,
   protectedProcedure,
   updateGameState,
+  adminUpdateGameState,
+  adminGameView,
+  isOperatorUser,
+  clearOperatorCache,
   recordFactionTerritoryBattle,
   deployFactionGarrison,
   recordFactionDefense,

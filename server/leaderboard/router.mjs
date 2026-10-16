@@ -2,7 +2,8 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 // Use the host's tRPC instance and protectedProcedure, hence canonical ctx.user.
-export function createLeaderboardRouter({ router, publicProcedure, protectedProcedure }, runtime) {
+// isOperator(user): 운영자 계정은 기록을 남기지 않고 순위에도 나오지 않는다
+export function createLeaderboardRouter({ router, publicProcedure, protectedProcedure, isOperator = () => false }, runtime) {
   if (runtime.config.identity !== 'account') throw new Error('account_leaderboard_required');
   const boardId = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
   async function call(ctx, write, action) {
@@ -15,10 +16,10 @@ export function createLeaderboardRouter({ router, publicProcedure, protectedProc
   return router({
     // Ranking is public, as in the guest REST API; personal rank requires a session.
     list: publicProcedure.input(z.object({ boardId, limit: z.number().int().min(1).max(100).default(20) }).strict()).query(({ ctx, input }) =>
-      call(ctx, false, async service => service.list(input.boardId, input.limit, ctx.user ? await service.account(ctx.user, false) : null))),
+      call(ctx, false, async service => service.list(input.boardId, input.limit, ctx.user && !isOperator(ctx.user) ? await service.account(ctx.user, false) : null))),
     beginRun: protectedProcedure.input(z.object({ boardId, protocolVersion: z.number().int(), rulesVersion: z.string().min(1).max(32), releaseSha: z.string().regex(/^[a-f0-9]{7,64}$/).optional() }).strict()).mutation(({ ctx, input }) =>
       call(ctx, true, async service => service.beginRun(input.boardId, await service.account(ctx.user), input))),
     submitRun: protectedProcedure.input(z.object({ runId: z.string().uuid(), score: z.number().int().min(-1e9).max(1e9), durationMs: z.number().int().min(0).max(1800000) }).strict()).mutation(({ ctx, input }) =>
-      call(ctx, true, async service => service.submitRun(input.runId, await service.account(ctx.user), input))),
+      isOperator(ctx.user) ? { runId: input.runId, score: input.score, accepted: false, operator: true, trust: 'client_reported' } : call(ctx, true, async service => service.submitRun(input.runId, await service.account(ctx.user), input))),
   });
 }
