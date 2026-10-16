@@ -884,6 +884,8 @@ function openSection(section: Section): void {
     ui.notify('공성 전투를 종료하고 전황을 저장했습니다.', 'jade')
   }
   state.section = section
+  // 메뉴를 옮기면 전투 뒤 돌아갈 곡도 그 메뉴 기준(영토면 영토 곡)
+  sound.returnTheme = section === 'territory' ? 'territory' : 'home'
   if (section === 'battle' && !scenarioActive) { duelActive = false; arena.setOpponentDeck(null); arena.setGenerals(battleGenerals()); ui.updateBattle(arena.getSnapshot()) }
   if (section === 'duel') {
     installDummyDuelOpponents()
@@ -1109,6 +1111,8 @@ const ui = new StrategyUI(root, {
     if (result.ok) {
       pendingSiege = { cityId: id, result }
       duelActive = false
+      // 공성전이 끝나면 천하영토 곡으로 돌아간다
+      sound.returnTheme = 'territory'
       state.section = 'battle'
       ui.setBattleAutoAvailable(true)
       arena.setSiegeDeck(siegeDeckFor(id), siegeMoraleBonus(id))
@@ -1518,6 +1522,8 @@ arena = new Arena(canvas, {
       state.selectedCityId = siege.cityId
       state.section = 'territory'
       pendingSiege = null
+      // 공성 결과 뒤 영토 메뉴로: 전장을 정리하고(곡은 승리 함성 · 패배 곡 뒤 천하영토 곡으로) 영토 화면을 그린다(전투 처리 도중이라 한 박자 뒤에)
+      window.setTimeout(() => { if (!arena.getSnapshot().active) arena.stopBattle() }, 0)
     } else if (result.won) {
       state.wins += 1
       // 반복 전투 보상은 별 수에 비례(3개 100% · 2개 80% · 1개 60%). 시나리오는 최초 클리어 보상만.

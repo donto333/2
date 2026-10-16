@@ -452,6 +452,8 @@ export class SoundEngine {
   }
 
   get currentTheme(): MusicTheme { return this.wanted }
+  /** 전투가 끝나면 돌아갈 곡(공성전은 천하영토 곡, 그 밖은 본영 곡) */
+  returnTheme: MusicTheme = 'home'
 
   setIntensity(level: number): void { this.intensity = Math.max(0, Math.min(2, Math.round(level))) }
 
@@ -1532,7 +1534,7 @@ export class SoundEngine {
       this.choir(out, [52, 55, 59, 64], t + 0.3, 3.6, 0.07)
       this.brass(out, [28, 35, 40], t, 2.4, 0.06, this.hallSend)
     }
-    this.setThemeAfter('home', won ? 4800 : 5200)
+    this.setThemeAfter(this.returnTheme, won ? 4800 : 5200)
   }
 }
 

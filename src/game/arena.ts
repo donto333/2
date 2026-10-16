@@ -540,7 +540,7 @@ export class Arena {
     this.battleActive = false
     sound.setPausedDuck(false)
     // 승리·패배 곡이 울리는 중이면(곡 없음) 끝나고 본영 곡으로 돌아가게 둔다
-    if (sound.currentTheme !== 'none') sound.setTheme('home')
+    if (sound.currentTheme !== 'none') sound.setTheme(sound.returnTheme)
     this.paused = false
     this.core = null
     this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
@@ -1050,10 +1050,10 @@ export class Arena {
         this.cameraVictory = event.result.won ? 1.5 : 0
         this.cameraShake = event.result.won ? 0.22 : 0.1
         this.playOutcome(event.result.won)
-        if (this.mode === 'raid') { sound.play('raidSquad'); sound.setThemeAfter('home', 9000) } else {
+        if (this.mode === 'raid') { sound.play('raidSquad'); sound.setThemeAfter(sound.returnTheme, 9000) } else {
           sound.play(event.result.won ? 'victory' : 'defeat')
           // 승리: 전투 곡을 서서히 끄고 함성 뒤 본영 곡으로(패배는 패배 곡이 끝나면 본영 곡으로 돌아간다)
-          if (event.result.won) { sound.setTheme('none'); sound.setThemeAfter('home', 3500) }
+          if (event.result.won) { sound.setTheme('none'); sound.setThemeAfter(sound.returnTheme, 3500) }
         }
         if (this.mode === 'normal') this.winStreak = event.result.won ? this.winStreak + 1 : Math.max(-2, Math.min(0, this.winStreak) - 2)
         // 랭킹 서버는 실제 경과 시간보다 긴 기록을 거절한다: 배속과 무관하게 실제 시간을 보낸다.
