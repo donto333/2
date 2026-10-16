@@ -344,7 +344,7 @@ const svg = (body: string) => `<svg viewBox="0 0 320 150" class="guide-art" aria
 /** 버프 · 디버프 목록 카드(전투 효과 카탈로그에서 그대로 만든다 — 효과가 바뀌면 설명도 함께 바뀐다) */
 const effectList = (ids: BattleEffectId[]) => `<ul class="guide-effects">${ids.map(id => {
   const e = BATTLE_EFFECTS[id]
-  return `<li class="is-${e.kind}"><span class="guide-effects__icon">${e.icon}</span><div><b>${esc(e.name)}</b><small>${e.duration}초</small><p>${esc(e.description)}</p></div></li>`
+  return `<li class="is-${e.kind}"><div><b>${esc(e.name)}</b><small>${e.duration}초</small><p>${esc(e.description)}</p></div></li>`
 }).join('')}</ul>`
 const SELF_COST: BattleEffectId[] = ['heavy-step', 'hangover']
 const BUFF_IDS = (Object.keys(BATTLE_EFFECTS) as BattleEffectId[]).filter(id => BATTLE_EFFECTS[id].kind === 'buff' && !id.startsWith('e-') && !SELF_COST.includes(id))
