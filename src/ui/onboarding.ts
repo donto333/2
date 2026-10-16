@@ -65,6 +65,8 @@ export class Onboarding {
       const target = event.target as Element | null
       if (!target || !(target instanceof Element)) return
       if (target.closest('.coach-layer--forced .coach-bubble')) return
+      // 튜토리얼 위에 뜨는 창(출석 체크 · 아이디 정하기)은 언제나 누를 수 있다
+      if (target.closest('.attendance-modal, .guest-signup')) return
       const step = this.current()
       if (step?.target && target.closest(step.target)) return
       event.preventDefault()

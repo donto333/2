@@ -323,9 +323,7 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   // 회원의 일일 금화는 서버가 지급한다(serverGrant('daily')).
   const receivedDailyGold = mode === 'guest' ? ensurePrelaunchDailyGold(state) : false
   // 출석 체크: 서버에 연결할 수 없는 게스트만 이 기기에서 처리한다(서버 계정은 서버가 날짜를 정한다)
-  ensureMissions(state)
-  const attended = mode === 'guest' && authView.status === 'offline' ? claimLocalAttendance(state) : null
-  if (attended) window.setTimeout(() => { ui.showAttendance(attended.day, attended.label); ui.render(state) }, 1500)
+  const attended = mode === 'guest' && claimLocalGuestAttendance()
   const migratedStarter = migrateLegacyStarterRoster(state)
   // 무장 등급 재설정(2026.10): 보유 무장을 새 등급으로 옮기고 내려간 무장은 옥패로 보상
   const regraded = migrateGeneralGrades(state).changed > 0
@@ -742,6 +740,26 @@ function withLedger<T>(task: () => Promise<T>): Promise<T> {
   return run
 }
 
+/** 서버에 연결할 수 없는 게스트: 이 기기에서 오늘 출석을 처리하고 바로 저장한다(같은 날 두 번 받지 않게) */
+function claimLocalGuestAttendance(): boolean {
+  if (authView.status !== 'offline') return false
+  ensureMissions(state)
+  const attended = claimLocalAttendance(state)
+  if (!attended) return false
+  persistLocalGame()
+  showAttendanceWhenReady(attended.day, attended.label)
+  return true
+}
+
+/** 출석 창은 첫 화면(소개 · 세력 선택 · 로그인)과 전투가 끝난 뒤에 띄운다 */
+function showAttendanceWhenReady(day: number, label: string, waited = 0): void {
+  const blocked = !state.factionConfirmed || (arena as Arena | undefined)?.getSnapshot().active || document.querySelector('.access-gate, .guest-signup, .game-intro, .faction-selection, .notice-popup, .summon-ceremony, .result-modal')
+  if (blocked && waited < 600) { window.setTimeout(() => showAttendanceWhenReady(day, label, waited + 1), 1000); return }
+  ui.render(state)
+  ui.showAttendance(day, label)
+  playSfx('reward')
+}
+
 /** 출석 체크(회원 · 서버 게스트): 서버가 날짜와 장부 재화를 정하고, 나머지 보상은 게임이 준다 */
 async function claimAttendance(): Promise<void> {
   if (!isMember()) return
@@ -758,8 +776,7 @@ async function claimAttendance(): Promise<void> {
     if (!claim) return
     queueAccountSave(true)
     ui.render(state)
-    ui.showAttendance(claim.day, claim.label)
-    playSfx('reward')
+    showAttendanceWhenReady(claim.day, claim.label)
   } catch {
     // 서버가 아직 출석 체크를 모르면(배포 전) 조용히 넘어간다
   }
@@ -1728,7 +1745,7 @@ const battleCoach = new BattleCoach(coach, { pause: on => { arena.setPaused(on);
 let tourSection = ''
 let tourSince = 0
 /** 다른 창(소개·알림·결과·모집 결과·진영 선택)이 떠 있으면 짚어 주기를 미룬다 */
-const overlayOpen = () => Boolean(document.querySelector('.game-intro, .notice-popup, .result-modal, .recruit-results, .summon-ritual, .summon-ceremony, .heaven-descends, .battle-guide, .access-gate, .faction-selection, .slot-picker'))
+const overlayOpen = () => Boolean(document.querySelector('.game-intro, .notice-popup, .result-modal, .recruit-results, .summon-ritual, .summon-ceremony, .heaven-descends, .battle-guide, .access-gate, .faction-selection, .slot-picker, .attendance-modal, .guest-signup'))
 // 첫 입장 튜토리얼(건너뛸 수 없음). 회원은 서버 진행을 불러온 뒤에 시작한다.
 const onboarding = new Onboarding({
   state,
@@ -1837,6 +1854,8 @@ void ManusAuth.prepare().then(session => {
 }).catch(() => {
   authView = { status: 'offline', name: null }
   ui.setAuth(authView)
+  // 서버에 닿지 않는 날에도 이 기기의 게스트는 출석을 받는다
+  if (gameAccess === 'guest') claimLocalGuestAttendance()
 })
 
 // ── 게스트 계정(서버) ─────────────────────────────────────────
