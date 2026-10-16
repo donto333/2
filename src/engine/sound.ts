@@ -1472,39 +1472,7 @@ export class SoundEngine {
     const buffer = this.fileBuffer('recruit')
     // 곡이 울리는 동안은 이 곡만 들린다(배경음 · 환경음 · 다른 효과음 모두 끔)
     this.solo(Math.round((buffer?.duration ?? 8.4) * 1000) + 200)
-    if (!buffer) return
-    const ctx = this.ctx!, src = ctx.createBufferSource(), gain = ctx.createGain()
-    src.buffer = buffer; gain.gain.value = 0.9
-    src.connect(gain).connect(this.sfxVol)
-    src.onended = () => { if (this.jingle?.src === src) this.jingle = null; try { gain.disconnect() } catch { /* 끝 */ } }
-    src.start(ctx.currentTime + 0.02)
-    this.jingle = { src, gain }
-  }
-  private jingle: { src: AudioBufferSourceNode; gain: GainNode } | null = null
-  /**
-   * 5성 무장 등장: 모집 효과음을 걷고 모집 곡(마단조 오음계 · 약 73BPM)을 되살려, 그 곡과 같은 조로 어우러지는 소리를 얹는다.
-   * 마단조 오음계(E G A B D)만 쓰고 박자는 곡의 8분음(약 0.41초) 간격으로.
-   */
-  heroReveal(): void {
-    if (!this.ceremonyReady()) return
-    const ctx = this.ctx!, now = ctx.currentTime
-    if (this.jingle) { const { src, gain } = this.jingle; gain.gain.setTargetAtTime(0, now, 0.12); try { src.stop(now + 0.6) } catch { /* 끝 */ } this.jingle = null }
-    // 혼자 울리기를 끝내고 모집 곡을 조금 낮춘 채로 함께 튼다
-    window.clearTimeout(this.soloTimer); this.soloUntil = 0
-    this.ambienceBus?.gain.setTargetAtTime(1, now, 0.6)
-    this.duckFor(4200)
-    const out = this.sfxVol, hall = this.hallSend, t = now + 0.08, step = 0.41
-    const bellRate = (midi: number) => mtof(midi) / 1046.5
-    this.gong(out, t, 0.3, 0.75, hall)
-    this.pad(out, [40, 52, 59, 64], t, 4.2, 0.05)
-    this.brass(out, [40, 47, 52, 55], t + 0.05, 3.2, 0.07, hall)
-    this.choir(out, [52, 59, 64, 67, 71], t + 0.1, 4.4, 0.12)
-    // 오음계를 두 옥타브 쓸어 올림
-    ;[64, 67, 69, 71, 74, 76, 79, 81, 83, 88].forEach((midi, i) => this.pluck(out, midi, t + 0.15 + i * 0.045, 0.15, { bright: 0.8, dur: 2.2, pan: -0.6 + i * 0.13, send: hall }))
-    // 피리 가락: 시 → 미 → 솔(길게), 곡의 8분음 간격
-    this.flute(out, 71, t + step * 1.5, step * 0.9, 0.12); this.flute(out, 76, t + step * 2.5, step * 0.9, 0.12); this.flute(out, 79, t + step * 3.5, step * 4, 0.13)
-    // 방울이 내려오며 마무리(미 · 시 · 솔 · 미)
-    ;[88, 83, 79, 76].forEach((midi, i) => this.bell(out, t + step * (2 + i), 0.09, bellRate(midi), -0.4 + i * 0.27, hall))
+    if (buffer) this.play_(buffer, this.sfxVol, this.ctx!.currentTime + 0.02, 0.9)
   }
   private soloUntil = 0
   private soloTimer = 0
