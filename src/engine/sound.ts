@@ -832,12 +832,12 @@ export class SoundEngine {
       case 'build': [0, 0.13, 0.26].forEach((d, i) => { this.drum(out, i === 2 ? 'tom' : 'rim', t + d, i === 2 ? 0.3 : 0.24, 0, i === 2 ? 1 : 0.85); this.metal(out, t + d, 0.06, 0.9) }); break
       case 'research': this.whoosh(out, t, 0.2, 0.12, 2000, 5200); this.bell(out, t + 0.12, 0.1, 1.5, 0, send); break
       case 'formation': this.drum(out, 'taiko', t, 0.3); this.drum(out, 'rim', t + 0.1, 0.12); break
-      case 'battleStart': window.setTimeout(() => this.neigh(0.14, -0.4), 650); [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.drum(out, 'taiko', t + 0.84, 0.6, 0, 0.85); break
+      case 'battleStart': [0, 0.28, 0.56].forEach((d, i) => this.drum(out, 'taiko', t + d, 0.4 + i * 0.12)); this.drum(out, 'taiko', t + 0.84, 0.6, 0, 0.85); break
       case 'attack': this.whoosh(out, t, 0.13, 0.08, 1200, 3200, pan); break
       // 타격: 짧은 파열음(딱) + 몸에 닿는 둔탁한 소리 + 작은 저음(쿵)
       case 'hit': { const rr = 0.85 + Math.random() * 0.3; this.thump(out, t, 0.3, pan, undefined, rr); this.drum(out, 'tom', t, 0.22, pan, 0.75 * rr); break }
       case 'hitBig': { const rr = 0.85 + Math.random() * 0.25; this.thump(out, t, 0.55, pan, send, 0.85 * rr); this.drum(out, 'taiko', t, 0.55, pan, 0.8 * rr); break }
-      case 'unitDown': this.neigh(0.13, pan, 0.85); this.drum(out, 'taiko', t, 0.45, pan, 0.78); this.whoosh(out, t, 0.5, 0.14, 500, 120, pan, send); break
+      case 'unitDown': this.drum(out, 'taiko', t, 0.45, pan, 0.78); this.whoosh(out, t, 0.5, 0.14, 500, 120, pan, send); break
       case 'enemySkill': this.drum(out, 'taiko', t, 0.45, pan, 0.8); this.whoosh(out, t, 0.35, 0.12, 600, 2400, pan); break
       case 'enemyWarn': [0, 0.13, 0.26].forEach(d => this.bell(out, t + d, 0.14, 2.2, 0, send)); break
       case 'pattern': this.drum(out, 'tom', t + 0.05, 0.2); this.drum(out, 'tom', t + 0.15, 0.24); break

@@ -918,8 +918,6 @@ export class Arena {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
         sound.skill(event.type, event.side, this.lanePan(event.lane), this.skillVoice(unit, event.type, event.side))
-        // 돌격 스킬: 말이 앞발을 들며 운다
-        if (event.type === '돌격' && unit.mounted) sound.neigh(event.side === 'player' ? 0.17 : 0.11, this.lanePan(event.lane))
         this.callbacks.onSkillCast?.({ side: event.side, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
         this.playSkill(unit, event.side, event.type, event.name, event.morale, event.target)
         if (event.side === 'enemy') this.enemyWarning = null
