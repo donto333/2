@@ -411,6 +411,14 @@ const GUIDE_CARDS: Array<{ title: string; body: string; art: string }> = [
     body: '적장의 스킬이 아군에게 거는 약화와 적이 스스로 거는 강화, 그리고 일부 강한 스킬의 대가입니다. 철벽 태세 · 경고 막기로 피해를 줄이십시오.',
     art: effectList(AGAINST_IDS),
   },
+  {
+    title: '자동 전투 (직접 하는 것보다 약합니다)',
+    body: '전투 위쪽 ‘자동’을 켜면 예고 대응 · 스킬 · 전술을 알아서 합니다. 다만 직접 하는 것보다 약합니다. 예고를 10번 중 3번쯤 놓치고(정확도 70%), 스킬도 준비된 뒤 한 박자 늦게 씁니다. 같은 전투에서 이기는 비율이 눈에 띄게 낮으니, 처음 깨는 시나리오나 어려운 전투는 직접 하고, 이미 깬 곳을 다시 돌 때 쓰십시오. 유저 대련에는 자동 전투 대신 ‘스킬 자동’만 있습니다.',
+    art: svg(`<g transform="translate(20,18)"><rect width="120" height="44" rx="6" class="ga-gold"/><text x="60" y="28" text-anchor="middle" class="ga-n">자동</text></g>
+      <g transform="translate(170,18)"><rect width="130" height="44" rx="6" class="ga-box"/><text x="65" y="28" text-anchor="middle" class="ga-n">정확도 70%</text></g>
+      <text x="20" y="96" class="ga-t">직접</text><rect x="80" y="86" width="220" height="12" rx="3" class="ga-track"/><rect x="80" y="86" width="210" height="12" rx="3" class="ga-jade"/>
+      <text x="20" y="128" class="ga-t">자동</text><rect x="80" y="118" width="220" height="12" rx="3" class="ga-track"/><rect x="80" y="118" width="130" height="12" rx="3" class="ga-amber"/>`),
+  },
 ]
 
 /** 전투 규칙 그림 설명(언제든 다시 열 수 있다). 닫으면 onClose */

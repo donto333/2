@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { disposeOwned, markShared } from './gpu-shared'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
 import { sound, type WeaponSound } from '../engine/sound'
-import { BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
+import { PLAYER_AUTO_PILOT, BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import { GENERAL_SKILLS, type SkillType } from './skills'
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
@@ -487,7 +487,7 @@ export class Arena {
   }
 
   setAutoPlay(on: boolean): void {
-    if (this.core) this.core.autoPilot = on ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null
+    if (this.core) this.core.autoPilot = on ? { ...PLAYER_AUTO_PILOT } : null
   }
 
   /** 대련 스킬 자동(기본 켬, 기기에 기억) */
@@ -800,7 +800,7 @@ export class Arena {
     const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
     this.enemyDeck = deck
     this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
-    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: options.autoPlay ? { accuracy: 0.85, reaction: [0.6, 1.2] } : null })
+    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: options.autoPlay ? { ...PLAYER_AUTO_PILOT } : null })
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()

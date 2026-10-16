@@ -60,7 +60,7 @@ import {
 } from './game/strategy'
 import { applyCombo } from './game/formation-advice'
 import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView } from './ui/strategy-ui'
-import { SCENARIOS, clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, scenarioStars, type ScenarioDefinition } from './game/scenarios'
+import { SCENARIOS, clearedScenarioCount, firstClearReward, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevel, type ScenarioDefinition } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
 import { raidBossDeck } from './game/raid'
 import { RaidRunner } from './game/raid-run'
@@ -390,7 +390,7 @@ function startRaidBattle(): void {
   scenarioActive = false
   activeScenario = null
   state.section = 'battle'
-  ui.setBattleAutoAvailable(false)
+  ui.setBattleAutoAvailable(true) // 자동 전투: 직접보다 약하게(정확도 70% · 스킬 한 박자 늦게) 모든 전투에서(대련 제외)
   arena.setOpponentDeck(raidBossDeck(raidRun.bossLevel, raidRun.weekKey), 'raid')
   arena.setGenerals(battleGenerals(ids))
   arena.startBattle()
@@ -1080,7 +1080,7 @@ const ui = new StrategyUI(root, {
       pendingSiege = { cityId: id, result }
       duelActive = false
       state.section = 'battle'
-      ui.setBattleAutoAvailable(false)
+      ui.setBattleAutoAvailable(true)
       arena.setSiegeDeck(siegeDeckFor(id), siegeMoraleBonus(id))
       arena.setGenerals(battleGenerals())
       arena.startBattle()
@@ -1204,7 +1204,7 @@ const ui = new StrategyUI(root, {
     arena.setEasyBattle(onboarding.at('scenario'))
     arena.setGenerals(battleGenerals())
     arena.startBattle()
-    ui.setBattleAutoAvailable(scenarioStars(state.scenarioCleared, scenario.id) >= 3)
+    ui.setBattleAutoAvailable(true)
     ui.updateBattle(arena.getSnapshot())
     ui.render(state)
     ui.updateBattle(arena.getSnapshot())
@@ -1213,7 +1213,7 @@ const ui = new StrategyUI(root, {
   onBattleStart: () => {
     // 레이드 진행 중이면 다음 군 출전으로 이어 간다(일반 전투를 열지 않는다)
     if (raidRun) { startRaidBattle(); return }
-    ui.setBattleAutoAvailable(false)
+    ui.setBattleAutoAvailable(true)
     scenarioActive = false
     activeScenario = null
     duelActive = false
@@ -1294,6 +1294,7 @@ const ui = new StrategyUI(root, {
   onBattleAuto: on => {
     arena.setAutoPlay(on)
     ui.updateBattle(arena.getSnapshot())
+    ui.notify(on ? '자동 전투 켜짐 · 예고 대응 정확도 70%, 스킬은 한 박자 늦게 씁니다(직접 하는 것보다 약함)' : '자동 전투 꺼짐 · 직접 지휘합니다')
   },
   onBattleAutoSkill: on => {
     arena.setAutoSkill(on)

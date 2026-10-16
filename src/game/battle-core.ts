@@ -160,7 +160,10 @@ export interface BattleResult {
   collapses: number
 }
 
-export interface AutoPilot { accuracy: number; reaction: [number, number] }
+/** 자동 전투 조종: accuracy 예고 대응 정확도, reaction 반응 시간(초), skillDelay 스킬이 준비된 뒤 기다리는 시간(초, 한 박자 늦게) */
+export interface AutoPilot { accuracy: number; reaction: [number, number]; skillDelay?: number }
+/** 플레이어가 켜는 자동 전투: 직접 하는 것보다 약하게(정확도 70% · 스킬 한 박자 늦게) */
+export const PLAYER_AUTO_PILOT: AutoPilot = { accuracy: 0.7, reaction: [0.6, 1.2], skillDelay: 1.5 }
 
 export interface CoreConfig {
   mode?: BattleMode
@@ -260,6 +263,8 @@ export class BattleCore {
   autoPilot: AutoPilot | null
   /** 스킬 자동(대련): 예고 대응은 직접, 스킬만 준비되면 알아서 쓴다 */
   autoSkill = false
+  /** 자동 전투: 무장(자리)별로 스킬이 준비된 시각 */
+  private autoReady = new Map<number, number>()
   /** 방금 스킬이 맞힌 상대 자리(연출용) */
   private lastSkillTarget: number | null = null
 
@@ -1118,20 +1123,26 @@ export class BattleCore {
     }
     const warned = this.enemies.some(unit => unit.warned && unit.troops > 0)
     if (warned && this.guardTimer <= 0 && this.gauge >= this.tacticCost('guard') + (this.phase === 2 ? 0 : 10)) this.useTactic('guard')
-    this.autoCastSkills()
+    this.autoCastSkills(pilot.skillDelay ?? 0)
     if (this.gauge >= this.tacticCost('charge') + (this.phase === 2 ? this.tacticCost('guard') : 0)) this.useTactic('charge')
   }
 
   /** 준비된 스킬을 쓴다(치유는 다쳤거나 디버프가 있을 때, 수호는 다쳤거나 적장 스킬 예고가 있을 때만) */
-  private autoCastSkills(): void {
+  private autoCastSkills(delay = 0): void {
     const warned = this.enemies.some(unit => unit.warned && unit.troops > 0)
     const hurt = this.players.some(other => other.troops > 0 && other.troops < other.maxTroops * 0.7)
     this.players.forEach(unit => {
-      if (unit.troops <= 0 || !unit.skillOn || unit.cd > 0) return
+      if (unit.troops <= 0 || !unit.skillOn || unit.cd > 0) { this.autoReady.delete(unit.lane); return }
+      // 자동 전투: 준비되고 나서 한 박자(delay초) 기다렸다가 쓴다
+      if (delay > 0) {
+        const since = this.autoReady.get(unit.lane)
+        if (since === undefined) { this.autoReady.set(unit.lane, this.t); return }
+        if (this.t - since < delay) return
+      }
       const type = unit.def.type
       if (type === '치유' && !hurt && this.playerDebuffs.length === 0) return
       if (type === '수호' && !hurt && !warned) return
-      this.castSkill(unit.lane)
+      if (this.castSkill(unit.lane)) this.autoReady.delete(unit.lane)
     })
   }
 
