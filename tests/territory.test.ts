@@ -9,7 +9,7 @@ describe('territory and governance', () => {
       ['jianye', '오나라'],
       ['ye', '위나라'],
     ])
-    expect(state.cities).toHaveLength(48)
+    expect(state.cities).toHaveLength(55)
     expect(state.resources.grain).toBeGreaterThan(0)
     expect(state.research).toHaveLength(40)
   })
@@ -28,7 +28,7 @@ describe('territory and governance', () => {
     const state = createInitialState()
     state.cities = state.cities.slice(0, 5)
     ensureCityRoster(state)
-    expect(state.cities).toHaveLength(48)
+    expect(state.cities).toHaveLength(55)
     expect(findCity(state, 'luoyang')?.owner).toBe('중립')
     expect(findCity(state, 'fucheng')?.region).toBe('익주 북방')
   })
@@ -162,7 +162,7 @@ describe('territory and governance', () => {
     const state = createInitialState()
     const city = findCity(state, 'fucheng')!
     expect(conquestPower(state)).toBeGreaterThan(0)
-    expect(conquestCost(city).grain).toBe(1150)
+    expect(conquestCost(city).grain).toBe(900) // 부성은 2026.10.17부터 1단계(수도 옆)
     city.defense = 8
     city.garrisons = [1, 2].map(index => ({ id: `neutral-${index}`, generalIds: [], averageLevel: 10, power: 1, source: 'dummy' as const, label: '중립 더미 수비대' }))
     let now = 1000
@@ -175,7 +175,7 @@ describe('territory and governance', () => {
     expect(result.ok).toBe(true)
     expect(city.owner).toBe('중립')
     expect(city.defense).toBeGreaterThanOrEqual(0)
-    expect(city.defense).toBeLessThan(CITY_DEFENSE_BY_LEVEL[2])
+    expect(city.defense).toBeLessThan(CITY_DEFENSE_BY_LEVEL[1])
     expect(city.conquestProgress).toBe(100)
     expect(result.captured).toBe(false)
     const goldBefore = state.gold
@@ -183,7 +183,7 @@ describe('territory and governance', () => {
     expect(final.ok).toBe(true)
     expect(final.won).toBe(true)
     expect(city.owner).toBe('촉한')
-    expect(state.gold).toBe(goldBefore + FACTION_WAR_GOLD_REWARD[2])
+    expect(state.gold).toBe(goldBefore + FACTION_WAR_GOLD_REWARD[city.level])
   })
 
   it('requires every deployed garrison to be defeated before capture', () => {
@@ -214,7 +214,7 @@ describe('territory and governance', () => {
     expect(second.captured).toBe(false)
     expect(city.owner).toBe('위나라')
     expect(city.defense).toBeGreaterThanOrEqual(0)
-    expect(city.defense).toBeLessThan(CITY_DEFENSE_BY_LEVEL[2])
+    expect(city.defense).toBeLessThan(CITY_DEFENSE_BY_LEVEL[1])
     expect(city.garrisons).toHaveLength(2)
     const final = launchFactionBattle(state, city.id, now + FACTION_BATTLE_COOLDOWN_MS)
     expect(final.ok).toBe(true)
@@ -324,7 +324,7 @@ describe('territory and governance', () => {
     expect(result.ok).toBe(true)
     expect(result.won).toBe(true)
     expect(city.battleLogs?.at(-1)?.attackerKind).toBe('user')
-    expect(state.honor).toBe(beforeHonor - FACTION_WAR_HONOR_COST[2])
-    expect(state.gold).toBe(beforeGold + FACTION_WAR_GOLD_REWARD[2])
+    expect(state.honor).toBe(beforeHonor - FACTION_WAR_HONOR_COST[city.level])
+    expect(state.gold).toBe(beforeGold + FACTION_WAR_GOLD_REWARD[city.level])
   })
 })

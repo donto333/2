@@ -303,11 +303,12 @@ function legacyCityDefenseFloor(cityId) {
   return Math.ceil((CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]) * TERRITORY_TEST_WEAKENING_RATIO);
 }
 const CITY_LEVEL_BY_ID = {
-  chengdu: 4, hanzhong: 4, xiangyang: 4, jianye: 4, xuchang: 4, luoyang: 5, ye: 4, chenliu: 2, puyang: 2, wancheng: 2,
-  jiangling: 4, yiling: 2, changsha: 3, lingling: 1, guiyang: 1, wujun: 3, kuaiji: 2, poyang: 2, hefei: 3, shouchun: 4,
-  jiujiang: 2, tianshui: 2, wuwei: 1, fucheng: 2, xindu: 1, changan: 4, meixian: 2, anding: 2, jinyang: 3, pingyuan: 2,
-  beihai: 2, langya: 2, xiapi: 3, guangling: 2, lujiang: 2, shangyong: 2, xinye: 2, jiangxia: 2, wuling: 1, badong: 2,
-  jianning: 1, yunnan: 1, jiaozhi: 1, shixing: 1, nanhai: 1, jianan: 1, yongchang: 1, bohai: 2
+  chengdu: 4, hanzhong: 4, xiangyang: 4, jianye: 4, xuchang: 4, luoyang: 5, ye: 4, chenliu: 2, puyang: 1, wancheng: 3,
+  jiangling: 4, yiling: 3, changsha: 3, lingling: 2, guiyang: 2, wujun: 1, kuaiji: 2, poyang: 1, hefei: 1, shouchun: 4,
+  jiujiang: 2, tianshui: 3, wuwei: 2, fucheng: 1, xindu: 1, changan: 4, meixian: 3, anding: 2, jinyang: 1, pingyuan: 1,
+  beihai: 2, langya: 3, xiapi: 3, guangling: 1, lujiang: 2, shangyong: 2, xinye: 3, jiangxia: 3, wuling: 2, badong: 2,
+  jianning: 1, yunnan: 2, jiaozhi: 2, shixing: 2, nanhai: 2, jianan: 2, yongchang: 2, bohai: 2,
+  yuzhang: 2, linhai: 2, qichun: 2, bajun: 2, baxi: 2, shangdang: 1, hejian: 2
 };
 function cityDefenseForLevel(level) { return CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]; }
 const FACTION_TERRITORY_SEED = [
@@ -315,12 +316,13 @@ const FACTION_TERRITORY_SEED = [
   ["luoyang", "중립", 92, 88], ["ye", "위나라", 86, 84], ["chenliu", "중립", 57, 61], ["puyang", "중립", 64, 58], ["wancheng", "중립", 70, 67],
   ["jiangling", "중립", 76, 73], ["yiling", "중립", 68, 55], ["changsha", "중립", 63, 71], ["lingling", "중립", 46, 49], ["guiyang", "중립", 52, 45],
   ["wujun", "중립", 73, 78], ["kuaiji", "중립", 66, 69], ["poyang", "중립", 59, 62], ["hefei", "중립", 88, 64], ["shouchun", "중립", 79, 68],
-  ["jiujiang", "중립", 55, 57], ["tianshui", "중립", 71, 53], ["wuwei", "중립", 61, 42], ["fucheng", "중립", 58, 51], ["xindu", "중립", 49, 47],
+  ["jiujiang", "중립", 55, 57], ["tianshui", "중립", 71, 53], ["wuwei", "중립", 61, 42], ["fucheng", "중립", 58, 66], ["xindu", "중립", 49, 62],
   ["changan", "중립", 88, 86], ["meixian", "중립", 64, 55], ["anding", "중립", 62, 48], ["jinyang", "중립", 75, 63], ["pingyuan", "중립", 58, 59],
   ["beihai", "중립", 60, 61], ["langya", "중립", 63, 57], ["xiapi", "중립", 72, 70], ["guangling", "중립", 61, 65], ["lujiang", "중립", 66, 60],
   ["shangyong", "중립", 70, 52], ["xinye", "중립", 59, 58], ["jiangxia", "중립", 65, 64], ["wuling", "중립", 50, 46], ["badong", "중립", 67, 50],
   ["jianning", "중립", 54, 42], ["yunnan", "중립", 52, 39], ["jiaozhi", "중립", 48, 44], ["shixing", "중립", 47, 41], ["nanhai", "중립", 45, 43],
-  ["jianan", "중립", 46, 44], ["yongchang", "중립", 48, 40], ["bohai", "중립", 60, 58]
+  ["jianan", "중립", 46, 44], ["yongchang", "중립", 48, 40], ["bohai", "중립", 60, 58],
+  ["yuzhang", "중립", 50, 62], ["linhai", "중립", 50, 54], ["qichun", "중립", 50, 52], ["bajun", "중립", 50, 76], ["baxi", "중립", 50, 66], ["shangdang", "중립", 50, 52], ["hejian", "중립", 50, 54]
 ].map(([cityId, owner, _legacyDefense, prosperity]) => ({ cityId, owner, conquestProgress: 0, defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[cityId]), prosperity, version: 1 }));
 const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.cityId));
 const NEUTRAL_AI_TICK_MS = 10 * 60 * 1000;
@@ -489,7 +491,9 @@ async function ensureFactionTerritories(db) {
     // 도시 단계가 올랐는데(2026.10.17 한중 · 허창 · 수춘 · 강릉) 공성 진전이 없는 중립 도시는 성벽을 새 최대치로
     const max = cityDefenseForLevel(CITY_LEVEL_BY_ID[row.cityId] ?? 1);
     const fullOldWall = Object.values(CITY_DEFENSE_BY_LEVEL).includes(Number(row.defense)) && Number(row.conquestProgress) === 0;
-    if (Number(row.defense) < max && Number(row.defense) !== floor && ((row.owner === "중립" && Number(row.conquestProgress) === 0) || fullOldWall)) {
+    // 단계가 내려간 도시(2026.10.17 재배치)는 새 최대치를 넘지 않게
+    const neutralFresh = row.owner === "중립" && Number(row.conquestProgress) === 0 && Number(row.defense) !== max;
+    if (Number(row.defense) > max || (Number(row.defense) !== floor && (neutralFresh || (fullOldWall && Number(row.defense) < max)))) {
       await db.update(factionTerritoryStates).set({ defense: max }).where(eq(factionTerritoryStates.cityId, row.cityId));
       continue;
     }
