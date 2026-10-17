@@ -11,7 +11,7 @@ describe('덱 유형 상성(영토전 · 유저 대련)', () => {
       const edges = ARCHETYPES.filter(other => other !== mine).map(other => styleEdge(mine, other))
       expect(edges.filter(edge => edge > 0)).toHaveLength(2)
       expect(edges.filter(edge => edge < 0)).toHaveLength(2)
-      for (const other of ARCHETYPES) expect(styleEdge(mine, other)).toBe(-styleEdge(other, mine))
+      for (const other of ARCHETYPES) expect(styleEdge(mine, other) + styleEdge(other, mine)).toBe(0)
       expect(STYLE_BEATS[mine]).not.toContain(mine)
     }
   })
