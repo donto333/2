@@ -38,8 +38,8 @@ export interface HeroLook {
   rider?: string
 }
 
-/** 천명 무장 전용 기수 모델(Tripo로 만든 원본 모델을 기마 모델 자세에 맞춰 구움, 2026.10.17) — 조운은 아직 없음 */
-export const TIANMING_RIDERS = new Set(['guan-yu', 'zhuge-liang', 'lu-bu', 'zhou-yu', 'simayi', 'xiahou-dun', 'liu-bei', 'cao-cao', 'sun-quan', 'sun-ce', 'lu-xun', 'zhang-liao', 'yuan-shao', 'dong-zhuo', 'zhang-jiao'])
+/** 천명 무장 전용 기수 모델(Tripo로 만든 원본 모델을 기마 모델 자세에 맞춰 구움, 2026.10.17) — 천명 16명 모두 */
+export const TIANMING_RIDERS = new Set(['guan-yu', 'zhao-yun', 'zhuge-liang', 'lu-bu', 'zhou-yu', 'simayi', 'xiahou-dun', 'liu-bei', 'cao-cao', 'sun-quan', 'sun-ce', 'lu-xun', 'zhang-liao', 'yuan-shao', 'dong-zhuo', 'zhang-jiao'])
 /** 전용 기수 모델이 있는 무장(여성 무장 + 천명 무장) — rider-models.ts */
 export const RIDER_MODELS = new Set(['sun-shangxiang', 'xiao-qiao', 'guan-yinping', 'zhu-rong', 'diao-chan', 'da-qiao', 'cai-wenji', ...TIANMING_RIDERS])
 /** 전용 기수 무장이 손에 쥐는 것: 책사는 깃부채(주유는 검) */

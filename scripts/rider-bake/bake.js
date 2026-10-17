@@ -6,10 +6,27 @@ const loader = new GLTFLoader()
 const draco = new DRACOLoader(); draco.setDecoderPath('/assets/draco/'); loader.setDRACOLoader(draco)
 const strip = name => name.replace(/^mixamorig:?/, '')
 async function load(url) { const g = await loader.loadAsync(url); g.scene.updateMatrixWorld(true); let m = null; g.scene.traverse(n => { if (n.isSkinnedMesh && !m && !n.userData.rider) m = n }); let plain = null; g.scene.traverse(n => { if (n.isMesh && !plain) plain = n }); return { g, m, plain } }
-function joints(mesh) {
+function joints(mesh, rest = false) {
   const out = new Map()
-  mesh.skeleton.bones.forEach((bone, i) => { const w = new THREE.Matrix4().copy(mesh.skeleton.boneInverses[i]).invert(); out.set(strip(bone.name), { i, pos: new THREE.Vector3().setFromMatrixPosition(w) }) })
+  if (rest) for (const bone of mesh.skeleton.bones) { let top = bone; while (top.parent) top = top.parent; top.updateMatrixWorld(true) }
+  // rest: 지금 놓인 뼈 위치(원본 모델) — 역바인드 행렬이 메시와 돌아가 있는 파일도 있어서 실제 보이는 자세를 기준으로 한다
+  mesh.skeleton.bones.forEach((bone, i) => { const w = rest ? bone.matrixWorld : new THREE.Matrix4().copy(mesh.skeleton.boneInverses[i]).invert(); out.set(strip(bone.name), { i, pos: new THREE.Vector3().setFromMatrixPosition(w) }) })
   return out
+}
+/** 원본 메시를 지금 뼈 자세로 스키닝한 위치 · 법선(월드) */
+function restSkin(mesh) {
+  const geo = mesh.geometry, pos = geo.getAttribute('position'), nor = geo.getAttribute('normal'), si = geo.getAttribute('skinIndex'), sw = geo.getAttribute('skinWeight')
+  mesh.skeleton.update()
+  const mats = mesh.skeleton.bones.map((bone, i) => new THREE.Matrix4().multiplyMatrices(bone.matrixWorld, mesh.skeleton.boneInverses[i]).multiply(mesh.bindMatrix))
+  const P = [], N = [], m = new THREE.Matrix4(), v = new THREE.Vector3(), n = new THREE.Vector3()
+  for (let k = 0; k < pos.count; k++) {
+    const e = new Float32Array(16)
+    for (let c = 0; c < 4; c++) { const w = sw.getComponent(k, c); if (!w) continue; const me = mats[si.getComponent(k, c)].elements; for (let t = 0; t < 16; t++) e[t] += me[t] * w }
+    m.fromArray(e)
+    P.push(v.fromBufferAttribute(pos, k).applyMatrix4(m).clone())
+    N.push(n.fromBufferAttribute(nor, k).applyMatrix3(new THREE.Matrix3().setFromMatrix4(m)).normalize().clone())
+  }
+  return { P, N }
 }
 // 방향(뼈 → 자식): 몸통은 두 축으로 맞춘다
 const CHILD = { Hips: 'Spine', Spine: 'Spine1', Spine1: 'Spine2', Spine2: 'Neck', Neck: 'Head', Head: 'HeadTop_End' }
@@ -42,6 +59,11 @@ function rotOf(R, name) { let n = name; while (n && !R.has(n)) n = PARENT[n]; re
 /** 원본(T자세 · mixamo 뼈)을 기마 모델 기수 자세로 굽고 기마 뼈 번호로 다시 묶는다 */
 function bake(source, donor, host) {
   const src = joints(donor ?? source.m)
+  // 어떤 파일은 역바인드 뼈대가 메시와 Y축으로 돌아가 있다: 왼손→오른손이 +X가 되게 뼈 위치를 돌려 맞춘다
+  const lr = src.get('LeftHand').pos.clone().sub(src.get('RightHand').pos)
+  const yaw = Math.atan2(-lr.z, lr.x)
+  if (Math.abs(yaw) > 0.2) { const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -yaw); const c = src.get('Hips').pos.clone(); for (const j of src.values()) j.pos.sub(c).applyQuaternion(q).add(c); console.log('yaw fix', yaw.toFixed(2)) }
+  const rest = null
   const dst = joints(host)
   const geo = (source.m ?? source.plain).geometry
   const srcBind = (source.m ?? source.plain).matrixWorld.clone()
@@ -62,7 +84,7 @@ function bake(source, donor, host) {
   const nm = new THREE.Matrix3().getNormalMatrix(srcBind)
   // 뼈대 없는 모델: 비슷한 모델(donor)의 가장 가까운 점에서 가중치를 빌린다
   let borrow = null
-  if (!sIdx && donor) {
+  if (donor) {
     const dg = donor.geometry, dp = dg.getAttribute('position'), dbm = donor.bindMatrix
     const pts = []; for (let i = 0; i < dp.count; i++) pts.push(new THREE.Vector3().fromBufferAttribute(dp, i).applyMatrix4(dbm))
     const cell = 0.02, grid = new Map(); const key = (x, y, z) => `${x},${y},${z}`
@@ -73,8 +95,8 @@ function bake(source, donor, host) {
   const hostInv = host.bindMatrixInverse
   const hostNm = new THREE.Matrix3().getNormalMatrix(hostInv)
   for (let v = 0; v < n; v++) {
-    world.fromBufferAttribute(pos, v).applyMatrix4(srcBind)
-    nv.fromBufferAttribute(nor, v).applyMatrix3(nm).normalize()
+    if (rest) { world.copy(rest.P[v]); nv.copy(rest.N[v]) }
+    else { world.fromBufferAttribute(pos, v).applyMatrix4(srcBind); nv.fromBufferAttribute(nor, v).applyMatrix3(nm).normalize() }
     const from = borrow ? borrow(world) : v
     acc.set(0, 0, 0); accN.set(0, 0, 0)
     const slots = new Map()
@@ -107,6 +129,8 @@ window.__bake = async (file, donorFile, opts = {}) => {
   const host = await load('/assets/models/cavalry.glb')
   const source = await load(`/up/${file}`)
   const donor = donorFile ? (await load(`/up/${donorFile}`)).m : null
+  // 뼈 가중치가 망가진 파일(전부 엉덩이뼈 등): 뼈대 없는 모델처럼 donor에서 가중치를 빌린다
+  if (donor && source.m) source.m = null
   const geo = bake(source, source.m ? null : donor, host.m)
   window.__last = { geo, material: (source.m ?? source.plain).material, host }
   return { count: geo.getAttribute('position').count, index: geo.index.count, P: b64(geo.getAttribute('position').array), N: b64(geo.getAttribute('normal').array), U: b64(geo.getAttribute('uv').array), J: b64(geo.getAttribute('skinIndex').array), W: b64(geo.getAttribute('skinWeight').array), I: b64(geo.index.array instanceof Uint32Array ? geo.index.array : new Uint32Array(geo.index.array)) }
