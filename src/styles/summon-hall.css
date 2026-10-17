@@ -7,7 +7,7 @@
 .sh-bars::after { bottom: 0; }
 .sh-bars.is-on::before, .sh-bars.is-on::after { height: 10vh; }
 
-.sh-intro { position: absolute; left: 0; right: 0; top: 16%; z-index: 3; display: grid; justify-items: center; gap: 10px; padding-inline: 16px; text-align: center; pointer-events: none; opacity: 0; transition: opacity .9s; }
+.sh-intro { position: absolute; left: 0; right: 0; bottom: calc(10% + env(safe-area-inset-bottom, 0px)); z-index: 3; display: grid; justify-items: center; gap: 10px; padding-inline: 16px; text-align: center; pointer-events: none; opacity: 0; transition: opacity .9s; }
 .sh-intro.is-on { opacity: 1; }
 .sh-intro b { font: 700 clamp(26px, 4.4vw, 46px) 'Gowun Batang', serif; letter-spacing: .32em; padding-left: .32em; color: #fff2cf; text-shadow: 0 0 24px rgba(232, 194, 122, .55), 0 2px 8px #000; }
 .sh-intro span { font: 400 clamp(13px, 1.6vw, 16px) 'Gowun Batang', serif; letter-spacing: .2em; color: #d8cdb2; text-shadow: 0 1px 6px #000; }

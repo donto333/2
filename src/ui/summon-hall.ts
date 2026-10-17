@@ -144,6 +144,9 @@ class SummonHall {
   private key!: THREE.SpotLight
   private flash!: THREE.PointLight
   private focus!: THREE.SpotLight
+  private jadeLight!: THREE.PointLight
+  private jadeChunk!: THREE.BufferGeometry
+  private jadeChunkMat!: THREE.MeshStandardMaterial
   private wall!: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>
   private mainShaft!: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>
   private braziers: Array<{ g: THREE.Group; flame: THREE.Mesh; light: THREE.PointLight; base: number }> = []
@@ -168,7 +171,7 @@ class SummonHall {
     this.layer.className = `summon-hall summon-ceremony summon-ceremony--${kind}`
     this.layer.innerHTML = `<canvas class="sh-canvas" aria-label="${kind === 'summon' ? '무장 모집 연출' : '장비 뽑기 연출'}"></canvas>
       <div class="sh-bars"></div>
-      <div class="sh-intro"><b>${kind === 'summon' ? '천명의 전당' : '보물의 전당'}</b><span>${kind === 'summon' ? '옥패의 부름에 석상이 깨어난다' : '봉인석이 깨지며 보물이 모습을 드러낸다'}</span></div>
+      <div class="sh-intro"><b>옥패의 부름</b><span>${kind === 'summon' ? '천명의 전당에서 석상이 깨어난다' : '보물의 전당에서 봉인석이 깨어난다'}</span></div>
       <div class="sh-caption" aria-live="polite"><span class="sh-caption__grade"></span><h2 class="sh-caption__name"></h2><div class="sh-caption__rule"><i></i></div><span class="sh-caption__sub"></span></div>
       <p class="sh-tap" hidden>화면을 누르면 넘어갑니다</p>
       <button class="sh-skip" type="button">건너뛰기 ▸▸</button>`
@@ -432,6 +435,7 @@ class SummonHall {
     const front = this.add(new THREE.DirectionalLight(0xffe8d0, 0.35)); front.position.set(2, 5, 12)
     this.flash = this.add(new THREE.PointLight(0xffffff, 0, 14, 2))
     this.focus = this.add(new THREE.SpotLight(0xffd88a, 0, 0, 0.34, 0.8, 2)); this.add(this.focus.target)
+    this.jadeLight = this.add(new THREE.PointLight(0x7dffc0, 0, 6, 2))
   }
 
   private buildEffects(): void {
@@ -585,6 +589,79 @@ class SummonHall {
     return { group, card, glow, ring }
   }
 
+  // ── 옥패 ───────────────────────────────────────────────
+  /** 게임의 옥패(모서리를 깎은 녹색 옥 · 테두리 조각 · 가운데 고리 · 붉은 고리와 술) */
+  private makeToken(): { group: THREE.Group; body: THREE.MeshPhysicalMaterial; ring: THREE.MeshPhysicalMaterial; u: { [key: string]: Uniform<number>; uCrack: Uniform<number>; uGlow: Uniform<number>; uTime: Uniform<number> } } {
+    const u = { uCrack: { value: 0 }, uGlow: { value: 0 }, uTime: { value: 0 } }
+    const W = 0.82, H = 1.1, ch = 0.17, shape = new THREE.Shape()
+    shape.moveTo(-W / 2 + ch, -H / 2); shape.lineTo(W / 2 - ch, -H / 2); shape.lineTo(W / 2, -H / 2 + ch); shape.lineTo(W / 2, H / 2 - ch); shape.lineTo(W / 2 - ch, H / 2); shape.lineTo(-W / 2 + ch, H / 2); shape.lineTo(-W / 2, H / 2 - ch); shape.lineTo(-W / 2, -H / 2 + ch); shape.closePath()
+    const geo = this.own(new THREE.ExtrudeGeometry(shape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.035, bevelSize: 0.03, bevelSegments: 4 })); geo.translate(0, 0, -0.05)
+    // 조각 무늬: 높이 그림 → 법선 그림
+    const S = 512, c = document.createElement('canvas'); c.width = c.height = S
+    const g = c.getContext('2d')!
+    g.fillStyle = '#808080'; g.fillRect(0, 0, S, S); g.strokeStyle = '#303030'; g.lineWidth = 10
+    const oct = (m: number, k: number) => { g.beginPath(); g.moveTo(m + k, m); g.lineTo(S - m - k, m); g.lineTo(S - m, m + k); g.lineTo(S - m, S - m - k); g.lineTo(S - m - k, S - m); g.lineTo(m + k, S - m); g.lineTo(m, S - m - k); g.lineTo(m, m + k); g.closePath(); g.stroke() }
+    oct(40, 60); g.lineWidth = 5; oct(62, 54)
+    g.lineWidth = 6; g.strokeStyle = '#4a4a4a'
+    for (const [x, y, f] of [[130, 120, 1], [382, 120, -1], [130, 392, 1], [382, 392, -1]]) { g.beginPath(); for (let t = 0; t < 9; t += 0.1) { const r = 6 + t * 5; g.lineTo(x + Math.cos(t * f) * r, y + Math.sin(t * f) * r) } g.stroke() }
+    g.lineWidth = 4; g.beginPath(); g.moveTo(170, 256); g.lineTo(342, 256); g.stroke()
+    const img = g.getImageData(0, 0, S, S).data, out = g.createImageData(S, S), Hh = (x: number, y: number) => img[(((y + S) % S) * S + ((x + S) % S)) * 4] / 255, n = new THREE.Vector3()
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { n.set(-(Hh(x + 1, y) - Hh(x - 1, y)) * 4, (Hh(x, y + 1) - Hh(x, y - 1)) * 4, 1).normalize(); const i = (y * S + x) * 4; out.data[i] = (n.x * 0.5 + 0.5) * 255; out.data[i + 1] = (n.y * 0.5 + 0.5) * 255; out.data[i + 2] = (n.z * 0.5 + 0.5) * 255; out.data[i + 3] = 255 }
+    g.putImageData(out, 0, 0)
+    const carve = this.own(new THREE.CanvasTexture(c)); carve.repeat.set(1 / W, 1 / H); carve.offset.set(0.5, 0.5)
+    const glassy = this.q === 'high'
+    const body = this.own(new THREE.MeshPhysicalMaterial({ color: 0x1f7a52, roughness: 0.18, metalness: 0, transmission: glassy ? 0.55 : 0, thickness: 0.8, ior: 1.6, attenuationColor: new THREE.Color(0x0e5a3c), attenuationDistance: 0.35, clearcoat: 1, clearcoatRoughness: 0.12, normalMap: carve, normalScale: new THREE.Vector2(1.2, 1.2), emissive: 0x2fd98a, emissiveIntensity: 0, sheen: 0.4, sheenColor: new THREE.Color(0x9fffd0) }))
+    body.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, u)
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vOP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvOP = position;')
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\nuniform float uCrack, uGlow, uTime; varying vec3 vOP;${VORONOI}`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          vec2 vc = vor(vOP * 9.); float spread = uCrack * 1.1 - length(vOP.xy) + (vc.y - .5) * .1;
+          float cr = (1. - smoothstep(0., .06 + fwidth(vc.x), vc.x)) * smoothstep(0., .1, spread);
+          float inner = .5 + .5 * sin(uTime * 2. + vOP.y * 6.);
+          totalEmissiveRadiance = emissive * (.55 + .45 * inner) + vec3(.8, 1., .9) * cr * uGlow;`)
+    }
+    body.customProgramCacheKey = () => 'hall-jade'
+    const group = new THREE.Group()
+    group.add(new THREE.Mesh(geo, body))
+    const ring = this.own(new THREE.MeshPhysicalMaterial({ color: 0x57b68e, roughness: 0.2, transmission: glassy ? 0.3 : 0, thickness: 0.3, clearcoat: 1, emissive: 0x3dffa8, emissiveIntensity: 0 }))
+    const disc = new THREE.Mesh(this.own(new THREE.TorusGeometry(0.13, 0.045, 16, 40)), ring); disc.position.z = 0.1; group.add(disc)
+    const dot = new THREE.Mesh(this.own(new THREE.SphereGeometry(0.05, 16, 12)), ring); dot.position.z = 0.1; dot.scale.z = 0.5; group.add(dot)
+    const red = this.own(new THREE.MeshStandardMaterial({ color: 0xb3261c, roughness: 0.55 }))
+    const loop = new THREE.Mesh(this.own(new THREE.TorusGeometry(0.085, 0.022, 10, 28)), red); loop.position.y = H / 2 + 0.12; group.add(loop)
+    const knot = new THREE.Mesh(this.own(new THREE.CylinderGeometry(0.035, 0.045, 0.08, 12)), red); knot.position.y = -H / 2 - 0.07; group.add(knot)
+    const tassel = new THREE.Mesh(this.own(new THREE.CylinderGeometry(0.04, 0.09, 0.34, 16, 1, true)), this.own(new THREE.MeshStandardMaterial({ color: 0xa31f17, roughness: 0.9, side: THREE.DoubleSide }))); tassel.position.y = -H / 2 - 0.28; group.add(tassel)
+    this.add(group)
+    this.tokenTime = u.uTime
+    this.tokenGroup = group
+    // 깨질 때 튀는 옥 조각
+    const base = new THREE.IcosahedronGeometry(1, 0); base.deleteAttribute('normal'); base.deleteAttribute('uv')
+    const merged = mergeVertices(base), p = merged.attributes.position
+    for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) * rand(0.6, 1.2), p.getY(i) * rand(0.6, 1.3), p.getZ(i) * rand(0.3, 0.6))
+    this.jadeChunk = this.own(merged.toNonIndexed()); this.jadeChunk.computeVertexNormals(); base.dispose(); merged.dispose()
+    this.jadeChunkMat = this.own(new THREE.MeshStandardMaterial({ color: 0x48b088, roughness: 0.2, emissive: 0x6dffbe, emissiveIntensity: 2.5, flatShading: true }))
+    return { group, body, ring, u }
+  }
+  private tokenTime: Uniform<number> | null = null
+  private tokenGroup: THREE.Group | null = null
+  private burstJade(at: THREE.Vector3): void {
+    for (let i = 0; i < 24; i++) {
+      const c = this.add(new THREE.Mesh(this.jadeChunk, this.jadeChunkMat)); c.scale.setScalar(rand(0.02, 0.05)); c.position.copy(at)
+      const v = new THREE.Vector3(rand(-3, 3), rand(-1, 3), rand(-2, 2))
+      void this.tween(1, () => { c.position.addScaledVector(v, 1 / 60); v.y -= 0.15; c.rotation.x += 0.2; c.scale.multiplyScalar(0.985) }, linear).then(() => this.scene.remove(c))
+    }
+  }
+  /** 옥패 조각 하나가 포물선을 그리며 석상으로 날아간다 */
+  private flyShard(from: THREE.Vector3, to: THREE.Vector3, dur: number): Promise<void> {
+    const m = this.add(new THREE.Mesh(this.jadeChunk, this.jadeChunkMat)); m.scale.setScalar(0.06)
+    const glow = new THREE.Sprite(this.own(new THREE.SpriteMaterial({ map: this.glowTex, color: 0xa8ffd8, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.75 })))
+    glow.scale.set(5, 5, 1); m.add(glow)
+    const ctrl = from.clone().lerp(to, 0.4); ctrl.y = Math.max(from.y, to.y) + 3 + rand(-0.5, 1.5); ctrl.x += rand(-1.5, 1.5)
+    const curve = new THREE.QuadraticBezierCurve3(from.clone(), ctrl, to.clone())
+    m.position.copy(from)
+    return this.tween(dur, k => { curve.getPoint(k, m.position); m.rotation.x += 0.3; m.rotation.y += 0.2; this.sparks.emit(m.position, 2, 0x9fffd0, { speed: 0.2, up: 0.1, life: 0.6, spread: 0.05, spreadY: 0.05, gravity: 0 }) }, x => x * x * (3 - 2 * x)).then(() => { this.scene.remove(m) })
+  }
+
   // ── 시간 · 보간 ─────────────────────────────────────────
   private tween(dur: number, fn: (k: number) => void, ease: (x: number) => number = easeInOut): Promise<void> {
     return new Promise(res => this.tweens.push({ t: 0, dur: Math.max(dur, 1e-4), fn, ease, res }))
@@ -714,16 +791,42 @@ class SummonHall {
     this.renderer.setAnimationLoop(() => this.frame())
     const W = this.wideShot(), n = this.entries.length
     try {
-      // 1) 천장 빛기둥을 따라 내려오며 전당 등장
-      this.camPos.set(0, 11.5, 3.5); this.camLook.set(0, 4, -4)
+      // 1) 불이 가라앉은 전당 한가운데 옥패가 떠오른다
+      const token = this.makeToken()
+      const tp = new THREE.Vector3(0, 2.1, 0.6)
+      token.group.position.copy(tp); token.group.rotation.y = -0.5
+      void this.lights(0.22, 0.01)
+      for (const b of this.braziers) b.base = 3
+      this.jadeLight.position.set(0.7, 2.5, 1.6); this.jadeLight.intensity = 1.2
+      const closeFov = this.portrait() ? 50 : 32
+      this.camPos.set(0.45, 2.25, 5.4); this.camLook.copy(tp).add(new THREE.Vector3(0, 0.08, 0)); void this.zoom(closeFov, 0.01)
       this.ui.intro.classList.add('is-on')
-      await this.moveCam(W.pos, W.look, 2.6); this.check()
+      void this.moveCam(new THREE.Vector3(-0.3, 2.18, 4.8), this.camLook.clone(), 2.5, linear)
+      void this.tween(2.5, k => { token.group.rotation.y = -0.5 + k * 1.1; token.body.emissiveIntensity = 0.05 + k * 0.3; token.ring.emissiveIntensity = k * 0.35; this.jadeLight.intensity = 1.2 + k * 1.6 }, easeInOut)
+      await this.wait(1.4); this.check()
       this.ui.intro.classList.remove('is-on')
-      // 2) 모든 석상에 흰 실금 — 결과는 아직 모름
+      await this.tween(1.0, k => { token.u.uCrack.value = k; token.u.uGlow.value = k * 0.7; token.group.position.y = tp.y + Math.sin(k * 20) * 0.004 }, easeInOut); this.check()
+      // 2) 옥패가 깨져 빛 조각이 되고, 조각이 닿는 석상마다 흰 실금이 간다
+      token.group.visible = false; this.jadeLight.intensity = 0
+      this.flash.position.copy(tp); this.flash.color.set(0x9fffd0)
+      void this.tween(0.5, k => { this.flash.intensity = 25 * (1 - k) }, linear)
+      const gu0 = this.grade.uniforms as unknown as Record<string, Uniform<number>>
+      ;(this.grade.uniforms.uFlashColor.value as THREE.Color).set(0.75, 1, 0.88)
+      void this.tween(0.35, k => { gu0.uFlash.value = (1 - k) * 0.14 }, easeOut).then(() => (this.grade.uniforms.uFlashColor.value as THREE.Color).set(1, 0.95, 0.85))
+      this.burstJade(tp)
+      this.sparks.emit(tp, 50, 0x9fffd0, { speed: 2, up: 1.5, life: 0.9, spread: 0.2, spreadY: 0.3, gravity: -2 })
       const hairline = this.kind === 'forge' ? { spread: 0.28, glow: 0.9 } : { spread: 0.38, glow: 1.6 }
-      this.statues.forEach((s, i) => { void this.wait(i * 0.08).then(() => this.setCrack(s, { color: '#fff1d6', ...hairline }, 0.9)) })
-      for (const b of this.braziers) void this.tween(0.6, k => { b.light.intensity = b.base * (1 + Math.sin(k * Math.PI) * 0.8) })
-      await this.wait(n === 1 ? 1.1 : 1.5); this.check()
+      this.statues.forEach((s, i) => {
+        void this.wait(i * 0.05).then(() => this.flyShard(tp, s.center, 1.25 + Math.random() * 0.3)).then(() => {
+          this.sparks.emit(s.center, 24, 0x9fffd0, { speed: 1.2, up: 1, life: 0.7, spread: 0.3, spreadY: 0.8, gravity: -2 })
+          return this.setCrack(s, { color: '#fff1d6', ...hairline }, 0.6)
+        })
+      })
+      for (const b of this.braziers) void this.tween(1.8, k => { b.base = 3 + 4 * k })
+      void this.lights(1, 1.8)
+      void this.zoom(this.baseFov, 1.6)
+      await this.moveCam(W.pos, W.look, 2.0); this.check()
+      await this.wait(0.6); this.check()
       const order = this.statues.map(s => ({ s, k: s.entry.rank + Math.random() * 0.5 })).sort((a, b) => a.k - b.k).map(o => o.s)
       const stars = order.filter(s => s.entry.star), rest = order.filter(s => !s.entry.star)
       const low = rest.filter(s => s.entry.rank <= 3), mid = rest.filter(s => s.entry.rank >= 4)
@@ -777,6 +880,8 @@ class SummonHall {
     } catch (error) {
       if (error !== SKIP) throw error
     }
+    if (this.tokenGroup) this.tokenGroup.visible = false
+    this.jadeLight.intensity = 0
     this.layer.classList.add('is-out')
     await new Promise<void>(res => window.setTimeout(res, 320))
   }
@@ -813,6 +918,7 @@ class SummonHall {
     }
     for (const m of this.animated) (m.uniforms.uTime as Uniform<number>).value = t
     this.bannerTime.value = t
+    if (this.tokenTime) this.tokenTime.value = t
     for (const b of this.braziers) { b.flame.lookAt(this.camera.position.x, b.g.position.y + 2.45, this.camera.position.z); b.light.intensity = b.base * (0.82 + Math.sin(t * 13 + b.g.position.x) * 0.08 + Math.random() * 0.14) }
     const lp = new THREE.Vector3()
     for (let i = this.chunks.length - 1; i >= 0; i--) {
