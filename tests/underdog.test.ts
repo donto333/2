@@ -34,9 +34,12 @@ describe('영토전 열세 진영 버프', () => {
   })
   it('공성에서 이기면 성벽 방어도 차감이 1.5배 · 2배가 된다', () => {
     const target = (state: StrategyState) => state.cities.find(city => city.owner === '중립' && city.id !== 'luoyang' && city.id !== 'xiangyang' && city.level >= 3)!.id
-    const even = createInitialState(); even.faction = '촉한'
-    const base = resolveConquestBattle(even, target(even), true).damage
+    // 같은 판(같은 무장)에서 위나라 도시를 중립으로 돌려 버프를 끈 것과 견준다
     const last = board(8)
-    expect(resolveConquestBattle(last, target(last), true).damage / base).toBeCloseTo(2, 1)
+    const even: StrategyState = structuredClone(last)
+    even.cities.forEach(city => { if (city.owner === '위나라' && city.id !== 'ye') city.owner = '중립' })
+    expect(underdogBuff(even)).toBeNull()
+    const base = resolveConquestBattle(even, target(even), true).damage
+    expect(resolveConquestBattle(last, target(last), true).damage / base).toBeCloseTo(2, 2)
   })
 })
