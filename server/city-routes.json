@@ -58,6 +58,11 @@
     ["shixing", "nanhai"],
     ["nanhai", "jiaozhi"],
     ["jianning", "jiaozhi"],
-    ["jianye", "poyang"]
+    ["jianye", "poyang"],
+    ["xindu", "badong"],
+    ["xindu", "jianning"],
+    ["xiapi", "shouchun"],
+    ["kuaiji", "jianan"],
+    ["jianan", "nanhai"]
   ]
 }

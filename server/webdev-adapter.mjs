@@ -307,7 +307,7 @@ const CITY_LEVEL_BY_ID = {
   jiangling: 3, yiling: 2, changsha: 3, lingling: 1, guiyang: 1, wujun: 3, kuaiji: 2, poyang: 2, hefei: 3, shouchun: 3,
   jiujiang: 2, tianshui: 2, wuwei: 1, fucheng: 2, xindu: 1, changan: 4, meixian: 2, anding: 2, jinyang: 3, pingyuan: 2,
   beihai: 2, langya: 2, xiapi: 3, guangling: 2, lujiang: 2, shangyong: 2, xinye: 2, jiangxia: 2, wuling: 1, badong: 2,
-  jianning: 1, yunnan: 1, jiaozhi: 1, shixing: 1, nanhai: 1
+  jianning: 1, yunnan: 1, jiaozhi: 1, shixing: 1, nanhai: 1, jianan: 1
 };
 function cityDefenseForLevel(level) { return CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]; }
 const FACTION_TERRITORY_SEED = [
@@ -319,7 +319,8 @@ const FACTION_TERRITORY_SEED = [
   ["changan", "중립", 88, 86], ["meixian", "중립", 64, 55], ["anding", "중립", 62, 48], ["jinyang", "중립", 75, 63], ["pingyuan", "중립", 58, 59],
   ["beihai", "중립", 60, 61], ["langya", "중립", 63, 57], ["xiapi", "중립", 72, 70], ["guangling", "중립", 61, 65], ["lujiang", "중립", 66, 60],
   ["shangyong", "중립", 70, 52], ["xinye", "중립", 59, 58], ["jiangxia", "중립", 65, 64], ["wuling", "중립", 50, 46], ["badong", "중립", 67, 50],
-  ["jianning", "중립", 54, 42], ["yunnan", "중립", 52, 39], ["jiaozhi", "중립", 48, 44], ["shixing", "중립", 47, 41], ["nanhai", "중립", 45, 43]
+  ["jianning", "중립", 54, 42], ["yunnan", "중립", 52, 39], ["jiaozhi", "중립", 48, 44], ["shixing", "중립", 47, 41], ["nanhai", "중립", 45, 43],
+  ["jianan", "중립", 46, 44]
 ].map(([cityId, owner, _legacyDefense, prosperity]) => ({ cityId, owner, conquestProgress: 0, defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[cityId]), prosperity, version: 1 }));
 const FACTION_TERRITORY_IDS = new Set(FACTION_TERRITORY_SEED.map(city => city.cityId));
 const NEUTRAL_AI_TICK_MS = 10 * 60 * 1000;
