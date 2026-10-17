@@ -14,6 +14,7 @@ import { ATTENDANCE_REWARDS, type AttendanceReward } from '../../server/attendan
 import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
 import { BATTLE_EFFECTS, type BattleEffectId } from '../game/battle-effects'
+import { fxGlyph, fxSeal } from './fx-icons'
 import { BONDS, skillDefFor, type SkillFx } from '../game/skills'
 import { ARCHETYPE_META, recommendDecks, type ComboAdvice } from '../game/formation-advice'
 import { ensureIconSprite, icon, type IconName } from './icons'
@@ -1902,7 +1903,7 @@ export class StrategyUI {
   private unitEffectIcons(chips: UnitEffectChip[]): string {
     const shown = chips.slice(0, 4)
     const more = chips.length - shown.length
-    return shown.map(chip => `<i class="bt-fx__icon is-${chip.kind}" title="${escapeHtml(`${tr(chip.name)} · ${tr(chip.description)} · ${Math.ceil(chip.remaining)}${tr('초')}`)}" aria-label="${escapeHtml(tr(chip.name))}">${chip.icon}</i>`).join('') + (more > 0 ? `<i class="bt-fx__more">+${more}</i>` : '')
+    return shown.map(chip => `<i class="bt-fx__icon is-${chip.kind}" title="${escapeHtml(`${tr(chip.name)} · ${tr(chip.description)} · ${Math.ceil(chip.remaining)}${tr('초')}`)}" aria-label="${escapeHtml(tr(chip.name))}">${fxGlyph(chip.id)}</i>`).join('') + (more > 0 ? `<i class="bt-fx__more">+${more}</i>` : '')
   }
 
   private attributeRows(general: General, scale = 0): string {
@@ -1928,7 +1929,7 @@ export class StrategyUI {
     const formation = new Set(this.renderedState?.formation ?? [])
     const buttons = bonds.map(bond => {
       const active = bond.members.filter(id => formation.has(id)).length >= bond.need
-      return `<button type="button" class="skill-fx-chip is-bond ${active ? 'is-active' : ''}" data-action="bond-info" data-bond="${bond.id}"><b>🤝</b>${escapeHtml(tr(bond.name))}${active ? '<small>발동 중</small>' : ''}</button>`
+      return `<button type="button" class="skill-fx-chip is-bond ${active ? 'is-active' : ''}" data-action="bond-info" data-bond="${bond.id}">${fxSeal('bond', 'bond')}<span class="fx-name">${escapeHtml(tr(bond.name))}</span>${active ? '<small>발동 중</small>' : ''}</button>`
     }).join('')
     return `<div class="skill-detail-wide skill-fx skill-bond"><small>인연 <em>눌러서 효과 보기</em></small><div class="skill-fx-chips">${buttons}</div><p class="skill-fx-info" data-effect-info hidden></p></div>`
   }
@@ -1945,7 +1946,7 @@ export class StrategyUI {
     if (!chips.size) return ''
     const buttons = [...chips.values()].map(chip => {
       const effect = BATTLE_EFFECTS[chip.id]
-      return `<button type="button" class="skill-fx-chip is-${effect.kind}" data-action="effect-info" data-effect="${chip.id}" data-sec="${chip.sec}" data-awaken="${chip.awaken ? '1' : ''}"><b>${effect.icon}</b>${escapeHtml(effect.name)}${chip.awaken ? '<small>각성</small>' : ''}</button>`
+      return `<button type="button" class="skill-fx-chip is-${effect.kind}" data-action="effect-info" data-effect="${chip.id}" data-sec="${chip.sec}" data-awaken="${chip.awaken ? '1' : ''}">${fxSeal(chip.id, effect.kind)}<span class="fx-name">${escapeHtml(effect.name)}</span>${chip.awaken ? '<small>각성</small>' : ''}</button>`
     }).join('')
     return `<div class="skill-detail-wide skill-fx"><small>버프 · 디버프 <em>눌러서 효과 보기</em></small><div class="skill-fx-chips">${buttons}</div><p class="skill-fx-info" data-effect-info hidden></p></div>`
   }
@@ -2412,6 +2413,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '효과 아이콘 고급화', '버프 · 디버프 · 인연 아이콘을 그림문자에서 금테 인장 문양으로 바꿨습니다. 버프는 비취색, 디버프는 주홍색, 인연은 금색 인장이며 버튼도 옻칠 바탕으로 바꿨습니다. 전투 중 무장 이름 옆 아이콘도 같은 인장으로 나옵니다.', '완료', 'jade'],
       ['2026.10.17', '스킬란 인연 표시', '무장 스킬 상세에 그 무장이 속한 인연(예: 유비 · 관우 · 장비의 도원결의)이 나옵니다. 누르면 효과, 필요 인원, 구성원(출전 중 · 보유 중 표시)을 볼 수 있습니다.', '완료', 'jade'],
       ['2026.10.17', '메뉴 설명 버튼', '각 메뉴 제목 옆의 (i) 표시를 없애고, 제목 오른쪽에 "○○ 설명" 버튼을 두었습니다. 누르면 그 메뉴의 설명과 주요 기능을 한 창에서 볼 수 있습니다(영토는 영토전 설명).', '완료', 'jade'],
       ['2026.10.17', '영토전 설명', '영토 · 내정 화면 위쪽에 영토전 설명 버튼이 생겼습니다. 세 진영 점령전 · 재야 · 주간 낙양전 규칙을 한 창에서 볼 수 있고, 내 진영 규칙이 강조됩니다. 낙양 이름 옆에 있던 낙양전 설명은 이 창으로 옮겼습니다.', '완료', 'jade'],
@@ -2705,7 +2707,7 @@ export class StrategyUI {
       const formation = new Set(this.renderedState?.formation ?? [])
       const members = bond.members.map(id => { const name = templateGeneral(id)?.name ?? id; return `<span class="bond-member ${formation.has(id) ? 'is-deployed' : owned.has(id) ? 'is-owned' : ''}">${escapeHtml(tr(name))}</span>` }).join('')
       const count = bond.members.filter(id => formation.has(id)).length
-      box.innerHTML = `<b>🤝 ${escapeHtml(tr(bond.name))}</b> <span>${tr(`출전 무장 중 ${bond.need}명 이상`)} · ${tr('지금')} ${count}/${bond.need}</span><br>${escapeHtml(tr(bond.desc))}<div class="bond-members">${members}</div><small class="bond-note">${tr('인연은 한 번에 하나만 적용되며, 여러 개가 성립하면 먼저 정해진 인연이 우선합니다. 금색은 출전 중, 밝은 글자는 보유 중인 무장입니다.')}</small>`
+      box.innerHTML = `<b class="fx-title">${fxSeal('bond', 'bond')}${escapeHtml(tr(bond.name))}</b> <span>${tr(`출전 무장 중 ${bond.need}명 이상`)} · ${tr('지금')} ${count}/${bond.need}</span><br>${escapeHtml(tr(bond.desc))}<div class="bond-members">${members}</div><small class="bond-note">${tr('인연은 한 번에 하나만 적용되며, 여러 개가 성립하면 먼저 정해진 인연이 우선합니다. 금색은 출전 중, 밝은 글자는 보유 중인 무장입니다.')}</small>`
     }
     else if (action === 'effect-info') {
       const effect = BATTLE_EFFECTS[button.dataset.effect as BattleEffectId]
@@ -2716,7 +2718,7 @@ export class StrategyUI {
       box.hidden = same
       box.dataset.effect = effect.id
       box.className = `skill-fx-info is-${effect.kind}`
-      box.innerHTML = `<b>${effect.icon} ${escapeHtml(tr(effect.name))}</b> <span>${tr(effect.kind === 'buff' ? '버프 · 아군에게' : '디버프 · 적에게')} · ${button.dataset.sec ?? effect.duration}${tr('초')}${button.dataset.awaken ? ` · ${tr('5성 각성 시')}` : ''}</span><br>${escapeHtml(tr(effect.description))}`
+      box.innerHTML = `<b class="fx-title">${fxSeal(effect.id, effect.kind)}${escapeHtml(tr(effect.name))}</b> <span>${tr(effect.kind === 'buff' ? '버프 · 아군에게' : '디버프 · 적에게')} · ${button.dataset.sec ?? effect.duration}${tr('초')}${button.dataset.awaken ? ` · ${tr('5성 각성 시')}` : ''}</span><br>${escapeHtml(tr(effect.description))}`
     }
     else if (action === 'guest-reset') { if (window.confirm(tr(this.account ? '이 게스트 아이디의 진행 기록을 서버에서도 모두 지우고 처음부터 시작합니다. 되돌릴 수 없습니다. 계속하시겠습니까?' : '이 기기의 게스트 진행 기록을 모두 지우고 처음부터 시작합니다. 되돌릴 수 없습니다. 계속하시겠습니까?'))) this.callbacks.onGuestReset() }
     else if (action === 'set-lang') setLang(button.dataset.value === 'en' ? 'en' : 'ko')

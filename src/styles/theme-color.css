@@ -2275,3 +2275,42 @@ body .section-heading .heading-copy { display: none !important; }
 .bond-note { display: block; margin-top: 6px; font-size: 11.5px; color: var(--cream-soft); }
 .skill-fx-info .bond-members .bond-member { display: inline-block; width: auto; flex: 0 0 auto; }
 .gcard-skill .skill-fx-info .bond-members { display: flex; grid-template-columns: none; }
+
+/* ── 버프 · 디버프 · 인연: 옻칠 바탕 + 금테 인장 ── */
+.fx-seal { position: relative; display: inline-grid; place-items: center; flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; color: #f3dfae;
+  background: radial-gradient(circle at 35% 30%, #2f7a62 0%, #154536 55%, #0a221b 100%);
+  box-shadow: 0 0 0 1px #c9a45c, 0 0 0 2px rgba(20, 12, 6, .9), 0 0 0 3px rgba(201, 164, 92, .35), inset 0 1px 2px rgba(255, 240, 200, .25); }
+.fx-seal.is-debuff { background: radial-gradient(circle at 35% 30%, #8a2a22 0%, #4d1410 55%, #220806 100%); }
+.fx-seal.is-bond { background: radial-gradient(circle at 35% 30%, #6b4a1c 0%, #33220c 55%, #140d05 100%); color: #ffe3a3; }
+.fx-seal svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 2px rgba(255, 215, 140, .35)); }
+
+html body .skill-fx-chip, html body .skill-fx-chip.is-debuff, html body .skill-fx-chip.is-bond {
+  gap: 7px; padding: 3px 12px 3px 4px; border-radius: 3px; font-family: 'Gowun Batang', serif; font-size: 12.5px; font-weight: 700; letter-spacing: .02em;
+  color: #f1e3c2; border: 1px solid rgba(201, 164, 92, .55);
+  background: linear-gradient(180deg, rgba(48, 34, 20, .95), rgba(22, 15, 9, .95));
+  box-shadow: inset 0 1px 0 rgba(255, 230, 170, .12), 0 1px 3px rgba(0, 0, 0, .45); transition: border-color .15s, box-shadow .15s, transform .15s; }
+html body .skill-fx-chip.is-buff .fx-name { color: #d9f0e2; }
+html body .skill-fx-chip.is-debuff .fx-name { color: #f6d6cc; }
+html body .skill-fx-chip.is-bond .fx-name { color: #ffe3a3; }
+html body .skill-fx-chip:hover { border-color: #e2bf72; transform: translateY(-1px); }
+html body .skill-fx-chip.is-open { border-color: #f0cf85; box-shadow: inset 0 1px 0 rgba(255, 230, 170, .2), 0 0 0 1px rgba(240, 207, 133, .5), 0 0 12px rgba(240, 190, 100, .25); }
+html body .skill-fx-chip small { margin-left: 2px; padding: 0 5px; border-left: 1px solid rgba(201, 164, 92, .45); font-family: Pretendard, sans-serif; font-size: 10.5px; color: #e6c47c; opacity: 1; }
+html body .skill-fx-chip.is-bond.is-active { border-color: #f0cf85; box-shadow: inset 0 0 0 1px rgba(240, 207, 133, .35), 0 0 12px rgba(240, 190, 100, .35); }
+html body .skill-fx-chip.is-bond.is-active .fx-seal { box-shadow: 0 0 0 1px #f0cf85, 0 0 0 2px rgba(20, 12, 6, .9), 0 0 0 3px rgba(240, 207, 133, .6), 0 0 8px rgba(255, 200, 110, .6); }
+
+html body .skill-fx-info, html body .skill-fx-info.is-debuff, html body .skill-fx-info.is-bond {
+  border-radius: 3px; border: 1px solid rgba(201, 164, 92, .3); border-left: 2px solid #c9a45c;
+  background: linear-gradient(180deg, rgba(34, 24, 14, .92), rgba(18, 12, 7, .92)); }
+html body .skill-fx-info.is-debuff { border-left-color: #b8584a; }
+.skill-fx-info .fx-title { display: inline-flex; align-items: center; gap: 7px; font-family: 'Gowun Batang', serif; color: #f6e2b0; margin-right: 4px; }
+.skill-fx-info .fx-title .fx-seal { width: 20px; height: 20px; }
+html body .skill-fx-info .bond-members .bond-member { border-radius: 3px; font-family: 'Gowun Batang', serif; }
+html body .skill-fx-info .bond-members .bond-member.is-deployed { background: linear-gradient(180deg, #f3d48d, #c99a48); color: #2a170a; }
+
+/* 전투 이름 옆 효과 아이콘도 같은 인장 */
+html body .bt-fx__icon { border-radius: 50%; color: #f3dfae; background: radial-gradient(circle at 35% 30%, #2f7a62, #0a221b); box-shadow: 0 0 0 1px #c9a45c, inset 0 1px 1px rgba(255, 240, 200, .25); }
+html body .bt-fx__icon.is-debuff { background: radial-gradient(circle at 35% 30%, #8a2a22, #220806); box-shadow: 0 0 0 1px #c9a45c, inset 0 1px 1px rgba(255, 240, 200, .25); }
+html body .bt-fx__icon svg { width: 72%; height: 72%; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 600px) { html body .bt-fx__icon { border-radius: 50%; } }
+html body .gcard-skill .skill-fx-chips { display: flex; flex-wrap: wrap; gap: 6px; grid-template-columns: none; }
+html body .gcard-skill .skill-fx-chip { width: auto; flex: 0 0 auto; display: inline-flex; align-items: center; }
