@@ -2199,8 +2199,12 @@ html body .bt-hud-row--threat.is-low > span b { color: #ff8a6a; }
 @keyframes attendance-today { 50% { transform: scale(1.08); filter: drop-shadow(0 0 8px rgba(255, 210, 120, .8)); } }
 @media (prefers-reduced-motion: reduce) { .attendance-day.is-today .attendance-day__art { animation: none; } }
 
-/* 상단: 천하 글자 위 출석 체크 버튼 */
+/* 상단: 천하 이름 오른쪽 출석 체크 메달(옻칠 원판 · 금테 · 붉은 점검 표시) */
 .brand-text { display: grid; justify-items: start; min-width: 0; }
-.brand-attendance { display: inline-flex; align-items: center; gap: 3px; margin-bottom: 1px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; line-height: 1.5; white-space: nowrap; color: #ffe3a3 !important; background: rgba(120, 70, 20, .55) !important; border: 1px solid rgba(246, 197, 109, .6) !important; cursor: pointer; }
-.brand-attendance:hover { background: rgba(160, 95, 25, .7) !important; }
+html body .brand-attendance { position: relative; flex: none; display: grid; place-items: center; width: 40px; height: 40px; margin-left: 14px; padding: 0; border-radius: 50%; cursor: pointer; color: #f0c87a; background: radial-gradient(circle at 35% 30%, #5a2a17, #2a120a 70%); border: 1.5px solid rgba(226, 182, 104, .85); box-shadow: 0 0 0 3px rgba(40, 18, 8, .85), 0 0 0 4px rgba(226, 182, 104, .35), 0 3px 8px rgba(0, 0, 0, .5); transition: transform .2s, box-shadow .2s; }
+html body .brand-attendance:hover { transform: translateY(-1px); box-shadow: 0 0 0 3px rgba(40, 18, 8, .85), 0 0 0 4px rgba(240, 200, 122, .7), 0 0 12px rgba(240, 190, 110, .45); }
+html body .brand-attendance svg { width: 24px; height: 24px; }
+.brand-attendance__count { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); padding: 0 5px; border-radius: 6px; font-size: 9.5px; font-weight: 700; line-height: 14px; white-space: nowrap; color: rgba(255, 236, 205, .85); background: linear-gradient(180deg, #a62f1f, #6e170e); border: 1px solid rgba(240, 200, 122, .7); font-variant-numeric: tabular-nums; }
+.brand-attendance__count b { color: #fff1d6; font-size: 10px; }
+@media (max-width: 760px) { html body .brand-attendance { width: 32px; height: 32px; margin-left: 8px; } html body .brand-attendance svg { width: 19px; height: 19px; } .brand-attendance__count { bottom: -8px; font-size: 9px; line-height: 12px; } }
 body .app-shell--battle .brand-attendance { display: none; }
