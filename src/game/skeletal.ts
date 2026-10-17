@@ -5,6 +5,7 @@
 import * as THREE from 'three'
 import { markShared } from './gpu-shared'
 import { cavalrySaberGeometry } from './battle-rig'
+import { weaponModel, weaponMaterial } from './weapon-models'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { STRIKE_FRAMES, handProp, type HandProp, type StrikeKind } from './battle-rig'
@@ -576,7 +577,10 @@ export function bakeSquadModel(gltf: GLTF): SquadModel | null {
     const idx: number[] = []
     if (bodyIndex) for (let i = 0; i < bodyIndex.count; i += 1) idx.push(bodyIndex.getX(i))
     else for (let i = 0; i < count; i += 1) idx.push(i)
-    for (let i = 0; i < saberCount; i += 1) idx.push(count + i)
+    // 칼: 색인 도형(실사풍 모델)이면 그 색인을, 아니면 꼭짓점 순서대로
+    const saberIndex = saberCount ? saber!.index : null
+    if (saberIndex) for (let i = 0; i < saberIndex.count; i += 1) idx.push(count + saberIndex.getX(i))
+    else for (let i = 0; i < saberCount; i += 1) idx.push(count + i)
     geometry.setIndex(idx)
   }
   const targets: THREE.BufferAttribute[] = []
@@ -602,8 +606,9 @@ export function bakeSquadModel(gltf: GLTF): SquadModel | null {
   if (body.geometry.groups.length) for (const g of body.geometry.groups) geometry.addGroup(g.start, g.count, g.materialIndex ?? 0)
   else geometry.addGroup(0, bodyDrawCount, 0)
   if (saberCount) {
-    geometry.addGroup(bodyDrawCount, saberCount, materials.length)
-    materials.push(new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.75, roughness: 0.35 }))
+    geometry.addGroup(bodyDrawCount, saber!.index ? saber!.index.count : saberCount, materials.length)
+    const saberModel = weaponModel('saber')
+    materials.push(saberModel ? weaponMaterial(saberModel) : new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.75, roughness: 0.35 }))
   }
   const model: SquadModel = { geometry, materials, duration: attack.duration, times, walkFrames: WALK_FRAMES, walkPeriod }
   squadCache.set(gltf, model)

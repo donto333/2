@@ -9,6 +9,7 @@ import type { General } from './strategy'
 import { SIGNATURE_WEAPONS, STRIKE_FRAMES, strikeInfluences, strikeModel, type SignatureWeapon, type StrikeKind, type StrikeModel } from './battle-rig'
 import { bakeSquadModel, rigInfo } from './skeletal'
 import { heroLook } from './hero-style'
+import { loadWeapons } from './weapon-models'
 
 export type ModelName = 'lubu' | 'caocao' | 'zhugeliang' | 'cavalry' | 'tianming' | 'lancer' | 'archer' | 'battlefield' | 'cavalry-lod' | 'lancer-lod' | 'archer-lod'
 const BASE = '/assets/models/'
@@ -27,7 +28,10 @@ export function loadModel(name: ModelName): Promise<GLTF> {
     loader = new GLTFLoader()
     loader.setDRACOLoader(draco)
   }
-  const pending: Promise<GLTF> = loader.loadAsync(assetUrl(`${BASE}${name}.glb`)).then((gltf: GLTF) => {
+  // 무기 모델도 함께 기다린다: 무장 손 · 병사 굽기가 실사풍 무기를 쓰도록(실패해도 예전 도형으로 계속)
+  const weapons = loadWeapons()
+  const pending: Promise<GLTF> = loader.loadAsync(assetUrl(`${BASE}${name}.glb`)).then(async (gltf: GLTF) => {
+    await weapons
     gltf.scene.traverse((node: THREE.Object3D) => {
       const mesh = node as THREE.Mesh
       if (!mesh.isMesh) return

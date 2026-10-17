@@ -14,6 +14,7 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { applyLayer, findBones, sampleKeys, type PoseKey } from './battle-poses'
 import type { ModelName } from './battle-models'
 import { monotoneSample } from './motion-math'
+import { weaponModel, weaponMaterial } from './weapon-models'
 
 export type StrikeKind = 'thrust' | 'slash' | 'shoot' | 'cast'
 
@@ -214,7 +215,19 @@ export const SIGNATURE_WEAPONS: Record<string, SignatureWeapon> = {
   'zhang-liao': 'halberd', 'zhang-fei': 'snake', 'zhang-bao': 'snake',
   'dian-wei': 'halberd', 'xu-chu': 'blade', 'xu-huang': 'blade',
 }
-const WEAPON_PROPS: Record<SignatureWeapon, () => Prop> = { glaive: glaiveProp, snake: snakeProp, spear: spearProp, halberd: halberdProp, blade: bladeProp }
+/** 실사풍 무기 모델(weapon-models.ts)이 불러와져 있으면 그것을, 아니면 코드로 만든 예전 도형을 쓴다 */
+function modelProp(kind: string, fallback: () => Prop): () => Prop {
+  return () => {
+    const model = weaponModel(kind)
+    return model ? { geometry: model.geometry, material: weaponMaterial(model) } : fallback()
+  }
+}
+const WEAPON_PROPS: Record<SignatureWeapon, () => Prop> = {
+  glaive: modelProp('glaive', glaiveProp), snake: modelProp('snake', snakeProp), spear: spearProp,
+  halberd: modelProp('halberd', halberdProp), blade: modelProp('blade', bladeProp),
+}
+const SWORD_PROP = modelProp('sword', swordProp)
+const FAN_PROP = modelProp('fan', fanProp)
 
 function withWeapon(name: ModelName, weapon: SignatureWeapon): RigSpec | undefined {
   const base = SPECS[name]
@@ -228,8 +241,8 @@ function withWeapon(name: ModelName, weapon: SignatureWeapon): RigSpec | undefin
 
 const SPECS: Partial<Record<ModelName, RigSpec>> = {
   lancer: LANCER,
-  cavalry: riderSpec(swordProp, [-0.3, 1.86, 0.3], 'sword'),
-  caocao: riderSpec(swordProp, [-0.3, 1.86, 0.28], 'sword'),
+  cavalry: riderSpec(SWORD_PROP, [-0.3, 1.86, 0.3], 'sword'),
+  caocao: riderSpec(SWORD_PROP, [-0.3, 1.86, 0.28], 'sword'),
   lubu: {
     // 여포 모델은 방천화극을 이미 쥐고 있다(오른쪽 앞으로 비스듬히): 그 화극을 무기 뼈에 붙인다
     kind: 'slash',
@@ -251,7 +264,7 @@ const SPECS: Partial<Record<ModelName, RigSpec>> = {
       { t: 1, b: {} },
     ],
   },
-  zhugeliang: riderSpec(fanProp, [-0.28, 1.9, 0.3], 'fan'),
+  zhugeliang: riderSpec(FAN_PROP, [-0.28, 1.9, 0.3], 'fan'),
 }
 
 /** 궁병: 활 겨눈 자세 위에서 시위 손을 턱까지 당겼다가 놓는다(이 모델은 L/R 이름이 반대로 붙어 있어 시위 손이 _R) */
@@ -524,9 +537,9 @@ export function strikeInfluences(progress: number, out: number[], times: number[
 /** 손에 쥐여 줄 무기(손잡이가 원점, 날이 +Y): 뼈대 모델의 손 뼈에 붙인다 */
 export type HandProp = 'sword' | 'fan' | 'bow' | SignatureWeapon
 export function handProp(kind: HandProp): Prop {
-  if (kind === 'sword') return swordProp()
+  if (kind === 'sword') return SWORD_PROP()
   if (kind === 'bow') return bowProp()
-  if (kind === 'fan') return fanProp()
+  if (kind === 'fan') return FAN_PROP()
   return WEAPON_PROPS[kind]()
 }
 
@@ -535,6 +548,9 @@ export function handProp(kind: HandProp): Prop {
  * 한 재질로 그리도록 부분마다 꼭짓점 색(강철 · 쇠 · 노끈 · 붉은 술)을 칠한다. 위치 · 노멀 · 색만 남긴다.
  */
 export function cavalrySaberGeometry(): THREE.BufferGeometry {
+  // 실사풍 기병칼 모델(색인 도형 · 꼭짓점 색)이 있으면 그것을 쓴다
+  const model = weaponModel('saber')
+  if (model) return model.geometry
   const parts: Array<[THREE.BufferGeometry, number]> = []
   // 날: 등은 곧게, 날 쪽은 끝으로 갈수록 살짝 좁아지며 끝 15%에서 비스듬히 휜 칼끝
   const length = 1.02, width = 0.04, back = 0.009, tipLen = 0.13, curve = 0.05, n = 24
