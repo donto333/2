@@ -466,6 +466,8 @@ export function createCities(): City[] {
     { id: 'jiaozhi', name: '교지', chineseName: '交趾', region: '남방 해안', owner: '중립', level: 1, prosperity: 44, defense: 48, buildings: createBuildings(1) },
     { id: 'shixing', name: '시흥', chineseName: '始興', region: '영남 북부', owner: '중립', level: 1, prosperity: 41, defense: 47, buildings: createBuildings(1) },
     { id: 'nanhai', name: '남해', chineseName: '南海', region: '영남 남부', owner: '중립', level: 1, prosperity: 43, defense: 45, buildings: createBuildings(1) },
+    { id: 'yongchang', name: '영창', chineseName: '永昌', region: '익주 서남', owner: '중립', level: 1, prosperity: 40, defense: 48, buildings: createBuildings(1) },
+    { id: 'bohai', name: '발해', chineseName: '渤海', region: '기주 동북', owner: '중립', level: 2, prosperity: 58, defense: 60, buildings: createBuildings(1) },
     { id: 'jianan', name: '건안', chineseName: '建安', region: '민월 해안', owner: '중립', level: 1, prosperity: 44, defense: 46, buildings: createBuildings(1) },
   // 약화 디버프는 공성 피해의 최저선이지 시작 방어도가 아니다.
   // 도시는 최대 방어도로 시작하고, 공격을 받을 때만 10% 하한까지 내려간다.
