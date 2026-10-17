@@ -2101,3 +2101,76 @@ html body .bt-fx__more { font-style: normal; font-size: 11px; font-weight: 700; 
 @media (max-width: 600px) { html body .bt-fx__icon { width: 15px; height: 15px; font-size: 10px; border-radius: 4px; } }
 /* 좁은 아군 카드: 이름은 다 보이게 하고 아이콘은 다음 줄로 */
 html body .bt-unit-main .bt-name-row { flex-wrap: wrap; row-gap: 2px; }
+
+/* 스킬 상세: 버프 · 디버프 칩(눌러서 효과 보기) */
+.skill-fx small em { font-style: normal; opacity: .7; font-weight: 400; margin-left: 4px; }
+.skill-fx-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.skill-fx-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: #dff8ef; background: rgba(60, 170, 130, .22); border: 1px solid rgba(140, 240, 200, .55); cursor: pointer; }
+.skill-fx-chip.is-debuff { color: #ffe0d8; background: rgba(190, 50, 40, .25); border-color: rgba(255, 140, 120, .6); }
+.skill-fx-chip small { font-size: 10.5px; opacity: .8; font-weight: 600; }
+.skill-fx-chip.is-open { box-shadow: 0 0 0 2px rgba(255, 220, 150, .75); }
+.skill-fx-info { margin: 6px 0 0; padding: 7px 10px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; color: var(--cream); background: rgba(40, 110, 90, .25); border-left: 3px solid rgba(140, 240, 200, .8); }
+.skill-fx-info.is-debuff { background: rgba(130, 40, 30, .3); border-left-color: rgba(255, 140, 120, .85); }
+.skill-fx-info span { color: var(--cream-soft); font-size: 12px; }
+
+/* 보유 무장: 레벨 초기화 */
+.gcard-reset { color: #ffd9c8; border-color: rgba(255, 150, 120, .45) !important; background: rgba(120, 40, 25, .25) !important; }
+.gcard-reset .cost-row span:last-child { font-size: 11px; opacity: .85; }
+
+/* 보유 무장: 능력치를 누르면 설명 */
+.stat-row--info { cursor: pointer; border-radius: 6px; }
+.stat-row--info:hover, .stat-row--info.is-open { background: rgba(255, 220, 150, .08); }
+.stat-row--info.is-open span { color: #ffe3a3; }
+.stat-info { grid-column: 1 / -1; margin: 6px 0 0; padding: 7px 10px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; color: var(--cream); background: rgba(255, 220, 150, .08); border-left: 3px solid rgba(255, 210, 130, .7); }
+.stat-info b { color: #ffe3a3; margin-right: 4px; }
+
+/* 장비 관리(간단히 보기) 2026.10.17 */
+.page-section--equipment-simple .equip-picker { padding: 12px 14px; margin-bottom: 14px; display: grid; gap: 10px; }
+.equip-picker__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.equip-picker__head h3 { margin: 0; font-size: 16px; }
+.equip-picker__head .mythic-stone-note { font-size: 12px; color: var(--cream-soft); }
+.equip-picker__head .equipment-auto { margin-left: auto; }
+.equip-picker__chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.equip-chip { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border-radius: 10px; text-align: left; color: var(--cream); background: rgba(23, 13, 8, .4); border: 1px solid var(--line); cursor: pointer; }
+.equip-chip.is-active { border-color: rgba(255, 210, 130, .9); background: rgba(120, 80, 30, .35); box-shadow: 0 0 0 1px rgba(255, 210, 130, .4) inset; }
+.equip-chip .equip-chip__face { flex: none; width: 36px; height: 36px; border-radius: 8px; }
+.equip-chip__text { display: grid; min-width: 0; line-height: 1.2; }
+.equip-chip__text small { font-size: 11px; color: var(--cream-soft); }
+.equip-chip__text strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.equip-chip__text em { font-style: normal; font-size: 11.5px; color: #8fe3b0; }
+.equip-chip.is-missing .equip-chip__text em { color: #ffb39c; }
+.equip-picker__others { width: 100%; }
+.page-section--equipment-simple .equipment-slots { display: block; padding: 12px; }
+.equip-slots__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.equip-slots__head h3 { margin: 0; font-size: 15px; }
+.equip-slots__head b { font-size: 13px; color: #ffe3a3; }
+.equip-slots__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.equip-set-line { margin: 8px 0 0; font-size: 12.5px; color: #8fe3b0; }
+.equip-set-line.is-muted { color: var(--cream-soft); }
+.equipment-more { padding: 0; margin-bottom: 14px; }
+.equipment-more > summary, .equipment-filter-more > summary { cursor: pointer; list-style: none; padding: 11px 14px; font-weight: 700; font-size: 13.5px; color: var(--cream); }
+.equipment-more > summary::-webkit-details-marker, .equipment-filter-more > summary::-webkit-details-marker { display: none; }
+.equipment-more > summary::after, .equipment-filter-more > summary::after { content: '▾'; float: right; opacity: .7; transition: transform .2s; }
+.equipment-more[open] > summary::after, .equipment-filter-more[open] > summary::after { transform: rotate(180deg); }
+.equipment-more .glass-card { background: none !important; border: 0 !important; box-shadow: none !important; margin: 0 !important; padding: 4px 14px 12px !important; }
+.equipment-more .glass-card::before, .equipment-more .glass-card::after { display: none !important; }
+.equip-type-tabs { display: flex; margin: 8px 0; }
+.equip-type-tabs .setting-seg__btn { flex: 1; }
+.equipment-filter-more { margin-bottom: 8px; border: 1px solid var(--line); border-radius: 10px; background: rgba(23, 13, 8, .3); }
+.equipment-filter-more > summary { padding: 8px 12px; font-size: 13px; }
+.equipment-filter-more > summary b { color: #ffe3a3; font-size: 12px; margin-left: 4px; }
+.equipment-filter-more .equipment-manage { padding: 0 12px 10px; }
+@media (max-width: 620px) {
+  .page-section--equipment-simple .equipment-slots { grid-template-columns: none; }
+  .equip-picker__chips { gap: 5px; }
+  .equip-chip { padding: 5px; gap: 5px; }
+  .equip-chip .equip-chip__face { width: 28px; height: 28px; }
+  .equip-chip__text strong { font-size: 12.5px; }
+  .equip-slots__row { gap: 5px; }
+  .page-section--equipment-simple .equipment-slot { min-height: 0; padding: 6px 4px; gap: 4px; }
+  .page-section--equipment-simple .equipment-slot em, .page-section--equipment-simple .equipment-specialty-line { font-size: 11px; }
+  .page-section--equipment-simple .equipment-slot-icon img { width: 28px; height: 28px; }
+  .page-section--equipment-simple .section-heading .heading-copy { display: none; }
+}
+html body .equip-picker__head .equipment-auto { flex: none; width: auto; }
+.equip-picker__others { padding: 7px 10px; border-radius: 8px; }

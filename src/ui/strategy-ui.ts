@@ -8,11 +8,13 @@ import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResou
 import { effectsSetting, muteSetting, musicSetting, qualitySetting, setEffectsSetting, setMusicSetting, setMuteSetting, setQualitySetting, setSfxSetting, sfxSetting, type EffectsSetting, type QualitySetting, type SoundLevel } from '../game/settings'
 import { sound } from '../engine/sound'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
-import { growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
+import { LEVEL_RESET_GOLD, levelResetRefund, growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, UnitEffectChip } from '../game/arena'
 import { ATTENDANCE_REWARDS, type AttendanceReward } from '../../server/attendance.mjs'
 import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
+import { BATTLE_EFFECTS, type BattleEffectId } from '../game/battle-effects'
+import { skillDefFor, type SkillFx } from '../game/skills'
 import { ARCHETYPE_META, recommendDecks, type ComboAdvice } from '../game/formation-advice'
 import { ensureIconSprite, icon, type IconName } from './icons'
 import { playForgeCeremony, playSummonCeremony } from './summon-ceremony'
@@ -235,6 +237,8 @@ export interface StrategyUiCallbacks {
   onFormation: (id: string) => void
   onFormationSlot: (id: string, slot: number) => void
   onUpgradeMany: (id: string) => void
+  /** 레벨 초기화(금화 10 · 재화 80% 반환) */
+  onLevelReset: (id: string) => void
   onAutoFormation: (withEquipment: boolean) => void
   onAutoEquip: () => void
   /** 추천 덱으로 편성(좌·중·우 순서) */
@@ -321,6 +325,14 @@ export interface StrategyUiCallbacks {
 
 type CityFilter = 'all' | 'front' | 'ally' | 'enemy' | 'neutral'
 
+/** 보유 무장 능력치 설명(누르면 펼쳐짐) — battle-core.ts의 계산과 맞춘다 */
+const STAT_INFO = {
+  leadership: { title: '통솔', body: '최대 병력이 늘어나고 일반 공격에도 조금 더해집니다. 통솔 · 수호 · 치유형 스킬의 위력과 통솔형 무장의 일반 공격은 통솔로 정해집니다. 장비로 오른 통솔은 방어력도 높입니다.' },
+  martial: { title: '무력', body: '돌격 · 사격 · 수호형 무장의 일반 공격 피해가 커지고, 돌격 · 사격형 스킬의 위력이 무력으로 정해집니다. 장비로 오른 무력은 공격력도 높입니다.' },
+  stratagem: { title: '모략', body: '계략 · 치유형 무장의 일반 공격 피해가 커지고, 계략형 스킬(화계 · 혼란 같은 디버프)의 위력이 모략으로 정해집니다.' },
+  speed: { title: '속도', body: '일반 공격 간격이 짧아집니다(빠를수록 줄어드는 폭은 조금씩 작아짐). 전장 평균보다 빠르면 전투 시작 때 첫 스킬이 더 빨리 준비됩니다.' },
+} as const
+
 export class StrategyUI {
   private readonly root: HTMLElement
   private readonly callbacks: StrategyUiCallbacks
@@ -368,6 +380,9 @@ export class StrategyUI {
   private equipmentSortDescending = true
   /** 보관함 필터: 부위 · 세트 · 등급 · 장착 여부 */
   private equipmentFilter: { type: string; set: string; grade: string; owner: string } = { type: 'all', set: 'all', grade: 'all', owner: 'all' }
+  /** 장비 관리: 접어 둔 칸(프리셋 · 세트 능력 / 필터 · 일괄 분해)을 펼쳤는가 — 다시 그려도 유지 */
+  private equipmentMoreOpen = false
+  private equipmentFilterOpen = false
   private equipmentScrollTop = 0
   private equipmentScrollFrame: number | null = null
   private equipmentIndexSource: Equipment[] | null = null
@@ -1309,7 +1324,30 @@ export class StrategyUI {
     const recent = !managementOnly && state.lastEquipmentDraw.length ? `<div class="equipment-draw-results glass-card"><div class="card-header"><div><span class="eyebrow">최근 획득</span><h3>이번 뽑기 결과</h3></div><span class="rate-note">${state.lastEquipmentDraw.length}개 획득</span></div><div class="equipment-mini-row">${state.lastEquipmentDraw.map(item => this.equipmentMiniCard(item)).join('')}</div><div class="equipment-extra-draw"><span>더 뽑으시겠습니까?</span><button class="mini-action" data-action="equipment-draw" data-count="1">1회 추가 뽑기 <span class="cost">${icon('honor', 'gi--cost')}240</span></button><button class="mini-action" data-action="equipment-draw" data-count="10">10회 추가 뽑기 <span class="cost">${icon('honor', 'gi--cost')}2,200</span></button></div></div>` : ''
     const setBonusPanel = `<div class="equipment-set-bonuses glass-card"><div class="card-header"><div><span class="eyebrow">세트 효과</span><h3>종류별 세트 능력</h3></div><span class="rate-note">${selected?.name ?? '무장'} 기준</span></div><div class="set-bonus-grid">${(Object.keys(EQUIPMENT_SET_META) as Array<keyof typeof EQUIPMENT_SET_META>).map(set => { const count = setCounts[set] ?? 0; const meta = EQUIPMENT_SET_META[set]; return `<div class="set-bonus-card ${count >= 2 ? 'is-active' : ''}" style="--set-color:${EQUIPMENT_GRADE_META.legendary.color}"><strong>${meta.label}</strong><span>${count}/3 장착</span><small>2세트 · ${meta.twoPiece}</small><small>3세트 · ${meta.threePiece}</small></div>` }).join('')}</div>${activeSets.length ? `<p class="set-active-note">활성 세트: ${activeSets.map(set => EQUIPMENT_SET_META[set].label).join(' · ')}</p>` : '<p class="set-active-note is-muted">같은 세트 장비를 2개 이상 장착하면 세트 능력이 활성화됩니다.</p>'}</div>`
     const equipmentHero = managementOnly ? `<div class="equipment-hero glass-card equipment-management-hero"><div class="equip-overview"><div class="equip-overview__head"><h2>출전 무장 장비 현황</h2><span class="mythic-stone-note">낙양 강화석 <b>${state.mythicStones}</b>개 · 신화장비 강화 1회에 1개</span></div><div class="equip-overview__rows">${state.formation.map((id, index) => { const general = state.generals.find(item => item.id === id); if (!general) return ''; const filled = Object.values(state.equipmentLoadouts[id] ?? {}).filter(Boolean).length; const sets = Object.entries(equipmentSetCounts(state, id)).filter(([, count]) => (count ?? 0) >= 2).map(([set, count]) => `${EQUIPMENT_SET_META[set as keyof typeof EQUIPMENT_SET_META].label} ${count}`).join(' · '); return `<button class="equip-overview__row ${general.id === selected?.id ? 'is-active' : ''} ${filled < 3 ? 'is-missing' : ''}" data-action="equip-general" data-id="${general.id}"><span>${['좌측', '중앙', '우측'][index]}</span><strong>${general.name}</strong><em>장비 ${filled}/3</em><small>${sets || '세트 효과 없음'}</small></button>` }).join('')}</div></div></div>` : `<div class="equipment-hero glass-card"><div><span class="pill pill--gold">장비 뽑기</span><h2>천하의 병장기</h2><p>노멀부터 전설까지 획득할 수 있습니다. 신화 장비는 추후 이벤트로만 지급됩니다.</p></div><div class="equipment-draw-actions"><button class="action-button action-button--primary" data-action="equipment-draw" data-count="1"><span>1회 뽑기</span><b class="cost">${icon('honor', 'gi--cost')}240</b></button><button class="action-button action-button--outline" data-action="equipment-draw" data-count="10"><span>10회 연속</span><b class="cost">${icon('honor', 'gi--cost')}2,200</b></button></div></div>`
+    if (managementOnly) return this.equipmentManageSection(state, selected, selectableGenerals, loadout, equipped, setBonusPanel, activeSets)
     return `<section class="page-section page-section--equipment"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>장비 관리</h1><p class="heading-copy">무기·갑옷·장신구를 장착하고 강화해 무장의 네 가지 전투 능력과 세트 능력을 끌어올리십시오.</p></div><div class="section-counter"><span>보유 장비</span><strong>${equipmentInventoryCount(state)}</strong></div></div>${equipmentHero}<div class="equipment-layout"><div><div class="equipment-toolbar glass-card"><div><span class="eyebrow">장착 무장</span><h3>장착 무장</h3><small>장비 반영 전투력 높은 순</small></div><button class="mini-action mini-action--deploy equipment-auto" data-action="auto-equip" title="출전 무장 3명에게 가장 좋은 장비 조합을 장착">출전 무장 자동 장착</button><select data-action="equipment-general">${selectableGenerals.map(general => `<option value="${general.id}" ${general.id === selected?.id ? 'selected' : ''}>${general.name} · ${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</option>`).join('')}</select></div><div class="equipment-slots glass-card">${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => this.equipmentSlot(type, loadout[type], state, selected?.id ?? '')).join('')}</div>${selected ? this.equipmentPresetBar(state, selected.id) : ''}${setBonusPanel}${recent}</div><div><div class="equipment-inventory"><div class="equipment-inventory-toolbar"><div class="card-header"><div><span class="eyebrow">보관 장비</span><h3>보유 장비</h3></div><span class="rate-note">${state.equipmentInventory.length}줄 · ${formatNumber(equipmentInventoryCount(state))}개</span></div><div class="equipment-sort-controls"><label>정렬 <select data-action="equipment-sort"><option value="grade" ${this.equipmentSort === 'grade' ? 'selected' : ''}>등급</option><option value="level" ${this.equipmentSort === 'level' ? 'selected' : ''}>강화 레벨</option><option value="name" ${this.equipmentSort === 'name' ? 'selected' : ''}>이름</option></select></label><button class="sort-direction" data-action="equipment-sort-direction">${this.equipmentSortDescending ? '↓' : '↑'}</button></div></div><div class="equipment-manage">${this.equipmentManageBar(state)}</div>${this.equipmentVirtualList(state, selected?.id ?? '', equipped)}</div></div></div></section>`
+  }
+
+  /** 장비 관리(간단히 보기): 무장 고르기 → 장비 3칸 → 보유 장비. 프리셋 · 세트 능력 · 필터는 접어 둔다 */
+  private equipmentManageSection(state: StrategyState, selected: General | undefined, selectable: General[], loadout: Partial<Record<EquipmentType, string>>, equipped: Set<string>, setBonusPanel: string, activeSets: Array<keyof typeof EQUIPMENT_SET_META>): string {
+    const lanes = ['좌측', '중앙', '우측']
+    const chips = state.formation.map((id, index) => {
+      const general = state.generals.find(item => item.id === id)
+      if (!general) return ''
+      const filled = Object.values(state.equipmentLoadouts[id] ?? {}).filter(Boolean).length
+      return `<button class="equip-chip ${general.id === selected?.id ? 'is-active' : ''} ${filled < 3 ? 'is-missing' : ''}" data-action="equip-general" data-id="${general.id}">${this.portrait(general, 'equip-chip__face')}<span class="equip-chip__text"><small>${lanes[index] ?? ''}</small><strong>${escapeHtml(general.name)}</strong><em>장비 ${filled}/3</em></span></button>`
+    }).join('')
+    const others = selectable.filter(general => !state.formation.includes(general.id))
+    const picker = `<div class="equip-picker glass-card"><div class="equip-picker__head"><h3>무장 선택</h3><span class="mythic-stone-note">낙양 강화석 <b>${state.mythicStones}</b></span><button class="mini-action mini-action--deploy equipment-auto" data-action="auto-equip" title="출전 무장 3명에게 가장 좋은 장비 조합을 장착">출전 무장 자동 장착</button></div><div class="equip-picker__chips">${chips}</div>${others.length ? `<select class="equip-picker__others" data-action="equipment-general" aria-label="다른 무장"><option value="" ${state.formation.includes(selected?.id ?? '') ? 'selected' : ''} disabled>다른 무장 고르기 (${others.length}명)</option>${others.map(general => `<option value="${general.id}" ${general.id === selected?.id ? 'selected' : ''}>${general.name} · ${formatNumber(combatPower(general) + equipmentPowerForUi(state, general.id))}</option>`).join('')}</select>` : ''}</div>`
+    const setLine = activeSets.length ? `<p class="equip-set-line">세트 효과 · ${activeSets.map(set => EQUIPMENT_SET_META[set].label).join(' · ')}</p>` : '<p class="equip-set-line is-muted">같은 세트를 2개 이상 끼면 세트 효과가 붙습니다</p>'
+    const slots = `<div class="equipment-slots glass-card"><div class="equip-slots__head"><h3>${escapeHtml(selected?.name ?? '무장')}의 장비</h3>${selected ? `<b>전투력 ${formatNumber(combatPower(selected) + equipmentPowerForUi(state, selected.id))}</b>` : ''}</div><div class="equip-slots__row">${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => this.equipmentSlot(type, loadout[type], state, selected?.id ?? '')).join('')}</div>${setLine}</div>`
+    const more = `<details class="equipment-more glass-card" ${this.equipmentMoreOpen ? 'open' : ''}><summary data-action="equipment-more">프리셋 · 세트 능력 자세히 보기</summary>${selected ? this.equipmentPresetBar(state, selected.id) : ''}${setBonusPanel}</details>`
+    const f = this.equipmentFilter
+    const applied = [f.set, f.grade, f.owner].filter(value => value !== 'all').length
+    const tabs = `<div class="equip-type-tabs setting-seg" role="group" aria-label="부위">${([['all', '전체'], ['weapon', EQUIPMENT_TYPE_META.weapon.label], ['armor', EQUIPMENT_TYPE_META.armor.label], ['accessory', EQUIPMENT_TYPE_META.accessory.label]] as Array<[string, string]>).map(([value, label]) => `<button class="setting-seg__btn ${f.type === value ? 'is-active' : ''}" data-action="equipment-type-tab" data-type="${value}">${label}</button>`).join('')}</div>`
+    const filterMore = `<details class="equipment-filter-more" ${this.equipmentFilterOpen ? 'open' : ''}><summary data-action="equipment-filter-more">필터 · 일괄 분해${applied ? ` <b>${applied}개 적용</b>` : ''}</summary><div class="equipment-manage">${this.equipmentManageBar(state, false)}</div></details>`
+    const inventory = `<div class="equipment-inventory"><div class="equipment-inventory-toolbar"><div class="card-header"><div><h3>보유 장비</h3></div><span class="rate-note">${formatNumber(equipmentInventoryCount(state))}개</span></div><div class="equipment-sort-controls"><label>정렬 <select data-action="equipment-sort"><option value="grade" ${this.equipmentSort === 'grade' ? 'selected' : ''}>등급</option><option value="level" ${this.equipmentSort === 'level' ? 'selected' : ''}>강화 레벨</option><option value="name" ${this.equipmentSort === 'name' ? 'selected' : ''}>이름</option></select></label><button class="sort-direction" data-action="equipment-sort-direction">${this.equipmentSortDescending ? '↓' : '↑'}</button></div></div>${tabs}${filterMore}${this.equipmentVirtualList(state, selected?.id ?? '', equipped)}</div>`
+    return `<section class="page-section page-section--equipment page-section--equipment-simple"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>장비 관리</h1><p class="heading-copy">무장을 고르고, 장비 칸을 채우고, 아래 목록에서 장착 · 강화합니다.</p></div><div class="section-counter"><span>보유 장비</span><strong>${equipmentInventoryCount(state)}</strong></div></div>${picker}<div class="equipment-layout"><div>${slots}${more}</div><div>${inventory}</div></div></section>`
   }
 
   /** 모집 · 장비 > 장비 뽑기: 뽑기만(장착·강화·보유 목록은 ‘장비 관리’에서). 무장 모집과 같은 짜임 */
@@ -1356,11 +1394,11 @@ export class StrategyUI {
   private equipmentOwnerNames = new Map<string, string>()
 
   /** 보관함 필터·일괄 분해·보관 경고 */
-  private equipmentManageBar(state: StrategyState): string {
+  private equipmentManageBar(state: StrategyState, withType = true): string {
     const f = this.equipmentFilter
     const opt = (key: keyof typeof f, value: string, label: string) => `<option value="${value}" ${f[key] === value ? 'selected' : ''}>${label}</option>`
     const filters = `<div class="equipment-filters">
-      <select data-action="equipment-filter" data-key="type" aria-label="부위">${opt('type', 'all', '부위 전체')}${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => opt('type', type, EQUIPMENT_TYPE_META[type].label)).join('')}</select>
+      ${withType ? `<select data-action="equipment-filter" data-key="type" aria-label="부위">${opt('type', 'all', '부위 전체')}${(['weapon', 'armor', 'accessory'] as EquipmentType[]).map(type => opt('type', type, EQUIPMENT_TYPE_META[type].label)).join('')}</select>` : ''}
       <select data-action="equipment-filter" data-key="set" aria-label="세트">${opt('set', 'all', '세트 전체')}${(Object.keys(EQUIPMENT_SET_META) as Array<keyof typeof EQUIPMENT_SET_META>).map(set => opt('set', set, EQUIPMENT_SET_META[set].label)).join('')}</select>
       <select data-action="equipment-filter" data-key="grade" aria-label="등급">${opt('grade', 'all', '등급 전체')}${(['mythic', 'legendary', 'unique', 'rare', 'normal'] as EquipmentGrade[]).map(grade => opt('grade', grade, EQUIPMENT_GRADE_META[grade].label)).join('')}</select>
       <select data-action="equipment-filter" data-key="owner" aria-label="장착">${opt('owner', 'all', '장착 전체')}${opt('owner', 'equipped', '장착 중')}${opt('owner', 'free', '미장착')}${opt('owner', 'locked', '잠금')}</select>
@@ -1757,7 +1795,24 @@ export class StrategyUI {
     // 유형별 성장: 레벨업 때 가장 많이 오르는 능력치(무력형=무력, 책사형=모략, 방어·지휘형=통솔)
     const weights = growthWeights(general)
     const grow = stats.reduce((best, row) => weights[row[2]] > weights[best[2]] ? row : best)[2]
-    return stats.map(([label, value, key]) => `<div class="${value === top ? 'is-top' : ''}${key === grow ? ' is-grow' : ''}"><span>${label}${key === grow ? '<sup title="레벨업 때 가장 많이 오릅니다">▲</sup>' : ''}</span><i><b style="width:${Math.min(100, value / base * 100).toFixed(1)}%"></b></i><em>${value}</em></div>`).join('')
+    return stats.map(([label, value, key]) => `<div class="${value === top ? 'is-top' : ''}${key === grow ? ' is-grow' : ''} stat-row--info" data-action="stat-info" data-stat="${key}" role="button" tabindex="0" title="눌러서 ${label} 설명 보기"><span>${label}${key === grow ? '<sup title="레벨업 때 가장 많이 오릅니다">▲</sup>' : ''}</span><i><b style="width:${Math.min(100, value / base * 100).toFixed(1)}%"></b></i><em>${value}</em></div>`).join('') + '<p class="stat-info" data-stat-info hidden></p>'
+  }
+
+  /** 스킬이 거는 버프 · 디버프: 누르면 아래에 효과 설명이 펼쳐진다 */
+  private skillEffectChips(general: General): string {
+    const def = skillDefFor(general.id, general.role, general.skillName, general.skillDescription)
+    const chips = new Map<string, { id: BattleEffectId; sec: number; awaken: boolean }>()
+    const collect = (fx: SkillFx[] = [], awaken: boolean) => fx.forEach(part => {
+      if ((part.k === 'buff' || part.k === 'debuff') && BATTLE_EFFECTS[part.id] && !chips.has(part.id)) chips.set(part.id, { id: part.id, sec: part.sec, awaken })
+    })
+    collect(def.active.fx, false)
+    collect(def.awaken?.fx, true)
+    if (!chips.size) return ''
+    const buttons = [...chips.values()].map(chip => {
+      const effect = BATTLE_EFFECTS[chip.id]
+      return `<button type="button" class="skill-fx-chip is-${effect.kind}" data-action="effect-info" data-effect="${chip.id}" data-sec="${chip.sec}" data-awaken="${chip.awaken ? '1' : ''}"><b>${effect.icon}</b>${escapeHtml(effect.name)}${chip.awaken ? '<small>각성</small>' : ''}</button>`
+    }).join('')
+    return `<div class="skill-detail-wide skill-fx"><small>버프 · 디버프 <em>눌러서 효과 보기</em></small><div class="skill-fx-chips">${buttons}</div><p class="skill-fx-info" data-effect-info hidden></p></div>`
   }
 
   private skillDetailPanel(general: General): string {
@@ -1766,6 +1821,7 @@ export class StrategyUI {
       detail.passive ? `<div class="skill-detail-wide"><small>패시브 (3성)</small><strong>${escapeHtml(detail.passive)}</strong></div>` : '',
       detail.awaken ? `<div class="skill-detail-wide"><small>각성 (5성)</small><strong>${escapeHtml(detail.awaken)}</strong></div>` : '',
       detail.weakness ? `<div class="skill-detail-wide skill-detail-weak"><small>약점</small><strong>${escapeHtml(detail.weakness)}</strong></div>` : '',
+      this.skillEffectChips(general),
     ].join('')
     return `<div class="skill-detail-panel skill-detail-panel--${detail.category === '정화·치료' ? 'cleanse' : detail.category === '버프' ? 'buff' : detail.category === '디버프' ? 'debuff' : 'combat'}"><div class="skill-detail-title"><span>◈ 스킬 상세 <b class="skill-category">${detail.type}</b></span><b>${skillRank(general)}성 · 사기 −${skillPower(general)}</b></div><div class="skill-detail-grid"><div><small>발동</small><strong>${escapeHtml(detail.trigger)}</strong></div><div><small>대상</small><strong>${escapeHtml(detail.target)}</strong></div><div class="skill-detail-wide"><small>효과</small><strong>${escapeHtml(detail.effect)}</strong></div><div><small>유형</small><strong>${escapeHtml(detail.duration)}</strong></div><div><small>쿨다운</small><strong>${escapeHtml(detail.cooldown)}</strong></div>${extra}</div></div>`
   }
@@ -1800,7 +1856,7 @@ export class StrategyUI {
         <div class="stat-bars stat-bars--attributes">${this.attributeRows(general, scale)}</div>
         <details class="gcard-skill"><summary><span>◈ ${escapeHtml(general.skillName)}</span><em>${detail.type}</em>${skillState}</summary><p>${escapeHtml(general.skillDescription)}</p>${this.skillDetailPanel(general)}</details>
         <button class="gcard-gear" data-action="equip-general" data-id="${general.id}" title="이 무장의 장비 화면으로">${gear}<span>${sets || (gearPower ? '세트 효과 없음' : '장비 없음')}</span><b>장착</b></button>
-        <div class="gcard-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : squadOf(state, general.id) > 0 ? '1군으로' : '출전 편성'}</button>${isMaxLevel(general) ? `<button class="mini-action gcard-up is-max" disabled title="최고 레벨입니다. 성급을 올리면 더 강해집니다.">최고 레벨 Lv.${MAX_GENERAL_LEVEL}<small class="cost-row">성급으로 더 강해집니다</small></button>` : `<button class="mini-action gcard-up" data-action="upgrade" data-id="${general.id}" ${canUpgrade ? '' : 'disabled'} title="은전 ${formatNumber(cost.silver)} · 병서 ${formatNumber(cost.manuals)}">강화 Lv.${general.level + 1}<small class="cost-row"><span class="cost ${state.silver < cost.silver ? 'is-short' : ''}">${icon('silver', 'gi--cost')}${compactNumber(cost.silver)}</span><span class="cost ${state.manuals < cost.manuals ? 'is-short' : ''}">${icon('manuals', 'gi--cost')}${formatNumber(cost.manuals)}</span></small></button>`}${many >= 2 ? `<button class="mini-action gcard-up-many" data-action="upgrade-many" data-id="${general.id}">${many}회 강화</button>` : ''}</div>
+        <div class="gcard-actions"><button class="mini-action mini-action--deploy" data-action="formation" data-id="${general.id}">${inFormation ? '편성 해제' : squadOf(state, general.id) > 0 ? '1군으로' : '출전 편성'}</button>${isMaxLevel(general) ? `<button class="mini-action gcard-up is-max" disabled title="최고 레벨입니다. 성급을 올리면 더 강해집니다.">최고 레벨 Lv.${MAX_GENERAL_LEVEL}<small class="cost-row">성급으로 더 강해집니다</small></button>` : `<button class="mini-action gcard-up" data-action="upgrade" data-id="${general.id}" ${canUpgrade ? '' : 'disabled'} title="은전 ${formatNumber(cost.silver)} · 병서 ${formatNumber(cost.manuals)}">강화 Lv.${general.level + 1}<small class="cost-row"><span class="cost ${state.silver < cost.silver ? 'is-short' : ''}">${icon('silver', 'gi--cost')}${compactNumber(cost.silver)}</span><span class="cost ${state.manuals < cost.manuals ? 'is-short' : ''}">${icon('manuals', 'gi--cost')}${formatNumber(cost.manuals)}</span></small></button>`}${many >= 2 ? `<button class="mini-action gcard-up-many" data-action="upgrade-many" data-id="${general.id}">${many}회 강화</button>` : ''}${general.level > 1 ? `<button class="mini-action gcard-reset" data-action="level-reset" data-id="${general.id}" ${state.gold < LEVEL_RESET_GOLD ? 'disabled' : ''} title="금화 ${LEVEL_RESET_GOLD}개 · 레벨에 쓴 은전 · 병서 80% 반환">레벨 초기화<small class="cost-row"><span class="cost ${state.gold < LEVEL_RESET_GOLD ? 'is-short' : ''}">${icon('gold', 'gi--cost')}${LEVEL_RESET_GOLD}</span><span>80% 반환</span></small></button>` : ''}</div>
       </div></article>`
   }
 
@@ -2190,6 +2246,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '중립 도시 수비 강화 · 무장 관리 편의', '영토 중립 도시 수비대의 평균 레벨이 2배가 되었습니다(도시 단계별 Lv.20~60, 공성 전투의 적도 같은 레벨). 보유 무장에 레벨 초기화 버튼이 생겨 금화 10개로 Lv.1로 되돌리고 레벨에 쓴 은전 · 병서의 80%를 돌려받습니다(성급 · 장비 · 스킬 해금은 유지). 능력치(통솔 · 무력 · 모략 · 속도)를 누르면 설명이, 스킬 상세의 버프 · 디버프를 누르면 효과가 나옵니다. 장비 관리는 무장 선택 → 장비 3칸 → 보유 장비 순으로 간단해졌고, 프리셋 · 세트 능력 · 필터는 접어 두었습니다.', '완료', 'jade'],
       ['2026.10.17', '전투 화면: 스킬 · 효과 표시', '스킬을 쓰면 화면 가운데 띠 대신 그 무장 머리 위에 초상과 스킬 이름이 떠오릅니다(무장이 움직이면 따라감). 버프 · 디버프는 아군 · 적 무장 카드의 이름 옆 아이콘으로 보여 주고, 아이콘에 마우스를 올리면 효과와 남은 시간이 나옵니다. 혼란처럼 한 명에게 걸린 효과는 그 무장에게만 표시됩니다.', '완료', 'jade'],
       ['2026.10.17', '게스트 계정 초기화', '아이디를 정한 게스트 계정에서 설정의 게스트 기록 초기화가 듣지 않던 문제를 고쳤습니다. 이제 서버에 저장된 진행(무장 · 재화 · 튜토리얼 · 출석)까지 지우고 같은 아이디로 처음부터 시작합니다. 회원 계정에는 이 버튼이 보이지 않습니다.', '완료', 'jade'],
       ['2026.10.17', '혼란: 적과 아군을 가리지 않고', '혼란에 빠진 무장은 공격과 스킬마다 반반 확률로 상대편 또는 같은 편을 노립니다. 혼란 무장만 모은 덱이 지나치게 쉽게 이기던 문제를 줄였습니다.', '완료', 'jade'],
@@ -2333,6 +2390,19 @@ export class StrategyUI {
       else this.callbacks.onFormation(id)
     }
     else if (action === 'upgrade-many') this.callbacks.onUpgradeMany(button.dataset.id ?? '')
+    else if (action === 'level-reset') {
+      const general = this.renderedState?.generals.find(item => item.id === button.dataset.id)
+      if (!general || !this.renderedState) return
+      const refund = levelResetRefund(this.renderedState, general)
+      if (window.confirm(tr(`${general.name}을(를) Lv.${general.level}에서 Lv.1로 되돌립니다.\n금화 ${LEVEL_RESET_GOLD}개를 쓰고 은전 ${formatNumber(refund.silver)} · 병서 ${formatNumber(refund.manuals)}(레벨에 쓴 재화의 80%)를 돌려받습니다.\n성급 · 장비 · 스킬 해금은 그대로입니다. 계속하시겠습니까?`))) this.callbacks.onLevelReset(general.id)
+    }
+    else if (action === 'equipment-more') this.equipmentMoreOpen = !(button.closest('details') as HTMLDetailsElement | null)?.open
+    else if (action === 'equipment-filter-more') this.equipmentFilterOpen = !(button.closest('details') as HTMLDetailsElement | null)?.open
+    else if (action === 'equipment-type-tab') {
+      this.equipmentFilter.type = button.dataset.type ?? 'all'
+      this.equipmentScrollTop = 0
+      if (this.renderedState) this.render(this.renderedState)
+    }
     else if (action === 'equip-general') { this.callbacks.onEquipmentSelectGeneral(button.dataset.id ?? ''); this.callbacks.onSection('equipment') }
     else if (action === 'board-compose') { this.boardComposeOpen = !this.boardComposeOpen; if (this.renderedState) this.render(this.renderedState) }
     else if (action === 'codex-filter') { this.codexFilter = (button.dataset.filter ?? 'all') as typeof this.codexFilter; if (this.renderedState) this.render(this.renderedState); this.applyCodexSearch() }
@@ -2422,6 +2492,28 @@ export class StrategyUI {
     else if (action === 'research') this.callbacks.onResearch(button.dataset.research ?? '')
     else if (action === 'battle-guide') this.callbacks.onBattleGuide()
     else if (action === 'coach-reset') this.callbacks.onCoachReset()
+    else if (action === 'stat-info') {
+      const key = button.dataset.stat as keyof typeof STAT_INFO
+      const info = STAT_INFO[key]
+      const box = button.parentElement?.querySelector<HTMLElement>('[data-stat-info]')
+      if (!info || !box) return
+      const same = box.dataset.stat === key && !box.hidden
+      button.parentElement?.querySelectorAll('[data-action="stat-info"]').forEach(row => row.classList.toggle('is-open', !same && row === button))
+      box.hidden = same
+      box.dataset.stat = key
+      box.innerHTML = `<b>${escapeHtml(tr(info.title))}</b> ${escapeHtml(tr(info.body))}`
+    }
+    else if (action === 'effect-info') {
+      const effect = BATTLE_EFFECTS[button.dataset.effect as BattleEffectId]
+      const box = button.closest('.skill-fx')?.querySelector<HTMLElement>('[data-effect-info]')
+      if (!effect || !box) return
+      const same = box.dataset.effect === effect.id && !box.hidden
+      button.closest('.skill-fx')?.querySelectorAll('.skill-fx-chip').forEach(chip => chip.classList.toggle('is-open', !same && chip === button))
+      box.hidden = same
+      box.dataset.effect = effect.id
+      box.className = `skill-fx-info is-${effect.kind}`
+      box.innerHTML = `<b>${effect.icon} ${escapeHtml(tr(effect.name))}</b> <span>${tr(effect.kind === 'buff' ? '버프 · 아군에게' : '디버프 · 적에게')} · ${button.dataset.sec ?? effect.duration}${tr('초')}${button.dataset.awaken ? ` · ${tr('5성 각성 시')}` : ''}</span><br>${escapeHtml(tr(effect.description))}`
+    }
     else if (action === 'guest-reset') { if (window.confirm(tr(this.account ? '이 게스트 아이디의 진행 기록을 서버에서도 모두 지우고 처음부터 시작합니다. 되돌릴 수 없습니다. 계속하시겠습니까?' : '이 기기의 게스트 진행 기록을 모두 지우고 처음부터 시작합니다. 되돌릴 수 없습니다. 계속하시겠습니까?'))) this.callbacks.onGuestReset() }
     else if (action === 'set-lang') setLang(button.dataset.value === 'en' ? 'en' : 'ko')
     else if (action === 'setting-quality') { setQualitySetting((button.dataset.value ?? 'auto') as QualitySetting); this.notify('그래픽 품질을 바꿨습니다. 새로고침하면 적용됩니다.', 'jade'); if (this.renderedState) this.render(this.renderedState) }

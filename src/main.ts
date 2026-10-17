@@ -52,6 +52,8 @@ import {
   upgrade,
   upgradeBuilding,
   applyAttendanceReward,
+  resetGeneralLevel,
+  dummyGarrisonLevelForCityLevel,
   claimLocalAttendance,
   settleBuildings,
   rushBuilding,
@@ -547,7 +549,10 @@ function siegeDeckFor(cityId: string): ReturnType<typeof allGenerals> {
   const seed = [...cityId].reduce((sum, character) => sum + character.charCodeAt(0), (city?.level ?? 1) * 31)
   return [0, 1, 2].map(index => {
     const template = catalog[(seed + index * 13) % catalog.length]
-    const level = Math.max(1, Math.min(30, (city?.level ?? 1) * 5 + index * 2))
+    // 중립 도시: 수비대 평균 레벨(도시 단계별 20~60)에 맞춘다(−2 · 0 · +2). 그 밖의 도시는 예전 기준
+    const level = city?.owner === '중립'
+      ? Math.max(1, Math.min(MAX_GENERAL_LEVEL, dummyGarrisonLevelForCityLevel(city.level) + (index - 1) * 2))
+      : Math.max(1, Math.min(30, (city?.level ?? 1) * 5 + index * 2))
     const scaled = scaleGeneral({ ...template, level: 1, stars: 1 }, level, Math.max(1, Math.min(5, city?.level ?? 1)))
     return { ...scaled, id: template.id, skillUnlocked: true }
   })
@@ -1058,6 +1063,15 @@ const ui = new StrategyUI(root, {
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) playSfx('unlock')
     if (result.ok) queueAccountSave()
+  },
+  onLevelReset: id => {
+    const result = resetGeneralLevel(state, id)
+    if (result.ok) arena.setGenerals(battleGenerals())
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx('coin')
+    // 금화를 썼으니 바로 저장한다(서버는 금화를 줄이는 저장만 받는다)
+    if (result.ok) queueAccountSave(true)
   },
   onUpgradeMany: id => {
     const result = upgradeMany(state, id)

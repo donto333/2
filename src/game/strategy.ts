@@ -95,7 +95,8 @@ export const CITY_DEFENSE_BY_LEVEL: Record<Grade, number> = { 1: 10_000, 2: 20_0
 // 구버전 저장 데이터 복구에만 사용하는 이전 10% 하한 비율이다.
 export const TERRITORY_TEST_WEAKENING_ENABLED = true
 export const TERRITORY_TEST_WEAKENING_RATIO = 0.10
-export const DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL: Record<Grade, number> = { 1: 10, 2: 15, 3: 20, 4: 25, 5: 30 }
+// 중립 도시 수비대 평균 레벨(2026.10.17: 2배로 상향 · 최고 레벨 60)
+export const DUMMY_GARRISON_LEVEL_BY_CITY_LEVEL: Record<Grade, number> = { 1: 20, 2: 30, 3: 40, 4: 50, 5: 60 }
 export const CITY_PRODUCTION_MULTIPLIER: Record<Grade, number> = { 1: 1, 2: 3, 3: 5, 4: 10, 5: 20 }
 export const CITY_INCOME_REWARD_MULTIPLIER = 10
 export function cityDefenseForLevel(level: number): number {
@@ -503,6 +504,11 @@ export function createDummyCityGarrisons(city: City): CityGarrison[] {
 export function ensureCityGarrisons(state: StrategyState): void {
   state.cities.forEach(city => {
     if (!Array.isArray(city.garrisons)) city.garrisons = city.owner === '중립' ? createDummyCityGarrisons(city) : []
+    // 중립 도시의 인공지능 수비대는 최신 레벨 기준을 따른다(격파 진행은 유지)
+    if (city.owner === '중립' && city.garrisons.some(garrison => garrison.source === 'dummy' && garrison.averageLevel !== dummyDefenseLevel(city))) {
+      const fresh = new Map(createDummyCityGarrisons(city).map(garrison => [garrison.id, garrison]))
+      city.garrisons = city.garrisons.map(garrison => garrison.source === 'dummy' ? fresh.get(garrison.id) ?? { ...garrison, averageLevel: dummyDefenseLevel(city) } : garrison)
+    }
     city.garrisons = city.garrisons.slice(0, MAX_CITY_GARRISONS)
     city.defendersDefeated = Math.max(0, Math.min(city.garrisons.length, Math.trunc(city.defendersDefeated ?? 0)))
     // 구버전 저장 데이터가 약화 하한에서 시작하던 경우만 새 시즌 초기값으로 복구한다.
@@ -1544,6 +1550,36 @@ export function upgrade(state: StrategyState, id: string): UpgradeResult {
   if (general.level >= skillUnlockLevel(general) && !general.skillUnlocked) state.lastNotice = `${general.name}이(가) Lv.${general.level}에 도달했습니다. ${general.stars}성 스킬 해금이 가능합니다.`
   else state.lastNotice = `${general.name} 강화 완료 · Lv.${general.level}`
   return { ok: true, message: state.lastNotice }
+}
+
+/** 레벨 초기화: 금화 10개를 쓰고 Lv.1로 되돌린다. 레벨에 쓴 은전 · 병서의 80%를 돌려준다(성급 · 장비 · 스킬 해금은 그대로) */
+export const LEVEL_RESET_GOLD = 10
+export const LEVEL_RESET_REFUND = 0.8
+export function levelResetRefund(state: StrategyState, general: Pick<General, 'level'>): { silver: number; manuals: number } {
+  let silver = 0, manuals = 0
+  for (let level = 1; level < general.level; level += 1) {
+    const cost = upgradeCost(state, { level })
+    silver += cost.silver; manuals += cost.manuals
+  }
+  return { silver: Math.floor(silver * LEVEL_RESET_REFUND), manuals: Math.floor(manuals * LEVEL_RESET_REFUND) }
+}
+export function resetGeneralLevel(state: StrategyState, id: string): UpgradeResult & { refund?: { silver: number; manuals: number } } {
+  const general = findGeneral(state, id)
+  if (!general) return { ok: false, message: '무장을 찾을 수 없습니다.' }
+  if (general.level <= 1) return { ok: false, message: `${general.name}은(는) 이미 Lv.1입니다.` }
+  if (state.gold < LEVEL_RESET_GOLD) return { ok: false, message: `금화가 부족합니다. 레벨 초기화에는 금화 ${LEVEL_RESET_GOLD}개가 필요합니다.` }
+  const refund = levelResetRefund(state, general)
+  const from = general.level
+  state.gold -= LEVEL_RESET_GOLD
+  state.silver += refund.silver
+  state.resources.silver = state.silver
+  state.manuals += refund.manuals
+  general.level = 1
+  const template = templateGeneral(general.id)
+  if (template) Object.assign(general, statsAt(template, 1, general.stars))
+  general.skillPower = Math.max(100, (general.skillPower ?? 100) - 3 * (from - 1))
+  state.lastNotice = `${general.name} 레벨 초기화 · Lv.${from} → Lv.1 · 금화 −${LEVEL_RESET_GOLD} · 은전 +${formatNumber(refund.silver)} · 병서 +${formatNumber(refund.manuals)} 반환`
+  return { ok: true, message: state.lastNotice, refund }
 }
 
 export function unlockSkill(state: StrategyState, id: string): UpgradeResult {

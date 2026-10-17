@@ -173,7 +173,7 @@ export const MENU_TOURS: Record<string, CoachStep[]> = {
     { target: '.summon-tabs', title: '모집 · 장비 뽑기', body: '위 탭에서 장비 뽑기로 바꿀 수 있습니다.' },
   ],
   equipment: [
-    { target: '.equipment-hero', title: '출전 무장 장비', body: '출전한 세 무장이 무엇을 차고 있는지, 빈 칸이 어디인지 보여 줍니다.' },
+    { target: '.equip-picker', title: '무장 선택', body: '출전한 세 무장이 장비를 몇 칸 채웠는지 보여 줍니다. 눌러서 장비를 볼 무장을 고릅니다.' },
     { target: '[data-action="auto-equip"]', title: '자동 장착', body: '가진 장비 중 가장 좋은 조합을 알아서 장착합니다. 같은 세트를 모으면 세트 효과가 붙습니다.' },
   ],
   research: [
