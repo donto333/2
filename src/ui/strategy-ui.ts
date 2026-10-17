@@ -8,7 +8,7 @@ import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResou
 import { effectsSetting, muteSetting, musicSetting, qualitySetting, setEffectsSetting, setMusicSetting, setMuteSetting, setQualitySetting, setSfxSetting, sfxSetting, type EffectsSetting, type QualitySetting, type SoundLevel } from '../game/settings'
 import { sound } from '../engine/sound'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
-import { STARTER_PACKS, starterPackBought, type StarterPack, LEVEL_RESET_GOLD, levelResetRefund, growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, homeCityId, isWanderer, wandererPlunderLeft, WANDERER_DAILY_PLUNDER, WANDERER_PLUNDER_RATE, FACTION_CHANGE_COOLDOWN_MS, RAZE_REBUILD_MS, cityYield, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
+import { statsAt, STARTER_PACKS, starterPackBought, type StarterPack, LEVEL_RESET_GOLD, levelResetRefund, growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, homeCityId, isWanderer, wandererPlunderLeft, WANDERER_DAILY_PLUNDER, WANDERER_PLUNDER_RATE, FACTION_CHANGE_COOLDOWN_MS, RAZE_REBUILD_MS, cityYield, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, UnitEffectChip } from '../game/arena'
 import { ATTENDANCE_REWARDS, type AttendanceReward } from '../../server/attendance.mjs'
 import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
@@ -1315,7 +1315,7 @@ export class StrategyUI {
       ['all', '전체', state.generals.length], ['5', '천명', state.generals.filter(g => g.grade === 5).length], ['4', '명장', state.generals.filter(g => g.grade === 4).length],
       ...(['기병', '보병', '궁병', '책사'] as Role[]).map(role => [role, role, state.generals.filter(g => g.role === role).length] as [Role, string, number]),
     ]
-    const scale = Math.max(100, ...state.generals.flatMap(g => [g.leadership, g.martial, g.stratagem, g.speed])) * 1.04
+    const scale = Math.max(this.level60Scale(), ...state.generals.flatMap(g => [g.leadership, g.martial, g.stratagem, g.speed]))
     const cards = (list: General[]) => list.map(general => this.generalCard(state, general, scale)).join('')
     const empty = !deployed.length && !reserve.length ? '<div class="roster-empty">이 조건에 맞는 무장이 없습니다.</div>' : ''
     return `<section class="page-section page-section--roster"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>보유 무장</h1><p class="heading-copy">무장을 키우고 장비를 갖춰 출전 진형에 배치하십시오.</p></div><div class="section-counter"><span>출전 전투력</span><strong>${formatNumber(totalPower(state))}</strong></div></div><div class="roster-toolbar roster-toolbar--expanded"><div class="filter-tabs">${filters.map(([id, label, count]) => `<button class="filter-tab ${this.rosterFilter === id ? 'is-active' : ''}" data-action="roster-filter" data-filter="${id}">${label} <b>${count}</b></button>`).join('')}</div><div class="roster-sort-controls"><label>정렬 <select data-action="roster-sort">${sortOptions.map(([value, label]) => `<option value="${value}" ${this.rosterSort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button class="sort-direction" data-action="roster-sort-direction" title="정렬 방향">${this.rosterSortDescending ? '↓' : '↑'}</button><button class="ghost-button ghost-button--small" data-action="section" data-section="formation">편성 화면 →</button></div></div>
@@ -1330,7 +1330,7 @@ export class StrategyUI {
     let shown = 0
     this.root.querySelectorAll<HTMLElement>('[data-codex-name]').forEach(card => {
       const name = card.dataset.codexName ?? ''
-      const match = !query || (!card.classList.contains('codex-card--locked') && name.includes(query))
+      const match = !query || name.includes(query)
       card.hidden = !match
       if (match) shown += 1
     })
@@ -1343,7 +1343,7 @@ export class StrategyUI {
     const owned = new Map(state.generals.map(general => [general.id, general]))
     const ownedCount = catalog.filter(general => owned.has(general.id)).length
     const f = this.codexFilter
-    const visible = catalog.filter(general => (f === 'all' ? true : f === 'owned' ? owned.has(general.id) : f === 'missing' ? !owned.has(general.id) : f === '5' ? general.grade === 5 : f === '4' ? general.grade === 4 : general.role === f)).filter(general => !this.codexQuery.trim() || (owned.has(general.id) && general.name.includes(this.codexQuery.trim())))
+    const visible = catalog.filter(general => (f === 'all' ? true : f === 'owned' ? owned.has(general.id) : f === 'missing' ? !owned.has(general.id) : f === '5' ? general.grade === 5 : f === '4' ? general.grade === 4 : general.role === f)).filter(general => !this.codexQuery.trim() || general.name.includes(this.codexQuery.trim()))
     const filters: Array<[typeof f, string, number]> = [['all', '전체', catalog.length], ['owned', '영입', ownedCount], ['missing', '미영입', catalog.length - ownedCount], ['5', '천명', catalog.filter(g => g.grade === 5).length], ['4', '명장', catalog.filter(g => g.grade === 4).length], ...(['기병', '보병', '궁병', '책사'] as Role[]).map(role => [role, role, catalog.filter(g => g.role === role).length] as [Role, string, number])]
     return `<section class="page-section page-section--codex"><div class="section-heading section-heading--compact"><div><span class="eyebrow">본진</span><h1>무장 도감</h1><p class="heading-copy">천하에 이름을 남긴 ${catalog.length}명의 무장과 영입 현황입니다.</p></div><div class="section-counter"><span>수집 현황</span><strong>${ownedCount}<small> / ${catalog.length}</small></strong></div></div><div class="codex-toolbar"><div class="filter-tabs">${filters.map(([id, label, count]) => `<button class="filter-tab ${f === id ? 'is-active' : ''}" data-action="codex-filter" data-filter="${id}">${label} <b>${count}</b></button>`).join('')}</div><label class="codex-search"><span>찾기</span><input data-codex-search type="search" placeholder="무장 이름" value="${escapeHtml(this.codexQuery)}"></label><div class="codex-progress"><i><b style="width:${(ownedCount / catalog.length) * 100}%"></b></i><small>${Math.round((ownedCount / catalog.length) * 100)}% · ${ownedCount}명 영입</small></div></div><div class="codex-grid">${visible.map(general => this.codexCard(owned.get(general.id) ?? general, owned.has(general.id))).join('')}</div><div class="roster-empty" data-codex-empty ${visible.length ? 'hidden' : ''}>조건에 맞는 무장이 없습니다.</div></section>`
   }
@@ -1928,8 +1928,9 @@ export class StrategyUI {
     if (!bonds.length) return ''
     const formation = new Set(this.renderedState?.formation ?? [])
     const buttons = bonds.map(bond => {
-      const active = bond.members.filter(id => formation.has(id)).length >= bond.need
-      return `<button type="button" class="skill-fx-chip is-bond ${active ? 'is-active' : ''}" data-action="bond-info" data-bond="${bond.id}">${fxSeal('bond', 'bond')}<span class="fx-name">${escapeHtml(tr(bond.name))}</span>${active ? '<small>발동 중</small>' : ''}</button>`
+      const count = bond.members.filter(id => formation.has(id)).length
+      const active = count >= bond.need
+      return `<button type="button" class="skill-fx-chip is-bond ${active ? 'is-active' : 'is-inactive'}" data-action="bond-info" data-bond="${bond.id}">${fxSeal('bond', 'bond')}<span class="fx-name">${escapeHtml(tr(bond.name))}</span>${active ? '<small>발동 중</small>' : `<small>미발동 ${count}/${bond.need}</small>`}</button>`
     }).join('')
     return `<div class="skill-detail-wide skill-fx skill-bond"><small>인연 <em>눌러서 효과 보기</em></small><div class="skill-fx-chips">${buttons}</div><p class="skill-fx-info" data-effect-info hidden></p></div>`
   }
@@ -1997,14 +1998,30 @@ export class StrategyUI {
       </div></article>`
   }
 
+  private lv60StatMax = 0
+  /** 도감 기준: 원형을 Lv.60(기본 성급)까지 키운 능력치 */
+  private atLevel60(general: General): General {
+    const base = templateGeneral(general.id) ?? general
+    return { ...base, ...statsAt(base, MAX_GENERAL_LEVEL, base.stars), level: MAX_GENERAL_LEVEL, stars: base.stars }
+  }
+  /** 능력치 막대의 기준값: 전체 무장 Lv.60 능력치 중 가장 높은 값 */
+  private level60Scale(): number {
+    if (!this.lv60StatMax) this.lv60StatMax = Math.max(100, ...allGenerals().flatMap(item => { const g = this.atLevel60(item); return [g.leadership, g.martial, g.stratagem, g.speed] })) * 1.04
+    return this.lv60StatMax
+  }
+
   private codexCard(general: General, owned: boolean): string {
     const meta = GRADE_META[general.grade]
     const hidden = owned ? '' : ' codex-card--locked'
-    const body = owned
-      ? `<div class="codex-stat-line"><span>Lv.${general.level} · ${'★'.repeat(general.stars)}</span><b>${formatNumber(combatPower(general))}</b></div><details class="gcard-skill"><summary><span>◈ ${escapeHtml(general.skillName)}</span><em>${skillDetail(general).type}</em></summary><p>${escapeHtml(general.skillDescription)}</p>${this.skillDetailPanel(general)}</details>`
+    const g60 = this.atLevel60(general)
+    const skillOf = owned ? general : g60
+    const status = owned
+      ? `<div class="codex-own-line"><span>보유 Lv.${general.level} · ${'★'.repeat(general.stars)}</span><b>${formatNumber(combatPower(general))}</b></div>`
       : `<div class="codex-lock-note">무장 모집에서 획득할 수 있습니다. (${meta.label} 등급 확률 ${meta.rate})</div>`
-    return `<article class="codex-card${hidden}${general.grade >= 4 ? ` gcard--aura gcard--g${general.grade}` : ''}" data-codex-name="${escapeHtml(general.name)}" style="--accent:${gradeColor(general)};--grade:${meta.color}"><div class="codex-card-art">${this.portrait(general, 'codex-portrait')}<span class="codex-grade">${general.grade} · ${meta.label}</span><span class="codex-state">${owned ? '영입 완료' : '미영입'}</span></div><div class="codex-card-body"><div class="codex-card-heading"><div><h3>${owned ? general.name : '???'}</h3><p>${owned ? escapeHtml(general.epithet) : `${general.role} · ${meta.label}`}</p></div><span>${general.role}</span></div>${body}</div></article>`
+    const body = `<div class="codex-stat-line"><span>Lv.60 기준 능력치</span><b>전투력 ${formatNumber(combatPower(g60))}</b></div><div class="stat-bars stat-bars--attributes codex-stats">${this.attributeRows(g60, this.level60Scale())}</div><details class="gcard-skill"><summary><span>◈ ${escapeHtml(skillOf.skillName)}</span><em>${skillDetail(skillOf).type}</em></summary><p>${escapeHtml(skillOf.skillDescription)}</p>${this.skillDetailPanel(skillOf)}</details>${status}`
+    return `<article class="codex-card${hidden}${general.grade >= 4 ? ` gcard--aura gcard--g${general.grade}` : ''}" data-codex-name="${escapeHtml(general.name)}" style="--accent:${gradeColor(general)};--grade:${meta.color}"><div class="codex-card-art">${this.portrait(general, 'codex-portrait')}<span class="codex-grade">${general.grade} · ${meta.label}</span><span class="codex-state">${owned ? '영입 완료' : '미영입'}</span></div><div class="codex-card-body"><div class="codex-card-heading"><div><h3>${escapeHtml(general.name)}</h3><p>${escapeHtml(general.epithet)}</p></div><span>${general.role}</span></div>${body}</div></article>`
   }
+
 
 
   /** 출전 편성 비교 대상: 다음 시나리오의 같은 자리 적장 */
@@ -2413,6 +2430,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '도감 스킬 · Lv.60 능력치', '무장 도감에서 미영입 무장도 이름 · 별호 · 스킬 상세 · 인연을 볼 수 있고, 능력치와 전투력은 Lv.60 기준으로 나옵니다. 보유 무장의 능력치 막대도 Lv.60 최고치를 기준으로 그립니다. 조건이 안 된 인연은 "미발동 0/3"처럼 표시됩니다.', '완료', 'jade'],
       ['2026.10.17', '효과 아이콘 고급화', '버프 · 디버프 · 인연 아이콘을 그림문자에서 금테 인장 문양으로 바꿨습니다. 버프는 비취색, 디버프는 주홍색, 인연은 금색 인장이며 버튼도 옻칠 바탕으로 바꿨습니다. 전투 중 무장 이름 옆 아이콘도 같은 인장으로 나옵니다.', '완료', 'jade'],
       ['2026.10.17', '스킬란 인연 표시', '무장 스킬 상세에 그 무장이 속한 인연(예: 유비 · 관우 · 장비의 도원결의)이 나옵니다. 누르면 효과, 필요 인원, 구성원(출전 중 · 보유 중 표시)을 볼 수 있습니다.', '완료', 'jade'],
       ['2026.10.17', '메뉴 설명 버튼', '각 메뉴 제목 옆의 (i) 표시를 없애고, 제목 오른쪽에 "○○ 설명" 버튼을 두었습니다. 누르면 그 메뉴의 설명과 주요 기능을 한 창에서 볼 수 있습니다(영토는 영토전 설명).', '완료', 'jade'],
@@ -2707,7 +2725,7 @@ export class StrategyUI {
       const formation = new Set(this.renderedState?.formation ?? [])
       const members = bond.members.map(id => { const name = templateGeneral(id)?.name ?? id; return `<span class="bond-member ${formation.has(id) ? 'is-deployed' : owned.has(id) ? 'is-owned' : ''}">${escapeHtml(tr(name))}</span>` }).join('')
       const count = bond.members.filter(id => formation.has(id)).length
-      box.innerHTML = `<b class="fx-title">${fxSeal('bond', 'bond')}${escapeHtml(tr(bond.name))}</b> <span>${tr(`출전 무장 중 ${bond.need}명 이상`)} · ${tr('지금')} ${count}/${bond.need}</span><br>${escapeHtml(tr(bond.desc))}<div class="bond-members">${members}</div><small class="bond-note">${tr('인연은 한 번에 하나만 적용되며, 여러 개가 성립하면 먼저 정해진 인연이 우선합니다. 금색은 출전 중, 밝은 글자는 보유 중인 무장입니다.')}</small>`
+      box.innerHTML = `<b class="fx-title">${fxSeal('bond', 'bond')}${escapeHtml(tr(bond.name))}</b> <span>${tr(`출전 무장 중 ${bond.need}명 이상`)} · ${tr('지금')} ${count}/${bond.need}</span><br><em class="bond-state ${count >= bond.need ? 'is-on' : 'is-off'}">${count >= bond.need ? tr('발동 중') : `${tr('미발동')} · ${bond.need - count}${tr('명 더 출전하면 발동')}`}</em><br>${escapeHtml(tr(bond.desc))}<div class="bond-members">${members}</div><small class="bond-note">${tr('인연은 한 번에 하나만 적용되며, 여러 개가 성립하면 먼저 정해진 인연이 우선합니다. 금색은 출전 중, 밝은 글자는 보유 중인 무장입니다.')}</small>`
     }
     else if (action === 'effect-info') {
       const effect = BATTLE_EFFECTS[button.dataset.effect as BattleEffectId]
