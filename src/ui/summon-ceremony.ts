@@ -1,10 +1,15 @@
-// 무장 모집·장비 뽑기 연출: 의식(기 모으기 → 균열 → 섬광) → 최고 등급이면 등장 연출(5등급 ‘천명 강림’, 전설·신화 장비) → 결과
+// 무장 모집·장비 뽑기 연출.
+// 기본은 3D ‘천명의 전당’(summon-hall.ts): 석상 · 봉인석이 금 가며 깨지고, 최고 등급은 클로즈업 → 이름 자막.
+// WebGL2가 없거나 모델을 불러오지 못하면 예전 2D 의식(기 모으기 → 균열 → 섬광 → 천명 강림)으로 대신한다.
 // 화면 전체를 덮는 층은 document.body에 붙여, 게임 화면이 다시 그려져도 끊기지 않게 한다.
 // 소리는 Web Audio로 직접 합성한다(파일 없이, 모집 버튼을 누른 뒤라 브라우저가 허용).
 import type { Equipment, EquipmentGrade, General } from '../game/strategy'
 import { EQUIPMENT_GRADE_META, GRADE_META } from '../game/strategy'
 import { effectsSetting } from '../game/settings'
 import { sound } from '../engine/sound'
+import { heroLook } from '../game/hero-style'
+import { loadModel, loadSkin } from '../game/battle-models'
+import { hallSupported, playSummonHall, type HallEntry, type HallRank } from './summon-hall'
 
 const esc = (value: string) => value.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch))
 const NEUTRAL = '#e9dcb8'
@@ -102,11 +107,37 @@ async function spotlight(item: Spotlight, level = 5, quiet = false): Promise<voi
 
 let running = false
 
+const withTimeout = <T,>(pending: Promise<T>, ms: number): Promise<T> => Promise.race([pending, new Promise<T>((_, reject) => window.setTimeout(() => reject(new Error('timeout')), ms))])
+
+/** 전당 준비(모델을 불러오는 동안 화면을 어둡게 덮어 둔다). 실패하면 null → 2D 연출 */
+async function prepareHall(build: () => Promise<HallEntry[]>): Promise<HallEntry[] | null> {
+  if (!hallSupported()) return null
+  const veil = document.createElement('div')
+  veil.className = 'summon-hall summon-ceremony is-on sh-veil'
+  document.body.appendChild(veil)
+  try { return await withTimeout(build(), 15000) } catch (error) { console.warn('[summon-hall] 3D 전당을 열지 못해 기본 연출로 대신합니다', error); return null } finally { window.setTimeout(() => veil.remove(), 400) }
+}
+
+/** 무장 → 전당 석상(말 탄 모델 + 전용 의상) */
+function summonEntries(rewards: General[]): Promise<HallEntry[]> {
+  return Promise.all(rewards.map(async general => {
+    const look = heroLook(general), meta = GRADE_META[general.grade]
+    const [gltf, skin] = await Promise.all([loadModel(look.model), look.skin ? loadSkin(look.skin).catch(() => null) : Promise.resolve(null)])
+    return { rank: general.grade as HallRank, color: meta.color, label: `${meta.label} · ${general.grade}등급`, name: general.name, sub: general.epithet, star: general.grade === 5, model: { gltf, skin } }
+  }))
+}
+
 /** 모집 연출 전체. 끝나면 결과 화면을 띄우면 된다 */
 export async function playSummonCeremony(rewards: General[], portraitOf: (general: General) => string): Promise<void> {
   if (running || !rewards.length) return
   running = true
   try {
+    const entries = await prepareHall(() => summonEntries(rewards))
+    if (entries) {
+      sound.recruitJingle()
+      try { await playSummonHall(entries, 'summon') } catch (error) { console.warn('[summon-hall]', error) }
+      return
+    }
     const top = Math.max(...rewards.map(general => general.grade)) as 1 | 2 | 3 | 4 | 5
     const heroes = rewards.filter((general, index) => general.grade === 5 && rewards.findIndex(item => item.id === general.id) === index)
     let behind = await ritual(top, GRADE_META[top].color, undefined, 'summon', heroes.length > 0)
@@ -128,6 +159,14 @@ export async function playForgeCeremony(items: Equipment[], imageOf: (item: Equi
   if (running || !items.length) return
   running = true
   try {
+    const entries = await prepareHall(async () => items.map(item => {
+      const rank = EQUIP_RANK[item.grade] as HallRank, meta = EQUIPMENT_GRADE_META[item.grade], label = labelOf(item)
+      return { rank, color: meta.color, label: `${meta.label} 장비`, name: item.name, sub: `${label.type} · ${label.set}`, star: rank >= 4, image: imageOf(item) }
+    }))
+    if (entries) {
+      try { await playSummonHall(entries, 'forge', entry => sound.heaven(entry.rank)) } catch (error) { console.warn('[summon-hall]', error) }
+      return
+    }
     const best = [...items].sort((a, b) => EQUIP_RANK[b.grade] - EQUIP_RANK[a.grade])[0]
     const level = EQUIP_RANK[best.grade]
     const stars = items.filter(item => EQUIP_RANK[item.grade] >= 4)
