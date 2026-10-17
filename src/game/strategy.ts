@@ -630,7 +630,7 @@ const CORE_LIBRARY: General[] = [
   },
   {
     id: 'zhang-fei', name: '장비', epithet: '익덕의 장판교 포효', role: '보병', grade: 4, stars: 1, level: 8,
-    attack: 89, defense: 79, command: 83, leadership: 83, martial: 94, stratagem: 48, speed: 58, skillName: '장판 포효', skillDescription: '적의 전열을 흔들고 중앙 돌파의 위력을 높인다.', skillUnlocked: false, accent: '#7bd6e8', portrait: '장',
+    attack: 89, defense: 79, command: 83, leadership: 83, martial: 94, stratagem: 48, speed: 58, skillName: '장판교 일갈', skillDescription: '전열에 홀로 버티고 서서 적을 막아 내며, 호통으로 적을 겁에 질리게 한다.', skillUnlocked: false, accent: '#7bd6e8', portrait: '장',
   },
   {
     id: 'huang-zhong', name: '황충', epithet: '한승의 백발 명궁', role: '궁병', grade: 4, stars: 1, level: 8,
