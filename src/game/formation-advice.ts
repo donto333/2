@@ -96,6 +96,24 @@ function profiles(): Map<string, Profile> {
   return cache
 }
 
+/** 인연 효과의 크기(전투 계산과 같은 값): 공격 · 피해 감소 · 스킬 위력은 그대로, 쿨다운은 초당 약 0.04로 환산 */
+const LEGACY_BOND: Record<string, Partial<BondDef>> = {
+  'peach-garden': { atk: 0.08, dr: 0.08 },
+  'five-tigers': { typeMult: { types: ['돌격', '사격'], value: 0.1 } },
+  'lu-bu-army': { skillMult: 0.08 },
+  'five-generals': { dr: 0.1 },
+  'dragon-phoenix': { cdTypes: { types: ['계략'], sec: 1.5 } },
+  'red-cliffs': { skillMult: 0.05 },
+  'yellow-heaven': { atk: 0.05, cdTypes: { types: ['계략'], sec: 1 } },
+}
+export function bondValue(bond: BondDef | null, trio: Array<{ def: GeneralSkillDef }>): number {
+  if (!bond) return 0
+  const fx = { ...bond, ...LEGACY_BOND[bond.id] }
+  const share = (types: string[]) => trio.filter(item => types.includes(item.def.type)).length / 3
+  return (fx.atk ?? 0) * 1 + (fx.dr ?? 0) * 1.4 + (fx.skillMult ?? 0) * 1.6 + (fx.typeMult ? fx.typeMult.value * 1.6 * share(fx.typeMult.types) : 0)
+    + (fx.cd ?? 0) * 0.04 * 3 + (fx.cdTypes ? fx.cdTypes.sec * 0.04 * 3 * share(fx.cdTypes.types) : 0)
+}
+
 const YELLOW = new Set(['zhang-jiao', 'zhang-bo', 'zhang-liang', 'guan-hai', 'zhou-cang'])
 
 /** 두 무장 사이의 연계(한 방향): a가 b를 살린다 */
@@ -133,8 +151,15 @@ function trioScore(trio: Profile[], archetype: Archetype, anchor: Profile = trio
   const sum = (key: 'dmg' | 'tank' | 'heal' | 'debuff' | 'util' | 'early') => trio.reduce((total, item) => total + item[key], 0)
   const power = trio.reduce((total, item) => total + item.power, 0) / 3
   const bondDef = bondFor(trio.map(item => item.general.id))
-  const bond = bondDef ? 1 : 0
+  // 인연은 효과 크기만큼(공격 +8% ≈ 0.08 → 점수 약 0.6): 이름만 맞는 약한 인연에 끌려가지 않게
+  const bond = bondDef ? 0.25 + bondValue(bondDef, trio) * 5 : 0
   const anchorBond = bondDef?.members.includes(anchor.general.id) ? 1 : 0
+  // 덱 성격에 맞는 인연 효과는 더 친다: 버티기=피해 감소, 속공=공격·스킬 위력, 유틸·디버프=쿨다운
+  const fx = bondDef ? { ...bondDef, ...LEGACY_BOND[bondDef.id] } : null
+  const cdFx = fx ? (fx.cd ?? 0) + (fx.cdTypes ? fx.cdTypes.sec * trio.filter(item => fx.cdTypes!.types.includes(item.def.type)).length / 3 : 0) : 0
+  const bondFit = !fx ? 0 : archetype === 'sustain' ? (fx.dr ?? 0) * 12
+    : archetype === 'early' ? ((fx.atk ?? 0) + (fx.skillMult ?? 0) + (fx.typeMult?.value ?? 0) * 0.6) * 8
+    : archetype === 'utility' || archetype === 'debuff' ? cdFx * 0.5 : 0
   let synergy = 0
   // 고른 무장이 낀 연계는 더 크게(그 무장을 중심으로 짠 덱이 되도록), 같은 진영끼리는 조금 가산
   let anchorTie = 0
@@ -152,7 +177,7 @@ function trioScore(trio: Profile[], archetype: Archetype, anchor: Profile = trio
   const carry = dmg < 0.9 ? -1.6 : dmg < 1.4 ? -0.4 : 0
   // 생존: 유형별 성장 이후 전열 수호형·회복이 승률을 크게 가른다(시뮬레이션: 전열이 약한 덱은 강한 적에게 진다)
   const survive = (front.def.type === '수호' ? 1.3 : 0) + Math.min(1, sum('heal')) * 0.5
-  const base = power * 0.9 + carry + bond * 0.5 + anchorTie * 0.9 + survive
+  const base = power * 0.9 + carry + bond * 0.5 + bondFit + anchorTie * 0.9 + survive
   switch (archetype) {
     // 연계는 고른 무장이 낀 연계·인연이 핵심(다른 둘끼리의 연계는 조금만)
     case 'chain': return base + anchorTie * 1.6 + (synergy - anchorTie) * 0.35 + anchorBond * 1.4 + dmg * 0.3 + frontTank * 0.3
@@ -186,6 +211,7 @@ export function recommendDecks(anchorId: string, archetypes: Archetype[] = ARCHE
   if (!anchor) return []
   const others = [...all.values()].filter(item => item !== anchor)
   const used = new Set<string>()
+  const partners = new Map<string, number>()
   const result: ComboAdvice[] = []
   for (const archetype of archetypes) {
     const ranked: Array<{ trio: Profile[]; score: number }> = []
@@ -193,10 +219,13 @@ export function recommendDecks(anchorId: string, archetypes: Archetype[] = ARCHE
       const trio = [anchor, others[i], others[j]]
       ranked.push({ trio, score: trioScore(trio, archetype, anchor) })
     }
+    // 앞 덱에 이미 나온 동료는 조금 깎는다: 다섯 덱이 같은 짝(예: 동탁 · 여포)으로만 채워지지 않게
+    for (const entry of ranked) for (const item of entry.trio) if (item !== anchor) entry.score -= (partners.get(item.general.id) ?? 0) * 0.7
     ranked.sort((left, right) => right.score - left.score)
     const pick = ranked.find(entry => !used.has(entry.trio.map(item => item.general.id).sort().join()))
     if (!pick) continue
     used.add(pick.trio.map(item => item.general.id).sort().join())
+    for (const item of pick.trio) if (item !== anchor) partners.set(item.general.id, (partners.get(item.general.id) ?? 0) + 1)
     const ids = frontLineOrder(pick.trio.map(item => item.general)).map(general => general.id)
     const keyInfo = keySkills(pick.trio, archetype)
     result.push({ archetype, ids, bond: bondFor(ids), score: pick.score, keys: keyInfo.map(key => key.label), keyInfo })
