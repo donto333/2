@@ -65,9 +65,6 @@
     ["kuaiji", "jianan"],
     ["jianan", "nanhai"],
     ["yunnan", "yongchang"],
-    ["pingyuan", "bohai"],
-    ["jianye", "shixin"],
-    ["shixin", "kuaiji"],
-    ["shixin", "poyang"]
+    ["pingyuan", "bohai"]
   ]
 }

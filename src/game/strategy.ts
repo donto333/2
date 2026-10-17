@@ -466,7 +466,6 @@ export function createCities(): City[] {
     { id: 'jiaozhi', name: '교지', chineseName: '交趾', region: '남방 해안', owner: '중립', level: 1, prosperity: 44, defense: 48, buildings: createBuildings(1) },
     { id: 'shixing', name: '시흥', chineseName: '始興', region: '영남 북부', owner: '중립', level: 1, prosperity: 41, defense: 47, buildings: createBuildings(1) },
     { id: 'nanhai', name: '남해', chineseName: '南海', region: '영남 남부', owner: '중립', level: 1, prosperity: 43, defense: 45, buildings: createBuildings(1) },
-    { id: 'shixin', name: '신도', chineseName: '新都', region: '양주 서남', owner: '중립', level: 1, prosperity: 45, defense: 50, buildings: createBuildings(1) },
     { id: 'yongchang', name: '영창', chineseName: '永昌', region: '익주 서남', owner: '중립', level: 1, prosperity: 40, defense: 48, buildings: createBuildings(1) },
     { id: 'bohai', name: '발해', chineseName: '渤海', region: '기주 동북', owner: '중립', level: 2, prosperity: 58, defense: 60, buildings: createBuildings(1) },
     { id: 'jianan', name: '건안', chineseName: '建安', region: '민월 해안', owner: '중립', level: 1, prosperity: 44, defense: 46, buildings: createBuildings(1) },
@@ -482,6 +481,9 @@ export function ensureCityRoster(state: StrategyState): void {
     const latest = template.get(city.id)
     if (latest) { city.name = latest.name; city.chineseName = latest.chineseName; city.region = latest.region }
   })
+  // 없앤 도시(예: 2026.10.17 신도 shixin)는 저장에서도 뺀다
+  state.cities = state.cities.filter(city => template.has(city.id))
+  if (state.selectedCityId && !template.has(state.selectedCityId)) state.selectedCityId = state.cities.find(city => city.owner === state.faction)?.id ?? state.cities[0]?.id ?? ''
   const existing = new Set(state.cities.map(city => city.id))
   const fresh = [...template.values()].filter(city => !existing.has(city.id))
   state.cities.push(...fresh)
