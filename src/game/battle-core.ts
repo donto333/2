@@ -368,6 +368,10 @@ export class BattleCore {
     })
     if (this.bond?.id === 'dragon-phoenix' && unit.def.type === '계략') cooldown -= 1.5
     if (this.bond?.id === 'yellow-heaven' && unit.def.type === '계략') cooldown -= 1
+    if (unit.side === 'player') {
+      cooldown -= this.bond?.cd ?? 0
+      if (this.bond?.cdTypes?.types.includes(unit.def.type)) cooldown -= this.bond.cdTypes.sec
+    }
     return Math.max(4, Math.round(cooldown * 10) / 10)
   }
 
@@ -436,6 +440,7 @@ export class BattleCore {
     if (id === 'firstStrike' && !unit.firstAttackDone) bonus += value
     if (this.bond?.id === 'peach-garden') bonus += 0.08
     if (this.bond?.id === 'yellow-heaven') bonus += 0.05
+    bonus += this.bond?.atk ?? 0
     if (hasBattleEffect(this.playerDebuffs, 'p-fear')) bonus -= 0.15
     return bonus
   }
@@ -463,6 +468,7 @@ export class BattleCore {
     })
     if (this.bond?.id === 'peach-garden') dr += 0.08
     if (this.bond?.id === 'five-generals') dr += 0.1
+    dr += this.bond?.dr ?? 0
     let taken = 0
     const weakness = unit.def.weakness?.id
     if (weakness === 'fragile10') taken += 0.1
@@ -834,6 +840,10 @@ export class BattleCore {
     if (id === 'vsBurning' && hasBattleEffect(this.debuffs, 'burning')) mult += value
     if (this.bond?.id === 'five-tigers' && (unit.def.type === '돌격' || unit.def.type === '사격')) mult += 0.1
     if (this.bond?.id === 'lu-bu-army') mult += 0.08
+    if (unit.side === 'player') {
+      mult += this.bond?.skillMult ?? 0
+      if (this.bond?.typeMult?.types.includes(unit.def.type)) mult += this.bond.typeMult.value
+    }
     if (!preview && this.pendingFlankBonus > 0 && id === 'flankCharge') mult += this.pendingFlankBonus
     if (unit.def.type === '돌격') mult += this.research.chargeSkill ?? 0
     for (const effect of fx) {

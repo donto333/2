@@ -156,7 +156,11 @@ export const GENERAL_SKILLS: Record<string, GeneralSkillDef> = {
 }
 
 /** 인연: 하나만 적용되며 여러 개가 성립하면 위에 있는 것이 우선. */
-export interface BondDef { id: string; name: string; members: string[]; need: number; desc: string }
+export interface BondDef {
+  id: string; name: string; members: string[]; need: number; desc: string
+  /** 일반 효과(새 인연은 이 값들로만 정한다): 아군 공격 · 받는 피해 감소 · 스킬 위력 · 특정 유형 스킬 위력 · 쿨다운 */
+  atk?: number; dr?: number; skillMult?: number; typeMult?: { types: SkillType[]; value: number }; cd?: number; cdTypes?: { types: SkillType[]; sec: number }
+}
 export const BONDS: BondDef[] = [
   { id: 'peach-garden', name: '도원결의', members: ['liu-bei', 'guan-yu', 'zhang-fei'], need: 3, desc: '아군 공격 +8%, 받는 피해 −8%' },
   { id: 'five-tigers', name: '오호대장군', members: ['guan-yu', 'zhang-fei', 'zhao-yun', 'ma-chao', 'huang-zhong'], need: 3, desc: '돌격·사격 스킬 피해 +10%' },
@@ -165,6 +169,26 @@ export const BONDS: BondDef[] = [
   { id: 'dragon-phoenix', name: '와룡봉추', members: ['zhuge-liang', 'pang-tong'], need: 2, desc: '계략 스킬 쿨다운 −1.5초' },
   { id: 'red-cliffs', name: '적벽의 불', members: ['zhou-yu', 'huang-gai', 'pang-tong', 'zhuge-liang'], need: 2, desc: '화계 지속 +2초' },
   { id: 'yellow-heaven', name: '황천당립', members: ['zhang-jiao', 'zhang-bo', 'zhang-liang', 'guan-hai', 'zhou-cang'], need: 3, desc: '아군 공격 +5%, 계략 스킬 쿨다운 −1초' },
+  // ── 모든 무장이 하나 이상의 인연을 갖도록 더한 인연(역사 속 인연 · 같은 군벌 · 함께 싸운 전투) ──
+  { id: 'wei-clan', name: '조씨 · 하후씨 일족', members: ['cao-cao', 'xiahou-dun', 'cao-ren', 'cao-hong'], need: 2, desc: '아군 공격 +5%, 받는 피해 −5%', atk: 0.05, dr: 0.05 },
+  { id: 'tiger-guard', name: '호위무사', members: ['xu-chu', 'dian-wei', 'cao-cao'], need: 2, desc: '아군 받는 피해 −10%', dr: 0.1 },
+  { id: 'wei-advisors', name: '위의 모사', members: ['guo-jia', 'xun-yu', 'xun-you', 'jia-xu', 'cheng-yu', 'simayi'], need: 2, desc: '계략 · 통솔 스킬 쿨다운 −1초', cdTypes: { types: ['계략', '통솔'], sec: 1 } },
+  { id: 'hefei', name: '합비 수비', members: ['zhang-liao', 'li-dian', 'yue-jin'], need: 2, desc: '아군 받는 피해 −8%, 공격 +4%', dr: 0.08, atk: 0.04 },
+  { id: 'fancheng', name: '번성 공방', members: ['cao-ren', 'xu-huang', 'wen-ping', 'pang-de', 'yu-jin'], need: 2, desc: '아군 받는 피해 −10%', dr: 0.1 },
+  { id: 'sun-family', name: '손가의 패업', members: ['sun-jian', 'sun-ce', 'sun-quan'], need: 2, desc: '아군 공격 +8%', atk: 0.08 },
+  { id: 'jiangdong-tigers', name: '강동의 맹장', members: ['gan-ning', 'ling-tong', 'taishi-ci', 'lu-meng'], need: 2, desc: '돌격 · 사격 스킬 위력 +10%', typeMult: { types: ['돌격', '사격'], value: 0.1 } },
+  { id: 'wu-commanders', name: '강동의 대도독', members: ['zhou-yu', 'lu-su', 'lu-meng', 'lu-xun'], need: 2, desc: '스킬 위력 +8%', skillMult: 0.08 },
+  { id: 'two-qiao', name: '강동이교', members: ['da-qiao', 'sun-ce', 'zhou-yu'], need: 2, desc: '아군 받는 피해 −8%, 모든 스킬 쿨다운 −0.5초', dr: 0.08, cd: 0.5 },
+  { id: 'shu-advisors', name: '촉의 책사', members: ['xu-shu', 'fa-zheng', 'zhuge-liang', 'pang-tong'], need: 2, desc: '모든 스킬 쿨다운 −0.8초', cd: 0.8 },
+  { id: 'shu-rising', name: '촉의 신진', members: ['wei-yan', 'wang-ping', 'guan-ping', 'guan-xing', 'zhang-bao', 'ma-dai'], need: 2, desc: '아군 공격 +6%', atk: 0.06 },
+  { id: 'nanman', name: '남만 왕가', members: ['meng-huo', 'zhu-rong'], need: 2, desc: '아군 공격 +5%, 받는 피해 −8%', atk: 0.05, dr: 0.08 },
+  { id: 'xiliang', name: '서량 군벌', members: ['ma-teng', 'han-sui', 'ma-chao', 'ma-dai', 'pang-de'], need: 2, desc: '돌격 스킬 위력 +12%', typeMult: { types: ['돌격'], value: 0.12 } },
+  { id: 'hebei', name: '하북의 패자', members: ['yuan-shao', 'yan-liang', 'wen-chou'], need: 2, desc: '아군 공격 +7%', atk: 0.07 },
+  { id: 'yuan-clan', name: '사세삼공', members: ['yuan-shao', 'yuan-shu'], need: 2, desc: '스킬 위력 +10%', skillMult: 0.1 },
+  { id: 'white-horse', name: '백마의종', members: ['gongsun-zan', 'zhao-yun'], need: 2, desc: '돌격 · 통솔 스킬 위력 +10%', typeMult: { types: ['돌격', '통솔'], value: 0.1 } },
+  { id: 'dong-court', name: '동탁의 조정', members: ['dong-zhuo', 'lu-bu', 'diao-chan'], need: 2, desc: '스킬 위력 +8%, 아군 받는 피해 −4%', skillMult: 0.08, dr: 0.04 },
+  { id: 'wenji-return', name: '문희귀한', members: ['cai-wenji', 'cao-cao'], need: 2, desc: '아군 받는 피해 −6%, 모든 스킬 쿨다운 −0.5초', dr: 0.06, cd: 0.5 },
+  { id: 'hanzhong', name: '한중의 객장', members: ['zhang-lu', 'ma-chao', 'pang-de'], need: 2, desc: '아군 공격 +5%, 받는 피해 −4%', atk: 0.05, dr: 0.04 },
 ]
 
 export function bondFor(ids: string[]): BondDef | null {
