@@ -2356,3 +2356,18 @@ body .combo-type .combo-style { display: block; margin-top: 2px; color: #a8987a;
 body .duel-style { align-self: center; padding: 3px 8px; border: 1px solid rgba(214, 178, 106, 0.35); border-radius: 999px; color: #d9cba8; font-size: 11px; white-space: nowrap; }
 body .duel-style.is-adv { border-color: rgba(96, 196, 150, 0.6); color: #8fe0b8; }
 body .duel-style.is-dis { border-color: rgba(220, 110, 90, 0.6); color: #f0a08c; }
+
+/* 진영 영향도 · 열세 버프(영토전) */
+body .influence-note { margin-top: 10px; display: grid; gap: 4px; max-width: 520px; }
+body .influence-row { display: grid; grid-template-columns: 52px 1fr 36px; align-items: center; gap: 8px; font-size: 12px; color: #c9b994; }
+body .influence-row.is-mine small, body .influence-row.is-mine strong { color: #f3d58a; }
+body .influence-row i { position: relative; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+body .influence-row i b { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #8a6a2c, #d6b26a); }
+body .influence-row.is-mine i b { background: linear-gradient(90deg, #2f8f6a, #6fd0a4); }
+body .influence-row i em { position: absolute; top: 0; bottom: 0; border-left: 1px dashed rgba(255, 240, 210, 0.6); }
+body .influence-row strong { text-align: right; font-size: 12px; }
+body .underdog-buff { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(96, 196, 150, 0.5); background: rgba(30, 70, 52, 0.45); color: #cfeedd; font-size: 12px; line-height: 1.55; }
+body .underdog-buff b { display: block; color: #8fe0b8; font-size: 13px; }
+body .underdog-buff--last-stand { border-color: rgba(230, 120, 90, 0.6); background: rgba(80, 30, 22, 0.5); color: #f6d4c8; }
+body .underdog-buff--last-stand b { color: #ffb08e; }
+body .underdog-hint { margin: 4px 0 0; color: #a8987a; font-size: 11px; }

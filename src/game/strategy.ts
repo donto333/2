@@ -1757,6 +1757,31 @@ export function cityYield(city: City, state?: StrategyState): Resources {
   }
 }
 
+// ── 열세 진영 버프(영토전) ────────────────────────────────────────
+/** 진영 영향도: 차지한 도시의 단계 합(1~5단계, 수도 · 낙양 포함) */
+export function factionInfluence(state: Pick<StrategyState, 'cities'>): Record<CityFaction, number> {
+  const out: Record<CityFaction, number> = { 촉한: 0, 위나라: 0, 오나라: 0 }
+  for (const city of state.cities) if (city.owner in out) out[city.owner as CityFaction] += city.level
+  return out
+}
+
+export interface UnderdogBuff { id: 'underdog' | 'last-stand'; name: string; /** 전투 이점(피해 · 전력 배율) */ battle: number; /** 이겼을 때 성벽 방어도 차감 배율 */ wall: number; desc: string }
+export const UNDERDOG_BUFFS: Record<UnderdogBuff['id'], UnderdogBuff> = {
+  underdog: { id: 'underdog', name: '열세의 노력', battle: 0.1, wall: 1.5, desc: '영향도가 가장 강한 진영의 50% 미만 · 영토전 전투 이점 +10% · 공성 승리 시 성벽 방어도 차감 1.5배' },
+  'last-stand': { id: 'last-stand', name: '구국의 총력전', battle: 0.2, wall: 2, desc: '영향도가 가장 강한 진영의 50% 미만이고 수도만 남음 · 영토전 전투 이점 +20% · 공성 승리 시 성벽 방어도 차감 2배' },
+}
+
+/** 이 진영이 받는 열세 버프(재야 · 조건 미달이면 없음) */
+export function underdogBuff(state: Pick<StrategyState, 'cities' | 'faction'>, faction: Faction = state.faction): UnderdogBuff | null {
+  if (faction === '재야') return null
+  const influence = factionInfluence(state)
+  const top = Math.max(...Object.values(influence))
+  if (top <= 0 || influence[faction] >= top * 0.5) return null
+  const owned = state.cities.filter(city => city.owner === faction)
+  const capitalOnly = owned.length === 1 && owned[0].id === FACTION_CAPITALS[faction]
+  return UNDERDOG_BUFFS[capitalOnly ? 'last-stand' : 'underdog']
+}
+
 export function conquestPower(state: StrategyState): number {
   const formationPower = totalPower(state)
   return formationPower + state.cities.filter(city => city.owner === state.faction).length * 35
@@ -1813,7 +1838,8 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
   const garrisons = (city.garrisons ?? []).filter(garrison => garrison.source === 'player')
   const raidPower = neutralRaidPower(neutralRaidLevelFor(state, city.id))
   const mods = researchMods(state)
-  const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.map(garrison => garrison.power * (1 + mods.raidGarrison)), defeated: city.defendersDefeated ?? 0, defense: city.defense, allowCapture: false })
+  const edge = 1 + (underdogBuff(state)?.battle ?? 0)
+  const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.map(garrison => garrison.power * (1 + mods.raidGarrison) * edge), defeated: city.defendersDefeated ?? 0, defense: city.defense, allowCapture: false })
   if (result.attackerWon && mods.raidWallDamage < 1) {
     // 성벽 보강·철옹성: 성벽이 받는 피해를 줄인다
     const reduced = Math.round(result.damage * mods.raidWallDamage)
@@ -1857,7 +1883,7 @@ export function launchFactionBattle(state: StrategyState, cityId: string, now = 
   state.honor -= honorCost
   state.lastFactionBattleAt = now
   let goldGranted = 0
-  const attackPower = conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70
+  const attackPower = (conquestPower(state) + state.cities.filter(item => item.owner === state.faction).length * 70) * (1 + (underdogBuff(state)?.battle ?? 0))
   const factionPower = 300 + city.level * 250 + (city.owner === '위나라' ? 100 : city.owner === '오나라' ? 70 : 0)
   const won = attackPower >= factionPower * 0.75
   addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: 0, note: won ? `최종 세력전 승리 · 옥패 -${honorCost} · 금화 +${goldReward}` : `최종 세력전 패배 · 옥패 -${honorCost}` })
@@ -1943,7 +1969,8 @@ export function resolveConquestBattle(state: StrategyState, cityId: string, batt
   if (!Array.isArray(city.garrisons)) city.garrisons = defenseLineForCity(city)
   const defenseLine = defenseLineForCity(city)
   const defeated = Math.max(0, Math.min(defenseLine.length, city.defendersDefeated ?? 0))
-  const damage = Math.round(wallDamageFromPower(conquestPower(state)) * (1 + researchMods(state).siegeDamage))
+  const underdog = underdogBuff(state)
+  const damage = Math.round(wallDamageFromPower(conquestPower(state)) * (1 + researchMods(state).siegeDamage) * (underdog?.wall ?? 1))
   city.defendersDefeated = Math.min(defenseLine.length, defeated + 1)
   if (isWanderer(state) && city.id !== LUOYANG_ID) {
     state.lastConquestAt = now
@@ -1960,8 +1987,8 @@ export function resolveConquestBattle(state: StrategyState, cityId: string, batt
   state.selectedCityId = city.id
   state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage }
   state.lastNotice = finalReady
-    ? `${city.name} 3D 공성전 승리 · 성벽 방어도 -${damage} · 수비병 전멸 · 최종 세력전을 실행하십시오.`
-    : `${city.name} 3D 공성전 승리 · 성벽 방어도 -${damage} · ${remaining}부대 남음`
+    ? `${city.name} 3D 공성전 승리 · 성벽 방어도 -${damage}${underdog ? ` (${underdog.name} ×${underdog.wall})` : ''} · 수비병 전멸 · 최종 세력전을 실행하십시오.`
+    : `${city.name} 3D 공성전 승리 · 성벽 방어도 -${damage}${underdog ? ` (${underdog.name} ×${underdog.wall})` : ''} · ${remaining}부대 남음`
   addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won: true, damage, note: '3D 공성전 승리 · 성벽 방어도 감소가 확정되었습니다.' })
   return { ok: true, captured: false, message: state.lastNotice, damage }
 }

@@ -186,6 +186,8 @@ export interface CoreConfig {
   hardRule?: HardRule | null
   /** 덱 유형 상성: 아군 · 적 덱 유형 이름과 아군 기준 상성(+1 유리 · −1 불리 · 0) */
   style?: DeckStyleMatch | null
+  /** 영토전 열세 버프(열세의 노력 0.1 · 구국의 총력전 0.2): 아군이 주는 피해와 스킬 사기 피해 배율 */
+  territoryBonus?: number
 }
 
 export interface DeckStyleMatch { player: string; enemy: string; edge: number; playerKey?: string; enemyKey?: string }
@@ -277,6 +279,7 @@ export class BattleCore {
   readonly hardRule: HardRule | null
   /** 덱 유형 상성(영토전 · 유저 대련) */
   readonly style: DeckStyleMatch | null
+  readonly territoryBonus: number
   private readonly rng: () => number
   readonly research: BattleResearch
   private collapseSaved = false
@@ -297,6 +300,7 @@ export class BattleCore {
     this.autoSkill = Boolean(config.autoSkill)
     this.hardRule = config.hardRule ?? null
     this.style = config.style ?? null
+    this.territoryBonus = clamp(config.territoryBonus ?? 0, 0, 0.5)
     this.moraleBonus = clamp(Math.round(config.moraleBonus ?? 0), 0, 50) + (this.hardRule === 'iron' ? HARD_RULE_EFFECT.ironMorale : 0)
     this.timeLimit = this.hardRule === 'swift' ? HARD_RULE_EFFECT.swiftTime : BATTLE_RULES.timeLimit
     this.research = config.research ?? {}
@@ -331,6 +335,7 @@ export class BattleCore {
     this.gauge = Math.min(100, this.research.startGauge ?? 0)
     if (this.players.some(unit => this.passive(unit) === 'startFear')) this.addEffect('debuff', 'fear', 3)
     this.log(`작전 개시 · 적 ${this.enemies.map(unit => unit.general.name).join(' · ')}${this.bond ? ` · 인연 ‘${this.bond.name}’ ${this.bond.desc}` : ''}`)
+    if (this.territoryBonus > 0) this.log(`영토전 열세 버프 · 아군 피해 +${Math.round(this.territoryBonus * 100)}%`, 'jade')
     if (this.style) this.log(`덱 상성 · 아군 ${this.style.player} vs 적 ${this.style.enemy}${this.style.edge > 0 ? ' · 유리(피해 +12%)' : this.style.edge < 0 ? ' · 불리(피해 −12%)' : ' · 상성 없음'}`, this.style.edge > 0 ? 'jade' : this.style.edge < 0 ? 'ember' : undefined)
   }
 
@@ -557,7 +562,8 @@ export class BattleCore {
     const front = victim.lane === BATTLE_RULES.frontLane && !opts.ignoreDr ? BATTLE_RULES.frontDr + (this.isFrontTank(victim) ? BATTLE_RULES.frontTankDr : 0) : 0
     const legion = hasGearSet(victim, 'command') ? 1 - BATTLE_RULES.legionGuard : 1
     // 덱 유형 상성: 유리한 덱이 주는 피해 +12%, 불리한 덱 −12%
-    const edge = this.style && attacker ? (1 + BATTLE_RULES.styleEdge * this.style.edge * (attacker.side === 'player' ? 1 : -1)) * this.styleTraitDamage(attacker.side) : 1
+    const edge = (this.style && attacker ? (1 + BATTLE_RULES.styleEdge * this.style.edge * (attacker.side === 'player' ? 1 : -1)) * this.styleTraitDamage(attacker.side) : 1)
+      * (attacker?.side === 'player' ? 1 + this.territoryBonus : 1)
     const amount = Math.max(1, Math.round(raw * (1 - front) * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken) * legion * edge))
     if (this.mode === 'raid' && victim.side === 'enemy') this.raidDamage += amount
     else victim.troops = Math.max(0, victim.troops - amount)
@@ -870,6 +876,7 @@ export class BattleCore {
     if (this.bond?.id === 'lu-bu-army') mult += 0.08
     if (unit.side === 'player') {
       if (this.style) mult += BATTLE_RULES.styleEdge * this.style.edge + this.styleTraitDamage('player') - 1
+      mult += this.territoryBonus
       mult += this.bond?.skillMult ?? 0
       if (this.bond?.typeMult?.types.includes(unit.def.type)) mult += this.bond.typeMult.value
     }

@@ -79,7 +79,7 @@ import { RAID_DAILY_LIMIT, RAID_DEFAULT_LEVEL, raidDayKey, raidResetIn, raidWeek
 import { autoEquipSquad, autoSquad, ensureSquads, packSquads, swapWithFirstSquad, toggleSquadMember, applySquadCombo } from './game/squads'
 import { applyEquipmentPreset, bulkDismantle, dismantleEquipment, packLoadouts, saveEquipmentPreset, toggleEquipmentLock, unpackLoadouts } from './game/equipment-manage'
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, duelTierFor, pickDuelMatches, type DuelTier } from '../server/duel-match.mjs'
-import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral } from './game/strategy'
+import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral, underdogBuff } from './game/strategy'
 import { locale } from './i18n/lang'
 import { sound, type Sfx } from './engine/sound'
 import { startDomTranslation, tr } from './i18n/translate'
@@ -1255,7 +1255,7 @@ const ui = new StrategyUI(root, {
       sound.returnTheme = 'territory'
       state.section = 'battle'
       ui.setBattleAutoAvailable(true)
-      arena.setSiegeDeck(siegeDeckFor(id), siegeMoraleBonus(id))
+      arena.setSiegeDeck(siegeDeckFor(id), siegeMoraleBonus(id), underdogBuff(state)?.battle ?? 0)
       arena.setGenerals(battleGenerals())
       arena.startBattle()
       // 전투 스냅샷을 먼저 반영해야 battleViewActive가 켜진 상태로 렌더링된다.
