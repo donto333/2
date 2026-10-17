@@ -303,7 +303,7 @@ function legacyCityDefenseFloor(cityId) {
   return Math.ceil((CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]) * TERRITORY_TEST_WEAKENING_RATIO);
 }
 const CITY_LEVEL_BY_ID = {
-  chengdu: 3, hanzhong: 4, xiangyang: 4, jianye: 3, xuchang: 4, luoyang: 5, ye: 4, chenliu: 2, puyang: 2, wancheng: 2,
+  chengdu: 4, hanzhong: 4, xiangyang: 4, jianye: 4, xuchang: 4, luoyang: 5, ye: 4, chenliu: 2, puyang: 2, wancheng: 2,
   jiangling: 4, yiling: 2, changsha: 3, lingling: 1, guiyang: 1, wujun: 3, kuaiji: 2, poyang: 2, hefei: 3, shouchun: 4,
   jiujiang: 2, tianshui: 2, wuwei: 1, fucheng: 2, xindu: 1, changan: 4, meixian: 2, anding: 2, jinyang: 3, pingyuan: 2,
   beihai: 2, langya: 2, xiapi: 3, guangling: 2, lujiang: 2, shangyong: 2, xinye: 2, jiangxia: 2, wuling: 1, badong: 2,
@@ -488,7 +488,8 @@ async function ensureFactionTerritories(db) {
     // 이미 공성 진전이 있는 도시는 현재 방어도를 그대로 보존한다.
     // 도시 단계가 올랐는데(2026.10.17 한중 · 허창 · 수춘 · 강릉) 공성 진전이 없는 중립 도시는 성벽을 새 최대치로
     const max = cityDefenseForLevel(CITY_LEVEL_BY_ID[row.cityId] ?? 1);
-    if (row.owner === "중립" && Number(row.conquestProgress) === 0 && Number(row.defense) < max && Number(row.defense) !== floor) {
+    const fullOldWall = Object.values(CITY_DEFENSE_BY_LEVEL).includes(Number(row.defense)) && Number(row.conquestProgress) === 0;
+    if (Number(row.defense) < max && Number(row.defense) !== floor && ((row.owner === "중립" && Number(row.conquestProgress) === 0) || fullOldWall)) {
       await db.update(factionTerritoryStates).set({ defense: max }).where(eq(factionTerritoryStates.cityId, row.cityId));
       continue;
     }

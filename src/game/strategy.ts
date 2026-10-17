@@ -421,10 +421,10 @@ function createBuildings(level = 1): CityBuilding[] {
 
 export function createCities(): City[] {
   return [
-    { id: 'chengdu', name: '성도', chineseName: '成都', region: '익주 중심', owner: '촉한', level: 3, prosperity: 82, defense: 74, buildings: createBuildings(2) },
+    { id: 'chengdu', name: '성도', chineseName: '成都', region: '익주 중심', owner: '촉한', level: 4, prosperity: 82, defense: 74, buildings: createBuildings(2) },
     { id: 'hanzhong', name: '한중', chineseName: '漢中', region: '검각 북문', owner: '중립', level: 4, prosperity: 64, defense: 86, buildings: createBuildings(1) },
     { id: 'xiangyang', name: '양양', chineseName: '襄陽', region: '형주 중앙 인공지능 수도', owner: '중립', level: 4, prosperity: 78, defense: 90, buildings: createBuildings(3) },
-    { id: 'jianye', name: '건업', chineseName: '建業', region: '강동 수운', owner: '오나라', level: 3, prosperity: 76, defense: 70, buildings: createBuildings(2) },
+    { id: 'jianye', name: '건업', chineseName: '建業', region: '강동 수운', owner: '오나라', level: 4, prosperity: 76, defense: 70, buildings: createBuildings(2) },
     { id: 'xuchang', name: '허창', chineseName: '許昌', region: '중원 관문', owner: '중립', level: 4, prosperity: 79, defense: 81, buildings: createBuildings(2) },
     { id: 'luoyang', name: '낙양', chineseName: '洛陽', region: '황하 수도권', owner: '중립', level: 5, prosperity: 94, defense: 100, buildings: createBuildings(5) },
     { id: 'ye', name: '업', chineseName: '鄴', region: '기주 북부', owner: '위나라', level: 4, prosperity: 84, defense: 86, buildings: createBuildings(3) },
@@ -483,8 +483,10 @@ export function ensureCityRoster(state: StrategyState): void {
       city.name = latest.name; city.chineseName = latest.chineseName; city.region = latest.region
       // 도시 단계가 바뀌면(2026.10.17 한중 · 허창 · 수춘 · 강릉 → 4단계) 따른다. 공성 진전이 없는 중립 도시는 성벽도 새 최대치로
       if (city.level !== latest.level) {
+        const fullWall = city.defense === cityDefenseForLevel(city.level)
         city.level = latest.level
-        if (city.owner === '중립' && !(city.conquestProgress ?? 0)) city.defense = cityDefenseForLevel(city.level)
+        // 공성 진전이 없는 중립 도시, 또는 성벽이 온전한 도시(예: 2026.10.17 성도 · 건업 4단계)는 새 최대치로
+        if ((city.owner === '중립' && !(city.conquestProgress ?? 0)) || fullWall) city.defense = cityDefenseForLevel(city.level)
       }
     }
   })
