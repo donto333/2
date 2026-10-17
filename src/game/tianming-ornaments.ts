@@ -46,9 +46,13 @@ export function buildOrnaments(look: TianmingLook, rest: Map<string, RestFrame>,
   }
 
   for (const ornament of look.ornaments ?? []) {
-    if (ornament === 'beard' && head) {
-      // 관우의 긴 수염: 가는 털을 그린 반투명 카드 여러 장을 겹쳐 턱에서 가슴까지 늘어뜨린다 + 콧수염
-      const material = make({ map: hairCard(0x2a2019), alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.55, metalness: 0 })
+    if ((ornament === 'beard' || ornament === 'whiteBeard' || ornament === 'shortBeard') && head) {
+      // 긴 수염(관우 · 장각) · 흰 긴 수염(황충 · 정욱) · 짧고 덥수룩한 수염(장비 · 전위 …)
+      // 가는 털을 그린 반투명 카드 여러 장을 겹쳐 턱에서 늘어뜨린다 + 콧수염
+      const short = ornament === 'shortBeard'
+      // 짧은 수염은 털 끝이 성글게 보이도록 알파 기준을 높이고 카드를 좁게
+      const material = make({ map: hairCard(ornament === 'whiteBeard' ? 0xcfcac2 : 0x2a2019, short ? 5 : 3), alphaTest: short ? 0.58 : 0.42, side: THREE.DoubleSide, roughness: 0.55, metalness: 0 })
+      const k = short ? 0.5 : 1
       const group = new THREE.Group()
       const card = (width: number, len: number, x: number, z: number, yaw: number, bend: number) => {
         const g = new THREE.PlaneGeometry(width, len, 1, 10)
@@ -61,23 +65,66 @@ export function buildOrnaments(look: TianmingLook, rest: Map<string, RestFrame>,
         m.rotation.y = yaw
         group.add(m)
       }
-      card(0.1, 0.5, 0, 0.005, 0, 0.28)
-      card(0.085, 0.44, -0.025, -0.012, 0.4, 0.24)
-      card(0.085, 0.44, 0.025, -0.012, -0.4, 0.24)
-      card(0.08, 0.38, 0, -0.025, 0, 0.2)
-      card(0.13, 0.18, 0, 0.025, 0, 0.5) // 턱 · 볼 수염
-      for (const side of [-1, 1]) { // 콧수염
-        const g = new THREE.PlaneGeometry(0.075, 0.13, 1, 4)
-        g.translate(0, -0.065, 0)
-        const m = mesh(g, material)
-        m.position.set(side * 0.018, 0.068, 0.028)
-        m.rotation.set(0.15, side * 0.35, side * 0.2) // 입가를 따라 아래로 늘어진다
-        group.add(m)
-      }
+      card(0.075, 0.36 * k, 0, 0.005, 0, 0.3)
+      card(0.06, 0.3 * k, -0.022, -0.01, 0.4, 0.26)
+      card(0.06, 0.3 * k, 0.022, -0.01, -0.4, 0.26)
+      // 얼굴(입 · 콧수염 · 턱수염 윗부분)은 초상화 얼굴 그림이 그린다 → 털 카드는 턱 아래로 늘어지는 부분만
       // 기본 자세의 턱 끝(모델 좌표): 머리 뼈보다 조금 위 · 얼굴 앞
-      group.position.set(H.x, H.y + 0.035, H.z + 0.13)
+      group.position.set(H.x, H.y + 0.012, H.z + 0.115)
       attach(head, group)
       updaters.push((t, gait) => { group.rotation.x = Math.sin(t * 2.3) * 0.025 + gait * 0.1; group.rotation.z = Math.sin(t * 1.6) * 0.02 })
+    }
+    if (ornament === 'headband' && head) {
+      // 황건 장수의 노란 두건: 이마를 두르고 뒤로 매듭 · 늘어진 끝자락
+      const material = make({ color: 0xc9a020, roughness: 0.8, metalness: 0, side: THREE.DoubleSide })
+      const band = new THREE.TorusGeometry(1, 0.06, 6, 40)
+      band.rotateX(Math.PI / 2)
+      const mBand = mesh(band, material)
+      mBand.scale.set(0.112, 0.16, 0.134)
+      mBand.position.set(H.x, H.y + 0.19, H.z + 0.015)
+      mBand.rotation.set(0.12, 0, 0)
+      attach(head, mBand)
+      const tails = new THREE.Group()
+      for (const side of [-1, 1]) {
+        const g = new THREE.PlaneGeometry(0.05, 0.22, 1, 6)
+        g.translate(0, -0.11, 0)
+        const m = mesh(g, material)
+        m.rotation.set(0.35, 0, side * 0.25)
+        m.position.x = side * 0.02
+        tails.add(m)
+      }
+      tails.position.set(H.x, H.y + 0.18, H.z - 0.12)
+      attach(head, tails)
+      updaters.push((t, gait) => { tails.rotation.x = 0.2 + gait * 0.5 + Math.sin(t * 3.1) * 0.08 })
+    }
+    if (ornament === 'hairBun' && head) {
+      // 여성 무장: 틀어 올린 머리(뒤통수 위 쪽진 머리 두 덩이) + 금비녀 · 옥 장식
+      const hair = make({ color: 0x15110f, roughness: 0.5, metalness: 0 })
+      const gold = make({ color: 0xc9a050, roughness: 0.35, metalness: 0.9 })
+      const jade = make({ color: 0x3f8a6a, roughness: 0.3, metalness: 0.1 })
+      const group = new THREE.Group()
+      const bun = mesh(new THREE.SphereGeometry(1, 20, 14), hair)
+      bun.scale.set(0.085, 0.07, 0.08); bun.position.set(0, 0, 0)
+      group.add(bun)
+      const top = mesh(new THREE.SphereGeometry(1, 16, 12), hair)
+      top.scale.set(0.055, 0.05, 0.055); top.position.set(0, 0.065, 0.015)
+      group.add(top)
+      // 비녀: 쪽 머리를 옆으로 꿰뚫고, 양 끝에 옥 구슬
+      const pinGroup = new THREE.Group()
+      const pin = mesh(new THREE.CylinderGeometry(0.005, 0.004, 0.22, 6), gold)
+      pin.rotation.z = Math.PI / 2
+      pinGroup.add(pin)
+      for (const side of [-1, 1]) {
+        const bead = mesh(new THREE.SphereGeometry(0.014, 10, 8), jade)
+        bead.position.set(side * 0.112, 0, 0)
+        pinGroup.add(bead)
+      }
+      pinGroup.rotation.z = -0.3
+      pinGroup.position.set(0, 0.02, 0.01)
+      group.add(pinGroup)
+      group.position.set(H.x, H.y + 0.25, H.z - 0.075)
+      group.rotation.x = -0.5
+      attach(head, group)
     }
     if (ornament === 'eyepatch' && head) {
       // 하후돈: 왼눈 안대 + 머리를 두르는 끈

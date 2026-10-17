@@ -11,6 +11,8 @@ import { STRIKE_FRAMES, handProp, type HandProp, type StrikeKind } from './battl
 import type { TianmingLook } from './hero-style'
 import { buildOrnaments, type Ornaments, type RestFrame } from './tianming-ornaments'
 import { fabric, glowPool } from './cloth-textures'
+import { applyDress, setFaceTexture, type HeroDress } from './hero-dress'
+import { mountRider, type RiderAsset } from './rider-models'
 
 type HeroAction = 'Idle' | 'Walk' | 'Gallop' | 'Attack' | 'Skill'
 
@@ -112,6 +114,7 @@ export class SkeletalHero {
   private flinchSide = 1
   private readonly body: THREE.MeshStandardMaterial[] = []
   private bodyMesh: THREE.SkinnedMesh | null = null
+  private rider: THREE.SkinnedMesh[] | null = null
   /** 장식을 붙일 뼈의 기본 자세(모델 좌표 → 뼈 좌표) */
   private readonly rest = new Map<string, RestFrame>()
 
@@ -293,6 +296,34 @@ export class SkeletalHero {
   /** 무장 전용 의상 텍스처로 갈아입힌다(같은 UV 배치) */
   setSkin(texture: THREE.Texture): void {
     for (const material of this.body) { material.map = texture; material.needsUpdate = true }
+  }
+
+  /** 초상화를 따른 차림새: 몸 텍스처 재채색(옷 · 갑옷 · 말 색) + 천명이 아니면 수염 · 두건 · 망토(천명은 enableTianming에서) */
+  setDress(dress: HeroDress | undefined, withOrnaments = true): void {
+    this.scene?.traverse(node => {
+      const mesh = node as THREE.SkinnedMesh
+      const material = mesh.material as THREE.MeshStandardMaterial
+      if (mesh.isSkinnedMesh && this.body.includes(material)) applyDress(material, dress, mesh)
+    })
+    if (!dress || !withOrnaments || this.ornaments || (!dress.ornaments?.length && dress.cape === undefined)) return
+    this.ornaments = buildOrnaments({ aura: 0, banner: { text: '', cloth: ['#000', '#000'], ink: '#000' }, cape: dress.cape, ornaments: dress.ornaments }, this.rest, this.bodyMesh)
+    for (const material of this.ornaments.materials) this.materials.push(material)
+  }
+
+  /** 전용 기수 모델로 바꿔 태운다(말 · 무기 · 동작은 그대로) — rider-models.ts */
+  setRider(asset: RiderAsset): void {
+    if (!this.scene || this.rider) return
+    this.rider = mountRider(this.scene, asset)
+    for (const mesh of this.rider) this.materials.push(mesh.material as THREE.MeshStandardMaterial)
+  }
+
+  /** 초상화 얼굴을 머리 앞면에 비춘다(차림새가 없으면 재채색 없이 얼굴만) */
+  setFace(texture: THREE.Texture, model?: string): void {
+    this.scene?.traverse(node => {
+      const mesh = node as THREE.SkinnedMesh
+      const material = mesh.material as THREE.MeshStandardMaterial
+      if (mesh.isSkinnedMesh && this.body.includes(material)) setFaceTexture(applyDress(material, undefined, mesh), texture, model)
+    })
   }
 
   /** 천명(5등급) 무장: 발밑 인장 · 피어오르는 불티 · 등 깃발 · 몸의 은은한 빛 + 무장마다의 망토 · 장식 */

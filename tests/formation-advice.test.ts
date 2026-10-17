@@ -32,6 +32,6 @@ describe('무장별 추천 덱', () => {
     expect(applyCombo(state, ['guan-yu', 'liu-bei', 'zhang-fei']).ok).toBe(true)
     expect(state.formation).toEqual(['guan-yu', 'liu-bei', 'zhang-fei'])
     expect(applyCombo(state, ['guan-yu', 'lu-bu', 'zhang-fei']).ok).toBe(false)
-    expect(allGenerals().length).toBe(70)
+    expect(allGenerals().length).toBe(73)
   })
 })

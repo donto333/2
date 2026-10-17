@@ -13,6 +13,8 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { AnimatedHero, heroStrikeModel, loadModel, loadSkin, loadTroopModel, strikeModelFor, troopModelFor } from './battle-models'
 import { heroLook } from './hero-style'
+import { loadFace } from './hero-dress'
+import { loadRider } from './rider-models'
 import { STRIKE_FRAMES } from './battle-rig'
 import { SkeletalHero, bakeSquadModel, rigInfo } from './skeletal'
 import { tr } from '../i18n/translate'
@@ -609,8 +611,13 @@ export class Arena {
       // 천명(5등급) 무장: 선두에서 천명만의 금빛 인장 · 불티 · 깃발을 두른다
       if (hero instanceof SkeletalHero) {
         // 천명(5등급) 무장: 무장마다의 의상 · 망토 · 장식 · 기운 색 · 이름 깃발
+        // 초상화를 따른 차림새(천명은 수염 · 망토를 천명 장식으로 함께 단다)
+        // 전용 기수: 다 불러올 때까지 원래 기수가 비치지 않게 잠시 감춘다
+        if (look.rider) { hero.root.visible = false; void loadRider(look.rider).then(asset => hero.setRider(asset)).catch(() => {}).finally(() => { hero.root.visible = true }) }
+        if (look.dress) hero.setDress(look.dress, !look.tianming)
         if (look.tianming) hero.enableTianming(look.tianming)
         if (look.skin) void loadSkin(look.skin).then(texture => hero.setSkin(texture)).catch(() => {})
+        if (look.face) void loadFace(look.face).then(texture => hero.setFace(texture, look.model)).catch(() => {})
       }
     }).catch(() => { /* 모델이 없으면 도형 모델 유지 */ })
     const troop = troopModelFor(unit.general.role)

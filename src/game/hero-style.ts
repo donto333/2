@@ -2,12 +2,13 @@
 import type { General } from './strategy'
 import type { HandProp, StrikeKind } from './battle-rig'
 import { SIGNATURE_WEAPONS } from './battle-rig'
+import { heroDress, type HeroDress } from './hero-dress'
 
 /** 말 탄 무장 모델(모두 말 뼈대 + 사람 뼈대) */
 export type HeroModel = 'lubu' | 'caocao' | 'zhugeliang' | 'cavalry' | 'tianming'
 
 /** 몸에 다는 장식 */
-export type Ornament = 'beard' | 'eyepatch' | 'pheasant'
+export type Ornament = 'hairBun' | 'beard' | 'whiteBeard' | 'shortBeard' | 'headband' | 'eyepatch' | 'pheasant'
 
 export interface TianmingLook {
   /** 발밑 인장 · 불티 · 몸빛 색 */
@@ -29,7 +30,16 @@ export interface HeroLook {
   /** 무장 전용 의상 텍스처(assets/models/skins/<이름>.jpg) */
   skin?: string
   tianming?: TianmingLook
+  /** 초상화를 따른 차림새(옷 · 갑옷 · 말 색 · 수염 · 두건 · 망토) — 전용 의상 · 전용 모델이 없는 무장 */
+  dress?: HeroDress
+  /** 초상화에서 잘라낸 얼굴 그림(머리 앞면에 비춘다) */
+  face?: string
+  /** 전용 기수 모델(assets/models/riders/<이름>.glb) — 기마 모델의 말 · 동작에 사람만 바꿔 태운다 */
+  rider?: string
 }
+
+/** 전용 기수 모델이 있는 무장(여성 무장) — rider-models.ts */
+export const RIDER_MODELS = new Set(['sun-shangxiang', 'xiao-qiao', 'guan-yinping', 'zhu-rong', 'diao-chan', 'da-qiao', 'cai-wenji'])
 
 /** 천명 무장마다의 모습 */
 const TIANMING: Record<string, Partial<HeroLook> & { look: TianmingLook }> = {
@@ -57,8 +67,10 @@ function baseLook(general: General): HeroLook {
   const top = general.grade === 5
   if (general.id === 'lu-bu') return { model: 'lubu' }
   if (general.id === 'cao-cao') return { model: 'caocao' }
-  if (general.id === 'zhuge-liang' || general.role === '책사') return { model: 'zhugeliang' }
   const model: HeroModel = top ? 'tianming' : 'cavalry'
+  // 여성 책사(초선 · 채문희)는 수염 달린 책사 모델 대신 말 탄 모델(투구를 머리 모양으로 오므린다 — hero-dress)
+  if (general.role === '책사' && heroDress(general.id)?.female) return { model, weapon }
+  if (general.id === 'zhuge-liang' || general.role === '책사') return { model: 'zhugeliang' }
   // 보병 · 궁병 무장도 말을 탄다: 보병은 말 위에서 찌르고, 궁병은 말 위에서 활을 쏜다
   if (general.role === '보병') return { model, kind: 'thrust', weapon: weapon ?? 'spear' }
   if (general.role === '궁병') return { model, kind: 'shoot', weapon: 'bow' }
@@ -66,10 +78,30 @@ function baseLook(general: General): HeroLook {
 }
 
 export function heroLook(general: General): HeroLook {
-  const look = baseLook(general)
+  // 전용 기수 모델: 기마 모델(말 · 동작)에 그 무장의 몸을 태운다 → 재채색 · 얼굴 비춤은 쓰지 않는다
+  if (RIDER_MODELS.has(general.id)) {
+    const base = baseLook(general)
+    const look: HeroLook = { model: 'cavalry', kind: base.kind, weapon: base.weapon, rider: general.id }
+    return general.grade === 5 ? { ...look, tianming: DEFAULT_TIANMING } : look
+  }
+  const look: HeroLook = { ...withDress(general, baseLook(general)), face: `/assets/faces/${general.id}.webp` }
   if (general.grade !== 5) return look
   const special = TIANMING[general.id]
-  if (!special) return { ...look, tianming: DEFAULT_TIANMING }
+  if (!special) {
+    // 이름 없는 천명 무장: 금빛 천명 기운 + 초상화를 따른 수염 · 두건 · 망토
+    const dress = look.dress
+    return { ...look, tianming: dress ? { ...DEFAULT_TIANMING, ornaments: dress.ornaments, cape: dress.cape } : DEFAULT_TIANMING }
+  }
   const { look: tianming, ...rest } = special
-  return { ...look, ...rest, tianming }
+  const merged: HeroLook = { ...look, ...rest, tianming }
+  // 전용 의상이 있으면 차림새 재채색은 쓰지 않는다
+  if (merged.skin || (merged.model !== 'cavalry' && merged.model !== 'tianming')) delete merged.dress
+  return merged
+}
+
+/** 전용 모델(여포 · 조조 · 제갈량)이 아닌 기본 말 탄 모델이면 초상화를 따른 차림새를 붙인다 */
+function withDress(general: General, look: HeroLook): HeroLook {
+  const dress = heroDress(general.id)
+  if (!dress || look.skin || general.id === 'zhuge-liang' || general.id === 'lu-bu' || general.id === 'cao-cao') return look
+  return { ...look, dress: look.model === 'zhugeliang' ? { ...dress, robe: true } : dress }
 }

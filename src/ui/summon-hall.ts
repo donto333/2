@@ -13,6 +13,8 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { dressUniforms, patchDressShader, setFaceTexture, type HeroDress } from '../game/hero-dress'
+import { mountRider, type RiderAsset } from '../game/rider-models'
 import { effectsSetting } from '../game/settings'
 import { tr } from '../i18n/translate'
 import '../styles/summon-hall.css'
@@ -30,7 +32,7 @@ export interface HallEntry {
   /** 클로즈업으로 따로 보여 줄지 */
   star: boolean
   /** 무장: 말 탄 모델(+ 전용 의상) */
-  model?: { gltf: GLTF; skin?: THREE.Texture | null }
+  model?: { gltf: GLTF; skin?: THREE.Texture | null; dress?: HeroDress; face?: THREE.Texture | null; kind?: string; rider?: RiderAsset | null }
   /** 장비: 떠오를 그림 */
   image?: string
 }
@@ -490,16 +492,19 @@ class SummonHall {
     m.customProgramCacheKey = () => `hall-stone-${cell}`
     return m
   }
-  private heroMaterial(orig: THREE.MeshStandardMaterial, skin: THREE.Texture | null | undefined, u: RimUniforms): THREE.MeshStandardMaterial {
+  private heroMaterial(orig: THREE.MeshStandardMaterial, skin: THREE.Texture | null | undefined, u: RimUniforms, dress?: HeroDress, mesh?: THREE.SkinnedMesh, face?: THREE.Texture | null, kind?: string): THREE.MeshStandardMaterial {
     const m = this.own(orig.clone()); if (skin) m.map = skin
+    const du = dress || (face && mesh) ? dressUniforms(dress, mesh ?? null) : null
+    if (du && face && mesh) setFaceTexture(du, face, kind)
     m.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, u)
+      if (du) patchDressShader(sh, du)
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uRim; uniform vec3 uRimColor;')
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
           float fr = pow(1. - abs(dot(normalize(vViewPosition), normal)), 2.6);
           totalEmissiveRadiance += uRimColor * fr * uRim;`)
     }
-    m.customProgramCacheKey = () => 'hall-hero'
+    m.customProgramCacheKey = () => (du ? 'hall-hero-dress' : 'hall-hero')
     return m
   }
 
@@ -541,7 +546,13 @@ class SummonHall {
         su.uOrigin.value.set(0, box.max.y * 0.74, -0.15); su.uBoxY.value.set(box.min.y, box.max.y)
         stone = SkeletonUtils.clone(gltf.scene); hero = SkeletonUtils.clone(gltf.scene)
         stone.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.material = this.stoneMaterial(m.material as THREE.MeshStandardMaterial, su, 3.1); m.castShadow = this.q !== 'low'; m.frustumCulled = false; found.mesh = m } })
-        hero.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.material = this.heroMaterial(m.material as THREE.MeshStandardMaterial, entry.model?.skin, hu); m.castShadow = this.q !== 'low'; m.frustumCulled = false } })
+        hero.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) { m.material = this.heroMaterial(m.material as THREE.MeshStandardMaterial, entry.model?.skin, hu, entry.model?.dress, (m as THREE.SkinnedMesh).isSkinnedMesh ? m as THREE.SkinnedMesh : undefined, entry.model?.face, entry.model?.kind); m.castShadow = this.q !== 'low'; m.frustumCulled = false } })
+        // 전용 기수(여성 무장): 석상 · 무장 모두 원래 사람을 감추고 그 무장의 몸을 태운다
+        const rider = entry.model.rider
+        if (rider) {
+          mountRider(stone, rider, m => this.stoneMaterial(m, su, 3.1))
+          mountRider(hero, rider, m => this.heroMaterial(m, null, hu))
+        }
         const pose = (obj: THREE.Object3D) => { const mx = new THREE.AnimationMixer(obj); for (const name of ['MountedIdle', 'HorseIdle']) { const clip = gltf.animations.find(a => a.name === name); if (clip) mx.clipAction(clip).play() } mx.update(0.05); return mx }
         pose(stone).stopAllAction(); mixer = pose(hero)
       } else {

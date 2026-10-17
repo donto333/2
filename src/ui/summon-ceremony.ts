@@ -3,6 +3,8 @@
 // WebGL2가 없거나 모델을 불러오지 못하면 예전 2D 의식(기 모으기 → 균열 → 섬광 → 천명 강림)으로 대신한다.
 // 화면 전체를 덮는 층은 document.body에 붙여, 게임 화면이 다시 그려져도 끊기지 않게 한다.
 // 소리는 Web Audio로 직접 합성한다(파일 없이, 모집 버튼을 누른 뒤라 브라우저가 허용).
+import { loadFace } from '../game/hero-dress'
+import { loadRider } from '../game/rider-models'
 import type { Equipment, EquipmentGrade, General } from '../game/strategy'
 import { EQUIPMENT_GRADE_META, GRADE_META } from '../game/strategy'
 import { effectsSetting } from '../game/settings'
@@ -122,8 +124,8 @@ async function prepareHall(build: () => Promise<HallEntry[]>): Promise<HallEntry
 function summonEntries(rewards: General[]): Promise<HallEntry[]> {
   return Promise.all(rewards.map(async general => {
     const look = heroLook(general), meta = GRADE_META[general.grade]
-    const [gltf, skin] = await Promise.all([loadModel(look.model), look.skin ? loadSkin(look.skin).catch(() => null) : Promise.resolve(null)])
-    return { rank: general.grade as HallRank, color: meta.color, label: `${meta.label} · ${general.grade}등급`, name: general.name, sub: general.epithet, star: general.grade === 5, model: { gltf, skin } }
+    const [gltf, skin, face, rider] = await Promise.all([loadModel(look.model), look.skin ? loadSkin(look.skin).catch(() => null) : Promise.resolve(null), look.face ? loadFace(look.face).catch(() => null) : Promise.resolve(null), look.rider ? loadRider(look.rider).catch(() => null) : Promise.resolve(null)])
+    return { rank: general.grade as HallRank, color: meta.color, label: `${meta.label} · ${general.grade}등급`, name: general.name, sub: general.epithet, star: general.grade === 5, model: { gltf, skin, dress: look.dress, face, kind: look.model, rider } }
   }))
 }
 

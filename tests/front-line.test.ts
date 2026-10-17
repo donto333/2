@@ -37,6 +37,6 @@ describe('진형: 가운데는 전열', () => {
     state.generals = ['lu-bu', 'guan-yu', 'cao-ren'].map(id => templateGeneral(id)!)
     autoFormation(state)
     expect(state.formation[1]).toBe('cao-ren')
-    expect(allGenerals().length).toBe(70)
+    expect(allGenerals().length).toBe(73)
   })
 })

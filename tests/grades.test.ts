@@ -5,7 +5,7 @@ describe('무장 등급 재설정(삼국지 속 역할·비중, 천명은 진영
   it('천명은 촉·위·오·군웅에서 4명씩 16명', () => {
     const heaven = allGenerals().filter(general => general.grade === 5).map(general => general.name).sort()
     expect(heaven).toEqual(['유비', '제갈량', '관우', '조운', '조조', '사마의', '장료', '하후돈', '손권', '손책', '주유', '육손', '여포', '동탁', '원소', '장각'].sort())
-    expect(allGenerals().length).toBe(70)
+    expect(allGenerals().length).toBe(73)
     expect(templateGeneral('zhang-fei')?.grade).toBe(4)
     expect(['송헌', '관해', '채문희'].sort()).toEqual(allGenerals().filter(general => general.grade === 1).map(general => general.name).sort())
   })
