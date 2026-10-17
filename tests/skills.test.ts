@@ -54,11 +54,16 @@ describe('general skill plan', () => {
   })
 
   it('picks the first matching bond in priority order', () => {
-    expect(BONDS).toHaveLength(7)
+    expect(BONDS).toHaveLength(26)
     expect(bondFor(['zhang-jiao', 'zhang-bo', 'guan-hai'])?.id).toBe('yellow-heaven')
     expect(bondFor(['liu-bei', 'guan-yu', 'zhang-fei'])?.id).toBe('peach-garden')
     expect(bondFor(['guan-yu', 'zhao-yun', 'ma-chao'])?.id).toBe('five-tigers')
     expect(bondFor(['zhou-yu', 'huang-gai', 'cao-cao'])?.id).toBe('red-cliffs')
-    expect(bondFor(['cao-cao', 'xun-yu', 'guo-jia'])).toBeNull()
+    expect(bondFor(['cao-cao', 'xun-yu', 'guo-jia'])?.id).toBe('wei-advisors')
+    expect(bondFor(['cao-cao', 'sun-ce', 'meng-huo'])).toBeNull()
+  })
+  it('every general belongs to at least one bond', () => {
+    const members = new Set(BONDS.flatMap(bond => bond.members))
+    expect(allGenerals().filter(general => !members.has(general.id)).map(general => general.id)).toEqual([])
   })
 })
