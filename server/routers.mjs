@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, getRaidInfo, startRaid, submitRaid, getRaidRanking, claimRaidReward, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole, adminUpdateGameState, adminGameView, isOperatorUser, resetGuestGameState } from './webdev-adapter.mjs'
+import { adminProcedure, router, publicProcedure, protectedProcedure, getCityDamageRankings, getFactionTerritories, getGameState, getLuoyangReward, getLuoyangHistory, grantCurrency, deployFactionGarrison, recordFactionDefense, listDuelOpponents, getRaidInfo, startRaid, submitRaid, getRaidRanking, claimRaidReward, listGameStates, listUsers, recordFactionTerritoryBattle, updateGameState, updateUserName, updateUserRole, adminUpdateGameState, adminGameView, isOperatorUser, resetGuestGameState, guildService } from './webdev-adapter.mjs'
 
 import { leaderboard } from './leaderboard.mjs'
 import { createLeaderboardRouter } from './leaderboard/router.mjs'
@@ -48,6 +48,9 @@ export const gameRouter = router({
     boardSettings: adminProcedure.query(async () => ({ settings: await getBoardSettings(), posts: await listAdminBoardPosts() })),
     deleteBoardPost: adminProcedure.input(z.object({ id: z.number().int().positive() }).strict()).mutation(({ input }) => deleteBoardPostAsAdmin(input.id)),
     setBoardPosting: adminProcedure.input(z.object({ enabled: z.boolean() }).strict()).mutation(({ input }) => setBoardPostingEnabled(input.enabled)),
+    guilds: adminProcedure.query(() => guildService.adminList()),
+    renameGuild: adminProcedure.input(z.object({ guildId: z.number().int().positive(), name: z.string().trim().min(2).max(8) }).strict()).mutation(({ input }) => guildService.adminRename(input.guildId, input.name)),
+    disbandGuild: adminProcedure.input(z.object({ guildId: z.number().int().positive() }).strict()).mutation(({ input }) => guildService.adminDisband(input.guildId)),
   }),
   leaderboard: createLeaderboardRouter({ router, publicProcedure, protectedProcedure, isOperator: isOperatorUser }, leaderboard),
   duel: router({
@@ -95,9 +98,34 @@ export const gameRouter = router({
     }),
     damageRanking: protectedProcedure.input(z.object({ cityId: z.string().trim().min(1).max(64) }).strict()).query(({ input }) => getCityDamageRankings(input.cityId)),
   }),
+  // 유저 연맹(server/guild.mjs): 같은 진영끼리 · 기여 · 기술 · 상점 · 공동 공성 · 채팅 · 주간 정산
+  guild: router({
+    me: protectedProcedure.query(({ ctx }) => guildService.me(ctx.user.id)),
+    list: protectedProcedure.input(z.object({ query: z.string().trim().max(16).optional() }).strict()).query(({ ctx, input }) => guildService.list(ctx.user.id, input.query ?? '')),
+    create: protectedProcedure.input(z.object({ name: z.string().trim().min(2).max(8), color: z.number().int().min(0).max(31).optional(), pattern: z.number().int().min(0).max(31).optional(), joinMode: z.enum(['open', 'approval']).optional(), minLevel: z.number().int().min(1).max(60).optional() }).strict()).mutation(({ ctx, input }) => guildService.create(ctx.user.id, input)),
+    apply: protectedProcedure.input(z.object({ guildId: z.number().int().positive() }).strict()).mutation(({ ctx, input }) => guildService.apply(ctx.user.id, input.guildId)),
+    cancelApply: protectedProcedure.input(z.object({ guildId: z.number().int().positive() }).strict()).mutation(({ ctx, input }) => guildService.cancelApply(ctx.user.id, input.guildId)),
+    decide: protectedProcedure.input(z.object({ requestId: z.number().int().positive(), accept: z.boolean() }).strict()).mutation(({ ctx, input }) => guildService.decide(ctx.user.id, input.requestId, input.accept)),
+    invite: protectedProcedure.input(z.object({ name: z.string().trim().min(1).max(32) }).strict()).mutation(({ ctx, input }) => guildService.invite(ctx.user.id, input.name)),
+    respondInvite: protectedProcedure.input(z.object({ requestId: z.number().int().positive(), accept: z.boolean() }).strict()).mutation(({ ctx, input }) => guildService.respondInvite(ctx.user.id, input.requestId, input.accept)),
+    leave: protectedProcedure.mutation(({ ctx }) => guildService.leave(ctx.user.id)),
+    kick: protectedProcedure.input(z.object({ userId: z.number().int().positive() }).strict()).mutation(({ ctx, input }) => guildService.kick(ctx.user.id, input.userId)),
+    setRole: protectedProcedure.input(z.object({ userId: z.number().int().positive(), role: z.enum(['leader', 'deputy', 'elite', 'member']) }).strict()).mutation(({ ctx, input }) => guildService.setRole(ctx.user.id, input.userId, input.role)),
+    disband: protectedProcedure.mutation(({ ctx }) => guildService.disband(ctx.user.id)),
+    settings: protectedProcedure.input(z.object({ notice: z.string().max(200).optional(), joinMode: z.enum(['open', 'approval']).optional(), minLevel: z.number().int().min(1).max(60).optional(), color: z.number().int().min(0).max(31).optional(), pattern: z.number().int().min(0).max(31).optional() }).strict()).mutation(({ ctx, input }) => guildService.updateSettings(ctx.user.id, input)),
+    donate: protectedProcedure.input(z.object({ kind: z.enum(['donateSilver', 'donateResources', 'donateGold']) }).strict()).mutation(({ ctx, input }) => guildService.donate(ctx.user.id, input.kind)),
+    research: protectedProcedure.input(z.object({ techId: z.enum(['harvest', 'siege', 'garrison', 'raid', 'build', 'supply', 'duel']) }).strict()).mutation(({ ctx, input }) => guildService.research(ctx.user.id, input.techId)),
+    buy: protectedProcedure.input(z.object({ itemId: z.string().max(16) }).strict()).mutation(({ ctx, input }) => guildService.buy(ctx.user.id, input.itemId)),
+    setTarget: protectedProcedure.input(z.object({ cityId: z.string().trim().min(2).max(32), cityName: z.string().trim().max(16).optional() }).strict()).mutation(({ ctx, input }) => guildService.setTarget(ctx.user.id, input.cityId, input.cityName)),
+    claim: protectedProcedure.mutation(({ ctx }) => guildService.claim(ctx.user.id)),
+    logs: protectedProcedure.query(({ ctx }) => guildService.logs(ctx.user.id)),
+    chat: protectedProcedure.input(z.object({ afterId: z.number().int().min(0).optional() }).strict()).query(({ ctx, input }) => guildService.chat(ctx.user.id, input.afterId ?? 0)),
+    say: protectedProcedure.input(z.object({ text: z.string().trim().min(1).max(400) }).strict()).mutation(({ ctx, input }) => guildService.say(ctx.user.id, input.text)),
+    ranking: protectedProcedure.input(z.object({ kind: z.enum(['level', 'contribution', 'raid']) }).strict()).query(({ ctx, input }) => guildService.ranking(ctx.user.id, input.kind)),
+  }),
   board: router({
-    list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라', '재야']) })).query(({ ctx, input }) => listBoardPosts(ctx.user, input.board)),
-    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라', '재야']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
+    list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라', '재야', '연맹']) })).query(({ ctx, input }) => listBoardPosts(ctx.user, input.board)),
+    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라', '재야', '연맹']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => deleteBoardPost(ctx.user, input.id, input.password)),
   }),
   account: router({

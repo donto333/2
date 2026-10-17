@@ -16,6 +16,7 @@ import { matchup, type BattleResult } from '../game/battle-core'
 import { BATTLE_EFFECTS, type BattleEffectId } from '../game/battle-effects'
 import { fxGlyph, fxSeal } from './fx-icons'
 import { BONDS, skillDefFor, type SkillFx } from '../game/skills'
+import { emptyGuildUi, guildEmblem, guildRankingCard, guildSection, type GuildTab, type GuildUiState } from './guild-ui'
 import { ARCHETYPES, ARCHETYPE_META, STYLE_BEATS, deckStyle, recommendDecks, styleEdge, type Archetype, type ComboAdvice } from '../game/formation-advice'
 
 /** 덱 유형 상성 설명: 강한 두 유형 · 약한 두 유형 */
@@ -86,7 +87,7 @@ const MOBILE_TABS: Section[] = ['overview', 'roster', 'formation', 'recruit', 'b
 /** 휴대폰에서 쓰는 짧은 메뉴 이름(한·영을 직접 고른다: ‘장비’ 같은 말이 사전에서 인물 이름으로 바뀌지 않게) */
 const SHORT_NAV: Record<string, [string, string]> = {
   overview: ['본영', 'Base'], roster: ['무장', 'Generals'], codex: ['도감', 'Codex'], formation: ['편성', 'Lineup'], recruit: ['모집', 'Recruit'], equipment: ['장비', 'Gear'], research: ['연구', 'Research'], territory: ['영토', 'Territory'],
-  battle: ['전투', 'Battle'], duel: ['대련', 'Duel'], raid: ['레이드', 'Raid'], rank: ['랭킹', 'Ranks'], board: ['게시판', 'Board'], shop: ['상점', 'Shop'], updates: ['소식', 'News'], account: ['계정', 'Account'], admin: ['관리', 'Admin'], balance: ['밸런스', 'Balance'],
+  battle: ['전투', 'Battle'], duel: ['대련', 'Duel'], raid: ['레이드', 'Raid'], rank: ['랭킹', 'Ranks'], board: ['게시판', 'Board'], guild: ['연맹', 'Guild'], shop: ['상점', 'Shop'], updates: ['소식', 'News'], account: ['계정', 'Account'], admin: ['관리', 'Admin'], balance: ['밸런스', 'Balance'],
 }
 /** 무장 사진 테두리·카드 강조색: 무장마다 다르던 색 대신 등급색으로 통일 */
 const gradeColor = (general: Pick<General, 'grade' | 'accent'>) => GRADE_META[general.grade]?.color ?? general.accent
@@ -180,7 +181,7 @@ export interface RankEntry {
 
 export interface BoardPost {
   id: number
-  board: '전체' | Faction
+  board: '전체' | Faction | '연맹'
   title: string
   content: string
   authorName: string
@@ -200,6 +201,7 @@ export interface CityDamageRanking {
   totalDamage: number
   battleCount: number
   updatedAt: string | Date
+  guildName?: string | null
 }
 
 export interface RaidInfoView {
@@ -221,7 +223,7 @@ export interface RaidInfoView {
 export interface RaidView {
   loading: boolean
   info: RaidInfoView | null
-  ranking: Array<{ rank: number; displayName: string; totalDamage: number; attempts: number; isMe: boolean }>
+  ranking: Array<{ rank: number; displayName: string; guildName?: string | null; totalDamage: number; attempts: number; isMe: boolean }>
   message: string
 }
 
@@ -237,6 +239,9 @@ export interface DuelOpponent {
   deck?: General[]
   /** 훈련 상대 설명(난이도 · 평균 레벨) */
   note?: string
+  /** 상대의 연맹 이름 · 대련 기술 보너스 */
+  guildName?: string | null
+  guildDuel?: number
 }
 
 export interface StrategyUiCallbacks {
@@ -320,6 +325,8 @@ export interface StrategyUiCallbacks {
   onBoardRefresh: (board: BoardPost['board']) => void
   onBoardPost: (board: BoardPost['board'], title: string, content: string, password: string) => void
   onBoardDelete: (id: number, password: string) => void
+  /** 연맹: 동작 이름과 버튼 · 입력 값 */
+  onGuild: (action: string, data: Record<string, string>) => void
   onStore: () => void
   onShopPurchase: (equipmentId: string) => void
   onCashShopPurchase: (productId: string) => void
@@ -357,6 +364,13 @@ const MENU_GUIDE_EXTRA: Record<string, Array<{ title: string; body: string }>> =
   rank: [
     { title: '천하 랭킹', body: '전투 점수가 높은 지휘관 순위입니다. 로그인한 계정의 기록이 올라갑니다.' },
   ],
+  guild: [
+    { title: '연맹', body: '같은 진영 지휘관끼리 연맹을 만들거나 가입합니다(만들기: 금화 50개 · 무장 최고 레벨 Lv.15). 인원은 Lv.1 20명에서 Lv.10 38명까지 늘어납니다.' },
+    { title: '기여와 레벨', body: '헌납(은전 · 자원 · 금화, 하루 한 번씩)과 공성 · 수비 · 레이드 · 출석으로 기여 포인트와 연맹 경험치가 쌓입니다.' },
+    { title: '연맹 기술', body: '연맹 자금으로 둔전 · 공성 기계 · 성곽 수비 · 토벌 · 축성 · 군량 보급 · 무예 수련을 연구하면 연맹원 모두에게 적용됩니다.' },
+    { title: '상점 · 공동 공성', body: '기여 포인트로 연맹 상점을 이용하고, 매주 정하는 목표 도시를 함께 공성해 점령하면 연맹원 모두가 보상을 받습니다.' },
+    { title: '소통 · 순위', body: '연맹 채팅 · 연맹 게시판 · 활동 기록이 있고, 천하 랭킹에서 연맹 순위(레벨 · 주간 기여 · 주간 레이드)를 봅니다.' },
+  ],
   board: [
     { title: '진영 게시판', body: '전체 게시판과 내 진영 게시판에 글을 쓸 수 있습니다. 글을 쓸 때 정한 비밀번호로 지울 수 있습니다.' },
   ],
@@ -384,6 +398,8 @@ export class StrategyUI {
   private ranks: RankEntry[] = []
   private boardPosts: BoardPost[] = []
   private boardTab: BoardPost['board'] = '전체'
+  /** 연맹 화면 상태 */
+  private guildUi: GuildUiState = emptyGuildUi()
   private duelOpponents: DuelOpponent[] = []
   private raidView: RaidView = { loading: false, info: null, ranking: [], message: '' }
   private duelMyPower = 0
@@ -795,6 +811,38 @@ export class StrategyUI {
     const panel = this.root.querySelector<HTMLElement>('[data-rank-list]')
     if (panel) panel.innerHTML = this.rankRows()
   }
+  /** 연맹 화면 상태 바꾸기(연맹 · 랭킹 화면이면 다시 그린다). 쓰고 있던 글(채팅 · 게시글 · 공지)은 그대로 둔다 */
+  setGuildUi(patch: Partial<GuildUiState>): void {
+    const chat = this.root.querySelector<HTMLElement>('[data-guild-chat]')
+    const stick = !chat || chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 30
+    this.guildUi = { ...this.guildUi, ...patch }
+    const section = this.renderedState?.section
+    if (section !== 'guild' && section !== 'rank') return
+    const drafts = [...this.root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-guild-form] input:not([type="radio"]):not([type="hidden"]), [data-guild-form] textarea')].map(field => ({ form: field.closest<HTMLElement>('[data-guild-form]')?.dataset.guildForm, name: field.name, value: field.value, focused: document.activeElement === field }))
+    this.render(this.renderedState!)
+    for (const draft of drafts) {
+      const field = this.root.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-guild-form="${draft.form}"] [name="${draft.name}"]`)
+      if (!field || field.type === 'password' && !draft.value) continue
+      if (draft.form !== 'notice' && draft.form !== 'settings') field.value = draft.value
+      if (draft.focused) field.focus()
+    }
+    const list = this.root.querySelector<HTMLElement>('[data-guild-chat]')
+    if (list && stick) list.scrollTop = list.scrollHeight
+  }
+  /** 관리자: 연맹 목록(이름 바꾸기 · 강제 해산) */
+  private adminGuilds: Array<{ id: number; name: string; faction: string; level: number; members: number; capacity: number; weekPoints: number }> = []
+  setAdminGuilds(rows: typeof this.adminGuilds): void { this.adminGuilds = rows }
+  private adminGuildPanel(): string {
+    const rows = this.adminGuilds.map(guild => `<article class="admin-board-row"><div><span class="pill pill--jade">${escapeHtml(guild.faction)}</span><strong>${ugc(guild.name)}</strong><small>Lv.${guild.level} · ${guild.members}/${guild.capacity}명 · 주간 기여 ${formatNumber(guild.weekPoints)}</small></div><form class="guild-form-row" data-guild-form="admin-rename"><input type="hidden" name="guildId" value="${guild.id}"><input name="name" maxlength="8" placeholder="새 이름" required><button class="mini-action" type="submit">이름 변경</button></form><button class="mini-action" data-action="guild-admin-disband" data-guild-id="${guild.id}" data-name="${escapeHtml(guild.name)}">강제 해산</button></article>`).join('')
+    return `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">연맹 관리</span><h3>유저 연맹</h3><p>부적절한 연맹 이름을 바꾸거나 연맹을 강제로 해산할 수 있습니다(연맹원은 모두 연맹 없음으로).</p></div></div><div class="admin-board-list">${rows || '<div class="admin-empty-row">아직 연맹이 없습니다.</div>'}</div></div>`
+  }
+  /** 보낸 뒤 그 입력 칸을 비운다 */
+  resetGuildForm(kind: string): void {
+    this.root.querySelector<HTMLFormElement>(`[data-guild-form="${kind}"]`)?.reset()
+  }
+  get guildTab(): GuildTab { return this.guildUi.tab }
+  get guildRankingKind(): GuildUiState['rankingKind'] { return this.guildUi.rankingKind }
+
   setBoardPosts(posts: BoardPost[], board: BoardPost['board']): void {
     this.boardPosts = posts
     this.boardTab = board
@@ -1126,6 +1174,7 @@ export class StrategyUI {
           ${this.navButton('rank', icon('rank'), '천하 랭킹', state.section)}
           ${this.navGroup('소통')}
           ${this.navButton('board', icon('board'), '진영 게시판', state.section)}
+          ${this.navButton('guild', icon('guild'), '연맹', state.section, this.guildUi.me?.requests?.length ? `${this.guildUi.me.requests.length}` : this.guildUi.me?.pending?.length ? '보상' : '')}
           ${this.navButton('shop', icon('shop'), '상점', state.section)}
           ${this.navButton('updates', icon('updates'), '업데이트 기록', state.section, 'NEW')}
           ${this.navButton('account', icon('account'), '계정 관리', state.section)}
@@ -1176,6 +1225,7 @@ export class StrategyUI {
     if (state.section === 'shop') return this.shopSection(state)
     if (state.section === 'rank') return this.rankSection(state)
     if (state.section === 'board') return this.boardSection(state)
+    if (state.section === 'guild') return guildSection(state, this.guildUi)
     if (state.section === 'updates') return this.updatesSection()
     if (state.section === 'account') return this.accountSection()
     if (state.section === 'admin') return this.isAdmin() ? this.adminSection(state) : this.overviewSection(state)
@@ -1702,7 +1752,8 @@ export class StrategyUI {
     const mapPosition = CITY_MAP_POSITIONS[city.id] ?? { x: 50, y: 50 }
     const position = `left:${mapPosition.x}%;top:${mapPosition.y}%`
     const castle = city.level >= 3 ? 'castle-city-major' : city.level === 2 ? 'castle-city-medium' : 'castle-city-minor'
-    return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''}" data-action="city-select" data-city="${city.id}" style="${position}"><span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="eager"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong></button>`
+    const target = this.renderedState?.guild?.target?.cityId === city.id
+    return `<button class="city-marker city-marker--lv${Math.min(city.level, 3)} ${ownerClass} ${selectedId === city.id ? 'is-selected' : ''} ${target ? 'is-guild-target' : ''}" data-action="city-select" data-city="${city.id}" style="${position}">${target && this.renderedState?.guild ? `<span class="city-marker-guild" title="연맹 공동 공성 목표">${guildEmblem(this.renderedState.guild.emblem, 'sm')}</span>` : ''}<span class="city-marker-castle"><img src="/assets/territory/${castle}.webp" alt="${city.name} 성채" loading="eager"></span><span class="city-marker-level">${city.level}</span><strong>${city.name}</strong></button>`
   }
 
   /** 전투 기록 결과 표시: 중립 습격은 방어하는 우리 입장(방어 성공/실패), 유저 공격은 공격 성공/실패 */
@@ -1729,7 +1780,7 @@ export class StrategyUI {
 
   private cityDamageRankingCard(city: City): string {
     const rankings = this.cityDamageRankingCityId === city.id ? this.cityDamageRankings : []
-    const rows = rankings.length ? rankings.map((entry, index) => `<li><span class="damage-rank-number">${index + 1}</span><strong>${ugc(entry.displayName)}</strong><small>${escapeHtml(entry.faction)} · ${entry.battleCount}회 참여</small><b>${formatNumber(entry.totalDamage)}</b></li>`).join('') : '<li class="city-damage-ranking-empty">아직 기록된 공성 피해 기여가 없습니다.</li>'
+    const rows = rankings.length ? rankings.map((entry, index) => `<li><span class="damage-rank-number">${index + 1}</span><strong>${ugc(entry.displayName)}${entry.guildName ? ` <small class="guild-tag">${ugc(entry.guildName)}</small>` : ''}</strong><small>${escapeHtml(entry.faction)} · ${entry.battleCount}회 참여</small><b>${formatNumber(entry.totalDamage)}</b></li>`).join('') : '<li class="city-damage-ranking-empty">아직 기록된 공성 피해 기여가 없습니다.</li>'
     return `<details class="city-damage-ranking" open><summary><span><span class="eyebrow">공성 기여</span><strong>공성 피해 기여 랭킹</strong></span><b>상위 ${rankings.length}명</b></summary><p>이 도시의 성벽 방어도를 가장 많이 깎은 유저 순위입니다.</p><ol>${rows}</ol></details>`
   }
 
@@ -1853,7 +1904,7 @@ export class StrategyUI {
       return `<div class="building-row is-building"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name} <em class="building-next">→ ${building.level + 1}단계 공사 중</em></strong><small>남은 시간 <b data-build-left="${building.endsAt}">${formatDuration(left)}</b></small><span class="building-progress"><i data-build-bar="${building.endsAt}" data-build-total="${total}" style="width:${Math.min(100, (1 - left / total) * 100).toFixed(1)}%"></i></span></div><div class="building-actions"><button class="mini-action" data-action="building-rush" data-city="${city.id}" data-build-rush="${building.endsAt}" ${canManage ? '' : 'disabled'}>즉시 완공 · 금화 ${rushCost(left)}</button><button class="mini-action" data-action="building-cancel" data-city="${city.id}" ${canManage ? '' : 'disabled'}>취소</button></div></div>`
     }
     const waitOther = Boolean(busyBuilding && !maxed)
-    return `<div class="building-row"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed || waitOther ? 'disabled' : ''} title="${waitOther ? '이 도시는 다른 건물을 짓는 중입니다' : ''}">${maxed ? '최고 단계' : waitOther ? `다른 공사 중 · ${costText}` : `강화 · ${formatDuration(buildingDurationMs(building))} · ${costText}`}</button></div>`
+    return `<div class="building-row"><div class="building-glyph">${icon(building.kind === 'agriculture' ? 'grain' : building.kind === 'commerce' ? 'silver' : building.kind === 'barracks' ? 'duel' : building.kind === 'workshop' ? 'iron' : 'research')}</div><div class="building-copy"><strong>${building.name}</strong><small>${building.description}</small><span class="building-level">${'◆'.repeat(building.level)}${'◇'.repeat(building.maxLevel - building.level)}</span></div><button class="mini-action ${maxed ? 'is-maxed' : ''}" data-action="building-upgrade" data-city="${city.id}" data-building="${building.id}" ${!canManage || maxed || waitOther ? 'disabled' : ''} title="${waitOther ? '이 도시는 다른 건물을 짓는 중입니다' : ''}">${maxed ? '최고 단계' : waitOther ? `다른 공사 중 · ${costText}` : `강화 · ${formatDuration(buildingDurationMs(building, this.renderedState ?? undefined))} · ${costText}`}</button></div>`
   }
 
   private researchSection(state: StrategyState): string {
@@ -2313,7 +2364,7 @@ export class StrategyUI {
       body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">가입 유저 목록</span><h3>로그인 계정 관리</h3><p>Manus OAuth로 로그인한 사용자와 관리자 권한을 관리합니다.</p></div><button class="ghost-button" data-action="admin-accounts-refresh">계정 새로고침 ↻</button></div><div class="admin-account-toolbar"><label><span>계정 검색</span><input data-admin-account-search value="${escapeHtml(this.adminAccountSearch)}" placeholder="이름·이메일·Open ID 검색"></label><button class="action-button action-button--outline" data-action="admin-account-search">검색</button><span class="admin-directory-count">${this.adminAccounts.length}명 표시</span></div>${this.adminAccountsError ? `<div class="admin-account-gate"><div class="account-gate-mark">◎</div><h3>관리자 권한이 필요합니다</h3><p>${escapeHtml(this.adminAccountsError)}</p><small>현재 계정의 role이 admin인지 확인한 뒤 다시 시도하십시오.</small></div>` : `<div class="admin-account-table"><div class="admin-table-head"><span>계정</span><span>ID</span><span>로그인 방식</span><span>최근 로그인</span><span>권한</span><span>작업</span></div>${accountRows || '<div class="admin-empty-row">표시할 로그인 계정이 없습니다.</div>'}</div><div class="admin-table-foot">계정 목록은 서버의 관리자 전용 라우터에서 조회됩니다. 권한 변경은 데이터베이스에 저장됩니다.</div>`}</div>`
     } else if (this.adminTab === 'board') {
       const boardRows = this.adminBoard.posts.map(post => `<article class="admin-board-row"><div><span class="pill pill--jade">${escapeHtml(post.board)}</span><strong>${ugc(post.title)}</strong><small>${ugc(post.authorName)} · ${escapeHtml(post.authorFaction)}</small></div><button class="mini-action" data-action="admin-board-delete" data-post-id="${post.id}">관리자 삭제</button></article>`).join('')
-      body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">게시판 관리</span><h3>게시판 운영 관리</h3><p>관리자는 모든 게시글을 삭제할 수 있고, 일반 사용자의 새 글 작성을 제한할 수 있습니다.</p></div><button class="ghost-button" data-action="admin-board-refresh">게시판 새로고침 ↻</button></div><div class="admin-board-control"><div><strong>일반 사용자 글 작성</strong><small>${this.adminBoard.postingEnabled ? '현재 허용 중입니다.' : '현재 제한 중입니다.'}</small></div><button class="action-button ${this.adminBoard.postingEnabled ? 'action-button--outline' : 'action-button--primary'}" data-action="admin-board-posting" data-enabled="${this.adminBoard.postingEnabled ? 'false' : 'true'}">${this.adminBoard.postingEnabled ? '작성 제한하기' : '작성 허용하기'}</button></div><div class="admin-board-list">${boardRows || '<div class="admin-empty-row">현재 게시글이 없습니다.</div>'}</div></div>`
+      body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">게시판 관리</span><h3>게시판 운영 관리</h3><p>관리자는 모든 게시글을 삭제할 수 있고, 일반 사용자의 새 글 작성을 제한할 수 있습니다.</p></div><button class="ghost-button" data-action="admin-board-refresh">게시판 새로고침 ↻</button></div><div class="admin-board-control"><div><strong>일반 사용자 글 작성</strong><small>${this.adminBoard.postingEnabled ? '현재 허용 중입니다.' : '현재 제한 중입니다.'}</small></div><button class="action-button ${this.adminBoard.postingEnabled ? 'action-button--outline' : 'action-button--primary'}" data-action="admin-board-posting" data-enabled="${this.adminBoard.postingEnabled ? 'false' : 'true'}">${this.adminBoard.postingEnabled ? '작성 제한하기' : '작성 허용하기'}</button></div><div class="admin-board-list">${boardRows || '<div class="admin-empty-row">현재 게시글이 없습니다.</div>'}</div></div>${this.adminGuildPanel()}`
     } else if (this.adminTab === 'game-data') {
       const search = this.adminGameSearch.toLocaleLowerCase('ko-KR')
       const shown = this.adminGameAccounts.filter(account => !search || `${account.name} ${account.email} ${account.openId} #${account.id}`.toLocaleLowerCase('ko-KR').includes(search))
@@ -2470,6 +2521,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '유저 연맹', '소통 메뉴에 연맹이 생겼습니다. 같은 진영 지휘관끼리 연맹을 만들고(금화 50개 · 무장 최고 레벨 Lv.15) 가입합니다(자유 가입 · 승인 가입 · 초대). 인원은 Lv.1 20명에서 레벨마다 2명씩 늘어 Lv.10 38명이고, 직위는 연맹장 · 부연맹장(2명) · 정예(5명) · 연맹원입니다. 헌납(은전 · 자원 · 금화, 하루 한 번씩)과 공성 승리 · 수비전 성공 · 주간 레이드 참여 · 출석으로 기여 포인트와 연맹 경험치가 쌓이고, 연맹 자금으로 기술 7가지(둔전 · 공성 기계 · 성곽 수비 · 토벌 · 축성 · 군량 보급 · 무예 수련)를 연구하면 연맹원 모두에게 적용됩니다. 기여 포인트로 연맹 상점(병서 · 은전 · 자원 · 뽑기권 · 신화장비 조각 · 낙양 강화석)을 이용하고, 매주 공동 공성 목표 도시를 정해 공성하면 성벽 방어도 차감 +10% · 기여 2배, 점령하면 연맹원 모두 보상을 받습니다. 연맹 채팅 · 연맹 게시판 · 활동 기록이 있고, 천하 랭킹에 연맹 순위(레벨 · 주간 기여 · 주간 레이드)가 생겨 매주 월요일 0시에 순위 보상을 줍니다. 대련 상대 · 레이드 순위 · 도시 피해 순위에 연맹 이름이 붙습니다.', '완료', 'jade'],
       ['2026.10.17', '덱 유형 상성 · 영토전 열세 버프', '영토전(공성)과 유저 대련에 덱 유형 상성이 생겼습니다. 세 무장의 스킬 구성으로 덱 유형(속공 · 버티기 · 유틸 · 디버프 · 스킬 연계)이 정해지고, 각 유형은 두 유형에 강하고 두 유형에 약합니다(속공 → 버티기 · 유틸, 버티기 → 유틸 · 디버프, 유틸 → 디버프 · 스킬 연계, 디버프 → 스킬 연계 · 속공, 스킬 연계 → 속공 · 버티기). 유리하면 주는 피해와 스킬 사기 피해 +12%, 불리하면 −12%이고, 유형 특성(속공 첫 18초 피해 +50% · 스킬 연계 피해 +22% · 유틸 쿨다운 −22% · 디버프 직접 피해 −12%)이 붙습니다. 영토전에는 진영 영향도(차지한 도시의 단계 합)가 생겨, 가장 강한 진영의 50% 미만인 진영은 ‘열세의 노력’(영토전 전투 이점 +10% · 공성 승리 시 성벽 방어도 차감 1.5배), 같은 조건에서 수도만 남으면 ‘구국의 총력전’(+20% · 2배)을 받습니다.', '완료', 'jade'],
       ['2026.10.17', '인연 · 추천 덱 개편', '인연이 없던 무장 44명에게 새 인연 19가지(조씨 · 하후씨 일족, 호위무사, 위의 모사, 합비 수비, 번성 공방, 손가의 패업, 강동의 맹장, 강동의 대도독, 강동이교, 촉의 책사, 촉의 신진, 남만 왕가, 서량 군벌, 하북의 패자, 사세삼공, 백마의종, 동탁의 조정, 문희귀한, 한중의 객장)를 만들어 70명 모두가 인연을 갖습니다. 인연이 여러 개 맞으면 목록에서 먼저 나오는 하나가 적용됩니다. 무장 스킬 상세와 추천 덱의 인연 꼬리표를 누르면 효과 · 필요 인원 · 구성원이 펼쳐집니다. 추천 덱은 인연의 실제 효과 크기와 덱 성격(버티기 = 피해 감소, 속공 = 공격 · 스킬 위력, 유틸 · 디버프 = 쿨다운)을 따져 고르고, 다섯 덱이 같은 동료로만 채워지지 않게 했습니다. ‘초반 끝내기’는 ‘속공’으로 이름을 바꿨습니다.', '완료', 'jade'],
       ['2026.10.17', '장비 수호형 · 전투 밸런스', '장비가 전열을 맡는 수호형이 되었습니다. 새 스킬 ‘장판교 일갈’(자신 받는 피해 −30% · 반격 15% · 적 공포 4초 · 적 전술 예고 1회 지연)과 패시브 ‘만인지적’(공격받을 때마다 쿨다운 −0.25초)을 쓰고, 능력치는 수호형 성장으로 다시 계산됩니다. 혼란에 빠진 무장은 공격과 스킬마다 반반 확률로 상대편 또는 같은 편을 노립니다. 영토 중립 도시 수비대의 평균 레벨이 2배(도시 단계별 Lv.20~60)가 되었고, 유저 대련 훈련 상대는 10% 쉬워졌습니다(내 덱 전력의 77% · 90% · 104%).', '완료', 'jade'],
@@ -2507,7 +2559,7 @@ export class StrategyUI {
   private rankSection(state: StrategyState): string {
     const loggedIn = this.auth.status === 'authenticated'
     const me = this.ranks.find(entry => entry.displayName === this.auth.name)
-    return `<section class="page-section page-section--rank"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>천하 랭킹</h1><p class="heading-copy">전투에서 얻은 전적 점수로 순위를 다툽니다.</p>${this.operatorNote('전적이 순위표에 기록되지 않습니다.')}</div><button class="ghost-button" data-action="rank-refresh">순위 새로고침 ↻</button></div><div class="rank-layout"><div class="glass-card rank-hero"><div class="rank-hero-bg">★</div><span class="pill pill--jade">이번 시즌 전적</span><h2>나의 기록</h2><p>전투에서 이길수록, 높은 별로 이길수록 점수가 오릅니다.<br>로그인하면 순위표에 이름이 올라갑니다.</p><div class="my-record"><span>나의 전적 점수</span><strong>${state.battleScore ? formatNumber(state.battleScore) : '기록 없음'}</strong><small>${state.wins}승${me ? ` · 현재 ${me.rank}위` : loggedIn ? ' · 순위표 밖' : ''}</small></div><div class="auth-status" data-auth-status>${loggedIn ? '로그인 중 · 전적이 순위표에 기록됩니다.' : '로그인하면 순위표에 이름을 올릴 수 있습니다.'}</div></div><div class="glass-card rank-table"><div class="card-header"><div><span class="eyebrow">순위표</span><h3>상위 지휘관</h3></div><span class="sync-label">${this.ranks.length ? `${this.ranks.length}명` : ''}</span></div><div data-rank-list>${this.rankRows()}</div><div class="rank-footnote">* 순위는 들어올 때와 새로고침할 때 서버에서 받아 옵니다.</div></div></div></section>`
+    return `<section class="page-section page-section--rank"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>천하 랭킹</h1><p class="heading-copy">전투에서 얻은 전적 점수로 순위를 다툽니다.</p>${this.operatorNote('전적이 순위표에 기록되지 않습니다.')}</div><button class="ghost-button" data-action="rank-refresh">순위 새로고침 ↻</button></div><div class="rank-layout"><div class="glass-card rank-hero"><div class="rank-hero-bg">★</div><span class="pill pill--jade">이번 시즌 전적</span><h2>나의 기록</h2><p>전투에서 이길수록, 높은 별로 이길수록 점수가 오릅니다.<br>로그인하면 순위표에 이름이 올라갑니다.</p><div class="my-record"><span>나의 전적 점수</span><strong>${state.battleScore ? formatNumber(state.battleScore) : '기록 없음'}</strong><small>${state.wins}승${me ? ` · 현재 ${me.rank}위` : loggedIn ? ' · 순위표 밖' : ''}</small></div><div class="auth-status" data-auth-status>${loggedIn ? '로그인 중 · 전적이 순위표에 기록됩니다.' : '로그인하면 순위표에 이름을 올릴 수 있습니다.'}</div></div><div class="glass-card rank-table"><div class="card-header"><div><span class="eyebrow">순위표</span><h3>상위 지휘관</h3></div><span class="sync-label">${this.ranks.length ? `${this.ranks.length}명` : ''}</span></div><div data-rank-list>${this.rankRows()}</div><div class="rank-footnote">* 순위는 들어올 때와 새로고침할 때 서버에서 받아 옵니다.</div></div>${guildRankingCard(this.guildUi)}</div></section>`
   }
 
   private boardSection(state: StrategyState): string {
@@ -2531,7 +2583,7 @@ export class StrategyUI {
     const bossCards = bossDeck.map((general, lane) => `<div class="raid-boss__unit" style="--accent:${gradeColor(general)}">${this.portrait(general, 'raid-boss__portrait')}<span>${['좌측', '중앙 · 전열', '우측'][lane]}</span><strong>${escapeHtml(general.name)}</strong><small>Lv.${general.level} · ${'★'.repeat(general.stars)}</small></div>`).join('')
     const squadRows = squads.map(squad => `<li class="${squad.ids.length ? '' : 'is-empty'}"><b>${SQUAD_LABELS[squad.index]}</b><span>${squad.ids.length ? squad.ids.map(id => escapeHtml(state.generals.find(general => general.id === id)?.name ?? '')).join(' · ') : '비어 있음 · 건너뜀'}</span><em>${squad.ids.length ? fmt(squad.power) : '-'}</em></li>`).join('')
     const rewardRows = RAID_REWARDS.map(row => `<tr class="${info && !info.offline && info.rank && info.rank >= row.from && info.rank <= row.to ? 'is-me' : ''}"><td>${row.from === row.to ? `${row.from}위` : row.to === Infinity ? `${row.from}위~` : `${row.from}~${row.to}위`}</td><td>금화 ${row.gold}</td><td>${row.stones ? `낙양 강화석 ${row.stones}` : '-'}</td></tr>`).join('')
-    const ranking = info?.offline ? '<div class="rank-empty">연습 모드에서는 순위가 기록되지 않습니다.</div>' : view.ranking.length ? `<ol class="raid-ranking">${view.ranking.map(row => `<li class="${row.isMe ? 'is-me' : ''}"><b>${row.rank}</b><span>${ugc(row.displayName)}</span><em>${fmt(row.totalDamage)}</em><small>${row.attempts}회</small></li>`).join('')}</ol>` : '<div class="rank-empty">이번 주 기록이 아직 없습니다. 첫 기록의 주인공이 되십시오.</div>'
+    const ranking = info?.offline ? '<div class="rank-empty">연습 모드에서는 순위가 기록되지 않습니다.</div>' : view.ranking.length ? `<ol class="raid-ranking">${view.ranking.map(row => `<li class="${row.isMe ? 'is-me' : ''}"><b>${row.rank}</b><span>${ugc(row.displayName)}${row.guildName ? ` <small class="guild-tag">${ugc(row.guildName)}</small>` : ''}</span><em>${fmt(row.totalDamage)}</em><small>${row.attempts}회</small></li>`).join('')}</ol>` : '<div class="rank-empty">이번 주 기록이 아직 없습니다. 첫 기록의 주인공이 되십시오.</div>'
     const last = info?.lastWeek
     const claim = last ? `<div class="raid-claim glass-card"><div><span class="eyebrow">지난주 결과</span><strong>${last.rank}위 · 피해 ${fmt(last.totalDamage)}</strong><small>보상 · 금화 ${last.reward.gold}${last.reward.stones ? ` · 낙양 강화석 ${last.reward.stones}` : ''}</small></div><button class="action-button action-button--primary" data-action="raid-claim" ${last.claimed ? 'disabled' : ''}>${last.claimed ? '받음' : '보상 받기'}</button></div>` : ''
     return `<section class="page-section page-section--raid"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>주간 레이드</h1><p class="heading-copy">끝없는 병력의 보스에게 1군 → 2군 → 3군이 차례로 90초씩 맞서 준 피해의 합계로 순위를 겨룹니다. 매주 월요일 0시 초기화 · 하루 ${info?.dailyLimit ?? 3}회.</p>${this.operatorNote('레이드 순위와 순위 보상에서 빠집니다.')}</div><button class="ghost-button" data-action="raid-refresh">새로고침 ↻</button></div>
@@ -2549,7 +2601,7 @@ export class StrategyUI {
   private duelSection(state: StrategyState): string {
     const formationReady = state.formation.length >= 3
     const opponents = this.duelOpponents
-    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>${opponents.some(opponent => !opponent.isDummy) ? '내 덱 전력과 비슷한 지휘관이 저장한 출전 덱과 겨룹니다.' : '덱을 저장한 지휘관이 20명이 될 때까지는 내 덱 전력에 맞춘 훈련 상대와 겨룹니다.'}${this.duelMyPower ? ` <b>내 덱 전력 ${formatNumber(this.duelMyPower)}</b>` : ''}</p><div class="duel-daily-limit"><strong>오늘 남은 대련 ${duelAttemptsRemaining(state)}회</strong><span>매일 5회 · 승리 시 신화장비 조각 쉬움 +1 · 보통 +2 · 어려움 +3 (신화장비 1개 = 조각 ${MYTHIC_FRAGMENT_COST}개)</span></div></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.length ? '' : '<div class="rank-empty">상대를 찾는 중입니다…</div>'}${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${ugc(opponent.displayName)}</strong><span>${opponent.isDummy ? `훈련 상대 · ${escapeHtml(opponent.note ?? '')}` : `지휘관 · 전력 ${formatNumber(opponent.power ?? 0)}${this.duelMyPower && opponent.power ? ` (내 덱 대비 ${opponent.power >= this.duelMyPower ? '+' : '−'}${Math.round(Math.abs(opponent.power / this.duelMyPower - 1) * 100)}%)` : ''} · 전적 점수 ${formatNumber(opponent.score)}`}</span></div>${this.duelStyleBadge(state, opponent)}<span class="duel-reward duel-reward--${opponent.tier ?? 'normal'}">${{ easy: '쉬움', normal: '보통', hard: '어려움' }[opponent.tier ?? 'normal']} · 조각 +${{ easy: 1, normal: 2, hard: 3 }[opponent.tier ?? 'normal']}</span><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
+    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>${opponents.some(opponent => !opponent.isDummy) ? '내 덱 전력과 비슷한 지휘관이 저장한 출전 덱과 겨룹니다.' : '덱을 저장한 지휘관이 20명이 될 때까지는 내 덱 전력에 맞춘 훈련 상대와 겨룹니다.'}${this.duelMyPower ? ` <b>내 덱 전력 ${formatNumber(this.duelMyPower)}</b>` : ''}</p><div class="duel-daily-limit"><strong>오늘 남은 대련 ${duelAttemptsRemaining(state)}회</strong><span>매일 5회 · 승리 시 신화장비 조각 쉬움 +1 · 보통 +2 · 어려움 +3 (신화장비 1개 = 조각 ${MYTHIC_FRAGMENT_COST}개)</span></div></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.length ? '' : '<div class="rank-empty">상대를 찾는 중입니다…</div>'}${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${ugc(opponent.displayName)}${opponent.guildName ? ` <small class="guild-tag">${ugc(opponent.guildName)}</small>` : ''}</strong><span>${opponent.isDummy ? `훈련 상대 · ${escapeHtml(opponent.note ?? '')}` : `지휘관 · 전력 ${formatNumber(opponent.power ?? 0)}${this.duelMyPower && opponent.power ? ` (내 덱 대비 ${opponent.power >= this.duelMyPower ? '+' : '−'}${Math.round(Math.abs(opponent.power / this.duelMyPower - 1) * 100)}%)` : ''} · 전적 점수 ${formatNumber(opponent.score)}`}</span></div>${this.duelStyleBadge(state, opponent)}<span class="duel-reward duel-reward--${opponent.tier ?? 'normal'}">${{ easy: '쉬움', normal: '보통', hard: '어려움' }[opponent.tier ?? 'normal']} · 조각 +${{ easy: 1, normal: 2, hard: 3 }[opponent.tier ?? 'normal']}</span><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
   }
 
   private rankRows(): string {
@@ -2590,6 +2642,7 @@ export class StrategyUI {
       card?.querySelectorAll<HTMLElement>('[data-action="mission-claim"]:not([disabled])').forEach(item => { item.classList.remove('is-flash'); void item.offsetWidth; item.classList.add('is-flash') })
       return
     }
+    if (action?.startsWith('guild-')) { if (button.tagName !== 'SELECT') this.guildClick(action, button); return }
     if (action === 'nav-more') { this.root.querySelector('.sidebar')?.classList.toggle('is-more-open'); return }
     if (action === 'section') { this.root.querySelector('.sidebar')?.classList.remove('is-more-open') }
     if (action === 'section') { if (button.dataset.scenarioId) { this.scenarioSelectedId = button.dataset.scenarioId; this.scenarioPicked = true; this.scenarioDifficulty = 'normal' } this.callbacks.onSection((button.dataset.section ?? 'overview') as Section) }
@@ -2885,8 +2938,28 @@ export class StrategyUI {
       this.callbacks.onEquipmentDraw(Number(button.dataset.count ?? 1))
     }
   }
+  private guildClick(action: string, button: HTMLElement): void {
+    const data = { ...button.dataset } as Record<string, string>
+    if (action === 'guild-tab') { this.guildUi = { ...this.guildUi, tab: (data.tab ?? 'info') as GuildTab }; if (this.renderedState) this.render(this.renderedState); this.callbacks.onGuild('tab', data); return }
+    if (action === 'guild-create-toggle') { this.guildUi.createOpen = !(button.closest('details') as HTMLDetailsElement | null)?.open; return }
+    if (action === 'guild-rank-kind') { this.guildUi = { ...this.guildUi, rankingKind: (data.kind ?? 'level') as GuildUiState['rankingKind'] }; this.callbacks.onGuild('ranking', data); return }
+    const ask = (title: string, detail: string, ok: string) => this.confirmPurchase(title, detail, () => this.callbacks.onGuild(action.slice(6), data), { eyebrow: '연맹', ok })
+    if (action === 'guild-leave') return ask('연맹 탈퇴', '탈퇴하면 24시간 동안 다른 연맹에 가입할 수 없습니다. 기여 포인트는 남습니다.', '탈퇴')
+    if (action === 'guild-disband') return ask('연맹 해산', '연맹이 사라지고 연맹 자금 · 기술도 없어집니다.', '해산')
+    if (action === 'guild-kick') return ask('연맹원 추방', `${data.name ?? ''}을(를) 추방합니다. 24시간 동안 다시 가입할 수 없습니다.`, '추방')
+    if (action === 'guild-admin-disband') return ask('연맹 강제 해산', `연맹 ‘${data.name ?? ''}’을(를) 해산합니다. 되돌릴 수 없습니다.`, '해산')
+    if (action === 'guild-research') return ask('연맹 기술 연구', '연맹 자금을 써서 기술을 한 단계 올립니다.', '연구')
+    this.callbacks.onGuild(action.slice(6), data)
+  }
+
   private handleChange = (event: Event): void => {
     const select = event.target as HTMLSelectElement
+    if (select.matches('[data-action="guild-role"]')) {
+      const data = { userId: select.dataset.userId ?? '', role: select.value }
+      if (select.value === 'leader') this.confirmPurchase('연맹장 위임', '연맹장을 넘기면 나는 부연맹장(자리가 없으면 연맹원)이 됩니다.', () => this.callbacks.onGuild('role', data), { eyebrow: '연맹', ok: '위임' })
+      else this.callbacks.onGuild('role', data)
+      return
+    }
     if (select.matches('[data-action="roster-sort"]')) {
       this.rosterSort = select.value as RosterSort
       if (this.renderedState) this.render(this.renderedState)
@@ -2907,6 +2980,13 @@ export class StrategyUI {
   }
   private handleSubmit = (event: SubmitEvent): void => {
     const form = event.target as HTMLFormElement
+    if (form.matches('[data-guild-form]')) {
+      event.preventDefault()
+      const data = Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, String(value)]))
+      if (form.dataset.guildForm === 'target') data.cityName = form.querySelector<HTMLSelectElement>('select[name="cityId"]')?.selectedOptions[0]?.dataset.name ?? ''
+      this.callbacks.onGuild(`form:${form.dataset.guildForm}`, data)
+      return
+    }
     if (form.matches('[data-board-form]')) {
       event.preventDefault()
       const data = new FormData(form)

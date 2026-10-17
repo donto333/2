@@ -287,6 +287,7 @@ export class Arena {
   private mode: BattleMode = 'normal'
   /** 영토전 열세 버프(공성에서만) */
   private territoryBonus = 0
+  private enemyBonus = 0
   private moraleBonus = 0
   /** 다음 전투를 튜토리얼 난이도로 */
   private easyBattle = false
@@ -409,11 +410,13 @@ export class Arena {
   }
 
   /** 미리 정한 적 덱과 전투 종류. null이면 일반 전투(적은 아군 레벨에 맞춰 뽑는다). */
-  setOpponentDeck(generals: General[] | null, mode: BattleMode = generals?.length ? 'duel' : 'normal'): void {
+  setOpponentDeck(generals: General[] | null, mode: BattleMode = generals?.length ? 'duel' : 'normal', bonus: { player?: number; enemy?: number } = {}): void {
     this.configuredEnemyDeck = generals?.slice(0, 3).map(general => ({ ...general })) ?? null
     this.mode = this.configuredEnemyDeck?.length ? mode : 'normal'
     this.moraleBonus = 0
-    this.territoryBonus = 0
+    // 유저 대련: 양쪽 연맹의 '무예 수련'
+    this.territoryBonus = this.mode === 'duel' ? bonus.player ?? 0 : 0
+    this.enemyBonus = this.mode === 'duel' ? bonus.enemy ?? 0 : 0
     this.easyBattle = false
     this.hardRule = null
   }
@@ -427,6 +430,7 @@ export class Arena {
     this.mode = 'siege'
     this.moraleBonus = moraleBonus
     this.territoryBonus = territoryBonus
+    this.enemyBonus = 0
     this.hardRule = null
   }
   isDuelBattle(): boolean {
@@ -855,7 +859,7 @@ export class Arena {
     const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
     this.enemyDeck = deck
     this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
-    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, hardRule: this.hardRule, territoryBonus: this.mode === 'siege' ? this.territoryBonus : 0, style: STYLE_MODES.has(this.mode) ? styleMatch(this.generals.map(general => general.id), deck.map(general => general.id)) : null, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: (options.autoPlay ?? (this.autoPreferred && this.mode !== 'duel' && !this.easyBattle)) ? { ...PLAYER_AUTO_PILOT } : null })
+    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, hardRule: this.hardRule, territoryBonus: this.mode === 'siege' || this.mode === 'duel' ? this.territoryBonus : 0, enemyBonus: this.mode === 'duel' ? this.enemyBonus : 0, style: STYLE_MODES.has(this.mode) ? styleMatch(this.generals.map(general => general.id), deck.map(general => general.id)) : null, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: (options.autoPlay ?? (this.autoPreferred && this.mode !== 'duel' && !this.easyBattle)) ? { ...PLAYER_AUTO_PILOT } : null })
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()

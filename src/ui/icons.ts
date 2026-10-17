@@ -7,7 +7,7 @@ export type IconName =
   | 'gold' | 'silver' | 'honor' | 'influence' | 'grain' | 'wood' | 'iron' | 'manuals' | 'mythic'
   // 메뉴
   | 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' | 'equipment' | 'territory' | 'research'
-  | 'battle' | 'duel' | 'raid' | 'shop' | 'rank' | 'board' | 'updates' | 'account' | 'admin' | 'balance'
+  | 'battle' | 'duel' | 'raid' | 'shop' | 'rank' | 'board' | 'guild' | 'updates' | 'account' | 'admin' | 'balance'
 
 // 메뉴: 한 가지 굵기의 선 그림(금빛 한 색). 재화: 두 가지 색의 평면 그림 + 먹선. 광택·무지개 그라데이션은 쓰지 않는다.
 const LINE = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
@@ -63,6 +63,8 @@ const SYMBOLS: Record<IconName, string> = {
   rank: `<path d="M4 27h24M6.5 27v-7.5h6.5V27M13 27V13h6v14M19 27v-5.5h6.5V27" ${LINE}/><path d="M16 4.5l1.4 2.9 3.1.4-2.3 2.1.6 3.1L16 11.5 13.2 13l.6-3.1-2.3-2.1 3.1-.4z" ${LINE} stroke-width="1.6"/>`,
   // 진영 게시판: 방(榜)
   board: `<path d="M5 6.5h22v15H5zM9 21.5L7 27M23 21.5l2 5.5M9.5 11h13M9.5 15h9" ${LINE}/>`,
+  // 연맹: 깃대 + 갈라진 깃발 + 별
+  guild: `<path d="M8 4v24M8 5h16l-4 5 4 5H8" ${LINE}/><path d="M14.5 8.2l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z" ${LINE}/>`,
   // 상점: 돈주머니
   shop: `<path d="M12.5 6.5h7l-2 3.5c5 1.8 8 6 8 10 0 4-4 6.5-9.5 6.5S6.5 24 6.5 20c0-4 3-8.2 8-10z" ${LINE}/><path d="M13 10h6M13.5 19h5" ${LINE}/>`,
   // 업데이트 기록: 징

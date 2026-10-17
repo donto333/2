@@ -26,6 +26,21 @@ function assertVisible(board, faction) {
   if (board !== '전체' && board !== faction) throw new Error('소속 진영 게시판만 이용할 수 있습니다.')
 }
 
+/** 연맹 게시판: 화면에서는 '연맹', 저장은 '연맹:<연맹 번호>'(가입한 연맹만) */
+const GUILD_BOARD = '연맹'
+async function guildBoardKey(userId) {
+  const [rows] = await getPool().query('SELECT guildId FROM game_guild_members WHERE userId=? LIMIT 1', [userId])
+  const guildId = rows[0]?.guildId
+  if (!guildId) throw new Error('연맹에 가입해야 연맹 게시판을 이용할 수 있습니다.')
+  return `${GUILD_BOARD}:${guildId}`
+}
+/** 화면의 게시판 이름 → 저장 이름(진영 확인 포함) */
+async function resolveBoard(user, board, faction) {
+  if (board === GUILD_BOARD) return guildBoardKey(user.id)
+  assertVisible(board, faction)
+  return board
+}
+
 function hashPassword(password, salt = randomBytes(16)) {
   const passwordSalt = salt.toString('hex')
   const passwordHash = scryptSync(password, salt, 64).toString('hex')
@@ -42,7 +57,7 @@ function passwordMatches(password, saltHex, hashHex) {
 function postView(row, userId, isAdmin = false) {
   return {
     id: Number(row.id),
-    board: row.board,
+    board: String(row.board).startsWith(`${GUILD_BOARD}:`) && !isAdmin ? GUILD_BOARD : row.board,
     title: row.title,
     content: row.content,
     authorName: row.authorName,
@@ -61,14 +76,14 @@ export async function getBoardSettings() {
 
 export async function listBoardPosts(user, board) {
   const faction = await currentFaction(user.id)
-  assertVisible(board, faction)
-  const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts WHERE board=? ORDER BY createdAt DESC, id DESC LIMIT 100`, [board])
+  const key = await resolveBoard(user, board, faction)
+  const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts WHERE board=? ORDER BY createdAt DESC, id DESC LIMIT 100`, [key])
   return rows.map(row => postView(row, user.id, user.role === 'admin'))
 }
 
 export async function createBoardPost(user, input) {
   const faction = await currentFaction(user.id)
-  assertVisible(input.board, faction)
+  const key = await resolveBoard(user, input.board, faction)
   const settings = await getBoardSettings()
   if (!settings.postingEnabled) throw new Error('관리자가 현재 게시글 작성을 제한하고 있습니다.')
   const title = input.title.trim()
@@ -80,7 +95,7 @@ export async function createBoardPost(user, input) {
   const { passwordSalt, passwordHash } = hashPassword(password)
   const [result] = await getPool().execute(
     'INSERT INTO game_board_posts (board,title,content,authorUserId,authorName,authorFaction,passwordSalt,passwordHash) VALUES (?,?,?,?,?,?,?,?)',
-    [input.board, title, content, user.id, name.slice(0, 64), faction, passwordSalt, passwordHash],
+    [key, title, content, user.id, name.slice(0, 64), faction, passwordSalt, passwordHash],
   )
   const [rows] = await getPool().query(`SELECT ${POST_COLUMNS} FROM game_board_posts WHERE id=? LIMIT 1`, [result.insertId])
   return postView(rows[0], user.id, user.role === 'admin')

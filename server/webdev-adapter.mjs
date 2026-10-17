@@ -4,6 +4,7 @@ import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPow
 import { neutralRaidPower, resolveNeutralRaid } from './neutral-raid.mjs';
 import { isLaunched } from './launch.mjs';
 import { attendanceLedger, nextAttendanceDay } from './attendance.mjs';
+import { createGuildService } from './guild.mjs';
 import { RAID_DAILY_LIMIT, RAID_SQUADS, previousRaidWeekKey, raidBossLevel, raidDamageCap, raidDayKey, raidRewardFor, raidWeekKey } from "./raid.mjs";
 const cityRoutes = createCityRoutesRequire(import.meta.url)('./city-routes.json');
 // starters/web-db-user-v1/shared/const.ts
@@ -147,6 +148,50 @@ var raidWeeklyScores = mysqlTable("raid_weekly_scores", {
 var luoyangWeeklyResults = mysqlTable("luoyang_weekly_results", {
   weekKey: varchar("weekKey", { length: 16 }).primaryKey(),
   winnerFaction: mysqlEnum("winnerFaction", ["촉한", "위나라", "오나라", "재야"]),
+  settledAt: timestamp("settledAt").defaultNow().notNull()
+});
+
+// ── 유저 연맹(server/037_guilds.sql) ──
+var guildsTable = mysqlTable("game_guilds", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 32 }).notNull(),
+  faction: varchar("faction", { length: 16 }).notNull(),
+  level: int("level").default(1).notNull(),
+  data: mediumtext("data").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull()
+});
+var guildMembersTable = mysqlTable("game_guild_members", {
+  userId: int("userId").primaryKey(),
+  guildId: int("guildId"),
+  data: mediumtext("data").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+});
+var guildRequestsTable = mysqlTable("game_guild_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  guildId: int("guildId").notNull(),
+  userId: int("userId").notNull(),
+  kind: varchar("kind", { length: 8 }).notNull(),
+  data: text("data").notNull(),
+  createdAt: bigint("createdAt", { mode: "number" }).notNull()
+});
+var guildLogsTable = mysqlTable("game_guild_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  guildId: int("guildId").notNull(),
+  at: bigint("at", { mode: "number" }).notNull(),
+  text: varchar("text", { length: 255 }).notNull()
+});
+var guildChatTable = mysqlTable("game_guild_chat", {
+  id: int("id").autoincrement().primaryKey(),
+  guildId: int("guildId").notNull(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 64 }).notNull(),
+  role: varchar("role", { length: 8 }).default("member").notNull(),
+  text: varchar("text", { length: 255 }).notNull(),
+  at: bigint("at", { mode: "number" }).notNull()
+});
+var guildWeeksTable = mysqlTable("game_guild_weeks", {
+  weekKey: varchar("weekKey", { length: 16 }).primaryKey(),
+  data: mediumtext("data").notNull(),
   settledAt: timestamp("settledAt").defaultNow().notNull()
 });
 
@@ -446,10 +491,21 @@ function strongestNeutralNeighborLevel(cityId, byCityId) {
   return levels.length ? Math.max(...levels) : 0;
 }
 /** 잠근(row FOR UPDATE) 도시에 습격 한 번을 적용할 값 묶음을 만든다. */
-function applyRaidToRow(target, attackerCityId, attackerLevel, now, { allowCapture = true, updatedByUserId = null } = {}) {
+/** 영토전 열세 버프(게임 strategy.ts의 underdogBuff와 같은 규칙): 영향도 = 차지한 도시 단계 합, 가장 강한 진영의 50% 미만이면 +10%, 수도만 남으면 +20% */
+const FACTION_CAPITAL_IDS = { 촉한: "chengdu", 위나라: "ye", 오나라: "jianye" };
+function underdogBattleBonus(faction, rows) {
+  if (!(faction in FACTION_CAPITAL_IDS)) return 0;
+  const influence = { 촉한: 0, 위나라: 0, 오나라: 0 };
+  for (const row of rows) if (row.owner in influence) influence[row.owner] += CITY_LEVEL_BY_ID[row.cityId] ?? 1;
+  const top = Math.max(...Object.values(influence));
+  if (top <= 0 || influence[faction] >= top * 0.5) return 0;
+  const owned = rows.filter(row => row.owner === faction);
+  return owned.length === 1 && owned[0].cityId === FACTION_CAPITAL_IDS[faction] ? 0.2 : 0.1;
+}
+function applyRaidToRow(target, attackerCityId, attackerLevel, now, { allowCapture = true, updatedByUserId = null, garrisonBoost = 1 } = {}) {
   const garrisons = parseGarrisons(target);
   const raidPower = neutralRaidPower(attackerLevel);
-  const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.list.map(g => Number(g.power)), defeated: garrisons.defeated, defense: Number(target.defense), allowCapture });
+  const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.list.map(g => Number(g.power) * garrisonBoost), defeated: garrisons.defeated, defense: Number(target.defense), allowCapture });
   const defender = result.defenderIndex >= 0 ? garrisons.list[result.defenderIndex] : null;
   const lastRaid = { at: now, attackerCityId, attackerLevel, raidPower, attackerWon: result.attackerWon, damage: result.damage, defenderLabel: defender?.label ?? null, captured: result.captured };
   const keptRazedAt = razedAtOf(target);
@@ -707,6 +763,11 @@ async function recordFactionTerritoryBattle(userId, input, { operator = false } 
         battleCount: sql`${cityDamageRankings.battleCount} + 1`
       }
     });
+    guildRecord(userId, "siege", { cityId: input.cityId });
+    if (input.captured) {
+      const after = await db.select({ owner: factionTerritoryStates.owner }).from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1);
+      if (after[0]?.owner === faction) guildService.cityCaptured(faction, input.cityId).catch(() => {});
+    }
   }
   return getFactionTerritories(userId);
 }
@@ -744,6 +805,7 @@ async function recordFactionDefense(userId, input, { operator = false } = {}) {
   await ensureFactionTerritories(db);
   await advanceNeutralTerritoryAi(db);
   const faction = await userFaction(db, userId);
+  const garrisonBoost = await guildService.tags([userId]).then(tags => tags.get(userId)?.garrison ?? 0).catch(() => 0);
   let outcome = null;
   await db.transaction(async tx => {
     const all = await tx.select().from(factionTerritoryStates);
@@ -752,10 +814,12 @@ async function recordFactionDefense(userId, input, { operator = false } = {}) {
     const current = rows[0];
     if (!current || current.owner !== faction) return;
     const attackerLevel = strongestNeutralNeighborLevel(current.cityId, byCityId) || (CITY_LEVEL_BY_ID[current.cityId] ?? 1);
-    const { set, result } = applyRaidToRow(current, "drill", attackerLevel, Date.now(), { allowCapture: false, updatedByUserId: userId });
+    // 수비병 전력 보정: 연맹 기술 '성곽 수비' + 영토전 열세 버프(게임의 defendCity와 같은 값)
+    const { set, result } = applyRaidToRow(current, "drill", attackerLevel, Date.now(), { allowCapture: false, updatedByUserId: userId, garrisonBoost: 1 + Math.min(0.4, garrisonBoost + underdogBattleBonus(faction, all)) });
     await tx.update(factionTerritoryStates).set(set).where(eq(factionTerritoryStates.cityId, current.cityId));
     outcome = result;
   });
+  if (outcome && !outcome.attackerWon) guildRecord(userId, "defense");
   return { outcome, territories: await getFactionTerritories(userId) };
 }
 async function getCityDamageRankings(cityId) {
@@ -764,7 +828,9 @@ async function getCityDamageRankings(cityId) {
   if (!FACTION_TERRITORY_IDS.has(cityId)) throw new Error("해당 도시를 찾을 수 없습니다.");
   const operators = await operatorUserIds(db);
   const rows = await db.select({ userId: cityDamageRankings.userId, faction: cityDamageRankings.faction, displayName: cityDamageRankings.displayName, totalDamage: cityDamageRankings.totalDamage, battleCount: cityDamageRankings.battleCount, updatedAt: cityDamageRankings.updatedAt }).from(cityDamageRankings).where(eq(cityDamageRankings.cityId, cityId)).orderBy(desc(cityDamageRankings.totalDamage), asc(cityDamageRankings.updatedAt)).limit(10 + operators.size);
-  return rows.filter(row => !operators.has(row.userId)).slice(0, 10);
+  const top = rows.filter(row => !operators.has(row.userId)).slice(0, 10);
+  const tags = await guildService.tags(top.map(row => row.userId)).catch(() => new Map());
+  return top.map(row => ({ ...row, guildName: tags.get(row.userId)?.name ?? null }));
 }
 async function listGameStates() {
   const db = await getDb();
@@ -799,7 +865,9 @@ async function listDuelOpponents(viewerId, limit = 12, power) {
       deck,
     };
   }).filter(Boolean);
-  const others = decks.filter(entry => entry.userId !== viewerId).map(({ userId: _userId, ...entry }) => entry);
+  // 상대의 연맹 이름 · 대련 기술(무예 수련): 상대 덱이 주는 피해에 반영한다
+  const tags = await guildService.tags(decks.map(entry => entry.userId)).catch(() => new Map());
+  const others = decks.filter(entry => entry.userId !== viewerId).map(({ userId, ...entry }) => ({ ...entry, guildName: tags.get(userId)?.name ?? null, guildDuel: tags.get(userId)?.duel ?? 0 }));
   if (power === undefined) return others.sort((left, right) => right.score - left.score).slice(0, Math.max(1, Math.min(50, limit)));
   const registered = decks.length;
   if (registered < DUEL_USER_THRESHOLD) return { mode: "dummy", registered, threshold: DUEL_USER_THRESHOLD, opponents: [] };
@@ -869,7 +937,8 @@ async function startRaid(user, now = Date.now()) {
   const boss = await currentRaidBossLevel(now);
   const states = await db.select().from(gameAccountStates).where(eq(gameAccountStates.userId, user.id)).limit(1);
   const squads = states[0] ? savedSquadDecks(states[0]) : [];
-  const cap = squads.reduce((sum, deck) => sum + raidDamageCap(duelDeckPower(deck)), 0);
+  const guildRaid = await guildService.tags([user.id]).then(tags => tags.get(user.id)?.raid ?? 0).catch(() => 0);
+  const cap = Math.round(squads.reduce((sum, deck) => sum + raidDamageCap(duelDeckPower(deck)), 0) * (1 + guildRaid));
   if (!cap) return { ok: false, reason: "저장된 출전 편성이 없습니다. 편성을 저장한 뒤 다시 도전하십시오." };
   return db.transaction(async tx => {
     await tx.insert(raidWeeklyScores).values({ weekKey, userId: user.id, displayName: user.name || `지휘관 ${user.id}` }).onDuplicateKeyUpdate({ set: { displayName: user.name || `지휘관 ${user.id}` } });
@@ -900,6 +969,7 @@ async function submitRaid(userId, input, now = Date.now()) {
     return { ok: true, added, capped: claimed > cap, totalDamage: total };
   });
   if (!result.ok) return result;
+  guildRecord(userId, "raid", { damage: result.added });
   return { ...result, rank: await raidRankOf(db, weekKey, result.totalDamage, userId) };
 }
 async function getRaidRanking(userId, limit = 100, now = Date.now()) {
@@ -909,7 +979,8 @@ async function getRaidRanking(userId, limit = 100, now = Date.now()) {
   const operators = await operatorUserIds(db);
   const size = Math.max(1, Math.min(100, limit));
   const rows = (await db.select({ userId: raidWeeklyScores.userId, displayName: raidWeeklyScores.displayName, totalDamage: raidWeeklyScores.totalDamage, attempts: raidWeeklyScores.attempts }).from(raidWeeklyScores).where(sql`${raidWeeklyScores.weekKey} = ${weekKey} AND ${raidWeeklyScores.totalDamage} > 0`).orderBy(desc(raidWeeklyScores.totalDamage), asc(raidWeeklyScores.updatedAt)).limit(size + operators.size)).filter(row => !operators.has(row.userId)).slice(0, size);
-  return { weekKey, rows: rows.map((row, index) => ({ rank: index + 1, displayName: row.displayName, totalDamage: Number(row.totalDamage), attempts: Number(row.attempts), isMe: row.userId === userId })) };
+  const tags = await guildService.tags(rows.map(row => row.userId)).catch(() => new Map());
+  return { weekKey, rows: rows.map((row, index) => ({ rank: index + 1, displayName: row.displayName, guildName: tags.get(row.userId)?.name ?? null, totalDamage: Number(row.totalDamage), attempts: Number(row.attempts), isMe: row.userId === userId })) };
 }
 /** 지난주 순위 보상 받기(금화·낙양 강화석은 서버 원장에 바로 더한다) */
 async function claimRaidReward(userId, now = Date.now()) {
@@ -1012,6 +1083,86 @@ function adminGameView(row) {
   };
 }
 
+// ── 유저 연맹: MySQL 저장소 + 서버 처리(server/guild.mjs) ──
+async function guildDb() {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  return db;
+}
+function guildRow(row) {
+  if (!row) return null;
+  const data = parseStateJson(row.data) ?? {};
+  return { ...data, id: row.id, name: row.name, faction: row.faction, level: row.level };
+}
+function guildData(guild) {
+  const { id: _id, name: _name, faction: _faction, level: _level, ...rest } = guild;
+  return JSON.stringify(rest);
+}
+async function guildAccount(userId) {
+  const db = await guildDb();
+  const rows = await db.select({ id: users.id, name: users.name, role: users.role, email: users.email, faction: gameAccountStates.faction, gold: gameAccountStates.gold, generalData: gameAccountStates.generalData, formationData: gameAccountStates.formationData })
+    .from(users).leftJoin(gameAccountStates, eq(gameAccountStates.userId, users.id)).where(eq(users.id, userId)).limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const generals = parseStateJson(row.generalData);
+  const formation = parseStateJson(row.formationData);
+  const list = Array.isArray(generals) ? generals.filter(general => general && typeof general.id === "string") : [];
+  const byId = new Map(list.map(general => [general.id, general]));
+  const deck = Array.isArray(formation) ? formation.slice(0, 3).map(id => byId.get(id)).filter(Boolean) : [];
+  return { userId: row.id, name: row.name || `지휘관 ${row.id}`, faction: row.faction ?? "촉한", gold: Number(row.gold) || 0, maxLevel: list.reduce((max, general) => Math.max(max, Number(general.level) || 0), 0), power: deck.length ? duelDeckPower(deck) : 0, operator: isOperatorUser(row) };
+}
+const mysqlGuildRepo = {
+  account: guildAccount,
+  async accountByName(name) { const found = await findUserByName(name); return found ? guildAccount(found.id) : null; },
+  async spendGold(userId, amount) {
+    const db = await guildDb();
+    const [result] = await db.update(gameAccountStates).set({ gold: sql`${gameAccountStates.gold} - ${amount}` }).where(sql`${gameAccountStates.userId} = ${userId} AND ${gameAccountStates.gold} >= ${amount}`);
+    return Number(result?.affectedRows ?? 0) > 0;
+  },
+  async grantLedger(userId, { gold = 0, fragments = 0, stones = 0 }) {
+    const db = await guildDb();
+    await db.update(gameAccountStates).set({ gold: sql`${gameAccountStates.gold} + ${gold}`, mythicFragments: sql`${gameAccountStates.mythicFragments} + ${fragments}`, mythicStones: sql`${gameAccountStates.mythicStones} + ${stones}` }).where(eq(gameAccountStates.userId, userId));
+  },
+  async getGuild(id) { const db = await guildDb(); const rows = await db.select().from(guildsTable).where(eq(guildsTable.id, id)).limit(1); return guildRow(rows[0]); },
+  async getGuildByName(name) { const db = await guildDb(); const rows = await db.select().from(guildsTable).where(sql`LOWER(${guildsTable.name}) = ${String(name).toLowerCase()}`).limit(1); return guildRow(rows[0]); },
+  async listGuilds(faction) { const db = await guildDb(); const rows = faction ? await db.select().from(guildsTable).where(eq(guildsTable.faction, faction)) : await db.select().from(guildsTable); return rows.map(guildRow); },
+  async insertGuild(guild) { const db = await guildDb(); const [result] = await db.insert(guildsTable).values({ name: guild.name, faction: guild.faction, level: guild.level, data: guildData(guild) }); return Number(result.insertId); },
+  async updateGuild(guild) { const db = await guildDb(); await db.update(guildsTable).set({ name: guild.name, faction: guild.faction, level: guild.level, data: guildData(guild) }).where(eq(guildsTable.id, guild.id)); },
+  async deleteGuild(id) { const db = await guildDb(); await db.delete(guildsTable).where(eq(guildsTable.id, id)); },
+  async getMember(userId) { const db = await guildDb(); const rows = await db.select().from(guildMembersTable).where(eq(guildMembersTable.userId, userId)).limit(1); return rows[0] ? { ...(parseStateJson(rows[0].data) ?? {}), userId: rows[0].userId, guildId: rows[0].guildId ?? null } : null; },
+  async listMembers(guildId) { const db = await guildDb(); const rows = await db.select().from(guildMembersTable).where(eq(guildMembersTable.guildId, guildId)); return rows.map(row => ({ ...(parseStateJson(row.data) ?? {}), userId: row.userId, guildId: row.guildId })); },
+  async putMember(member) { const db = await guildDb(); const { userId, guildId, ...rest } = member; const data = JSON.stringify(rest); await db.insert(guildMembersTable).values({ userId, guildId: guildId ?? null, data }).onDuplicateKeyUpdate({ set: { guildId: guildId ?? null, data } }); },
+  async listRequests({ guildId, userId, kind } = {}) {
+    const db = await guildDb();
+    const where = [guildId != null ? sql`${guildRequestsTable.guildId} = ${guildId}` : null, userId != null ? sql`${guildRequestsTable.userId} = ${userId}` : null, kind ? sql`${guildRequestsTable.kind} = ${kind}` : null].filter(Boolean);
+    const rows = await db.select().from(guildRequestsTable).where(where.length ? sql.join(where, sql` AND `) : sql`1 = 1`);
+    return rows.map(row => ({ ...(parseStateJson(row.data) ?? {}), id: row.id, guildId: row.guildId, userId: row.userId, kind: row.kind, createdAt: Number(row.createdAt) }));
+  },
+  async getRequest(id) { const db = await guildDb(); const rows = await db.select().from(guildRequestsTable).where(eq(guildRequestsTable.id, id)).limit(1); const row = rows[0]; return row ? { ...(parseStateJson(row.data) ?? {}), id: row.id, guildId: row.guildId, userId: row.userId, kind: row.kind, createdAt: Number(row.createdAt) } : null; },
+  async insertRequest(item) { const db = await guildDb(); const { guildId, userId, kind, createdAt, ...rest } = item; const [result] = await db.insert(guildRequestsTable).values({ guildId, userId, kind, createdAt, data: JSON.stringify(rest) }); return Number(result.insertId); },
+  async deleteRequest(id) { const db = await guildDb(); await db.delete(guildRequestsTable).where(eq(guildRequestsTable.id, id)); },
+  async addLog(guildId, at, text) { const db = await guildDb(); await db.insert(guildLogsTable).values({ guildId, at, text: String(text).slice(0, 255) }); },
+  async listLogs(guildId, limit) { const db = await guildDb(); return db.select().from(guildLogsTable).where(eq(guildLogsTable.guildId, guildId)).orderBy(desc(guildLogsTable.id)).limit(limit); },
+  async addChat(message) {
+    const db = await guildDb();
+    const [result] = await db.insert(guildChatTable).values({ guildId: message.guildId, userId: message.userId, name: String(message.name).slice(0, 64), role: message.role ?? "member", text: message.text, at: message.at });
+    const id = Number(result.insertId);
+    // 연맹마다 최근 200개만 남긴다
+    if (id % 20 === 0) await db.delete(guildChatTable).where(sql`${guildChatTable.guildId} = ${message.guildId} AND ${guildChatTable.id} < ${id - 400}`);
+    return id;
+  },
+  async listChat(guildId, afterId, limit) {
+    const db = await guildDb();
+    const rows = await db.select().from(guildChatTable).where(sql`${guildChatTable.guildId} = ${guildId} AND ${guildChatTable.id} > ${afterId}`).orderBy(desc(guildChatTable.id)).limit(limit);
+    return rows.reverse().map(row => ({ ...row, at: Number(row.at) }));
+  },
+  async getWeek(weekKey) { const db = await guildDb(); const rows = await db.select().from(guildWeeksTable).where(eq(guildWeeksTable.weekKey, weekKey)).limit(1); return rows[0] ? parseStateJson(rows[0].data) : null; },
+  async putWeek(weekKey, data) { const db = await guildDb(); await db.insert(guildWeeksTable).values({ weekKey, data: JSON.stringify(data) }).onDuplicateKeyUpdate({ set: { data: JSON.stringify(data) } }); },
+};
+const guildService = createGuildService(mysqlGuildRepo);
+/** 다른 처리(공성 · 수비 · 레이드 · 출석)에서 연맹 기여를 남긴다: 연맹이 없거나 표가 아직 없어도 본 처리는 그대로 */
+function guildRecord(userId, kind, opts) { guildService.record(userId, kind, opts).catch(() => {}); }
+
 const PRELAUNCH_DAILY_GOLD = 100;
 // 정식 출시(launch.mjs의 OFFICIAL_LAUNCH 또는 환경 변수 OFFICIAL_LAUNCH=1)가 되면 매일 금화는 자동으로 멈춘다.
 const PRELAUNCH_GOLD_ENABLED = true;
@@ -1068,6 +1219,7 @@ async function grantCurrency(userId, input) {
         day = next;
         ledger.attendance = { count: next, last: today };
         ({ gold, fragments, stones } = attendanceLedger(next));
+        guildRecord(userId, "attendance");
         await tx.update(gameAccountStates).set({ grantLedger: JSON.stringify(ledger) }).where(eq(gameAccountStates.userId, userId));
       }
     } else if (input.kind === "duel") {
@@ -1594,6 +1746,7 @@ function publicPlatformConfig(env = process.env) {
 }
 export {
   ENV,
+  guildService,
   findUserByName,
   createGuestUser,
   getUserByOpenId,

@@ -70,6 +70,9 @@ import {
   MAX_GENERAL_LEVEL,
 } from './game/strategy'
 import { applyCombo } from './game/formation-advice'
+import { guildMods } from './game/guild'
+import type { GuildChatMessage, GuildLog, GuildMe, GuildRanking, GuildView } from '../server/guild.mjs'
+import type { GuildBoardPost } from './ui/guild-ui'
 import { StrategyUI, recordPurchase, type RaidView, type RaidInfoView, type LuoyangHistory, type AccountView, type AdminBoardState, type AuthView, type BoardPost, type CityDamageRanking, type DuelOpponent, type GameAccountView, type AdminGameEdit } from './ui/strategy-ui'
 import { HARD_RULE_INFO, SCENARIOS, clearedScenarioCount, firstClearReward, hardClearReward, hardUnlocked, markHardCleared, recordHardStars, recordScenarioStars, scenarioById, scenarioEnemyIds, scenarioEnemyLevelFor, scenarioEnemyStars, scenarioHardRule, type ScenarioDefinition, type ScenarioDifficulty } from './game/scenarios'
 import { dummyDuelDecks } from './game/duel'
@@ -302,6 +305,8 @@ let raidRun: { token: string | null; weekKey: string; bossLevel: number; runner:
 let raidView: RaidView = { loading: false, info: null, ranking: [], message: '' }
 /** 대련 상대별 난이도와 지금 겨루는 상대의 난이도(승리 보상 조각 수) */
 const duelTiers = new Map<string, DuelTier>()
+/** 대련 상대의 연맹 '무예 수련' 보너스 */
+const duelGuildBonus = new Map<string, number>()
 let duelTier: DuelTier = 'normal'
 let scenarioActive = false
 let activeScenario: ScenarioDefinition | null = null
@@ -487,7 +492,8 @@ async function beginRaidAsIs(): Promise<void> {
 /** 한 군의 전투가 끝났을 때: 다음 군이 있으면 이어서, 없으면 합계를 기록 */
 function onRaidSquadEnd(result: { raidDamage?: number }): void {
   if (!raidRun) return
-  const step = raidRun.runner.record(result.raidDamage ?? 0)
+  // 연맹 기술 '토벌': 레이드 피해 +2%/단계(서버 피해 상한도 같은 만큼 늘어난다)
+  const step = raidRun.runner.record(Math.round((result.raidDamage ?? 0) * (1 + guildMods(state).raid)))
   ui.updateBattle(arena.getSnapshot())
   if (step.next) {
     // 군 사이: 방금 군의 피해와 다음 군을 보여 주고 이어서 출전(버튼 또는 5초 뒤 자동)
@@ -584,6 +590,8 @@ function installDuelOpponents(opponents: DuelOpponent[]): void {
   opponents = opponents.map(opponent => ({ ...opponent, tier: opponent.tier ?? duelTierFor(opponent.power ?? duelDeckPower(opponent.deck ?? []), myPower) }))
   duelTiers.clear()
   opponents.forEach(opponent => duelTiers.set(opponent.id, opponent.tier ?? 'normal'))
+  duelGuildBonus.clear()
+  opponents.forEach(opponent => duelGuildBonus.set(opponent.id, opponent.guildDuel ?? 0))
   duelDecks.clear()
   opponents.forEach(opponent => duelDecks.set(opponent.id, duelDeckFor(opponent)))
   ui.setDuelOpponents(opponents, duelDeckPower(battleGenerals()))
@@ -979,11 +987,203 @@ async function deleteBoardPost(id: number, password: string): Promise<void> {
   try {
     await ManusAuth.mutate('board.delete', { id, password })
     ui.notify('게시글을 삭제했습니다.', 'jade')
-    await refreshBoard()
+    if (state.section === 'guild') await refreshGuildBoard()
+    else await refreshBoard()
   } catch (error) {
     ui.notify(error instanceof Error ? error.message : '게시글 삭제에 실패했습니다.', 'ember')
   }
 }
+// ── 유저 연맹(server/guild.mjs) ─────────────────────────────────────
+/** 연맹 서버 호출. 점검(QA)에서는 window.__guildBackend로 메모리 서버를 끼워 넣을 수 있다 */
+type GuildBackend = (procedure: string, input?: unknown) => Promise<unknown>
+function guildBackend(): GuildBackend | null {
+  const mock = (window as unknown as { __guildBackend?: GuildBackend }).__guildBackend
+  if (mock) return mock
+  if (authView.status !== 'authenticated') return null
+  const reads = new Set(['me', 'list', 'logs', 'chat', 'ranking'])
+  return (procedure, input) => reads.has(procedure) ? ManusAuth.query(`guild.${procedure}`, input) : ManusAuth.mutate(`guild.${procedure}`, input)
+}
+const GUILD_LOCKED = '연맹은 서버 계정(회원 또는 아이디를 정한 게스트)으로 접속해야 이용할 수 있습니다.'
+let guildChatTimer = 0
+let guildChatCache: GuildChatMessage[] = []
+let guildChatLastId = 0
+/** 내 연맹을 서버에서 받아 화면 · 보너스(state.guild)에 반영 */
+async function refreshGuild(options: { list?: boolean } = {}): Promise<GuildMe | null> {
+  const call = guildBackend()
+  if (!call) { state.guild = null; ui.setGuildUi({ locked: GUILD_LOCKED, me: null }); return null }
+  ui.setGuildUi({ locked: null, loading: true })
+  try {
+    const me = await call('me') as GuildMe
+    const guild = me.guild && me.member ? { id: me.guild.id, name: me.guild.name, level: me.guild.level, role: me.member.role, emblem: me.guild.emblem, tech: me.guild.tech, target: me.guild.target ? { cityId: me.guild.target.cityId, cityName: me.guild.target.cityName } : null } : null
+    const changed = JSON.stringify(state.guild ?? null) !== JSON.stringify(guild)
+    state.guild = guild
+    if (changed) persistLocalGame()
+    const patch: Parameters<typeof ui.setGuildUi>[0] = { me, loading: false }
+    if (!guild && (options.list ?? true) && state.section === 'guild') patch.list = await call('list', { query: '' }) as GuildView[]
+    ui.setGuildUi(patch)
+    if (guild && state.section === 'guild') void refreshGuildTab()
+    return me
+  } catch (error) {
+    ui.setGuildUi({ loading: false })
+    if (state.section === 'guild') ui.notify(error instanceof Error ? error.message : '연맹 정보를 불러오지 못했습니다.', 'ember')
+    return null
+  }
+}
+/** 지금 연 칸에 필요한 것(기록 · 채팅 · 게시판)을 받아 온다 */
+async function refreshGuildTab(): Promise<void> {
+  const call = guildBackend()
+  if (!call || !state.guild) return
+  try {
+    if (ui.guildTab === 'talk') {
+      const [chat, logs] = await Promise.all([call('chat', { afterId: 0 }) as Promise<GuildChatMessage[]>, call('logs') as Promise<GuildLog[]>])
+      guildChatLastId = chat.at(-1)?.id ?? 0
+      guildChatCache = chat
+      ui.setGuildUi({ chat, logs })
+      void refreshGuildBoard()
+    } else if (ui.guildTab === 'info') {
+      ui.setGuildUi({ logs: await call('logs') as GuildLog[] })
+    }
+  } catch { /* 다음에 다시 */ }
+}
+async function refreshGuildBoard(): Promise<void> {
+  const mock = (window as unknown as { __guildBoard?: () => Promise<GuildBoardPost[]> }).__guildBoard
+  try {
+    const posts = mock ? await mock() : authView.status === 'authenticated' ? await ManusAuth.query('board.list', { board: '연맹' }) as GuildBoardPost[] : []
+    ui.setGuildUi({ posts })
+  } catch { ui.setGuildUi({ posts: [] }) }
+}
+async function refreshGuildRanking(kind: 'level' | 'contribution' | 'raid' = 'level'): Promise<void> {
+  const call = guildBackend()
+  if (!call) { ui.setGuildUi({ locked: GUILD_LOCKED, ranking: null }); return }
+  try { ui.setGuildUi({ ranking: await call('ranking', { kind }) as GuildRanking, rankingKind: kind }) } catch { ui.setGuildUi({ ranking: null }) }
+}
+/** 연맹 채팅: 소통 칸을 보고 있는 동안 5초마다 새 말만 받아 온다 */
+function pollGuildChat(): void {
+  window.clearInterval(guildChatTimer)
+  guildChatTimer = window.setInterval(async () => {
+    if (state.section !== 'guild' || ui.guildTab !== 'talk' || !state.guild || document.hidden) return
+    const call = guildBackend()
+    if (!call) return
+    try {
+      const fresh = await call('chat', { afterId: guildChatLastId }) as GuildChatMessage[]
+      if (!fresh.length) return
+      guildChatLastId = fresh.at(-1)!.id
+      guildChatCache = [...guildChatCache, ...fresh].slice(-200)
+      ui.setGuildUi({ chat: guildChatCache })
+    } catch { /* 다음에 다시 */ }
+  }, 5000)
+}
+
+async function guildAction(action: string, data: Record<string, string>): Promise<void> {
+  // 관리자: 연맹 이름 바꾸기 · 강제 해산
+  if (action === 'form:admin-rename' || action === 'admin-disband') {
+    try {
+      if (action === 'admin-disband') await ManusAuth.mutate('admin.disbandGuild', { guildId: Number(data.guildId) })
+      else await ManusAuth.mutate('admin.renameGuild', { guildId: Number(data.guildId), name: (data.name ?? '').trim() })
+      ui.notify(action === 'admin-disband' ? '연맹을 해산했습니다.' : '연맹 이름을 바꿨습니다.', 'jade')
+      await refreshAdminBoard()
+    } catch (error) { ui.notify(error instanceof Error ? error.message : '처리하지 못했습니다.', 'ember') }
+    return
+  }
+  const call = guildBackend()
+  if (!call) { ui.notify(GUILD_LOCKED, 'ember'); return }
+  const num = (value: string | undefined) => Number(value) || 0
+  try {
+    switch (action) {
+      case 'tab': void refreshGuildTab(); return
+      case 'refresh': await refreshGuild(); return
+      case 'ranking': await refreshGuildRanking((data.kind ?? 'level') as 'level' | 'contribution' | 'raid'); return
+      case 'board-refresh': await refreshGuildBoard(); return
+      case 'form:search': ui.setGuildUi({ search: data.query ?? '', list: await call('list', { query: data.query ?? '' }) as GuildView[] }); return
+      case 'form:create': {
+        const result = await call('create', { name: (data.name ?? '').trim(), color: num(data.color), pattern: num(data.pattern), joinMode: data.joinMode === 'approval' ? 'approval' : 'open', minLevel: Math.max(1, num(data.minLevel)) }) as { goldSpent: number }
+        state.gold = Math.max(0, state.gold - (result.goldSpent ?? 0))
+        ui.notify(`연맹 ‘${data.name}’을(를) 만들었습니다.`, 'jade')
+        playSfx('formation')
+        break
+      }
+      case 'apply': {
+        const result = await call('apply', { guildId: num(data.guildId) }) as { joined: boolean }
+        ui.notify(result.joined ? '연맹에 가입했습니다.' : '가입을 신청했습니다. 정예 이상이 승인하면 가입됩니다(48시간).', 'jade')
+        break
+      }
+      case 'cancel-apply': await call('cancelApply', { guildId: num(data.guildId) }); break
+      case 'invite-accept': case 'invite-decline': await call('respondInvite', { requestId: num(data.requestId), accept: action === 'invite-accept' }); if (action === 'invite-accept') ui.notify('연맹에 가입했습니다.', 'jade'); break
+      case 'decide': await call('decide', { requestId: num(data.requestId), accept: data.accept === '1' }); ui.notify(data.accept === '1' ? '가입을 승인했습니다.' : '신청을 거절했습니다.', 'jade'); break
+      case 'leave': await call('leave'); ui.notify('연맹에서 나왔습니다.', 'jade'); break
+      case 'disband': await call('disband'); ui.notify('연맹을 해산했습니다.', 'jade'); break
+      case 'kick': await call('kick', { userId: num(data.userId) }); ui.notify('연맹원을 추방했습니다.', 'jade'); break
+      case 'role': await call('setRole', { userId: num(data.userId), role: data.role }); ui.notify('직위를 바꿨습니다.', 'jade'); break
+      case 'form:notice': await call('settings', { notice: data.notice ?? '' }); ui.notify('공지를 저장했습니다.', 'jade'); break
+      case 'form:settings': await call('settings', { joinMode: data.joinMode === 'approval' ? 'approval' : 'open', minLevel: Math.max(1, num(data.minLevel)) }); ui.notify('가입 설정을 저장했습니다.', 'jade'); break
+      case 'form:emblem': await call('settings', { color: num(data.color), pattern: num(data.pattern) }); ui.notify('문장을 바꿨습니다.', 'jade'); break
+      case 'form:target': await call('setTarget', { cityId: data.cityId, cityName: data.cityName }); ui.notify(`이번 주 목표 도시를 ${data.cityName}(으)로 정했습니다.`, 'jade'); break
+      case 'form:invite': await call('invite', { name: (data.name ?? '').trim() }); ui.resetGuildForm('invite'); ui.notify(`${data.name}에게 초대를 보냈습니다.`, 'jade'); break
+      case 'donate': {
+        const kind = data.kind as 'donateSilver' | 'donateResources' | 'donateGold'
+        // 은전 · 자원은 게임 저장이 주인: 서버가 확인한 뒤 여기서 뺀다(금화는 서버가 뺐다)
+        const result = await call('donate', { kind }) as { cost: { silver?: number; grain?: number; wood?: number; iron?: number; gold?: number }; points: number }
+        const cost = result.cost ?? {}
+        state.silver = Math.max(0, state.silver - (cost.silver ?? 0)); state.resources.silver = state.silver
+        state.resources.grain = Math.max(0, state.resources.grain - (cost.grain ?? 0))
+        state.resources.wood = Math.max(0, state.resources.wood - (cost.wood ?? 0))
+        state.resources.iron = Math.max(0, state.resources.iron - (cost.iron ?? 0))
+        state.gold = Math.max(0, state.gold - (cost.gold ?? 0))
+        ui.notify(`헌납했습니다 · 기여 +${result.points}`, 'jade')
+        playSfx('formation')
+        break
+      }
+      case 'research': await call('research', { techId: data.tech }); ui.notify('연맹 기술을 연구했습니다.', 'jade'); break
+      case 'buy': {
+        const result = await call('buy', { itemId: data.item }) as { grant: Record<string, number>; ledger: { fragments: number; stones: number } }
+        const grant = result.grant ?? {}
+        state.manuals += grant.manuals ?? 0
+        state.silver += grant.silver ?? 0; state.resources.silver = state.silver
+        state.resources.grain += grant.grain ?? 0
+        state.resources.wood += grant.wood ?? 0
+        state.resources.iron += grant.iron ?? 0
+        if (state.missions) { state.missions.freeRecruits = (state.missions.freeRecruits ?? 0) + (grant.freeRecruits ?? 0); state.missions.freeDraws = (state.missions.freeDraws ?? 0) + (grant.freeDraws ?? 0) }
+        // 신화 조각 · 강화석은 서버가 장부에 이미 더했다: 게임 값도 맞춘다(저장이 서버 값을 줄이지 않게)
+        state.mythicFragments += result.ledger?.fragments ?? 0
+        state.mythicStones += result.ledger?.stones ?? 0
+        ui.notify('연맹 상점에서 샀습니다.', 'jade')
+        break
+      }
+      case 'claim': {
+        const result = await call('claim') as { gold: number; manuals: number; honor: number }
+        state.gold += result.gold ?? 0
+        state.manuals += result.manuals ?? 0
+        state.honor += result.honor ?? 0
+        ui.notify(`연맹 보상을 받았습니다${result.gold ? ` · 금화 +${result.gold}` : ''}${result.manuals ? ` · 병서 +${result.manuals}` : ''}${result.honor ? ` · 옥패 +${result.honor}` : ''}`, 'jade')
+        break
+      }
+      case 'form:say': {
+        await call('say', { text: data.text ?? '' })
+        ui.resetGuildForm('say')
+        const fresh = await call('chat', { afterId: guildChatLastId }) as GuildChatMessage[]
+        if (fresh.length) { guildChatLastId = fresh.at(-1)!.id; guildChatCache = [...guildChatCache, ...fresh].slice(-200); ui.setGuildUi({ chat: guildChatCache }) }
+        return
+      }
+      case 'form:post': {
+        const mock = (window as unknown as { __guildPost?: (input: unknown) => Promise<void> }).__guildPost
+        const input = { board: '연맹', title: (data.title ?? '').trim(), content: (data.content ?? '').trim(), password: data.password ?? '' }
+        if (mock) await mock(input)
+        else await ManusAuth.mutate('board.create', input)
+        ui.resetGuildForm('post')
+        ui.notify('연맹 게시판에 글을 올렸습니다.', 'jade')
+        await refreshGuildBoard()
+        return
+      }
+      default: return
+    }
+    ui.render(state)
+    queueAccountSave()
+    await refreshGuild()
+  } catch (error) {
+    ui.notify(error instanceof Error ? error.message : '연맹 요청을 처리하지 못했습니다.', 'ember')
+  }
+}
+
 /** 메뉴 옮기기(메뉴 버튼·튜토리얼이 함께 쓴다) */
 function openSection(section: Section): void {
   if (section === 'formation') mission('visitFormation')
@@ -1029,6 +1229,8 @@ function openSection(section: Section): void {
   else if (section === 'territory') sound.setTheme('territory')
   else if (sound.currentTheme === 'shop' || sound.currentTheme === 'territory') sound.setTheme('home')
   if (section === 'board') void refreshBoard()
+  if (section === 'guild') { void refreshGuild(); pollGuildChat() }
+  if (section === 'rank') void refreshGuildRanking(ui.guildRankingKind)
   if (section === 'territory') void refreshCityDamageRankings(state.selectedCityId)
   ui.render(state)
   if (section === 'account') void refreshAccount()
@@ -1509,7 +1711,8 @@ const ui = new StrategyUI(root, {
     duelTier = duelTiers.get(opponentId) ?? 'normal'
     state.section = 'battle'
     ui.setBattleAutoAvailable(false)
-    arena.setOpponentDeck(deck, 'duel')
+    // 양쪽 연맹의 '무예 수련'(대련에서 주는 피해)
+    arena.setOpponentDeck(deck, 'duel', { player: guildMods(state).duel, enemy: duelGuildBonus.get(opponentId) ?? 0 })
     arena.setGenerals(battleGenerals())
     arena.startBattle()
     ui.updateBattle(arena.getSnapshot())
@@ -1581,6 +1784,7 @@ const ui = new StrategyUI(root, {
   onBoardPost: (board, title, content, password) => {
     void createBoardPost(board, title, content, password)
   },
+  onGuild: (action, data) => { void guildAction(action, data) },
   onBoardDelete: (id, password) => {
     void deleteBoardPost(id, password)
   },
@@ -2077,6 +2281,8 @@ async function refreshAccount(): Promise<void> {
     ui.render(state)
     if (localSaveDirty) void flushAccountSave()
     void refreshFactionTerritories()
+    // 연맹 보너스(기술 · 목표 도시)를 받아 둔다
+    void refreshGuild({ list: false })
   } catch {
     ui.notify('계정 정보를 불러오지 못했습니다. 로그인 상태를 확인해 주세요.', 'ember')
   }
@@ -2234,6 +2440,7 @@ async function refreshAdminBoard(): Promise<void> {
   try {
     const result = await ManusAuth.query('admin.boardSettings') as AdminBoardState
     ui.setAdminBoard(result)
+    ui.setAdminGuilds(await ManusAuth.query('admin.guilds').catch(() => []) as Parameters<typeof ui.setAdminGuilds>[0])
     ui.render(state)
   } catch (error) {
     ui.notify(error instanceof Error ? error.message : '게시판 운영 정보를 불러오지 못했습니다.', 'ember')
