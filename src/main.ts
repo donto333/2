@@ -82,7 +82,7 @@ import { RAID_DAILY_LIMIT, RAID_DEFAULT_LEVEL, raidDayKey, raidResetIn, raidWeek
 import { autoEquipSquad, autoSquad, ensureSquads, packSquads, swapWithFirstSquad, toggleSquadMember, applySquadCombo } from './game/squads'
 import { applyEquipmentPreset, bulkDismantle, dismantleEquipment, packLoadouts, saveEquipmentPreset, toggleEquipmentLock, unpackLoadouts } from './game/equipment-manage'
 import { DUEL_MATCH_COUNT, DUEL_TIER_FRAGMENTS, DUEL_USER_THRESHOLD, duelDeckPower, duelTierFor, pickDuelMatches, type DuelTier } from '../server/duel-match.mjs'
-import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral, underdogBuff } from './game/strategy'
+import { autoEquip, autoFormation, withEquipmentStats, fullEquipmentSets, equipmentSetCounts, cityDefenseForLevel, scaleGeneral, templateGeneral, underdogBuff, grantAllGenerals } from './game/strategy'
 import { locale } from './i18n/lang'
 import { sound, type Sfx } from './engine/sound'
 import { startDomTranslation, tr } from './i18n/translate'
@@ -313,7 +313,10 @@ let activeScenario: ScenarioDefinition | null = null
 let activeDifficulty: ScenarioDifficulty = 'normal'
 /** 회원 진행(서버)을 불러왔는가: 튜토리얼은 이것을 기다린다 */
 let accountLoaded = false
-let gameAccess: 'member' | 'guest' | null = window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
+/** GitHub Pages 정적 미리보기: 서버가 없으니 모든 무장을 보유한 이 기기의 미리보기 계정으로 바로 들어간다 */
+const STATIC_PREVIEW = /\.github\.io$/i.test(window.location.hostname)
+if (STATIC_PREVIEW) { try { window.localStorage.setItem(GUEST_ACCESS_KEY, '1') } catch { /* 저장 불가 */ } }
+let gameAccess: 'member' | 'guest' | null = STATIC_PREVIEW || window.localStorage.getItem(GUEST_ACCESS_KEY) === '1' ? 'guest' : null
 const duelDecks = new Map<string, ReturnType<typeof allGenerals>>()
 let pendingSiege: { cityId: string; result: ReturnType<typeof launchConquest> } | null = null
 
@@ -326,6 +329,7 @@ function restoreAccessState(mode: 'member' | 'guest'): void {
   // 회원 데이터는 계정별 서버 원장을 기준으로 한다. 공용 회원 로컬 저장본을
   // 먼저 복원하면 다른 계정의 진행 상태가 새 계정에 재사용될 수 있다.
   if (mode === 'guest') restoreLocalGame(GUEST_GAME_SAVE_KEY)
+  if (mode === 'guest' && STATIC_PREVIEW && grantAllGenerals(state) > 0) localSaveDirty = true
   ensureCityRoster(state)
   const normalizedTerritories = normalizeInitialSeasonTerritories(state)
   syncResearchRoster()

@@ -2378,6 +2378,13 @@ export function grantGeneral(state: StrategyState, id: string): General | null {
   return general
 }
 
+/** 아직 없는 무장을 모두 1성 Lv.1로 넣는다(미리보기 계정용). 넣은 수를 돌려준다. */
+export function grantAllGenerals(state: StrategyState): number {
+  let added = 0
+  for (const template of LIBRARY) if (!findGeneral(state, template.id) && grantGeneral(state, template.id)) added += 1
+  return added
+}
+
 export interface AttendanceClaim { day: number; label: string; general: General | null }
 
 /**
