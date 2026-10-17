@@ -22,7 +22,10 @@ describe('무장별 추천 덱', () => {
     }
   })
   it('연계 덱은 그 무장의 인연·연계를 살린다', () => {
-    expect(recommendDecks('liu-bei').find(deck => deck.archetype === 'chain')?.bond?.name).toBe('도원결의')
+    // 유비: 도원결의 덱이 추천에 들고, 연계 덱은 유비와 짝을 이루는 무장(관우 · 장비 또는 손상향 '궁요희')을 넣는다
+    const liuBei = recommendDecks('liu-bei')
+    expect(liuBei.some(deck => deck.bond?.name === '도원결의')).toBe(true)
+    expect(liuBei.find(deck => deck.archetype === 'chain')?.ids.some(id => ['guan-yu', 'zhang-fei', 'sun-shangxiang'].includes(id))).toBe(true)
     expect(recommendDecks('lu-bu').find(deck => deck.archetype === 'chain')?.bond?.name).toBe('여포군')
     expect(recommendDecks('guan-yu').find(deck => deck.archetype === 'chain')?.ids).toContain('guan-ping')
   })
