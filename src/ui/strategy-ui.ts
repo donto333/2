@@ -14,7 +14,7 @@ import { ATTENDANCE_REWARDS, type AttendanceReward } from '../../server/attendan
 import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
 import { BATTLE_EFFECTS, type BattleEffectId } from '../game/battle-effects'
-import { skillDefFor, type SkillFx } from '../game/skills'
+import { BONDS, skillDefFor, type SkillFx } from '../game/skills'
 import { ARCHETYPE_META, recommendDecks, type ComboAdvice } from '../game/formation-advice'
 import { ensureIconSprite, icon, type IconName } from './icons'
 import { playForgeCeremony, playSummonCeremony } from './summon-ceremony'
@@ -1921,6 +1921,18 @@ export class StrategyUI {
     return stats.map(([label, value, key]) => `<div class="${value === top ? 'is-top' : ''}${key === grow ? ' is-grow' : ''} stat-row--info" data-action="stat-info" data-stat="${key}" role="button" tabindex="0" title="눌러서 ${label} 설명 보기"><span>${label}${key === grow ? '<sup title="레벨업 때 가장 많이 오릅니다">▲</sup>' : ''}</span><i><b style="width:${Math.min(100, value / base * 100).toFixed(1)}%"></b></i><em>${value}</em></div>`).join('') + '<p class="stat-info" data-stat-info hidden></p>'
   }
 
+  /** 이 무장이 속한 인연: 누르면 아래에 효과 · 구성원이 펼쳐진다 */
+  private bondChips(general: General): string {
+    const bonds = BONDS.filter(bond => bond.members.includes(general.id))
+    if (!bonds.length) return ''
+    const formation = new Set(this.renderedState?.formation ?? [])
+    const buttons = bonds.map(bond => {
+      const active = bond.members.filter(id => formation.has(id)).length >= bond.need
+      return `<button type="button" class="skill-fx-chip is-bond ${active ? 'is-active' : ''}" data-action="bond-info" data-bond="${bond.id}"><b>🤝</b>${escapeHtml(tr(bond.name))}${active ? '<small>발동 중</small>' : ''}</button>`
+    }).join('')
+    return `<div class="skill-detail-wide skill-fx skill-bond"><small>인연 <em>눌러서 효과 보기</em></small><div class="skill-fx-chips">${buttons}</div><p class="skill-fx-info" data-effect-info hidden></p></div>`
+  }
+
   /** 스킬이 거는 버프 · 디버프: 누르면 아래에 효과 설명이 펼쳐진다 */
   private skillEffectChips(general: General): string {
     const def = skillDefFor(general.id, general.role, general.skillName, general.skillDescription)
@@ -1945,6 +1957,7 @@ export class StrategyUI {
       detail.awaken ? `<div class="skill-detail-wide"><small>각성 (5성)</small><strong>${escapeHtml(detail.awaken)}</strong></div>` : '',
       detail.weakness ? `<div class="skill-detail-wide skill-detail-weak"><small>약점</small><strong>${escapeHtml(detail.weakness)}</strong></div>` : '',
       this.skillEffectChips(general),
+      this.bondChips(general),
     ].join('')
     return `<div class="skill-detail-panel skill-detail-panel--${detail.category === '정화·치료' ? 'cleanse' : detail.category === '버프' ? 'buff' : detail.category === '디버프' ? 'debuff' : 'combat'}"><div class="skill-detail-title"><span>◈ 스킬 상세 <b class="skill-category">${detail.type}</b></span><b>${skillRank(general)}성 · 사기 −${skillPower(general)}</b></div><div class="skill-detail-grid"><div><small>발동</small><strong>${escapeHtml(detail.trigger)}</strong></div><div><small>대상</small><strong>${escapeHtml(detail.target)}</strong></div><div class="skill-detail-wide"><small>효과</small><strong>${escapeHtml(detail.effect)}</strong></div><div><small>유형</small><strong>${escapeHtml(detail.duration)}</strong></div><div><small>쿨다운</small><strong>${escapeHtml(detail.cooldown)}</strong></div>${extra}</div></div>`
   }
@@ -2399,6 +2412,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '스킬란 인연 표시', '무장 스킬 상세에 그 무장이 속한 인연(예: 유비 · 관우 · 장비의 도원결의)이 나옵니다. 누르면 효과, 필요 인원, 구성원(출전 중 · 보유 중 표시)을 볼 수 있습니다.', '완료', 'jade'],
       ['2026.10.17', '메뉴 설명 버튼', '각 메뉴 제목 옆의 (i) 표시를 없애고, 제목 오른쪽에 "○○ 설명" 버튼을 두었습니다. 누르면 그 메뉴의 설명과 주요 기능을 한 창에서 볼 수 있습니다(영토는 영토전 설명).', '완료', 'jade'],
       ['2026.10.17', '영토전 설명', '영토 · 내정 화면 위쪽에 영토전 설명 버튼이 생겼습니다. 세 진영 점령전 · 재야 · 주간 낙양전 규칙을 한 창에서 볼 수 있고, 내 진영 규칙이 강조됩니다. 낙양 이름 옆에 있던 낙양전 설명은 이 창으로 옮겼습니다.', '완료', 'jade'],
       ['2026.10.17', '네 번째 진영 · 재야(중립 진영)', '진영 선택에 재야(중립 진영)가 생겼습니다. 재야는 본성 없이 수도와 양양을 포함한 어느 도시든 공성할 수 있고, 이기면 성벽을 깎고 그 성 하루 생산량의 25%를 약탈합니다(하루 30회). 성벽을 0으로 무너뜨리면 그 성의 내정 건물이 초기화되고, 성벽은 하루 뒤 다시 세워집니다. 성벽이 0인 동안은 공성할 수 없습니다. 재야는 점령 · 내정 · 최종 세력전을 할 수 없고, 낙양만은 세 진영과 같은 규칙으로 차지할 수 있습니다. 진영은 설정에서 30일에 한 번 바꿀 수 있습니다.', '완료', 'jade'],
@@ -2677,6 +2691,21 @@ export class StrategyUI {
       box.hidden = same
       box.dataset.stat = key
       box.innerHTML = `<b>${escapeHtml(tr(info.title))}</b> ${escapeHtml(tr(info.body))}`
+    }
+    else if (action === 'bond-info') {
+      const bond = BONDS.find(item => item.id === button.dataset.bond)
+      const box = button.closest('.skill-fx')?.querySelector<HTMLElement>('[data-effect-info]')
+      if (!bond || !box) return
+      const same = box.dataset.effect === bond.id && !box.hidden
+      button.closest('.skill-fx')?.querySelectorAll('.skill-fx-chip').forEach(chip => chip.classList.toggle('is-open', !same && chip === button))
+      box.hidden = same
+      box.dataset.effect = bond.id
+      box.className = 'skill-fx-info is-bond'
+      const owned = new Set(this.renderedState?.generals.map(item => item.id) ?? [])
+      const formation = new Set(this.renderedState?.formation ?? [])
+      const members = bond.members.map(id => { const name = templateGeneral(id)?.name ?? id; return `<span class="bond-member ${formation.has(id) ? 'is-deployed' : owned.has(id) ? 'is-owned' : ''}">${escapeHtml(tr(name))}</span>` }).join('')
+      const count = bond.members.filter(id => formation.has(id)).length
+      box.innerHTML = `<b>🤝 ${escapeHtml(tr(bond.name))}</b> <span>${tr(`출전 무장 중 ${bond.need}명 이상`)} · ${tr('지금')} ${count}/${bond.need}</span><br>${escapeHtml(tr(bond.desc))}<div class="bond-members">${members}</div><small class="bond-note">${tr('인연은 한 번에 하나만 적용되며, 여러 개가 성립하면 먼저 정해진 인연이 우선합니다. 금색은 출전 중, 밝은 글자는 보유 중인 무장입니다.')}</small>`
     }
     else if (action === 'effect-info') {
       const effect = BATTLE_EFFECTS[button.dataset.effect as BattleEffectId]
