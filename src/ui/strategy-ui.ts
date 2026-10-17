@@ -790,13 +790,13 @@ export class StrategyUI {
     return playForgeCeremony(items, item => equipmentImage(item.type), item => ({ type: EQUIPMENT_TYPE_META[item.type].label, set: EQUIPMENT_SET_META[item.set].label }))
   }
 
-  playRecruitAnimation(general: General, count: number, revealNow = false): Promise<void> {
+  playRecruitAnimation(general: General, count: number, revealNow = false, eyebrow = ''): Promise<void> {
     if (this.recruitAnimationActive) return Promise.resolve()
     this.recruitAnimationActive = true
     const meta = GRADE_META[general.grade]
     const overlay = document.createElement('div')
     overlay.className = 'summon-ritual'
-    overlay.innerHTML = `<div class="ritual-backdrop"></div><div class="ritual-orbit ritual-orbit--one"></div><div class="ritual-orbit ritual-orbit--two"></div><div class="ritual-stage"><div class="ritual-heading"><span class="eyebrow">${count === 10 ? '10회 연속 모집 · 대표 등장' : '1회 모집 · 옥패의 응답'}</span><strong>천명이 인장을 깨운다</strong></div><div class="ritual-seal"><span>✦</span><i>옥패의 응답</i></div><div class="ritual-reveal" style="--grade:${meta.color};--accent:${gradeColor(general)}"><span class="ritual-grade">${meta.label} · ${general.grade}등급</span>${this.ritualPortrait(general)}<h2>${general.name}</h2><p>${general.epithet}</p><small>${general.role} · Lv.${general.level} · ${general.stars}성</small><div class="ritual-skill"><b>${general.skillName}</b><span>${general.skillDescription}</span></div></div><button class="action-button action-button--primary ritual-continue" data-action="close-summon">결과 확인 <span>→</span></button></div>`
+    overlay.innerHTML = `<div class="ritual-backdrop"></div><div class="ritual-orbit ritual-orbit--one"></div><div class="ritual-orbit ritual-orbit--two"></div><div class="ritual-stage"><div class="ritual-heading"><span class="eyebrow">${eyebrow || (count === 10 ? '10회 연속 모집 · 대표 등장' : '1회 모집 · 옥패의 응답')}</span><strong>천명이 인장을 깨운다</strong></div><div class="ritual-seal"><span>✦</span><i>옥패의 응답</i></div><div class="ritual-reveal" style="--grade:${meta.color};--accent:${gradeColor(general)}"><span class="ritual-grade">${meta.label} · ${general.grade}등급</span>${this.ritualPortrait(general)}<h2>${general.name}</h2><p>${general.epithet}</p><small>${general.role} · Lv.${general.level} · ${general.stars}성</small><div class="ritual-skill"><b>${general.skillName}</b><span>${general.skillDescription}</span></div></div><button class="action-button action-button--primary ritual-continue" data-action="close-summon">결과 확인 <span>→</span></button></div>`
     this.root.appendChild(overlay)
 
     return new Promise(resolve => {
@@ -2285,6 +2285,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '천명 무장 무작위 결과 연출', '신규유저 패키지 1과 출석 37일째의 천명(5등급) 무장 무작위 보상을 받으면, 모집 때처럼 천명 강림 연출로 누가 나왔는지 보여 줍니다.', '완료', 'jade'],
       ['2026.10.17', '도시 신도 제거', '건업 남쪽에 새로 만들었던 도시 신도와 그 진군로(건업 · 회계 · 파양)를 없앴습니다. 성도 옆 광한은 그대로입니다.', '완료', 'jade'],
       ['2026.10.17', '상점 패키지 · 신규유저 패키지', '상점에 패키지 칸이 생겼습니다. 신규유저 패키지 1(천명 무장 1명 무작위) · 2(무장 뽑기 50회) · 3(장비 뽑기 50회) · 4(식량 · 목재 · 철 · 은전 각 10만 + 병서 500)는 계정당 한 번씩만 살 수 있습니다. 정식 출시 후 가격은 4,900원 · 9,900원 · 9,900원 · 9,900원이며, 출시 전에는 누구나 한 번씩 무료로 받을 수 있습니다.', '완료', 'jade'],
       ['2026.10.17', '신도 자리 바로잡기', '삼국시대 지도에 맞춰 오나라 신도군 자리(건업 남쪽, 회계와 파양 사이)에 1단계 중립 도시 신도를 새로 만들고 건업 · 회계 · 파양과 이었습니다. 성도 옆의 예전 신도는 이름을 광한으로 바꿨습니다(진군로 · 점령 상태는 그대로).', '완료', 'jade'],

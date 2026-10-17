@@ -61,6 +61,7 @@ import {
   cancelBuilding,
   type Section,
   type StrategyState,
+  type General,
   type FactionTerritorySnapshot,
   type Faction,
   clampGeneralLevels,
@@ -781,17 +782,22 @@ function claimLocalGuestAttendance(): boolean {
   const attended = claimLocalAttendance(state)
   if (!attended) return false
   persistLocalGame()
-  showAttendanceWhenReady(attended.day, attended.label)
+  showAttendanceWhenReady(attended.day, attended.label, 0, attended.label.startsWith('천명 무장') ? attended.general : null)
   return true
 }
 
 /** 출석 창은 첫 화면(소개 · 세력 선택 · 로그인)과 전투가 끝난 뒤에 띄운다 */
-function showAttendanceWhenReady(day: number, label: string, waited = 0): void {
+function showAttendanceWhenReady(day: number, label: string, waited = 0, legend: General | null = null): void {
   const blocked = !state.factionConfirmed || (arena as Arena | undefined)?.getSnapshot().active || document.querySelector('.access-gate, .guest-signup, .game-intro, .faction-selection, .notice-popup, .summon-ceremony, .result-modal')
-  if (blocked && waited < 600) { window.setTimeout(() => showAttendanceWhenReady(day, label, waited + 1), 1000); return }
+  if (blocked && waited < 600) { window.setTimeout(() => showAttendanceWhenReady(day, label, waited + 1, legend), 1000); return }
   ui.render(state)
-  ui.showAttendance(day, label)
-  playSfx('reward')
+  // 천명 무장 무작위 보상: 누가 나왔는지 강림 연출로 먼저 보여 준 뒤 출석 판을 띄운다
+  const reveal = legend ? ui.celebrateRecruit([legend]) : Promise.resolve()
+  void reveal.then(() => {
+    ui.render(state)
+    ui.showAttendance(day, label)
+    playSfx('reward')
+  })
 }
 
 /** 출석 체크(회원 · 서버 게스트): 서버가 날짜와 장부 재화를 정하고, 나머지 보상은 게임이 준다 */
@@ -810,7 +816,7 @@ async function claimAttendance(): Promise<void> {
     if (!claim) return
     queueAccountSave(true)
     ui.render(state)
-    showAttendanceWhenReady(claim.day, claim.label)
+    showAttendanceWhenReady(claim.day, claim.label, 0, claim.label.startsWith('천명 무장') ? claim.general : null)
   } catch {
     // 서버가 아직 출석 체크를 모르면(배포 전) 조용히 넘어간다
   }
@@ -1581,10 +1587,15 @@ const ui = new StrategyUI(root, {
   onStarterPack: id => {
     const result = claimStarterPack(state, id)
     if (result.ok) { recordPurchase(result.message); arena.setGenerals(battleGenerals()) }
-    ui.render(state)
-    ui.notify(result.message, result.ok ? 'jade' : 'ember')
-    if (result.ok) playSfx(result.general ? 'unlock' : 'coin')
     if (result.ok) queueAccountSave(true)
+    // 천명 무장 무작위: 강림 연출로 누가 나왔는지 보여 준 뒤 결과 알림
+    const reveal = result.ok && result.general ? ui.celebrateRecruit([result.general]) : Promise.resolve()
+    void reveal.then(() => {
+      ui.render(state)
+      ui.notify(result.message, result.ok ? 'jade' : 'ember')
+      if (result.ok && !result.general) playSfx('coin')
+      if (result.ok && result.general) void ui.playRecruitAnimation(result.general, 1, true, '신규유저 패키지 · 천명 무장 무작위')
+    })
   },
   onCashShopPurchase: productId => {
     const result = purchaseResourcePackage(state, productId)
