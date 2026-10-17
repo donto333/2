@@ -9,7 +9,7 @@ describe('territory and governance', () => {
       ['jianye', '오나라'],
       ['ye', '위나라'],
     ])
-    expect(state.cities).toHaveLength(48)
+    expect(state.cities).toHaveLength(49)
     expect(state.resources.grain).toBeGreaterThan(0)
     expect(state.research).toHaveLength(40)
   })
@@ -28,7 +28,7 @@ describe('territory and governance', () => {
     const state = createInitialState()
     state.cities = state.cities.slice(0, 5)
     ensureCityRoster(state)
-    expect(state.cities).toHaveLength(48)
+    expect(state.cities).toHaveLength(49)
     expect(findCity(state, 'luoyang')?.owner).toBe('중립')
     expect(findCity(state, 'fucheng')?.region).toBe('익주 북방')
   })
