@@ -2198,3 +2198,9 @@ html body .bt-hud-row--threat.is-low > span b { color: #ff8a6a; }
 .attendance-day.is-today .attendance-day__art { animation: attendance-today 1.6s ease-in-out infinite; }
 @keyframes attendance-today { 50% { transform: scale(1.08); filter: drop-shadow(0 0 8px rgba(255, 210, 120, .8)); } }
 @media (prefers-reduced-motion: reduce) { .attendance-day.is-today .attendance-day__art { animation: none; } }
+
+/* 상단: 천하 글자 위 출석 체크 버튼 */
+.brand-text { display: grid; justify-items: start; min-width: 0; }
+.brand-attendance { display: inline-flex; align-items: center; gap: 3px; margin-bottom: 1px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; line-height: 1.5; white-space: nowrap; color: #ffe3a3 !important; background: rgba(120, 70, 20, .55) !important; border: 1px solid rgba(246, 197, 109, .6) !important; cursor: pointer; }
+.brand-attendance:hover { background: rgba(160, 95, 25, .7) !important; }
+body .app-shell--battle .brand-attendance { display: none; }

@@ -1056,7 +1056,7 @@ export class StrategyUI {
     return `
       <div class="app-shell${state.section === 'battle' && this.battleViewActive ? ' app-shell--battle' : ''}">
         <header class="topbar">
-          <div class="brand-lockup"><div class="brand-seal brand-seal--img"><img src="/assets/ui/brand-seal.svg" alt="천하 인장" width="40" height="40" draggable="false"></div><div><div class="brand-title">천하</div><div class="brand-subtitle">패왕의 시대</div></div></div>
+          <div class="brand-lockup"><div class="brand-seal brand-seal--img"><img src="/assets/ui/brand-seal.svg" alt="천하 인장" width="40" height="40" draggable="false"></div><div class="brand-text"><button type="button" class="brand-attendance" data-action="attendance-open" title="출석 체크 보기">📅 출석 ${Math.min(ATTENDANCE_REWARDS.length, state.missions?.attendance?.count ?? 0)}/${ATTENDANCE_REWARDS.length}</button><div class="brand-title">천하</div><div class="brand-subtitle">패왕의 시대</div></div></div>
           <div class="topbar-center"><button type="button" class="topbar-chapter" data-action="section" data-section="battle" title="시나리오로 이동"><span class="season-dot"></span><span>${this.chapterLabel(state)}</span></button><span class="topbar-divider"></span><div class="topbar-resources"><span class="topbar-resource topbar-resource--gold" title="금화">${icon('gold')}<small>금화</small><strong>${formatNumber(state.gold)}</strong></span><span class="topbar-resource topbar-resource--silver" title="은전">${icon('silver')}<small>은전</small><strong title="${formatNumber(state.silver)}">${compactNumber(state.silver)}</strong></span><span class="topbar-resource topbar-resource--honor" title="옥패">${icon('honor')}<small>옥패</small><strong title="${formatNumber(state.honor)}">${compactNumber(state.honor)}</strong></span><span class="topbar-resource topbar-resource--influence" title="영향력">${icon('influence')}<small>영향력</small><strong title="${formatNumber(state.resources.influence)}">${compactNumber(state.resources.influence)}</strong></span><span class="topbar-resource topbar-resource--grain" title="식량">${icon('grain')}<small>식량</small><strong title="${formatNumber(state.resources.grain)}">${compactNumber(state.resources.grain)}</strong></span><span class="topbar-resource topbar-resource--wood" title="목재">${icon('wood')}<small>목재</small><strong title="${formatNumber(state.resources.wood)}">${compactNumber(state.resources.wood)}</strong></span><span class="topbar-resource topbar-resource--iron" title="철">${icon('iron')}<small>철</small><strong title="${formatNumber(state.resources.iron)}">${compactNumber(state.resources.iron)}</strong></span></div></div>
           ${state.section === 'battle' && this.battleViewActive ? this.battleTopControls() : ''}
           <div class="topbar-actions"><button class="lang-toggle sound-toggle ${muteSetting() ? 'is-muted' : ''}" data-action="sound-toggle" data-no-tr title="${muteSetting() ? '소리 켜기' : '소리 끄기'}" aria-label="${muteSetting() ? '소리 켜기' : '소리 끄기'}">${muteSetting() ? '🔇' : '🔊'}</button><button class="lang-toggle" data-action="set-lang" data-value="${isEnglish() ? 'ko' : 'en'}" data-no-tr title="언어 / Language">${isEnglish() ? '한국어' : 'EN'}</button><button class="auth-button" data-auth-button data-action="${this.auth.status === 'authenticated' ? 'logout' : this.auth.status === 'offline' ? 'offline' : 'login'}" title="${this.auth.status === 'authenticated' ? `${escapeHtml(this.auth.name ?? '장군')} · 로그아웃` : ''}">${authButtonInner(this.auth)}</button></div>
@@ -2263,6 +2263,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '출석 체크 바로 보기', '화면 왼쪽 위 천하 글자 위에 출석 버튼(받은 날 수 / 37)이 생겨, 언제든 눌러 출석 체크 판을 다시 볼 수 있습니다.', '완료', 'jade'],
       ['2026.10.17', '새 도시 영창 · 발해, 지도 위치 정리', '운남 서쪽에 영창(1단계), 평원 북쪽에 발해(2단계) 중립 도시가 생겨 운남–영창, 평원–발해로 이어집니다. 남해는 지도 그림의 강 하구로, 건안은 해안선으로 옮겼고, 성이 겹쳐 이름이 가려지던 도시(낭야 · 수춘 · 합비 · 여강 · 완성 · 신야 · 양양 · 복양 · 광릉 · 운남)를 조금씩 떼어 놓았습니다.', '완료', 'jade'],
       ['2026.10.17', '진군로 추가 · 건안', '신도–파동, 신도–건녕, 하비–수춘 진군로가 이어졌습니다. 회계와 남해 사이 해안에 1단계 중립 도시 건안이 생겨 회계–건안–남해로 이어집니다.', '완료', 'jade'],
       ['2026.10.17', '출석 체크 그림', '출석 체크 창의 날짜마다 보상 그림이 들어갑니다. 무장은 초상, 재화는 재화 그림, 무료 뽑기는 횟수 표시와 함께 보이고, 받은 날은 ✓, 오늘 받을 칸은 반짝입니다.', '완료', 'jade'],
@@ -2513,6 +2514,10 @@ export class StrategyUI {
     else if (action === 'research') this.callbacks.onResearch(button.dataset.research ?? '')
     else if (action === 'battle-guide') this.callbacks.onBattleGuide()
     else if (action === 'coach-reset') this.callbacks.onCoachReset()
+    else if (action === 'attendance-open') {
+      const count = Math.min(ATTENDANCE_REWARDS.length, this.renderedState?.missions?.attendance?.count ?? 0)
+      this.showAttendance(count, count ? `출석 ${count}일째 · 보상을 받았습니다` : '접속하면 출석 보상을 받습니다')
+    }
     else if (action === 'stat-info') {
       const key = button.dataset.stat as keyof typeof STAT_INFO
       const info = STAT_INFO[key]
