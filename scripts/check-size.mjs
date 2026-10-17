@@ -7,7 +7,8 @@ import { gzipSync } from 'node:zlib'
 
 const MB = 1024 * 1024
 // Raised at the user's request: retain a guardrail while allowing richer GLB/GLTF and visual assets.
-const BUDGET = { js: 20.0 * MB, fonts: 22.0 * MB, transfer: 44.0 * MB }
+// 2026.10.17: 천명 무장 전용 기수 모델 15종(약 16MB, 전투에 나온 무장만 그때 내려받음)으로 64MB까지.
+const BUDGET = { js: 20.0 * MB, fonts: 22.0 * MB, transfer: 64.0 * MB }
 const walk = dir => readdirSync(dir).flatMap(name => {
   const p = join(dir, name)
   return statSync(p).isDirectory() ? walk(p) : [p]

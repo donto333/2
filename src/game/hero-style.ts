@@ -38,8 +38,12 @@ export interface HeroLook {
   rider?: string
 }
 
-/** 전용 기수 모델이 있는 무장(여성 무장) — rider-models.ts */
-export const RIDER_MODELS = new Set(['sun-shangxiang', 'xiao-qiao', 'guan-yinping', 'zhu-rong', 'diao-chan', 'da-qiao', 'cai-wenji'])
+/** 천명 무장 전용 기수 모델(Tripo로 만든 원본 모델을 기마 모델 자세에 맞춰 구움, 2026.10.17) — 조운은 아직 없음 */
+export const TIANMING_RIDERS = new Set(['guan-yu', 'zhuge-liang', 'lu-bu', 'zhou-yu', 'simayi', 'xiahou-dun', 'liu-bei', 'cao-cao', 'sun-quan', 'sun-ce', 'lu-xun', 'zhang-liao', 'yuan-shao', 'dong-zhuo', 'zhang-jiao'])
+/** 전용 기수 모델이 있는 무장(여성 무장 + 천명 무장) — rider-models.ts */
+export const RIDER_MODELS = new Set(['sun-shangxiang', 'xiao-qiao', 'guan-yinping', 'zhu-rong', 'diao-chan', 'da-qiao', 'cai-wenji', ...TIANMING_RIDERS])
+/** 전용 기수 무장이 손에 쥐는 것: 책사는 깃부채(주유는 검) */
+const RIDER_WEAPON: Record<string, HandProp> = { 'zhuge-liang': 'fan', simayi: 'fan', 'zhou-yu': 'sword', 'lu-xun': 'sword', 'liu-bei': 'sword', 'cao-cao': 'sword', 'sun-quan': 'sword', 'yuan-shao': 'sword', 'dong-zhuo': 'sword', 'zhang-jiao': 'fan', 'lu-bu': 'halberd' }
 
 /** 천명 무장마다의 모습 */
 const TIANMING: Record<string, Partial<HeroLook> & { look: TianmingLook }> = {
@@ -81,8 +85,13 @@ export function heroLook(general: General): HeroLook {
   // 전용 기수 모델: 기마 모델(말 · 동작)에 그 무장의 몸을 태운다 → 재채색 · 얼굴 비춤은 쓰지 않는다
   if (RIDER_MODELS.has(general.id)) {
     const base = baseLook(general)
-    const look: HeroLook = { model: 'cavalry', kind: base.kind, weapon: base.weapon, rider: general.id }
-    return general.grade === 5 ? { ...look, tianming: DEFAULT_TIANMING } : look
+    const special = TIANMING[general.id]
+    const weapon = RIDER_WEAPON[general.id] ?? special?.weapon ?? SIGNATURE_WEAPONS[general.id] ?? base.weapon
+    const look: HeroLook = { model: 'cavalry', kind: special?.kind ?? base.kind, weapon, rider: general.id }
+    if (general.grade !== 5) return look
+    // 천명: 기운 색 · 이름 깃발만 두른다(수염 · 망토 · 장식은 모델에 이미 있다)
+    const tianming: TianmingLook = special ? { aura: special.look.aura, banner: special.look.banner } : DEFAULT_TIANMING
+    return { ...look, tianming }
   }
   const look: HeroLook = { ...withDress(general, baseLook(general)), face: `/assets/faces/${general.id}.webp` }
   if (general.grade !== 5) return look
