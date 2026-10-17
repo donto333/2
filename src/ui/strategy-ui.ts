@@ -23,7 +23,7 @@ const POWER_MARK_KEY = 'cheonharo.powerMark'
 import { TerritoryMapController, type MapCity } from './territory-map'
 import { isEnglish, locale, setLang } from '../i18n/lang'
 import { tr } from '../i18n/translate'
-import { maybeShowIntro } from './coach'
+import { MENU_TOURS, maybeShowIntro } from './coach'
 
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character))
 const equipmentImage = (type: EquipmentType): string => `/assets/equipment/${type}.webp`
@@ -332,6 +332,37 @@ export interface StrategyUiCallbacks {
 
 type CityFilter = 'all' | 'front' | 'ally' | 'enemy' | 'neutral'
 
+/** 메뉴 설명 창에 넣을 주요 기능(따라하기 안내가 없는 메뉴) */
+const MENU_GUIDE_EXTRA: Record<string, Array<{ title: string; body: string }>> = {
+  codex: [
+    { title: '무장 도감', body: '게임에 나오는 모든 무장을 등급 · 병과별로 봅니다. 아직 없는 무장도 능력치와 스킬을 미리 확인할 수 있습니다.' },
+    { title: '스킬 상세', body: '무장을 펼치면 스킬 효과 · 쿨다운 · 패시브 · 각성을 볼 수 있고, 버프 · 디버프를 누르면 효과가 나옵니다.' },
+  ],
+  duel: [
+    { title: '유저 대련', body: '다른 유저가 저장한 덱과 겨룹니다. 하루 5회까지 도전할 수 있습니다.' },
+    { title: '난이도와 보상', body: '상대 덱 전력에 따라 쉬움 · 보통 · 어려움으로 나뉘고, 이기면 신화장비 조각을 쉬움 1 · 보통 2 · 어려움 3개 받습니다.' },
+    { title: '훈련 상대', body: '덱을 저장한 유저가 적을 때는 내 덱 전력에 맞춘 훈련 상대 세 팀과 겨룹니다.' },
+  ],
+  raid: [
+    { title: '주간 레이드', body: '매주 바뀌는 보스에게 1 · 2 · 3군을 차례로 보내 누적 피해를 겨룹니다.' },
+    { title: '순위와 보상', body: '누적 피해 순위에 따라 주간 보상을 받습니다. 주가 바뀌면 보스와 기록이 새로 시작합니다.' },
+  ],
+  rank: [
+    { title: '천하 랭킹', body: '전투 점수가 높은 지휘관 순위입니다. 로그인한 계정의 기록이 올라갑니다.' },
+  ],
+  board: [
+    { title: '진영 게시판', body: '전체 게시판과 내 진영 게시판에 글을 쓸 수 있습니다. 글을 쓸 때 정한 비밀번호로 지울 수 있습니다.' },
+  ],
+  updates: [
+    { title: '업데이트 기록', body: '지금까지 바뀐 내용을 날짜별로 정리해 둡니다. 새 기록이 있으면 메뉴에 표시가 붙습니다.' },
+  ],
+  account: [
+    { title: '계정', body: '로그인 상태와 계정 정보를 봅니다.' },
+    { title: '이 기기 설정', body: '언어 · 배경음악 · 효과음 · 그래픽 품질 · 전투 효과를 바꾸고, 따라하기 안내를 다시 볼 수 있습니다.' },
+    { title: '진영 변경', body: '진영은 30일에 한 번 바꿀 수 있습니다.' },
+  ],
+}
+
 /** 보유 무장 능력치 설명(누르면 펼쳐짐) — battle-core.ts의 계산과 맞춘다 */
 const STAT_INFO = {
   leadership: { title: '통솔', body: '최대 병력이 늘어나고 일반 공격에도 조금 더해집니다. 통솔 · 수호 · 치유형 스킬의 위력과 통솔형 무장의 일반 공격은 통솔로 정해집니다. 장비로 오른 통솔은 방어력도 높입니다.' },
@@ -530,17 +561,20 @@ export class StrategyUI {
         if (cleaned !== text) node.textContent = cleaned
       }
     })
-    this.root.querySelectorAll<HTMLElement>('.section-heading, .summon-menu-head').forEach(heading => {
-      const copy = heading.querySelector<HTMLElement>('.heading-copy')
+    // 메뉴 설명: 제목 옆 (i) 대신 오른쪽에 'OO 설명' 버튼(영토는 '영토전 설명'이 따로 있다)
+    this.root.querySelectorAll<HTMLElement>('.section-heading').forEach(heading => {
       const title = heading.querySelector('h1')
-      if (!copy || !title || heading.querySelector('.heading-info')) return
-      const info = document.createElement('button')
-      info.className = 'heading-info'
-      info.type = 'button'
-      info.setAttribute('aria-label', '설명 보기')
-      info.textContent = 'i'
-      info.addEventListener('click', event => { event.stopPropagation(); heading.classList.toggle('is-info-open') })
-      title.appendChild(info)
+      if (!title || heading.querySelector('.menu-guide-button') || heading.querySelector('[data-action="territory-rules"]') || heading.closest('.page-section--battle')) return
+      const button = document.createElement('button')
+      button.className = 'action-button action-button--outline menu-guide-button'
+      button.type = 'button'
+      button.dataset.action = 'menu-guide'
+      button.textContent = tr(`${(title.textContent ?? '').trim()} 설명`)
+      const side = [...heading.children].find(child => child !== title.closest('.section-heading > *'))
+      const wrap = document.createElement('div')
+      wrap.className = 'heading-side'
+      if (side) { heading.insertBefore(wrap, side); wrap.appendChild(side) } else heading.appendChild(wrap)
+      wrap.appendChild(button)
     })
   }
 
@@ -1698,6 +1732,23 @@ export class StrategyUI {
     return `<details class="city-battle-log" ${logs.length ? 'open' : ''}><summary><span><span class="eyebrow">도시 전투 기록</span><strong>성 전투 기록</strong></span><b>${logs.length}건</b></summary><p>이 성의 공성전·세력전과 인공지능 습격 결과를 최근 30건까지 보관합니다.</p><ul>${entries}</ul></details>`
   }
 
+  /** 메뉴 설명 창: 제목 아래 설명 문장 + 이 메뉴의 주요 기능 */
+  private showMenuGuide(): void {
+    const state = this.renderedState
+    const heading = this.root.querySelector<HTMLElement>('.section-heading')
+    const title = (heading?.querySelector('h1')?.textContent ?? '').trim()
+    const intro = (heading?.querySelector('.heading-copy')?.textContent ?? '').trim()
+    const items = (MENU_TOURS[state?.section ?? ''] ?? MENU_GUIDE_EXTRA[state?.section ?? ''] ?? []).map(step => `<li><b>${escapeHtml(tr(step.title))}</b> ${escapeHtml(tr(step.body))}</li>`).join('')
+    document.querySelector('.territory-rules-modal')?.remove()
+    const modal = document.createElement('div')
+    modal.className = 'territory-rules-modal'
+    modal.innerHTML = `<div class="territory-rules__card glass-card" role="dialog" aria-label="${escapeHtml(tr(`${title} 설명`))}"><div class="territory-rules__head"><div><span class="eyebrow">${escapeHtml(tr('메뉴 설명'))}</span><h2>${escapeHtml(tr(`${title} 설명`))}</h2></div><button class="territory-rules__close" data-rules-close aria-label="닫기">✕</button></div><div class="territory-rules__body">${intro ? `<p class="menu-guide__intro">${escapeHtml(intro)}</p>` : ''}${items ? `<section class="territory-rules__section"><h3>${escapeHtml(tr('주요 기능'))}</h3><ul>${items}</ul></section>` : ''}</div></div>`
+    const close = () => modal.remove()
+    modal.addEventListener('click', event => { if (event.target === modal) close() })
+    modal.querySelector('[data-rules-close]')?.addEventListener('click', close)
+    document.body.appendChild(modal)
+  }
+
   /** 영토전 설명(세 진영 점령전 · 재야 · 낙양전) */
   private showTerritoryRules(): void {
     document.querySelector('.territory-rules-modal')?.remove()
@@ -2348,6 +2399,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '메뉴 설명 버튼', '각 메뉴 제목 옆의 (i) 표시를 없애고, 제목 오른쪽에 "○○ 설명" 버튼을 두었습니다. 누르면 그 메뉴의 설명과 주요 기능을 한 창에서 볼 수 있습니다(영토는 영토전 설명).', '완료', 'jade'],
       ['2026.10.17', '영토전 설명', '영토 · 내정 화면 위쪽에 영토전 설명 버튼이 생겼습니다. 세 진영 점령전 · 재야 · 주간 낙양전 규칙을 한 창에서 볼 수 있고, 내 진영 규칙이 강조됩니다. 낙양 이름 옆에 있던 낙양전 설명은 이 창으로 옮겼습니다.', '완료', 'jade'],
       ['2026.10.17', '네 번째 진영 · 재야(중립 진영)', '진영 선택에 재야(중립 진영)가 생겼습니다. 재야는 본성 없이 수도와 양양을 포함한 어느 도시든 공성할 수 있고, 이기면 성벽을 깎고 그 성 하루 생산량의 25%를 약탈합니다(하루 30회). 성벽을 0으로 무너뜨리면 그 성의 내정 건물이 초기화되고, 성벽은 하루 뒤 다시 세워집니다. 성벽이 0인 동안은 공성할 수 없습니다. 재야는 점령 · 내정 · 최종 세력전을 할 수 없고, 낙양만은 세 진영과 같은 규칙으로 차지할 수 있습니다. 진영은 설정에서 30일에 한 번 바꿀 수 있습니다.', '완료', 'jade'],
       ['2026.10.17', '천하영토 도시 재배치 · 새 도시 7곳', '초반에도 공성할 수 있도록 각 수도 바로 옆 도시는 1단계, 두 걸음은 2단계, 그 너머는 3단계로 바꿨습니다. 장안 · 한중 · 허창 · 수춘 · 강릉 · 양양은 4단계 대도시로, 남쪽 · 서쪽 변방은 2단계로 두었습니다. 새 중립 도시 7곳(촉 쪽 파군 · 파서, 오 쪽 예장 · 임해 · 기춘, 위 쪽 상당 · 하간)이 생겼고, 회계–건안은 임해를 거쳐 이어집니다. 세 진영이 먼저 닿는 땅의 수입이 서로 비슷해졌습니다.', '완료', 'jade'],
@@ -2604,6 +2656,7 @@ export class StrategyUI {
     else if (action === 'faction-battle') this.callbacks.onFactionBattle(button.dataset.city ?? '')
     else if (action === 'collect-income') this.callbacks.onCollectIncome()
     else if (action === 'territory-rules') this.showTerritoryRules()
+    else if (action === 'menu-guide') this.showMenuGuide()
     else if (action === 'building-upgrade') this.callbacks.onBuildingUpgrade(button.dataset.city ?? '', button.dataset.building ?? '')
     else if (action === 'building-rush') this.callbacks.onBuildingRush(button.dataset.city ?? '')
     else if (action === 'building-cancel') this.callbacks.onBuildingCancel(button.dataset.city ?? '')

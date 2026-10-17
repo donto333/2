@@ -2254,3 +2254,12 @@ html body .faction-choice--wanderer { --faction-color: #d8c3a0; }
 .territory-rules__section h3 em { font-style: normal; font-size: 11px; margin-left: 6px; padding: 1px 6px; border-radius: 999px; color: #241208; background: #f6c56d; vertical-align: middle; }
 .territory-rules__section ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .territory-rules__section li { font-size: 13px; line-height: 1.6; color: #d2c8b3; }
+
+/* 메뉴 설명 버튼(제목 오른쪽) · 제목 옆 (i) 없앰 */
+body .heading-info { display: none !important; }
+body .section-heading .heading-copy { display: none !important; }
+.heading-side { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.menu-guide-button { white-space: nowrap; }
+.menu-guide__intro { margin: 0; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; line-height: 1.6; color: #e9dcc0; background: rgba(120, 80, 30, .18); border-left: 3px solid rgba(246, 197, 109, .7); }
+.territory-rules__section li b { color: #f3e7cf; margin-right: 4px; }
+@media (max-width: 620px) { .menu-guide-button { padding: 7px 10px !important; font-size: 12px !important; } }
