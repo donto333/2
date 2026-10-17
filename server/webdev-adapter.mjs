@@ -303,8 +303,8 @@ function legacyCityDefenseFloor(cityId) {
   return Math.ceil((CITY_DEFENSE_BY_LEVEL[level] ?? CITY_DEFENSE_BY_LEVEL[5]) * TERRITORY_TEST_WEAKENING_RATIO);
 }
 const CITY_LEVEL_BY_ID = {
-  chengdu: 3, hanzhong: 2, xiangyang: 4, jianye: 3, xuchang: 3, luoyang: 5, ye: 4, chenliu: 2, puyang: 2, wancheng: 2,
-  jiangling: 3, yiling: 2, changsha: 3, lingling: 1, guiyang: 1, wujun: 3, kuaiji: 2, poyang: 2, hefei: 3, shouchun: 3,
+  chengdu: 3, hanzhong: 4, xiangyang: 4, jianye: 3, xuchang: 4, luoyang: 5, ye: 4, chenliu: 2, puyang: 2, wancheng: 2,
+  jiangling: 4, yiling: 2, changsha: 3, lingling: 1, guiyang: 1, wujun: 3, kuaiji: 2, poyang: 2, hefei: 3, shouchun: 4,
   jiujiang: 2, tianshui: 2, wuwei: 1, fucheng: 2, xindu: 1, changan: 4, meixian: 2, anding: 2, jinyang: 3, pingyuan: 2,
   beihai: 2, langya: 2, xiapi: 3, guangling: 2, lujiang: 2, shangyong: 2, xinye: 2, jiangxia: 2, wuling: 1, badong: 2,
   jianning: 1, yunnan: 1, jiaozhi: 1, shixing: 1, nanhai: 1, jianan: 1, yongchang: 1, bohai: 2
@@ -476,7 +476,7 @@ function factionTerritoryView(row, battleLogs = []) {
   };
 }
 async function ensureFactionTerritories(db) {
-  const existing = await db.select({ cityId: factionTerritoryStates.cityId, defense: factionTerritoryStates.defense, conquestProgress: factionTerritoryStates.conquestProgress }).from(factionTerritoryStates);
+  const existing = await db.select({ cityId: factionTerritoryStates.cityId, owner: factionTerritoryStates.owner, defense: factionTerritoryStates.defense, conquestProgress: factionTerritoryStates.conquestProgress }).from(factionTerritoryStates);
   const known = new Set(existing.map(row => row.cityId));
   const missing = FACTION_TERRITORY_SEED.filter(city => !known.has(city.cityId)).map(city => ({ ...city, defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[city.cityId] ?? 1) }));
   if (missing.length) {
@@ -486,6 +486,12 @@ async function ensureFactionTerritories(db) {
     const floor = legacyCityDefenseFloor(row.cityId);
     // 이전 버전이 모든 도시를 약화 하한에서 시작시킨 경우만 원래 최대치로 복구한다.
     // 이미 공성 진전이 있는 도시는 현재 방어도를 그대로 보존한다.
+    // 도시 단계가 올랐는데(2026.10.17 한중 · 허창 · 수춘 · 강릉) 공성 진전이 없는 중립 도시는 성벽을 새 최대치로
+    const max = cityDefenseForLevel(CITY_LEVEL_BY_ID[row.cityId] ?? 1);
+    if (row.owner === "중립" && Number(row.conquestProgress) === 0 && Number(row.defense) < max && Number(row.defense) !== floor) {
+      await db.update(factionTerritoryStates).set({ defense: max }).where(eq(factionTerritoryStates.cityId, row.cityId));
+      continue;
+    }
     if (Number(row.defense) === floor && Number(row.conquestProgress) === 0) {
       await db.update(factionTerritoryStates).set({ defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[row.cityId] ?? 1) }).where(eq(factionTerritoryStates.cityId, row.cityId));
     }

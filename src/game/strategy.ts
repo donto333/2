@@ -422,16 +422,16 @@ function createBuildings(level = 1): CityBuilding[] {
 export function createCities(): City[] {
   return [
     { id: 'chengdu', name: '성도', chineseName: '成都', region: '익주 중심', owner: '촉한', level: 3, prosperity: 82, defense: 74, buildings: createBuildings(2) },
-    { id: 'hanzhong', name: '한중', chineseName: '漢中', region: '검각 북문', owner: '중립', level: 2, prosperity: 64, defense: 86, buildings: createBuildings(1) },
+    { id: 'hanzhong', name: '한중', chineseName: '漢中', region: '검각 북문', owner: '중립', level: 4, prosperity: 64, defense: 86, buildings: createBuildings(1) },
     { id: 'xiangyang', name: '양양', chineseName: '襄陽', region: '형주 중앙 인공지능 수도', owner: '중립', level: 4, prosperity: 78, defense: 90, buildings: createBuildings(3) },
     { id: 'jianye', name: '건업', chineseName: '建業', region: '강동 수운', owner: '오나라', level: 3, prosperity: 76, defense: 70, buildings: createBuildings(2) },
-    { id: 'xuchang', name: '허창', chineseName: '許昌', region: '중원 관문', owner: '중립', level: 3, prosperity: 79, defense: 81, buildings: createBuildings(2) },
+    { id: 'xuchang', name: '허창', chineseName: '許昌', region: '중원 관문', owner: '중립', level: 4, prosperity: 79, defense: 81, buildings: createBuildings(2) },
     { id: 'luoyang', name: '낙양', chineseName: '洛陽', region: '황하 수도권', owner: '중립', level: 5, prosperity: 94, defense: 100, buildings: createBuildings(5) },
     { id: 'ye', name: '업', chineseName: '鄴', region: '기주 북부', owner: '위나라', level: 4, prosperity: 84, defense: 86, buildings: createBuildings(3) },
     { id: 'chenliu', name: '진류', chineseName: '陳留', region: '연주 평원', owner: '중립', level: 2, prosperity: 61, defense: 57, buildings: createBuildings(1) },
     { id: 'puyang', name: '복양', chineseName: '濮陽', region: '연주 동문', owner: '중립', level: 2, prosperity: 58, defense: 64, buildings: createBuildings(1) },
     { id: 'wancheng', name: '완성', chineseName: '宛城', region: '남양 요충', owner: '중립', level: 2, prosperity: 67, defense: 70, buildings: createBuildings(1) },
-    { id: 'jiangling', name: '강릉', chineseName: '江陵', region: '형주 수운', owner: '중립', level: 3, prosperity: 73, defense: 76, buildings: createBuildings(2) },
+    { id: 'jiangling', name: '강릉', chineseName: '江陵', region: '형주 수운', owner: '중립', level: 4, prosperity: 73, defense: 76, buildings: createBuildings(2) },
     { id: 'yiling', name: '이릉', chineseName: '夷陵', region: '삼협 관문', owner: '중립', level: 2, prosperity: 55, defense: 68, buildings: createBuildings(1) },
     { id: 'changsha', name: '장사', chineseName: '長沙', region: '형남 동부', owner: '중립', level: 3, prosperity: 71, defense: 63, buildings: createBuildings(2) },
     { id: 'lingling', name: '영릉', chineseName: '零陵', region: '형남 남부', owner: '중립', level: 1, prosperity: 49, defense: 46, buildings: createBuildings(1) },
@@ -440,7 +440,7 @@ export function createCities(): City[] {
     { id: 'kuaiji', name: '회계', chineseName: '會稽', region: '동남 해안', owner: '중립', level: 2, prosperity: 69, defense: 66, buildings: createBuildings(1) },
     { id: 'poyang', name: '파양', chineseName: '鄱陽', region: '강동 호수길', owner: '중립', level: 2, prosperity: 62, defense: 59, buildings: createBuildings(1) },
     { id: 'hefei', name: '합비', chineseName: '合肥', region: '회남 전선', owner: '중립', level: 3, prosperity: 64, defense: 88, buildings: createBuildings(2) },
-    { id: 'shouchun', name: '수춘', chineseName: '壽春', region: '회남 중심', owner: '중립', level: 3, prosperity: 68, defense: 79, buildings: createBuildings(2) },
+    { id: 'shouchun', name: '수춘', chineseName: '壽春', region: '회남 중심', owner: '중립', level: 4, prosperity: 68, defense: 79, buildings: createBuildings(2) },
     { id: 'jiujiang', name: '시상', chineseName: '柴桑', region: '장강 수운 · 오의 거점', owner: '중립', level: 2, prosperity: 57, defense: 55, buildings: createBuildings(1) },
     { id: 'tianshui', name: '천수', chineseName: '天水', region: '농서 동문', owner: '중립', level: 2, prosperity: 53, defense: 71, buildings: createBuildings(1) },
     { id: 'wuwei', name: '무위', chineseName: '武威', region: '하서 회랑', owner: '중립', level: 1, prosperity: 42, defense: 61, buildings: createBuildings(1) },
@@ -479,7 +479,14 @@ export function ensureCityRoster(state: StrategyState): void {
   // 저장된 도시도 이름·한자·지역 설명은 최신 정의를 따른다(예: 구강 九江 → 시상 柴桑 지명 정정).
   state.cities.forEach(city => {
     const latest = template.get(city.id)
-    if (latest) { city.name = latest.name; city.chineseName = latest.chineseName; city.region = latest.region }
+    if (latest) {
+      city.name = latest.name; city.chineseName = latest.chineseName; city.region = latest.region
+      // 도시 단계가 바뀌면(2026.10.17 한중 · 허창 · 수춘 · 강릉 → 4단계) 따른다. 공성 진전이 없는 중립 도시는 성벽도 새 최대치로
+      if (city.level !== latest.level) {
+        city.level = latest.level
+        if (city.owner === '중립' && !(city.conquestProgress ?? 0)) city.defense = cityDefenseForLevel(city.level)
+      }
+    }
   })
   // 없앤 도시(예: 2026.10.17 신도 shixin)는 저장에서도 뺀다
   state.cities = state.cities.filter(city => template.has(city.id))
