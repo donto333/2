@@ -1,0 +1,57 @@
+name: 3D 모델 압축 (Draco · 병사용 간략 모델)
+
+# 손으로 실행: public/assets/models/*.glb의 메시를 Draco로 압축하고, 병사용 간략 모델(<이름>-lod.glb,
+# 삼각형 약 1/4)을 만들어 asset-opt 브랜치에 올린다. 애니메이션 · 뼈 이름 · 텍스처는 그대로.
+# 이미 Draco로 압축된 파일은 건너뛴다(다시 압축하면 화질만 떨어진다).
+on:
+  workflow_dispatch:
+    inputs:
+      lod_ratio:
+        description: '병사용 간략 모델의 삼각형 비율'
+        default: '0.25'
+
+permissions:
+  contents: write
+
+jobs:
+  draco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 도구
+        run: npm i -g @gltf-transform/cli@4.1.1
+      - name: 압축 · 간략 모델
+        run: |
+          set -e
+          mkdir -p /tmp/opt
+          is_draco() { node -e "const b=require('fs').readFileSync(process.argv[1]);const j=JSON.parse(b.slice(20,20+b.readUInt32LE(12)));process.exit((j.extensionsUsed||[]).includes('KHR_draco_mesh_compression')?0:1)" "$1"; }
+          Q="--quantize-position 14 --quantize-normal 10 --quantize-texcoord 12 --quantize-generic 12"
+          for f in public/assets/models/*.glb; do
+            n=$(basename "$f" .glb)
+            case "$n" in *-lod) continue;; esac
+            if is_draco "$f"; then echo "건너뜀(이미 압축): $n"; src="$f"; else
+              gltf-transform draco "$f" "/tmp/opt/$n.glb" $Q
+              src="$f"
+            fi
+            case "$n" in cavalry|lancer|archer)
+              # 병사용: 원본(압축 전)에서 줄여야 하므로, 이미 압축된 경우 git 기록에서 원본을 꺼낸다
+              if is_draco "$f"; then git show "$(git log --format=%H -n 1 --diff-filter=AM -- "$f")~1:$f" > "/tmp/$n-src.glb" 2>/dev/null || cp "$f" "/tmp/$n-src.glb"; else cp "$f" "/tmp/$n-src.glb"; fi
+              gltf-transform weld "/tmp/$n-src.glb" "/tmp/$n-weld.glb"
+              gltf-transform simplify "/tmp/$n-weld.glb" "/tmp/$n-simp.glb" --ratio ${{ inputs.lod_ratio }} --error 0.02
+              gltf-transform draco "/tmp/$n-simp.glb" "/tmp/opt/$n-lod.glb" $Q
+              gltf-transform inspect "/tmp/opt/$n-lod.glb" | grep -iE "tri|vert|render|count" | head -20 || true
+            ;; esac
+          done
+          ls -la public/assets/models/*.glb /tmp/opt/*.glb
+          cp /tmp/opt/*.glb public/assets/models/
+      - name: 올리기
+        run: |
+          git config user.name "asset-bot"; git config user.email "asset-bot@users.noreply.github.com"
+          git checkout -b asset-opt
+          git add public/assets/models/*.glb
+          git commit -qm "3D 모델 Draco 압축 · 병사용 간략 모델"
+          git push -f origin asset-opt

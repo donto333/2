@@ -1,0 +1,71 @@
+name: 종합 점검 (단위 테스트 · 100배속 실제 플레이)
+
+# 손으로 실행: 타입 검사 → 단위 테스트 → 빌드 → 스모크 → 실제 빌드를 브라우저로 열어 100배속으로
+# 시나리오 전체 · 일반 전투 · 대련 · 레이드 · 모든 무장을 싸워 본다. 결과는 qa-results 브랜치에 올린다.
+on:
+  workflow_dispatch:
+    inputs:
+      quick:
+        description: '빠른 점검(시나리오 4개 · 무장 일부)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qa
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: 브라우저 준비
+        run: pnpm exec playwright install --with-deps chromium
+      - name: 타입 검사
+        id: typecheck
+        continue-on-error: true
+        run: pnpm typecheck 2>&1 | tee typecheck.log
+      - name: 단위 테스트
+        id: unit
+        continue-on-error: true
+        run: pnpm test 2>&1 | tee unit.log
+      - name: 빌드
+        run: pnpm run manus:build-source 2>&1 | tee build.log
+      - name: 스모크
+        id: smoke
+        continue-on-error: true
+        run: pnpm smoke 2>&1 | tee smoke.log
+      - name: 100배속 실제 플레이
+        id: play
+        continue-on-error: true
+        run: |
+          (pnpm exec vite preview --port 4173 --strictPort --host 127.0.0.1 > preview.log 2>&1 &)
+          for i in $(seq 1 40); do curl -sf http://127.0.0.1:4173/ >/dev/null && break; sleep 0.5; done
+          node scripts/qa-100x.mjs http://127.0.0.1:4173/ qa-out ${{ inputs.quick && '--quick' || '' }} 2>&1 | tee play.log
+      - name: 결과 올리기
+        if: always()
+        run: |
+          mkdir -p out && cp -r qa-out out/ 2>/dev/null || true
+          cp typecheck.log unit.log build.log smoke.log play.log out/ 2>/dev/null || true
+          {
+            echo "# 종합 점검 결과 (${GITHUB_SHA::7})"
+            echo "- 타입 검사: ${{ steps.typecheck.outcome }}"
+            echo "- 단위 테스트: ${{ steps.unit.outcome }}"
+            echo "- 스모크: ${{ steps.smoke.outcome }}"
+            echo "- 100배속 실제 플레이: ${{ steps.play.outcome }}"
+          } > out/SUMMARY.md
+          git config user.name "qa-bot"; git config user.email "qa-bot@users.noreply.github.com"
+          git checkout --orphan qa-results-tmp
+          git rm -rq --cached . && git clean -fdxq -e out
+          mv out/* . && rmdir out
+          git add -A && git commit -qm "QA ${GITHUB_SHA::7}"
+          git push -f origin HEAD:qa-results

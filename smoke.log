@@ -1,0 +1,13 @@
+
+> cheonharo@0.1.0 smoke /home/runner/work/2/2
+> node scripts/smoke.mjs
+
+smoke: FAIL — locator.evaluate: Error: strict mode violation: locator('[data-action="section"][data-section="territory"]') resolved to 3 elements:
+    1) <button data-nav="" class="nav-button   " data-action="section" data-section="territory">…</button> aka getByRole('button', { name: '영토 · 내정' })
+    2) <button data-action="section" class="lobby-shortcut" data-section="territory">…</button> aka getByRole('button', { name: '영토', exact: true })
+    3) <button class="mini-action" data-action="section" data-section="territory">바로 가기</button> aka getByRole('button', { name: '바로 가기' }).nth(2)
+
+Call log:
+  - waiting for locator('[data-action="section"][data-section="territory"]')
+
+ ELIFECYCLE  Command failed with exit code 1.

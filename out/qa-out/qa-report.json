@@ -1,0 +1,235 @@
+{
+ "startedAt": "2026-10-17T20:15:45.552Z",
+ "url": "http://127.0.0.1:4173/",
+ "speed": 100,
+ "battles": [
+  {
+   "label": "시나리오 1 (scenario-184-0-0)",
+   "ok": true,
+   "wallMs": 23574,
+   "result": "승리",
+   "notice": "시나리오 184년 황건적의 난, 도원결의 클리어 · 별 2개 · 금화 +11 · 모든 재화 보상 획득",
+   "frames": 15,
+   "frameMaxMs": 3781,
+   "geometries": 140,
+   "textures": 65,
+   "programs": 31,
+   "heapMB": 75,
+   "sceneObjects": 4335
+  },
+  {
+   "label": "시나리오 2 (scenario-185-0-1)",
+   "ok": true,
+   "wallMs": 20098,
+   "result": "승리",
+   "notice": "시나리오 185년 변장-한수의 난, 흑산적 준동 클리어 · 별 2개 · 금화 +11 · 모든 재화 보상 획득",
+   "frames": 14,
+   "frameMaxMs": 1722,
+   "geometries": 205,
+   "textures": 71,
+   "programs": 37,
+   "heapMB": 102,
+   "sceneObjects": 11600
+  },
+  {
+   "label": "시나리오 3 (scenario-186-0-2)",
+   "ok": true,
+   "wallMs": 21316,
+   "result": "승리",
+   "notice": "시나리오 186년 장온 출진 클리어 · 별 2개 · 금화 +11 · 모든 재화 보상 획득",
+   "frames": 14,
+   "frameMaxMs": 2747,
+   "geometries": 176,
+   "textures": 72,
+   "programs": 37,
+   "heapMB": 120,
+   "sceneObjects": 10430
+  },
+  {
+   "label": "시나리오 4 (scenario-187-0-3)",
+   "ok": true,
+   "wallMs": 18784,
+   "result": "승리",
+   "notice": "시나리오 187년 장거-장순의 난, 구성의 난 클리어 · 별 2개 · 금화 +11 · 모든 재화 보상 획득",
+   "frames": 14,
+   "frameMaxMs": 1483,
+   "geometries": 151,
+   "textures": 61,
+   "programs": 35,
+   "heapMB": 105,
+   "sceneObjects": 7269
+  },
+  {
+   "label": "일반 전투",
+   "ok": true,
+   "wallMs": 15032,
+   "result": "승리",
+   "notice": "전투 승리 · 별 2개 · 옥패 +80 · 은전 +960 · 오늘 보상 4회 남음",
+   "frames": 11,
+   "frameMaxMs": 1474,
+   "geometries": 145,
+   "textures": 63,
+   "programs": 35,
+   "heapMB": 101,
+   "sceneObjects": 8797
+  },
+  {
+   "label": "대련",
+   "ok": true,
+   "wallMs": 50525,
+   "result": "패배",
+   "notice": "전투 패배 · 보상 없음 · 무장 배치와 성장 상태를 다시 점검하십시오.",
+   "frames": 32,
+   "frameMaxMs": 1981,
+   "geometries": 175,
+   "textures": 111,
+   "programs": 37,
+   "heapMB": 87,
+   "sceneObjects": 4825
+  },
+  {
+   "label": "레이드 1군",
+   "ok": true,
+   "wallMs": 12130,
+   "result": "",
+   "notice": "레이드 종료 · 합계 피해 641 (1군 541 · 2군 100) · 연습 기록(순위·보상 없음)",
+   "frames": 5,
+   "frameMaxMs": 1489,
+   "geometries": 137,
+   "textures": 77,
+   "programs": 37,
+   "heapMB": 108,
+   "sceneObjects": 1602
+  },
+  {
+   "label": "무장 guan-yu, zhao-yun, zhuge-liang",
+   "ok": true,
+   "wallMs": 41296,
+   "result": "승리",
+   "notice": "전투 승리 · 별 3개 · 옥패 +100 · 은전 +1,200 · 오늘 보상 3회 남음",
+   "frames": 24,
+   "frameMaxMs": 2207,
+   "geometries": 203,
+   "textures": 128,
+   "programs": 37,
+   "heapMB": 99,
+   "sceneObjects": 6283
+  },
+  {
+   "label": "무장 lu-bu, zhang-fei, huang-zhong",
+   "ok": true,
+   "wallMs": 17654,
+   "result": "패배",
+   "notice": "전투 패배 · 보상 없음 · 무장 배치와 성장 상태를 다시 점검하십시오.",
+   "frames": 14,
+   "frameMaxMs": 1295,
+   "geometries": 189,
+   "textures": 93,
+   "programs": 37,
+   "heapMB": 95,
+   "sceneObjects": 5906
+  },
+  {
+   "label": "휴대폰 화면 전투",
+   "ok": true,
+   "wallMs": 18968,
+   "result": "승리",
+   "notice": "전투 승리 · 별 2개 · 옥패 +80 · 은전 +960 · 오늘 보상 4회 남음",
+   "frames": 13,
+   "frameMaxMs": 1990,
+   "geometries": 378,
+   "textures": 71,
+   "programs": 32,
+   "heapMB": 103,
+   "sceneObjects": 4741
+  }
+ ],
+ "errors": [],
+ "failedRequests": [],
+ "warnings": [
+  "THREE.DRACOLoader: setDecoderConfig to has been deprecated and will be removed in r194."
+ ],
+ "memory": [
+  {
+   "at": "시나리오 1",
+   "heapMB": 94,
+   "geometries": 140,
+   "textures": 65
+  },
+  {
+   "at": "끝",
+   "heapMB": 88,
+   "geometries": 195,
+   "textures": 94
+  }
+ ],
+ "checks": [
+  {
+   "name": "시나리오 목록 읽기",
+   "ok": true,
+   "detail": "58개"
+  },
+  {
+   "name": "시나리오 진행 기록 저장",
+   "ok": true,
+   "detail": "클리어 8개"
+  },
+  {
+   "name": "로컬 저장",
+   "ok": true,
+   "detail": "7개 키"
+  },
+  {
+   "name": "일반 전투",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "대련",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "레이드",
+   "ok": true,
+   "detail": "1군 진행"
+  },
+  {
+   "name": "무장 목록",
+   "ok": true,
+   "detail": "73명"
+  },
+  {
+   "name": "휴대폰 화면 전투",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "멈춘 전투 없음",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "스크립트 오류 없음",
+   "ok": true,
+   "detail": "0건"
+  },
+  {
+   "name": "파일 404 없음",
+   "ok": true,
+   "detail": "0건"
+  },
+  {
+   "name": "지오메트리 누수 없음",
+   "ok": true,
+   "detail": "초반 162 → 후반 227"
+  },
+  {
+   "name": "텍스처 누수 없음",
+   "ok": true,
+   "detail": "초반 77 → 후반 92"
+  }
+ ],
+ "loadMs": 2045,
+ "finishedAt": "2026-10-17T20:22:06.029Z"
+}

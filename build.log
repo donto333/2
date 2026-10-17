@@ -1,0 +1,29 @@
+
+> cheonharo@0.1.0 manus:build-source /home/runner/work/2/2
+> node scripts/asset-versions.mjs && tsc --noEmit && vite build && node scripts/check-size.mjs
+
+자산 해시: 60개
+[36mvite v8.3.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 132 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/balance.html                               0.83 kB │ gzip:   0.47 kB
+dist/index.html                                 1.12 kB │ gzip:   0.63 kB
+dist/assets/favicon-kTiPzIyz.png                2.40 kB
+dist/assets/draco_wasm_wrapper-fZCQGLGb.js     58.45 kB
+dist/assets/draco_wasm_wrapper-DxJM36Ib.js     58.76 kB
+dist/assets/draco_decoder-Z1_iN-Ht.wasm       192.42 kB │ gzip:  64.11 kB
+dist/assets/draco_decoder-C32yEggz.wasm       285.74 kB │ gzip:  89.66 kB
+dist/assets/draco_decoder-fzg4nYZr.js         719.41 kB
+dist/assets/launch-D0zLeuoS.css                 0.96 kB │ gzip:   0.32 kB
+dist/assets/balance-BpvMxkk1.css                8.79 kB │ gzip:   2.45 kB
+dist/assets/main-BTgKzQex.css                 328.08 kB │ gzip:  66.37 kB
+dist/assets/launch-B0OckUzI.js                  0.76 kB │ gzip:   0.43 kB
+dist/assets/balance-B23gO-5b.js                 2.97 kB │ gzip:   1.61 kB
+dist/assets/app-LD53W1kz.js                    24.03 kB │ gzip:   9.93 kB
+dist/assets/scenarios-BBcbbjk1.js             219.72 kB │ gzip:  74.11 kB
+dist/assets/main-D3U7e4wX.js                1,771.75 kB │ gzip: 543.49 kB
+
+[32m✓ built in 682ms[39m
+bundle (gzip): js 0.77 MB / fonts 0.75 MB / transfer 57.26 MB

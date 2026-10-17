@@ -1,0 +1,42 @@
+/* 천명의 전당(무장 모집 · 장비 뽑기 3D 연출) — summon-hall.ts */
+.summon-hall { display: block; background: #040306; }
+.summon-hall .sh-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.sh-bars::before, .sh-bars::after { content: ""; position: absolute; left: 0; right: 0; height: 0; background: #000; z-index: 2; transition: height .7s cubic-bezier(.6, 0, .2, 1); pointer-events: none; }
+.sh-bars::before { top: 0; }
+.sh-bars::after { bottom: 0; }
+.sh-bars.is-on::before, .sh-bars.is-on::after { height: 10vh; }
+
+.sh-intro { position: absolute; left: 0; right: 0; bottom: calc(10% + env(safe-area-inset-bottom, 0px)); z-index: 3; display: grid; justify-items: center; gap: 10px; padding-inline: 16px; text-align: center; pointer-events: none; opacity: 0; transition: opacity .9s; }
+.sh-intro.is-on { opacity: 1; }
+.sh-intro b { font: 700 clamp(26px, 4.4vw, 46px) 'Gowun Batang', serif; letter-spacing: .32em; padding-left: .32em; color: #fff2cf; text-shadow: 0 0 24px rgba(232, 194, 122, .55), 0 2px 8px #000; }
+.sh-intro span { font: 400 clamp(13px, 1.6vw, 16px) 'Gowun Batang', serif; letter-spacing: .2em; color: #d8cdb2; text-shadow: 0 1px 6px #000; }
+
+.sh-caption { position: absolute; left: 0; right: 0; bottom: calc(12vh + env(safe-area-inset-bottom, 0px)); z-index: 4; display: grid; justify-items: center; gap: 8px; padding-inline: 16px; pointer-events: none;
+  opacity: 0; transform: translateY(14px); transition: opacity .6s, transform .8s cubic-bezier(.2, .8, .2, 1); --c: #f6c56d; }
+.sh-caption.is-on { opacity: 1; transform: none; }
+.sh-caption::before { content: ""; position: absolute; inset: -40px -10vw -30px; z-index: -1; background: radial-gradient(ellipse at 50% 60%, rgba(0, 0, 0, .55), transparent 70%); }
+.sh-caption__grade { font: 700 12px Pretendard, sans-serif; letter-spacing: .4em; padding-left: .4em; color: var(--c); text-shadow: 0 0 10px currentColor; }
+.sh-caption__grade::before, .sh-caption__grade::after { content: "◆"; font-size: 7px; vertical-align: middle; margin: 0 .9em; opacity: .8; }
+.sh-caption__name { margin: 0; font: 700 clamp(40px, 7vw, 76px)/1.1 'Gowun Batang', serif; letter-spacing: .16em; padding-left: .16em; white-space: nowrap; filter: drop-shadow(0 3px 12px rgba(0, 0, 0, .9)); }
+.sh-caption__name span { display: inline-block; background: linear-gradient(180deg, #fffaf0 0%, #f4d796 45%, #b8873a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; opacity: 0; transform: translateY(.3em) scale(1.08); }
+.sh-caption.is-plain .sh-caption__name span { background-image: linear-gradient(180deg, #ffffff, color-mix(in srgb, var(--c) 45%, #c9d3d9)); }
+.sh-caption.is-on .sh-caption__name span { animation: sh-letter .8s cubic-bezier(.2, .8, .2, 1) forwards; animation-delay: calc(.12s + var(--i) * .11s); }
+@keyframes sh-letter { to { opacity: 1; transform: none; } }
+.sh-caption__rule { display: flex; align-items: center; gap: 10px; width: min(460px, 76vw); transform: scaleX(0); transition: transform .9s cubic-bezier(.2, .8, .2, 1) .25s; }
+.sh-caption.is-on .sh-caption__rule { transform: none; }
+.sh-caption__rule::before, .sh-caption__rule::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--c)); }
+.sh-caption__rule::after { transform: scaleX(-1); }
+.sh-caption__rule i { width: 7px; height: 7px; transform: rotate(45deg); border: 1px solid var(--c); }
+.sh-caption__sub { font: 400 clamp(14px, 1.9vw, 18px) 'Gowun Batang', serif; color: #eadfc4; letter-spacing: .1em; text-shadow: 0 1px 6px #000; }
+
+.sh-tap { position: absolute; left: 0; right: 0; bottom: calc(3vh + env(safe-area-inset-bottom, 0px)); z-index: 4; margin: 0; text-align: center; font-size: 12px; letter-spacing: .1em; color: #8d8574; pointer-events: none; }
+.sh-skip { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 5;
+  font: 700 13px/1 Pretendard, sans-serif; color: #efe6d0; background: rgba(16, 12, 12, .6); border: 1px solid rgba(214, 178, 110, .35); border-radius: 6px; padding: 9px 12px; cursor: pointer; }
+.sh-skip:hover { background: rgba(40, 30, 24, .8); }
+.sh-skip:focus-visible { outline: 2px solid #e8c27a; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sh-caption.is-on .sh-caption__name span { animation: none; opacity: 1; transform: none; }
+}
+.sh-veil { background: #040306; }

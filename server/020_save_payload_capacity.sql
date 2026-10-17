@@ -1,0 +1,11 @@
+ALTER TABLE `game_account_states`
+  ADD COLUMN IF NOT EXISTS `scenarioData` MEDIUMTEXT NULL;
+
+ALTER TABLE `game_account_states`
+  MODIFY COLUMN `generalData` MEDIUMTEXT NULL,
+  MODIFY COLUMN `formationData` MEDIUMTEXT NULL,
+  MODIFY COLUMN `citiesData` MEDIUMTEXT NULL,
+  MODIFY COLUMN `researchData` MEDIUMTEXT NULL,
+  MODIFY COLUMN `equipmentData` MEDIUMTEXT NULL,
+  MODIFY COLUMN `equipmentLoadoutsData` MEDIUMTEXT NULL,
+  MODIFY COLUMN `scenarioData` MEDIUMTEXT NULL;

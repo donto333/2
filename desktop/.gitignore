@@ -1,0 +1,5 @@
+node_modules/
+app/
+release/
+package-lock.json
+steam_appid.txt

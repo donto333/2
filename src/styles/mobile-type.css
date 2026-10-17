@@ -1,0 +1,56 @@
+/* 글자 다듬기(모든 화면 + 휴대폰 보강). 다른 스타일보다 뒤에 불러 덮어쓴다. */
+
+/* 기기·앱(카카오 인앱 브라우저 등)이 글자를 제멋대로 키우지 않게 */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* 1. 한글은 낱말(띄어쓰기) 단위로 줄을 바꾼다. 칸보다 긴 낱말만 어쩔 수 없이 끊는다 */
+body, body * { word-break: keep-all; overflow-wrap: break-word; }
+input, textarea, .board-post-body, .board-post-content { word-break: normal; overflow-wrap: anywhere; }
+
+/* 6. 명조(고운바탕)는 앱 이름·이야기 문장·큰 제목에만. 카드·목록 제목은 고딕으로 통일 */
+body .general-line h3, body .gcard-head h3, body .slot-picker__card h3, body .equip-overview__head h2,
+body .rank-hero h2, body .recruit-copy h2, body .coach-bubble strong, body .battle-guide h2 {
+  font-family: Pretendard, 'Noto Sans KR', sans-serif; font-weight: 700; letter-spacing: -.01em;
+}
+
+/* 작은 배지는 자리가 좁아 11px까지만 */
+body sup { font-size: 11px; line-height: 1; }
+/* 능력치 이름 옆 「▲성장」은 좁은 칸이라 한 줄로, 조금 작게 */
+html body .gcard .stat-bars > div span { white-space: nowrap; }
+html body .gcard .stat-bars > div span sup { font-size: 10px; line-height: 1; white-space: nowrap; }
+body .scenario-mini-head small { font-size: 12px; }
+body .gcard-gear__slot small { font-size: 11px; }
+
+/* 3. 편성: 「출정 준비 완료」가 설명 문장 위에 겹치지 않게 */
+.formation-screen-head .formation-readiness { position: static; display: inline-block; margin-top: 10px; transform: none; }
+
+@media (max-width: 760px) {
+  /* 4. 휴대폰 본문은 한 단계 크게, 줄 간격 넉넉히 */
+  html body .main-content p, html body .heading-copy, html body .scenario-story, html body .notice-text,
+  html body .update-entry-copy p, html body .formation-screen-head p, html body .coach-bubble p { font-size: 14px; line-height: 1.62; }
+  html body .main-content li { line-height: 1.6; }
+  html body .topbar-actions .lang-toggle { font-size: 12px; }
+
+  /* 8. 누르기 편하게: 글자 링크는 보이는 모양은 그대로 두고 누르는 범위만 넓힌다 */
+  html body .text-button, html body .formation-release { position: relative; min-height: 36px; padding-top: 9px; padding-bottom: 9px; }
+  html body .filter-tab, html body .setting-seg__btn, html body .roster-squad-chip,
+  html body .mini-action, html body .ghost-button, html body .formation-unequip, html body .equipment-slot-unequip,
+  html body .scenario-mini, html body .scenario-stepper .action-button, html body .scenario-guide-button { min-height: 38px; }
+  html body .setting-seg__btn { min-width: 44px; }
+  html body .equipment-lock { min-width: 36px; min-height: 36px; display: inline-grid; place-items: center; }
+  html body .research-summary summary { min-height: 38px; display: flex; align-items: center; }
+  html body .heading-info { position: relative; }
+  html body .heading-info::after { content: ''; position: absolute; inset: -9px; }
+  html body select { min-height: 38px; }
+
+  /* 9. 짧은 버튼 글자는 한 줄로 */
+  html body .action-button, html body .mini-action, html body .filter-tab, html body .setting-seg__btn, html body .ghost-button,
+  html body .text-button, html body .roster-squad-chip, html body .scenario-stepper .action-button { white-space: nowrap; }
+  html body .scenario-stepper .action-button { padding-left: 10px; padding-right: 10px; }
+  html body .formation-auto-row .action-button, html body .formation-toolbar .action-button { white-space: nowrap; }
+
+  /* 7. 글자가 커져도(앱 글자 크기 설정) 무장 카드 두 칸이 무너지지 않게: 줄을 넘겨 쌓는다 */
+  html body .gcard-head, html body .general-line { flex-wrap: wrap; row-gap: 4px; }
+  html body .gcard-head h3, html body .general-line h3 { min-width: 0; }
+  html body .gcard-meta, html body .level-line { flex-wrap: wrap; row-gap: 2px; }
+}

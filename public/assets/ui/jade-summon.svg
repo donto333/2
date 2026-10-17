@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" role="img" aria-label="옥패">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="54%" r="50%">
+      <stop offset="0" stop-color="#ffe3a3" stop-opacity=".55"/>
+      <stop offset=".45" stop-color="#e0a24a" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#e0a24a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="jade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#bff5d8"/>
+      <stop offset=".28" stop-color="#5fc496"/>
+      <stop offset=".62" stop-color="#2a8a63"/>
+      <stop offset="1" stop-color="#0f4a35"/>
+    </linearGradient>
+    <radialGradient id="jadeInner" cx="38%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#d8ffec" stop-opacity=".75"/>
+      <stop offset=".35" stop-color="#7fd9ad" stop-opacity=".25"/>
+      <stop offset="1" stop-color="#0b3a29" stop-opacity=".35"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff2c2"/>
+      <stop offset=".5" stop-color="#e9b85a"/>
+      <stop offset="1" stop-color="#8f5a1a"/>
+    </linearGradient>
+    <linearGradient id="silk" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7a1712"/>
+      <stop offset=".5" stop-color="#d8402f"/>
+      <stop offset="1" stop-color="#7a1712"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.2"/></filter>
+    <clipPath id="plaque"><path d="M120 62c30 0 58 10 66 24 6 10 6 22 6 34v90c0 14-8 24-20 28l-52 16-52-16c-12-4-20-14-20-28v-90c0-12 0-24 6-34 8-14 36-24 66-24z"/></clipPath>
+  </defs>
+
+  <!-- 뒤 광채 -->
+  <circle cx="120" cy="160" r="118" fill="url(#glow)"/>
+  <g stroke="#f0c26a" stroke-opacity=".35" stroke-width="1" fill="none">
+    <circle cx="120" cy="160" r="104"/>
+    <circle cx="120" cy="160" r="96" stroke-dasharray="2 6"/>
+  </g>
+  <g fill="#ffe3a3">
+    <circle cx="34" cy="112" r="1.6" opacity=".8"/><circle cx="206" cy="96" r="1.4" opacity=".7"/>
+    <circle cx="214" cy="214" r="1.8" opacity=".6"/><circle cx="26" cy="228" r="1.3" opacity=".7"/>
+    <path d="M200 132l1.4 3.2 3.2 1.4-3.2 1.4-1.4 3.2-1.4-3.2-3.2-1.4 3.2-1.4z" opacity=".9"/>
+    <path d="M42 176l1.2 2.6 2.6 1.2-2.6 1.2-1.2 2.6-1.2-2.6-2.6-1.2 2.6-1.2z" opacity=".8"/>
+  </g>
+
+  <!-- 매듭과 끈 -->
+  <path d="M120 6v34" stroke="url(#silk)" stroke-width="5" stroke-linecap="round"/>
+  <g fill="#c0392b" stroke="#4a0d08" stroke-width="1.4" stroke-linejoin="round">
+    <path d="M120 30c-14-10-26-4-24 6s14 10 24 4c10 6 22 6 24-4s-10-16-24-6z"/>
+    <path d="M110 40l10 12 10-12" fill="#a82a1f"/>
+  </g>
+  <circle cx="120" cy="36" r="5" fill="url(#gold)" stroke="#4a0d08" stroke-width="1.2"/>
+  <path d="M120 50v14" stroke="#a82a1f" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 옥패 본체 -->
+  <g>
+    <path d="M120 62c30 0 58 10 66 24 6 10 6 22 6 34v90c0 14-8 24-20 28l-52 16-52-16c-12-4-20-14-20-28v-90c0-12 0-24 6-34 8-14 36-24 66-24z" fill="#0b2f22" transform="translate(3 5)" opacity=".55" filter="url(#soft)"/>
+    <path d="M120 62c30 0 58 10 66 24 6 10 6 22 6 34v90c0 14-8 24-20 28l-52 16-52-16c-12-4-20-14-20-28v-90c0-12 0-24 6-34 8-14 36-24 66-24z" fill="url(#jade)" stroke="#0a3324" stroke-width="2"/>
+    <g clip-path="url(#plaque)">
+      <rect x="40" y="60" width="160" height="200" fill="url(#jadeInner)"/>
+      <!-- 옥의 결 -->
+      <g fill="none" stroke="#e9fff4" stroke-opacity=".18" stroke-width="1.2">
+        <path d="M44 120c30 8 50-6 80 2s52 12 76-4"/>
+        <path d="M44 190c26-10 58 6 84-2s44-14 72 2"/>
+      </g>
+      <ellipse cx="88" cy="96" rx="30" ry="12" fill="#ffffff" opacity=".22" transform="rotate(-18 88 96)"/>
+    </g>
+    <!-- 테두리 음각 -->
+    <path d="M120 74c26 0 50 9 56 20 5 8 5 18 5 28v86c0 9-5 16-14 19l-47 14-47-14c-9-3-14-10-14-19v-86c0-10 0-20 5-28 6-11 30-20 56-20z" fill="none" stroke="#0e4a34" stroke-width="2.4" stroke-opacity=".75"/>
+    <path d="M120 74c26 0 50 9 56 20 5 8 5 18 5 28v86c0 9-5 16-14 19l-47 14-47-14c-9-3-14-10-14-19v-86c0-10 0-20 5-28 6-11 30-20 56-20z" fill="none" stroke="#d8ffec" stroke-width=".9" stroke-opacity=".45" transform="translate(.8 .8)"/>
+    <!-- 구름무늬(운문) -->
+    <g fill="none" stroke="#0e4a34" stroke-width="2.2" stroke-linecap="round" stroke-opacity=".8">
+      <path d="M72 104c0-8 10-10 13-4s-3 10-7 7"/><path d="M85 100c6-6 16-2 14 6"/>
+      <path d="M168 104c0-8-10-10-13-4s3 10 7 7"/><path d="M155 100c-6-6-16-2-14 6"/>
+      <path d="M72 214c0 8 10 10 13 4s-3-10-7-7"/><path d="M85 218c6 6 16 2 14-6"/>
+      <path d="M168 214c0 8-10 10-13 4s3-10 7-7"/><path d="M155 218c-6 6-16 2-14-6"/>
+      <path d="M66 140v38M174 140v38" stroke-dasharray="3 5"/>
+    </g>
+    <g fill="none" stroke="#d8ffec" stroke-width=".8" stroke-linecap="round" stroke-opacity=".4" transform="translate(.8 .8)">
+      <path d="M72 104c0-8 10-10 13-4s-3 10-7 7"/><path d="M168 104c0-8-10-10-13-4s3 10 7 7"/>
+      <path d="M72 214c0 8 10 10 13 4s-3-10-7-7"/><path d="M168 214c0 8-10 10-13 4s3-10 7-7"/>
+    </g>
+
+    <!-- 가운데 금 메달: 교차한 극(戟)과 검 -->
+    <circle cx="120" cy="160" r="38" fill="#0b3a29" opacity=".55" transform="translate(1.5 2.5)"/>
+    <circle cx="120" cy="160" r="38" fill="url(#gold)" stroke="#5a3410" stroke-width="2"/>
+    <circle cx="120" cy="160" r="31" fill="#3a1f0c" stroke="#fff2c2" stroke-opacity=".55" stroke-width="1"/>
+    <circle cx="120" cy="160" r="27" fill="none" stroke="#e9b85a" stroke-width="1" stroke-dasharray="1.5 3.5"/>
+    <!-- 극(戟): 세워 그린 뒤 -45° 회전 -->
+    <g transform="rotate(-42 120 160)">
+      <rect x="118.6" y="134" width="2.8" height="54" rx="1.2" fill="#c98a3a" stroke="#3a1f0c" stroke-width=".8"/>
+      <path d="M120 122l4.6 13h-9.2z" fill="#fff2c2" stroke="#5a3410" stroke-width=".9" stroke-linejoin="round"/>
+      <path d="M121.4 139c6-1.5 10.5 1.5 11 6.5-3.6-2.2-7.4-2.4-11-1.4z" fill="#f3d29b" stroke="#5a3410" stroke-width=".9" stroke-linejoin="round"/>
+      <rect x="117" y="135" width="6" height="2.6" rx="1" fill="#c0392b"/>
+      <path d="M120 188l-2 4h4z" fill="#e9b85a"/>
+    </g>
+    <!-- 검(劍): 세워 그린 뒤 +42° 회전 -->
+    <g transform="rotate(42 120 160)">
+      <path d="M120 126l3.2 6v38h-6.4v-38z" fill="#ffffff" stroke="#5a3410" stroke-width=".9" stroke-linejoin="round"/>
+      <path d="M120 131v38" stroke="#b9c6cf" stroke-width="1"/>
+      <path d="M110 170h20l-2.4 3.6h-15.2z" fill="url(#gold)" stroke="#5a3410" stroke-width=".9" stroke-linejoin="round"/>
+      <rect x="117.6" y="173.6" width="4.8" height="10" rx="1.2" fill="#8f1d14" stroke="#3a1f0c" stroke-width=".8"/>
+      <circle cx="120" cy="186.2" r="3" fill="url(#gold)" stroke="#5a3410" stroke-width=".9"/>
+    </g>
+    <circle cx="120" cy="160" r="3.4" fill="#c0392b" stroke="#fff2c2" stroke-width="1"/>
+  </g>
+
+  <!-- 술(수술) -->
+  <path d="M120 244v10" stroke="#a82a1f" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="120" cy="257" r="4.5" fill="url(#gold)" stroke="#4a0d08" stroke-width="1"/>
+  <g stroke-linecap="round" stroke-width="2.2">
+    <path d="M114 262l-4 30" stroke="#8f1d14"/><path d="M117 262l-2 32" stroke="#c0392b"/>
+    <path d="M120 262v34" stroke="#d8402f"/><path d="M123 262l2 32" stroke="#c0392b"/>
+    <path d="M126 262l4 30" stroke="#8f1d14"/>
+  </g>
+  <rect x="112" y="260" width="16" height="5" rx="2" fill="url(#gold)" stroke="#4a0d08" stroke-width="1"/>
+</svg>

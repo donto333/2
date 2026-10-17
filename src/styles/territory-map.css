@@ -1,0 +1,297 @@
+/*
+ * 영토 지도 (src/ui/territory-map.ts)
+ *  - .map-viewport : 정사각형 창. 손가락·마우스 입력을 받는다.
+ *  - .map-world    : 원래 비율(1152×648)의 지도. JS가 transform으로 확대·이동한다.
+ *  - 도시 표식은 --map-inv(=1/배율)로 거꾸로 축소해 화면에서 늘 같은 크기로 보인다.
+ *  - data-lod: far(점+이름) · mid(작은 성) · near(큰 성)
+ */
+
+/* 진입 애니메이션(rise-in)이 transform을 쓰면 브라우저가 이 섹션을 position:fixed의 기준으로 삼아
+   전체 화면 지도·도시 정보 창이 화면이 아니라 섹션 안에 갇힌다. 영토 화면만 진입 애니메이션을 끈다. */
+body .page-section--territory { animation: none !important; transform: none !important; }
+
+/* ── 창 ─────────────────────────────────────────────────── */
+body .map-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-top: 17px;
+  overflow: hidden;
+  border: 1px solid rgba(240, 194, 106, .38);
+  border-radius: 6px;
+  background: #24170e;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  box-shadow: inset 0 0 0 1px rgba(255, 227, 163, .08), inset 0 0 40px rgba(20, 8, 2, .45);
+}
+/* PC: 정사각형이 화면 높이를 넘지 않게 */
+@media (min-width: 761px) {
+  body .territory-map:not(.is-fullscreen) .map-viewport { max-width: min(100%, calc(var(--app-h, 100vh) - 200px)); margin-left: auto; margin-right: auto; }
+}
+body .map-viewport:active { cursor: grabbing; }
+
+/* ── 월드 레이어: main.css의 여러 .map-canvas 높이 규칙을 덮어쓴다 ── */
+body .map-viewport .map-world.map-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1152px;
+  height: 648px;
+  margin: 0;
+  border: 0;
+  transform-origin: 0 0;
+  background-size: 100% 100%;
+  background-position: 0 0;
+  /* 4배 해상도(4608×2592) 지도. 받기 전에는 원래 작은 지도가 밑에 먼저 보인다 */
+  background-image: linear-gradient(180deg, rgba(23,14,9,.12), rgba(23,14,9,.3)), url('/assets/territory/china-strategic-map-hd.webp'), url('/assets/territory/china-strategic-map.webp');
+  background-repeat: no-repeat;
+  --map-inv: 1;
+}
+body .map-viewport .map-world.is-moving { will-change: transform; }
+body .map-viewport .map-world .territory-frontlines line { vector-effect: non-scaling-stroke; stroke-width: 2px; }
+/* 13주(州) 이름표: 실제 위치 중심에 놓고 화면 크기 고정. 가까이 확대하면 도시 이름을 가리지 않게 흐리게 */
+body .map-viewport .map-label--province {
+  position: absolute;
+  z-index: 1;
+  transform: translate(-50%, -50%) scale(var(--map-inv));
+  transform-origin: center;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  color: rgba(255, 228, 168, .9);
+  font: 700 16px/1.1 'Gowun Batang', serif;
+  letter-spacing: .32em;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 1px 2px #000, 0 0 8px rgba(30, 10, 2, .9);
+  transition: opacity .25s;
+}
+body .map-viewport .map-label--province small { font-size: 12px; letter-spacing: .2em; color: rgba(255, 228, 168, .75); }
+body .map-viewport[data-lod='mid'] .map-label--province { opacity: .88; }
+body .map-viewport[data-lod='near'] .map-label--province { opacity: .35; }
+
+/* ── 도시 표식: 화면 크기 고정, 누르기는 창이 받아 가장 가까운 도시를 고른다 ── */
+body .map-viewport .city-marker,
+body .map-viewport .city-marker:hover,
+body .map-viewport .city-marker.is-selected {
+  pointer-events: none;
+  transition: none;
+  transform: translate(-50%, -50%) scale(calc(var(--map-inv) * var(--marker-size, 1)));
+}
+body .map-viewport .city-marker.is-selected { --marker-size: 1.12; z-index: 5; }
+body .map-viewport .city-marker strong { white-space: nowrap; }
+body .map-viewport .city-marker.is-label-hidden strong { visibility: hidden; }
+
+/* far: 성 그림 대신 소속 색 점 */
+body .map-viewport[data-lod='far'] .city-marker { --marker-size: .62; }
+body .map-viewport[data-lod='far'] .city-marker.is-selected { --marker-size: .74; }
+body .map-viewport[data-lod='far'] .city-marker-castle,
+body .map-viewport[data-lod='far'] .city-marker-level { display: none !important; }
+body .map-viewport[data-lod='far'] .city-marker::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0 auto 4px;
+  border-radius: 50%;
+  border: 3px solid #fff3d8;
+  background: var(--marker-color, var(--gold));
+  box-shadow: 0 0 0 2px rgba(24, 10, 4, .75), 0 3px 6px rgba(0, 0, 0, .5);
+}
+body .map-viewport[data-lod='far'] .city-marker strong { font-size: 19px; margin-top: 0; }
+/* 지도의 '공격 가능(칼)' 표시는 모든 확대 단계에서 숨긴다(성 색이 소속을 알려 준다) */
+body .map-viewport .city-marker::after, body .city-marker.is-enemy::after, body .city-marker.is-neutral::after { content: none; display: none; }
+body .map-viewport[data-lod='far'] .city-marker.is-selected::before { box-shadow: 0 0 0 3px var(--gold), 0 0 14px var(--gold); }
+body .map-viewport .city-marker.is-ally { --marker-color: #4fcf98; }
+body .map-viewport .city-marker.is-neutral { --marker-color: #f0c26a; }
+body .map-viewport .city-marker.is-enemy { --marker-color: #e5533f; }
+
+/* mid: 작은 성. 표식 전체를 줄이되 글자는 거꾸로 키워 화면에서 12px 이상 유지 */
+body .map-viewport[data-lod='mid'] .city-marker { --marker-size: .62; }
+body .map-viewport[data-lod='mid'] .city-marker.is-selected { --marker-size: .74; }
+body .map-viewport[data-lod='mid'] .city-marker strong { font-size: 20px; }
+body .map-viewport[data-lod='mid'] .city-marker-level { width: 26px !important; height: 26px !important; font-size: 18px !important; line-height: 26px !important; }
+/* near: 큰 성 */
+body .map-viewport[data-lod='near'] .city-marker { --marker-size: .86; }
+body .map-viewport[data-lod='near'] .city-marker.is-selected { --marker-size: .98; }
+body .map-viewport[data-lod='near'] .city-marker strong { font-size: 15px; }
+
+/* ── 조작 버튼 ───────────────────────────────────────────── */
+body .map-controls {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 10;
+  display: grid;
+  gap: 6px;
+}
+body .map-controls button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--gold-line, rgba(240, 194, 106, .55));
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(64, 30, 16, .92), rgba(36, 16, 9, .92));
+  color: #ffe3a3;
+  font-size: 20px;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 227, 163, .15), 0 4px 10px rgba(0, 0, 0, .35);
+}
+body .map-controls button:disabled { opacity: .4; cursor: default; }
+body .map-controls button:not(:disabled):active { transform: scale(.94); }
+body .map-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 10;
+  max-width: calc(100% - 80px);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(24, 10, 4, .72);
+  color: #f0e3c8;
+  font-size: 12px;
+  pointer-events: none;
+  transition: opacity .4s;
+}
+body .map-hint .hint-mouse { display: none; }
+@media (pointer: fine) {
+  body .map-hint .hint-touch { display: none; }
+  body .map-hint .hint-mouse { display: inline; }
+}
+/* 한 번 지도를 만져 본 뒤에는 안내 문구를 숨긴다 */
+body .map-viewport.is-hint-seen .map-hint { opacity: 0; }
+
+/* ── 전체 화면 ───────────────────────────────────────────── */
+body .territory-map.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  margin: 0;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  background: #1c120b;
+  backdrop-filter: none;
+}
+body .territory-map.is-fullscreen .map-viewport { flex: 1; aspect-ratio: auto; margin-top: 8px; }
+body .territory-map.is-fullscreen .map-legend { margin-top: 8px; }
+body .territory-map.is-fullscreen .mobile-city-selector { display: none; }
+body.map-fullscreen-open { overflow: hidden; }
+/* 지도는 본문 쌓임 층 안에 있어 상단 바·하단 메뉴 위로 올라갈 수 없으므로, 전체 화면 동안 둘을 숨긴다 */
+body.map-fullscreen-open .topbar,
+body.map-fullscreen-open .sidebar,
+body.map-fullscreen-open .ambient-vignette { visibility: hidden; }
+body.map-fullscreen-open .main-content { z-index: 90; }
+
+/* ── 도시 찾기 (검색 + 필터) ─────────────────────────────── */
+body .city-finder { padding: 12px 10px; }
+body .city-finder-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 8px; }
+body .city-finder-head small { color: #e2cfa8; font-size: 12px; }
+body .city-finder-search {
+  width: 100%;
+  box-sizing: border-box;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(240, 194, 106, .4);
+  border-radius: 8px;
+  background: rgba(20, 10, 5, .7);
+  color: #fff3dc;
+  font: inherit;
+  font-size: 15px;
+}
+body .city-finder-search::placeholder { color: #b9a582; }
+body .city-finder-filters { display: flex; gap: 6px; margin: 8px 0; overflow-x: auto; scrollbar-width: none; }
+body .city-filter-chip {
+  flex: none;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(240, 194, 106, .32);
+  border-radius: 999px;
+  background: rgba(36, 18, 10, .7);
+  color: #f0e3c8;
+  font-size: 13px;
+}
+body .city-filter-chip b { margin-left: 3px; color: #ffd59a; font-weight: 700; }
+body .city-filter-chip.is-active { background: linear-gradient(180deg, #dc4d3c, #b8322a); border-color: #f0c26a; color: #fff6e3; }
+body .city-filter-chip.is-active b { color: #fff6e3; }
+body .city-finder-list { display: grid; gap: 4px; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
+body .city-finder-row {
+  display: grid;
+  grid-template-columns: 12px auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid rgba(240, 194, 106, .16);
+  border-radius: 7px;
+  background: rgba(30, 16, 9, .66);
+  color: #f6ead3;
+  text-align: left;
+}
+body .city-finder-row[hidden] { display: none; }
+body .city-finder-row.is-selected { border-color: #f0c26a; background: rgba(110, 40, 22, .55); }
+body .city-finder-row strong { font-size: 15px; }
+body .city-finder-row small { color: #dcc9a4; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body .city-finder-row em { font-style: normal; color: #ffd59a; font-size: 12px; font-weight: 700; }
+body .city-finder-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dot, #f0c26a); box-shadow: 0 0 6px var(--dot, #f0c26a); }
+body .city-finder-row.is-ally { --dot: #4fcf98; }
+body .city-finder-row.is-front { --dot: #ff9b4a; }
+body .city-finder-row.is-enemy { --dot: #e5533f; }
+body .city-finder-row.is-neutral { --dot: #f0c26a; }
+body .city-finder-empty { margin: 10px 2px 0; color: #e2cfa8; font-size: 13px; }
+
+/* ── 도시 정보: PC는 기존 옆 패널, 휴대폰은 아래에서 올라오는 창 ── */
+body .city-sheet-bar { display: none; }
+@media (max-width: 760px) {
+  body .page-section--territory .city-management {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 128px; /* 하단 메뉴 높이 */
+    z-index: 45;
+    max-height: min(62vh, 560px);
+    margin: 0;
+    padding: 6px 16px 18px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 16px 16px 0 0;
+    border: 1px solid rgba(240, 194, 106, .55);
+    border-bottom: 0;
+    background: linear-gradient(180deg, rgba(58, 26, 14, .98), rgba(34, 15, 9, .98));
+    box-shadow: 0 -12px 36px rgba(10, 4, 1, .55);
+    transform: translateY(calc(100% + 140px));
+    transition: transform .28s cubic-bezier(.2, .8, .2, 1);
+    visibility: hidden;
+  }
+  body .page-section--territory.is-sheet-open .city-management { transform: none; visibility: visible; }
+  body .city-sheet-bar {
+    position: sticky;
+    top: -6px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    margin: 0 -16px 4px;
+    background: inherit;
+  }
+  body .city-sheet-grip { width: 42px; height: 5px; border-radius: 3px; background: rgba(240, 194, 106, .55); }
+  body .city-sheet-close {
+    position: absolute;
+    right: 8px;
+    top: 0;
+    width: 44px;
+    height: 32px;
+    border: 0;
+    background: transparent;
+    color: #ffe3a3;
+    font-size: 18px;
+  }
+  body .map-hint { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body .page-section--territory .city-management { transition: none; }
+}

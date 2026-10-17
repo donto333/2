@@ -1,0 +1,75 @@
+
+> cheonharo@0.1.0 test /home/runner/work/2/2
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.2 [39m[90m/home/runner/work/2/2[39m
+
+ [32m✓[39m tests/guild.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 63[2mms[22m[39m
+ [32m✓[39m tests/territory.test.ts [2m([22m[2m23 tests[22m[2m)[22m[32m 106[2mms[22m[39m
+ [32m✓[39m tests/strategy.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 191[2mms[22m[39m
+ [32m✓[39m tests/desktop-login.test.mjs [2m([22m[2m1 test[22m[2m)[22m[32m 117[2mms[22m[39m
+ [32m✓[39m tests/neutral-raid.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 47[2mms[22m[39m
+ [32m✓[39m tests/battle-motion.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 60[2mms[22m[39m
+ [32m✓[39m tests/hard-scenario.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+ [32m✓[39m tests/raid.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 108[2mms[22m[39m
+ [32m✓[39m tests/battle-core.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 297[2mms[22m[39m
+ [32m✓[39m tests/wanderer.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 52[2mms[22m[39m
+ [32m✓[39m tests/research.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+ [32m✓[39m tests/skills.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m tests/confusion.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m tests/equipment-manage.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 45[2mms[22m[39m
+ [32m✓[39m tests/balance-sim.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 539[2mms[22m[39m
+ [32m✓[39m tests/guest-auth.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/auto-setup.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 85[2mms[22m[39m
+ [32m✓[39m tests/squads.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+ [32m✓[39m tests/loop.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/attendance.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m tests/missions.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+ [32m✓[39m tests/duel.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32m✓[39m tests/onboarding.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 980[2mms[22m[39m
+   [32m✓[39m 첫 입장 튜토리얼 [2m(5)[22m
+     [33m[2m✓[22m[39m 무료 10회 모집은 옥패를 쓰지 않고 5등급 무장이 반드시 한 명 이상 나온다[33m 725[2mms[22m[39m
+ [32m✓[39m tests/rules.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/underdog.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 34[2mms[22m[39m
+ [32m✓[39m tests/economy.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 52[2mms[22m[39m
+ [32m✓[39m tests/territory-map.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/grades.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m tests/level-reset.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 56[2mms[22m[39m
+ [32m✓[39m tests/deck-style.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 985[2mms[22m[39m
+   [32m✓[39m 덱 유형 상성(영토전 · 유저 대련) [2m(3)[22m
+     [33m[2m✓[22m[39m 추천 덱은 거의 다 그 유형으로 판정된다[33m 972[2mms[22m[39m
+ [32m✓[39m tests/speed.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/save.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/level-cap.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 34[2mms[22m[39m
+ [32m✓[39m tests/front-line.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 286[2mms[22m[39m
+ [32m✓[39m tests/command-balance.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 297[2mms[22m[39m
+ [32m✓[39m tests/starter-pack.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m tests/formation-advice.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 1569[2mms[22m[39m
+   [32m✓[39m 무장별 추천 덱 [2m(4)[22m
+     [33m[2m✓[22m[39m 무장마다 유형별(연계·버티기·초반·디버프·유틸) 서로 다른 조합 5개, 모두 그 무장을 포함[33m 748[2mms[22m[39m
+     [33m[2m✓[22m[39m 버티기 덱은 가운데(전열)에 수호형을 세운다[33m 521[2mms[22m[39m
+ [32m✓[39m tests/english.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 179[2mms[22m[39m
+ [32m✓[39m tests/scenarios.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/city-routes.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m tests/roster.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/auto-battle.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/battle-effects.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/i18n.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/tianming-riders.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/level.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [32m✓[39m tests/steam.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/shop.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/preview-account.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m tests/weapon-models.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/preview.test.mjs [2m([22m[2m9 tests[22m[2m)[22m[33m 972[2mms[22m[39m
+   [33m[2m✓[22m[39m allows source requests through the supported preview host 127.0.0.1[33m 404[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m51 passed[39m[22m[90m (51)[39m
+[2m      Tests [22m [1m[32m267 passed[39m[22m[90m (267)[39m
+[2m   Start at [22m 20:14:57
+[2m   Duration [22m 6.99s[2m (tests 60%, import 23%, transform 14%, worker 2%)[22m
+
+[2m    Isolate [22m [33m51 workers spawned[39m[2m · ~140ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~2.24s faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+

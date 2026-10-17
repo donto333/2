@@ -1,0 +1,13 @@
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m4173[22m/[39m
+[2m8:15:46 PM[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/trpc/webdev.auth.me?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D[39m
+Error: connect ECONNREFUSED 127.0.0.1:3001
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+[2m8:17:56 PM[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/trpc/game.leaderboard.beginRun[39m
+Error: connect ECONNREFUSED 127.0.0.1:3001
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+[2m8:21:33 PM[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/trpc/webdev.auth.me?input=%7B%22json%22%3Anull%2C%22meta%22%3A%7B%22values%22%3A%5B%22undefined%22%5D%7D%7D[39m
+Error: connect ECONNREFUSED 127.0.0.1:3001
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)
+[2m8:21:35 PM[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/trpc/game.leaderboard.beginRun[39m
+Error: connect ECONNREFUSED 127.0.0.1:3001
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1638:16)

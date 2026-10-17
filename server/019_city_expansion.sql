@@ -1,0 +1,22 @@
+INSERT IGNORE INTO faction_territory_states (cityId, owner, conquestProgress, defense, prosperity, version)
+VALUES
+  ('changan', '중립', 0, 88, 86, 1),
+  ('meixian', '중립', 0, 64, 55, 1),
+  ('anding', '중립', 0, 62, 48, 1),
+  ('jinyang', '중립', 0, 75, 63, 1),
+  ('pingyuan', '중립', 0, 58, 59, 1),
+  ('beihai', '중립', 0, 60, 61, 1),
+  ('langya', '중립', 0, 63, 57, 1),
+  ('xiapi', '중립', 0, 72, 70, 1),
+  ('guangling', '중립', 0, 61, 65, 1),
+  ('lujiang', '중립', 0, 66, 60, 1),
+  ('shangyong', '중립', 0, 70, 52, 1),
+  ('xinye', '중립', 0, 59, 58, 1),
+  ('jiangxia', '중립', 0, 65, 64, 1),
+  ('wuling', '중립', 0, 50, 46, 1),
+  ('badong', '중립', 0, 67, 50, 1),
+  ('jianning', '중립', 0, 54, 42, 1),
+  ('yunnan', '중립', 0, 52, 39, 1),
+  ('jiaozhi', '중립', 0, 48, 44, 1),
+  ('shixing', '중립', 0, 47, 41, 1),
+  ('nanhai', '중립', 0, 45, 43, 1);

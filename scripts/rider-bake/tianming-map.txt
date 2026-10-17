@@ -1,0 +1,16 @@
+533531e3 yuan-shao
+577f6bca lu-xun
+5980ef37 sun-quan
+5aa6b77d guan-yu
+623867f3 liu-bei bcde6513
+65aae50e zhang-liao
+6fdb3d3e zhou-yu
+79f30480 simayi
+81fecded sun-ce
+a91fe399 zhuge-liang
+bcde6513 cao-cao
+be523b09 xiahou-dun
+c7d3386b lu-bu
+eb90d938 dong-zhuo
+ee1194aa zhang-jiao
+e4e000a3 zhao-yun 5980ef37

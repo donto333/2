@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 2,
+  "title": "천하: 패왕의 시대",
+  "description": "옥패의 부름으로 독자적인 무장을 모집하고 강화해, 실시간 3D 전장에서 진형과 장수 스킬로 승리를 만드는 한국어 전술 전략 게임.",
+  "defaultCaptions": {
+    "x": "천하: 패왕의 시대 — 무장을 모집하고 전장을 지배하라.",
+    "facebook": "천하: 패왕의 시대에서 당신의 진형을 시험해 보세요.",
+    "reddit": "A cinematic Korean Three.js tactical strategy prototype inspired by the Three Kingdoms era, with original generals and a summon-and-upgrade loop.",
+    "discord": "천하: 패왕의 시대 — 황혼의 관문에 출정합니다."
+  },
+  "assets": {
+    "og": "assets/share/og.png",
+    "favicon": "assets/share/favicon.png"
+  }
+}

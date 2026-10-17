@@ -1,0 +1,9 @@
+/* 게임에 넣어 둔 한글 글꼴(모든 기기에서 같은 모양). 자주 쓰는 한글 2,350자 + 게임 안 글자만 담은 부분 글꼴.
+   없는 글자(드문 이름 등)는 기기 글꼴로 자연스럽게 넘어간다. 둘 다 무료 상업 사용 가능(OFL). */
+@font-face { font-family: 'Pretendard'; src: url('/fonts/Pretendard.subset.woff2') format('woff2'); font-weight: 45 920; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Gowun Batang'; src: url('/fonts/GowunBatang-Regular.subset.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Gowun Batang'; src: url('/fonts/GowunBatang-Bold.subset.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+/* 프리텐다드에 없는 기호만 채우는 보조 글꼴(같은 이름 · 그 글자 범위만). 기기마다 다른 글꼴로 튀지 않게.
+   Inter(OFL, 프리텐다드의 바탕 글꼴) · DejaVu Sans(자유 라이선스) 일부 */
+@font-face { font-family: 'Pretendard'; src: url('/fonts/PretendardSymbols-Inter.woff') format('woff'); font-weight: 45 920; font-style: normal; font-display: swap; unicode-range: U+2018-2019, U+201C-201D, U+2039-203A, U+AB, U+BB, U+2190, U+F7, U+25CB, U+25CF, U+25A1, U+2248, U+2713; }
+@font-face { font-family: 'Pretendard'; src: url('/fonts/PretendardSymbols-DejaVu.woff') format('woff'); font-weight: 45 920; font-style: normal; font-display: swap; unicode-range: U+2726, U+270E, U+2715, U+2694, U+2692, U+275A, U+2696, U+26A1, U+25CE, U+25C8, U+25A3, U+25A6, U+2301; }
