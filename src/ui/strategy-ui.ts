@@ -2050,10 +2050,11 @@ export class StrategyUI {
         const has = owned.has(id)
         return `<div class="combo-member ${id === anchorId ? 'is-anchor' : ''} ${has ? '' : 'is-unowned'}" style="--accent:${gradeColor(general)}">${this.portrait(general, 'combo-member__portrait')}<div><small>${lanes[lane]}</small><strong>${escapeHtml(general.name)}</strong><span>${general.role} · ${GRADE_META[general.grade].label}</span>${has ? '' : '<em class="combo-edge is-dis">미보유</em>'}</div></div>`
       }).join('')
-      // 인연 · 핵심 스킬 꼬리표: 누르면 설명이 펼쳐진다(인연은 효과 · 필요 인원 · 구성원, 스킬은 효과)
+      // 인연 꼬리표: 누르면 설명이 펼쳐진다(효과 · 필요 인원 · 구성원)
       const nameOf = (id: string) => catalog.find(item => item.id === id)?.name ?? id
       const bondTag = combo.bond ? `<details class="combo-tag combo-tag--bond combo-tag--info"><summary>인연 ‘${escapeHtml(combo.bond.name)}’</summary><div class="combo-tag__pop"><b>인연 ‘${escapeHtml(combo.bond.name)}’</b><p>${escapeHtml(combo.bond.desc)}</p><small>${combo.bond.need}명 이상 함께 출전 · ${combo.bond.members.map(id => escapeHtml(nameOf(id))).join(' · ')}</small></div></details>` : ''
-      const tags = [bondTag, ...combo.keyInfo.map(key => `<details class="combo-tag combo-tag--info"><summary>${escapeHtml(key.label)}</summary><div class="combo-tag__pop"><b>${escapeHtml(key.general)} ‘${escapeHtml(key.skill)}’</b><p>${escapeHtml(key.desc)}</p></div></details>`)].join('')
+      // 꼬리표는 인연만(누르면 효과 · 필요 인원 · 구성원)
+      const tags = bondTag
       const isCurrent = combo.ids.join(',') === current
       const action = isCurrent ? '<span class="combo-current">현재 편성</span>' : missing.length ? `<span class="combo-missing">미보유 ${missing.length}명</span>` : `<button class="mini-action mini-action--deploy" data-action="apply-combo" data-squad="${squad}" data-ids="${combo.ids.join(',')}">${squad > 0 ? `${SQUAD_LABELS[squad]}에 ` : ''}이 덱으로 편성</button>`
       return `<li class="combo-row combo-row--${combo.archetype} ${isCurrent ? 'is-current' : ''}"><div class="combo-type"><b>${meta.label}</b><small>${meta.desc}</small></div><div class="combo-members">${members}</div><div class="combo-side"><div class="combo-tags">${tags}</div>${action}</div></li>`
