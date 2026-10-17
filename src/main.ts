@@ -565,7 +565,7 @@ function siegeMoraleBonus(cityId: string): number {
   return Math.round(50 * Math.max(0, Math.min(1, city.defense / Math.max(1, cityDefenseForLevel(city.level)))))
 }
 
-/** 덱을 저장한 지휘관이 적을 때: 내 덱 전력(장비 포함)에 맞춘 훈련 상대 3팀(쉬움 90% · 보통 100% · 어려움 110%) */
+/** 덱을 저장한 지휘관이 적을 때: 내 덱 전력(장비 포함)에 맞춘 훈련 상대 3팀(쉬움 77% · 보통 90% · 어려움 104%) */
 function dummyDuelOpponents(): DuelOpponent[] {
   return dummyDuelDecks(battleGenerals(), dayKey()).map(dummy => ({ id: dummy.id, displayName: dummy.displayName, score: 0, power: dummy.power, tier: dummy.tier, isDummy: true, note: dummy.note, deck: dummy.deck }))
 }

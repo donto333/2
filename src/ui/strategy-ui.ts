@@ -873,9 +873,12 @@ export class StrategyUI {
     set('[data-bt-phase]', `${snapshot.phaseName}`)
     set('[data-bt-morale-text]', `적 사기 ${snapshot.moraleValue} / ${snapshot.moraleMax}`)
     width('[data-bt-morale]', snapshot.morale)
-    width('[data-bt-threat]', snapshot.threat)
-    set('[data-bt-threat-text]', `${snapshot.threat}`)
-    set('[data-bt-collapse]', `붕괴 ${snapshot.collapses}/2`)
+    // 아군 사기 = 100 − 위협도(계산은 그대로, 화면만 사기로 보여 준다)
+    const allyMorale = Math.max(0, 100 - snapshot.threat)
+    width('[data-bt-threat]', allyMorale)
+    set('[data-bt-threat-text]', `${allyMorale}`)
+    q('.bt-hud-row--threat')?.classList.toggle('is-low', allyMorale <= 30)
+    set('[data-bt-collapse]', `사기 붕괴 ${snapshot.collapses}/2`)
     q('[data-bt-collapse]')?.classList.toggle('is-danger', snapshot.collapses > 0)
     set('[data-bt-combo]', `연계 ${snapshot.combo}`)
     set('[data-bt-pressure]', `적 압박 ×${snapshot.difficultyMultiplier.toFixed(2)}`)
@@ -1005,15 +1008,15 @@ export class StrategyUI {
 
   showBattleResult(result: BattleResult, notice = '', factors: Array<{ label: string; text: string; tone: 'good' | 'bad' | 'neutral' }> = []): void {
     const stars = [1, 2, 3].map(index => `<i class="${index <= result.stars ? 'is-on' : ''}">★</i>`).join('')
-    const reason = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '남은 병력 비율로 판정했습니다', raid: `레이드 종료 · 누적 피해 ${(result.raidDamage ?? 0).toLocaleString('ko-KR')}` }[result.reason]
+    const reason = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: '90초 안에 끝내지 못했습니다', troops: '아군 병력이 전멸했습니다', collapse: '아군 사기가 두 번 무너졌습니다', ratio: '남은 병력 비율로 판정했습니다', raid: `레이드 종료 · 누적 피해 ${(result.raidDamage ?? 0).toLocaleString('ko-KR')}` }[result.reason]
     const rows = [
       ['예고 파훼', `${result.breaks} / ${result.patterns}`],
       ['최대 연계', String(result.maxCombo)],
       ['남은 병력', `${Math.round(result.troopRatio * 100)}%`],
-      ['전열 붕괴', `${result.collapses}회`],
+      ['사기 붕괴', `${result.collapses}회`],
       ['전투 시간', `${Math.round(result.durationMs / 1000)}초`],
     ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join('')
-    const checks = result.won ? `<ul class="result-checks"><li class="is-on">승리</li><li class="${result.troopRatio >= 0.5 ? 'is-on' : ''}">병력 50% 이상</li><li class="${result.collapses === 0 ? 'is-on' : ''}">전열 붕괴 없음</li></ul>` : ''
+    const checks = result.won ? `<ul class="result-checks"><li class="is-on">승리</li><li class="${result.troopRatio >= 0.5 ? 'is-on' : ''}">병력 50% 이상</li><li class="${result.collapses === 0 ? 'is-on' : ''}">사기 붕괴 없음</li></ul>` : ''
     const modal = document.createElement('div')
     modal.className = 'result-modal'
     modal.innerHTML = `<div class="result-card"><span class="eyebrow">작전 결과</span><div class="result-mark">${result.won ? '승리' : '패배'}</div>${result.won ? `<div class="result-stars">${stars}</div>` : ''}<h2>${escapeHtml(reason)}</h2>${checks}<div class="result-grid">${rows}</div>${factors.length ? `<div class="result-factors"><span class="eyebrow">승패 요인</span><ul>${factors.map(item => `<li class="is-${item.tone}"><b>${escapeHtml(item.label)}</b><span>${escapeHtml(item.text)}</span></li>`).join('')}</ul></div>` : ''}${notice ? `<p>${escapeHtml(notice)}</p>` : ''}<div class="result-score"><span>작전 점수</span><strong>${formatNumber(result.score)}</strong></div><button class="action-button action-button--primary" data-action="close-result">확인</button></div>`
@@ -2034,7 +2037,7 @@ export class StrategyUI {
     const tactic = (id: 'guard' | 'feint' | 'charge', icon: string, label: string, note: string) => `<button class="bt-tactic bt-tactic--${id}" title="${label} · ${note}" data-action="battle-tactic" data-tactic="${id}" ${id === 'guard' ? 'data-bt-guard' : ''} disabled><span>${icon}</span><strong>${label}</strong><small>${note}</small><em>${battle?.tacticCosts[id] ?? { guard: 35, feint: 50, charge: 65 }[id]}</em></button>`
     return `<section class="page-section page-section--battle">
 <div class="bt-top">
-<div class="bt-hud glass-card"><div class="bt-hud-row"><span class="bt-phase" data-bt-phase>${battle?.phaseName ?? '1막 · 서전'}</span><b data-bt-morale-text>적 사기 ${battle?.moraleValue ?? 80} / ${battle?.moraleMax ?? 80}</b></div><div class="bt-bar bt-bar--morale"><i data-bt-morale style="width:${battle?.morale ?? 100}%"></i></div><div class="bt-hud-row bt-hud-row--threat"><span>위협도 <b data-bt-threat-text>${battle?.threat ?? 0}</b></span><div class="bt-bar bt-bar--threat"><i data-bt-threat style="width:${battle?.threat ?? 0}%"></i></div><b class="bt-collapse" data-bt-collapse>붕괴 ${battle?.collapses ?? 0}/2</b></div><div class="bt-hud-meta"><span class="bt-mode">${modeLabel}</span>${battle?.mode === 'raid' ? `<span class="bt-raid-damage">누적 피해 <b data-bt-raid>${formatNumber(battle?.raidDamage ?? 0)}</b></span>` : ''}<span data-bt-status>${battle?.status ?? '대기 중'}</span><span class="bt-time" data-bt-time>제한 90초</span><span data-bt-combo>연계 ${battle?.combo ?? 0}</span><span data-bt-pressure>적 압박 ×1.00</span><span data-bt-bond>${escapeHtml(battle?.bond ? `인연 · ${battle.bond}` : '인연 없음')}</span></div></div>
+<div class="bt-hud glass-card"><div class="bt-hud-row"><span class="bt-phase" data-bt-phase>${battle?.phaseName ?? '1막 · 서전'}</span><b data-bt-morale-text>적 사기 ${battle?.moraleValue ?? 80} / ${battle?.moraleMax ?? 80}</b></div><div class="bt-bar bt-bar--morale"><i data-bt-morale style="width:${battle?.morale ?? 100}%"></i></div><div class="bt-hud-row bt-hud-row--threat"><span>아군 사기 <b data-bt-threat-text>${100 - (battle?.threat ?? 0)}</b></span><div class="bt-bar bt-bar--threat bt-bar--ally-morale"><i data-bt-threat style="width:${100 - (battle?.threat ?? 0)}%"></i></div><b class="bt-collapse" data-bt-collapse>사기 붕괴 ${battle?.collapses ?? 0}/2</b></div><div class="bt-hud-meta"><span class="bt-mode">${modeLabel}</span>${battle?.mode === 'raid' ? `<span class="bt-raid-damage">누적 피해 <b data-bt-raid>${formatNumber(battle?.raidDamage ?? 0)}</b></span>` : ''}<span data-bt-status>${battle?.status ?? '대기 중'}</span><span class="bt-time" data-bt-time>제한 90초</span><span data-bt-combo>연계 ${battle?.combo ?? 0}</span><span data-bt-pressure>적 압박 ×1.00</span><span data-bt-bond>${escapeHtml(battle?.bond ? `인연 · ${battle.bond}` : '인연 없음')}</span></div></div>
 <div class="bt-enemies glass-card"><span class="bt-enemies-label">상대 무장</span><div class="bt-enemy-row" data-bt-enemies>${this.enemyHudMarkup(battle?.opponentDeck)}</div></div>
 </div>
 <div class="bt-stage"><div class="bt-paused" data-bt-paused hidden><strong>일시 정지</strong><small>전투 시간과 적의 행동이 멈췄습니다.</small><button class="action-button action-button--primary" data-action="battle-pause">▶ 계속하기</button></div><div class="bt-callout" data-bt-callout><span class="eyebrow">적 전술 예고</span><strong data-bt-pattern>${active ? '다음 예고 대기' : '전투 시작 전'}</strong><div class="bt-lanes"><span data-bt-lane="0">↙ 좌</span><span data-bt-lane="1">↑ 중</span><span data-bt-lane="2">↘ 우</span></div><div class="bt-bar bt-bar--window"><i data-bt-window style="width:0%"></i></div></div><div class="bt-enemy-warn" data-bt-enemy-warn hidden></div><div class="bt-feed"><ul class="bt-log" data-bt-log><li>전투 기록이 여기에 표시됩니다.</li></ul><button class="bt-log-toggle" data-action="battle-log">${this.battleLogOpen ? '접기' : '더 보기'}</button></div></div>
@@ -2246,6 +2249,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '아군 사기 · 대련 훈련 상대', '전투 화면의 위협도를 아군 사기(100에서 시작해 깎이는 막대)로 바꿔 보여 줍니다. 계산은 그대로이며, 0이 되면 사기 붕괴(병력 감소)가 일어나고 두 번이면 패배합니다. 스킬 · 효과 설명도 아군 사기 기준으로 고쳤습니다. 유저 대련의 훈련 상대(더미 덱)는 난이도를 10% 낮췄습니다(내 덱 전력의 77% · 90% · 104%).', '완료', 'jade'],
       ['2026.10.17', '중립 도시 수비 강화 · 무장 관리 편의', '영토 중립 도시 수비대의 평균 레벨이 2배가 되었습니다(도시 단계별 Lv.20~60, 공성 전투의 적도 같은 레벨). 보유 무장에 레벨 초기화 버튼이 생겨 금화 10개로 Lv.1로 되돌리고 레벨에 쓴 은전 · 병서의 80%를 돌려받습니다(성급 · 장비 · 스킬 해금은 유지). 능력치(통솔 · 무력 · 모략 · 속도)를 누르면 설명이, 스킬 상세의 버프 · 디버프를 누르면 효과가 나옵니다. 장비 관리는 무장 선택 → 장비 3칸 → 보유 장비 순으로 간단해졌고, 프리셋 · 세트 능력 · 필터는 접어 두었습니다.', '완료', 'jade'],
       ['2026.10.17', '전투 화면: 스킬 · 효과 표시', '스킬을 쓰면 화면 가운데 띠 대신 그 무장 머리 위에 초상과 스킬 이름이 떠오릅니다(무장이 움직이면 따라감). 버프 · 디버프는 아군 · 적 무장 카드의 이름 옆 아이콘으로 보여 주고, 아이콘에 마우스를 올리면 효과와 남은 시간이 나옵니다. 혼란처럼 한 명에게 걸린 효과는 그 무장에게만 표시됩니다.', '완료', 'jade'],
       ['2026.10.17', '게스트 계정 초기화', '아이디를 정한 게스트 계정에서 설정의 게스트 기록 초기화가 듣지 않던 문제를 고쳤습니다. 이제 서버에 저장된 진행(무장 · 재화 · 튜토리얼 · 출석)까지 지우고 같은 아이디로 처음부터 시작합니다. 회원 계정에는 이 버튼이 보이지 않습니다.', '완료', 'jade'],

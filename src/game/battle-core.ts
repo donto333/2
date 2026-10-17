@@ -176,7 +176,7 @@ export interface CoreConfig {
   autoSkill?: boolean
   /** 기술 연구(강병·지략)의 아군 보정 */
   research?: BattleResearch | null
-  /** 튜토리얼 전투: 적 사기 절반, 예고를 받을 시간 넉넉히, 실수의 대가(위협도·병력 피해) 크게 줄임 */
+  /** 튜토리얼 전투: 적 사기 절반, 예고를 받을 시간 넉넉히, 실수의 대가(아군 사기·병력 피해) 크게 줄임 */
   easy?: boolean
   /** 시나리오 어려움 단계의 특수 규칙 */
   hardRule?: HardRule | null
@@ -649,7 +649,7 @@ export class BattleCore {
     if (save && !this.threatSaveUsed && this.threat >= 80) {
       this.threatSaveUsed = true
       this.threat = Math.max(0, this.threat - (save.def.passive?.value ?? 20))
-      this.log(`${save.general.name} · 공성계 · 위협도 −${save.def.passive?.value ?? 20}`, 'jade')
+      this.log(`${save.general.name} · 공성계 · 아군 사기 +${save.def.passive?.value ?? 20}`, 'jade')
     }
     if (this.threat >= 100) this.collapse()
   }
@@ -667,7 +667,7 @@ export class BattleCore {
     this.threat = BATTLE_RULES.collapseThreatReset
     this.combo = 0
     this.events.push({ kind: 'collapse', count: this.collapses })
-    this.log(this.collapses >= BATTLE_RULES.collapsesToLose ? '전열이 두 번째로 무너졌습니다.' : `전열 붕괴 · 아군 병력 −${Math.round((this.research.collapseLoss ?? BATTLE_RULES.collapseTroopLoss) * 100)}% · 한 번 더 무너지면 패배합니다`, 'ember')
+    this.log(this.collapses >= BATTLE_RULES.collapsesToLose ? '아군 사기가 두 번째로 무너졌습니다.' : `사기 붕괴 · 아군 병력 −${Math.round((this.research.collapseLoss ?? BATTLE_RULES.collapseTroopLoss) * 100)}% · 한 번 더 무너지면 패배합니다`, 'ember')
   }
 
   // ── 적 전술 예고 ─────────────────────────────────
@@ -735,7 +735,7 @@ export class BattleCore {
       this.combo = 0
       this.lastCommandFailed = true
       this.raiseThreat(BATTLE_RULES.threatWrong, 'wrong')
-      this.log(`${open.def.label}에 잘못 대응 · 위협도 ${Math.round(this.threat)}`, 'ember')
+      this.log(`${open.def.label}에 잘못 대응 · 아군 사기 ${Math.round(100 - this.threat)}`, 'ember')
     }
   }
 
@@ -751,7 +751,7 @@ export class BattleCore {
     const lanes = open.def.kind === 'guard' ? [1, 1] : open.def.lanes
     lanes.forEach(lane => { const target = this.laneTarget(this.players, lane); if (target) this.dealDamage(target, BATTLE_RULES.noAnswerTroopDamage * (1 + this.phase * 0.5), open.def.label, null) })
     this.raiseThreat(BATTLE_RULES.threatNoAnswer, 'none')
-    this.log(`${open.def.label}에 대응하지 못했습니다 · 위협도 ${Math.round(this.threat)}`, 'ember')
+    this.log(`${open.def.label}에 대응하지 못했습니다 · 아군 사기 ${Math.round(100 - this.threat)}`, 'ember')
   }
 
   /** 무장 버튼(레인) 입력: 예고 하나에 첫 입력만 판정한다. */
@@ -783,7 +783,7 @@ export class BattleCore {
     if (tactic === 'guard') {
       this.guardTimer = BATTLE_RULES.guardDuration
       this.threat = Math.max(0, this.threat - 25)
-      this.log('철벽 태세 · 4.5초 동안 위협도 상승과 적장 스킬 피해를 줄입니다', 'jade')
+      this.log('철벽 태세 · 4.5초 동안 아군 사기 하락과 적장 스킬 피해를 줄입니다', 'jade')
       if (this.pattern && !this.pattern.judged && this.pattern.def.kind === 'guard') this.resolvePattern(true, 1, '철벽 태세')
       return true
     }
@@ -992,8 +992,8 @@ export class BattleCore {
         return count ? [`상태이상 ${count}개 해제`] : []
       }
       case 'gauge': this.gauge = Math.min(100, this.gauge + effect.n); return [`게이지 +${effect.n}`]
-      case 'threat': this.threat = Math.max(0, this.threat + effect.n); return [`위협도 ${effect.n}`]
-      case 'condThreat': if (this.lastCommandFailed) { this.threat = Math.max(0, this.threat + effect.n); return [`위협도 ${effect.n}`] } return []
+      case 'threat': this.threat = Math.max(0, this.threat + effect.n); return [`아군 사기 ${effect.n > 0 ? '−' : '+'}${Math.abs(effect.n)}`]
+      case 'condThreat': if (this.lastCommandFailed) { this.threat = Math.max(0, this.threat + effect.n); return [`아군 사기 ${effect.n > 0 ? '−' : '+'}${Math.abs(effect.n)}`] } return []
       case 'selfCost': unit.troops = Math.max(1, Math.round(unit.troops - unit.maxTroops * effect.pct / 100)); return [`자기 병력 −${effect.pct}%`]
       case 'allyCd': {
         const others = this.players.filter(other => other !== unit && other.troops > 0 && (effect.scope === 'all' || other.general.role === '기병'))
@@ -1155,7 +1155,7 @@ export class BattleCore {
     const playerTroops = this.players.reduce((sum, unit) => sum + unit.troops, 0)
     const maxTroops = Math.max(1, this.players.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const troopRatio = playerTroops / maxTroops
-    // 별: 승리 1 + 병력 60% 이상 1 + (전열 붕괴 없음 그리고 예고 파훼율 60% 이상) 1
+    // 별: 승리 1 + 병력 60% 이상 1 + (사기 붕괴 없음 그리고 예고 파훼율 60% 이상) 1
     const breakRate = this.patternsSeen ? this.breaks / this.patternsSeen : 1
     const stars = won ? 1 + (troopRatio >= 0.6 ? 1 : 0) + (this.collapses === 0 && breakRate >= 0.6 ? 1 : 0) : 0
     // 랭킹 점수는 시즌이 바뀔 때까지 기존 공식을 유지한다(병력은 2배가 되었으므로 절반으로 환산).
@@ -1163,7 +1163,7 @@ export class BattleCore {
       + this.players.reduce((sum, unit) => sum + unit.general.level * 41 + unit.general.leadership + unit.general.martial + unit.general.stratagem + unit.general.speed, 0)))
     this.result = { won, reason, stars, score, durationMs: Math.round(this.t * 1000), breaks: this.breaks, patterns: this.patternsSeen, maxCombo: this.maxCombo, troopRatio, collapses: this.collapses, ...(this.mode === 'raid' ? { raidDamage: Math.round(this.raidDamage) } : {}) }
     this.events.push({ kind: 'end', result: this.result })
-    const why = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: `${this.timeLimit}초 안에 끝내지 못했습니다`, troops: '아군 병력이 전멸했습니다', collapse: '전열이 두 번 무너졌습니다', ratio: '제한 시간 종료 · 남은 병력 비율로 판정했습니다', raid: `레이드 종료 · 누적 피해 ${Math.round(this.raidDamage).toLocaleString('ko-KR')}` }[reason]
+    const why = { morale: '3막 적 사기를 무너뜨렸습니다', wipe: '적 병력을 전멸시켰습니다', timeout: `${this.timeLimit}초 안에 끝내지 못했습니다`, troops: '아군 병력이 전멸했습니다', collapse: '아군 사기가 두 번 무너졌습니다', ratio: '제한 시간 종료 · 남은 병력 비율로 판정했습니다', raid: `레이드 종료 · 누적 피해 ${Math.round(this.raidDamage).toLocaleString('ko-KR')}` }[reason]
     this.log(`${won ? '전투 승리' : '전투 패배'} · ${why}${won ? ` · 별 ${stars}개` : ''}`, won ? 'jade' : 'ember')
   }
 

@@ -10,7 +10,7 @@ const STORE_KEY = 'cheonharo.balance.config.v1'
 const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] ?? ch))
 const pct = (value: number) => `${Math.round(value * 100)}%`
 const MODE_LABEL = { normal: '일반 전투', scenario: '시나리오', siege: '공성전', duel: '유저 대련', raid: '레이드' } as const
-const REASON_LABEL: Record<string, string> = { morale: '3막 돌파(승)', wipe: '적 전멸(승)', ratio: '병력 비율 판정', timeout: '90초 초과(패)', troops: '아군 전멸(패)', collapse: '전열 붕괴 2회(패)' }
+const REASON_LABEL: Record<string, string> = { morale: '3막 돌파(승)', wipe: '적 전멸(승)', ratio: '병력 비율 판정', timeout: '90초 초과(패)', troops: '아군 전멸(패)', collapse: '사기 붕괴 2회(패)' }
 const ACCURACY = [[0, '무조작'], [0.5, '예고 50% 대응'], [0.7, '예고 70% 대응'], [0.9, '예고 90% 대응'], [1, '예고 100% 대응']] as const
 
 function loadConfig(): BalanceConfig {
@@ -85,7 +85,7 @@ export function mountBalance(root: HTMLElement, access: AccessState): void {
     const starBar = s.stars.map((count, star) => count ? `<i class="bl-star-${star}" style="flex:${count}" title="별 ${star}개 ${count}판">${star ? '★'.repeat(star) : '패'} ${Math.round(count / s.runs * 100)}%</i>` : '').join('')
     const reasons = Object.entries(s.reasons).sort((left, right) => right[1] - left[1]).map(([reason, count]) => `<li><span>${REASON_LABEL[reason] ?? reason}</span><b>${Math.round(count / s.runs * 100)}%</b></li>`).join('')
     const laneRow = (label: string, lanes: BatchSummary['ally']) => lanes.map((lane, index) => `<tr><td>${label} ${['좌', '중', '우'][index]}</td><td>${esc(lane.name)}</td><td>${lane.casts.toFixed(1)}회</td><td>${lane.morale.toFixed(1)}</td><td>${pct(lane.troopsLeft)}</td></tr>`).join('')
-    return `<div class="bl-tiles">${tile('아군 승률', pct(s.winRate), `${s.wins} / ${s.runs}판`)}${tile('평균 전투 시간', `${s.avgTime.toFixed(1)}초`, s.wins ? `승리 시 ${s.avgTimeWin.toFixed(1)}초` : '')}${tile('남은 아군 병력', pct(s.avgTroopRatio))}${tile('예고 파훼율', pct(s.avgBreakRate))}${tile('평균 최대 연계', s.avgMaxCombo.toFixed(1))}${tile('평균 전열 붕괴', `${s.avgCollapses.toFixed(2)}회`)}</div>
+    return `<div class="bl-tiles">${tile('아군 승률', pct(s.winRate), `${s.wins} / ${s.runs}판`)}${tile('평균 전투 시간', `${s.avgTime.toFixed(1)}초`, s.wins ? `승리 시 ${s.avgTimeWin.toFixed(1)}초` : '')}${tile('남은 아군 병력', pct(s.avgTroopRatio))}${tile('예고 파훼율', pct(s.avgBreakRate))}${tile('평균 최대 연계', s.avgMaxCombo.toFixed(1))}${tile('평균 사기 붕괴', `${s.avgCollapses.toFixed(2)}회`)}</div>
       <div class="bl-starbar">${starBar}</div>
       <div class="bl-split"><div><h3>끝난 이유</h3><ul class="bl-reasons">${reasons}</ul></div><div><h3>무장별 (한 판 평균)</h3><table class="bl-table"><thead><tr><th>자리</th><th>무장</th><th>스킬</th><th>사기 피해</th><th>남은 병력</th></tr></thead><tbody>${laneRow('아군', s.ally)}${laneRow('적군', s.enemy)}</tbody></table><p class="bl-note">적군의 스킬은 사기 대신 병력 피해·방진·상태이상으로 작동해 사기 피해가 0으로 보입니다.</p></div></div>`
   }

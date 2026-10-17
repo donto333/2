@@ -2174,3 +2174,9 @@ html body .bt-unit-main .bt-name-row { flex-wrap: wrap; row-gap: 2px; }
 }
 html body .equip-picker__head .equipment-auto { flex: none; width: auto; }
 .equip-picker__others { padding: 7px 10px; border-radius: 8px; }
+
+/* 아군 사기(= 100 − 위협도): 높을수록 좋다. 30 이하면 붉게 깜빡인다 */
+html body .bt-bar--ally-morale > i { background: linear-gradient(90deg, #3fb58a, #8fe3b0); transition: width .25s ease; }
+html body .bt-hud-row--threat.is-low .bt-bar--ally-morale > i { background: linear-gradient(90deg, #e3542f, #f0a04a); animation: ally-morale-low 1s ease-in-out infinite; }
+html body .bt-hud-row--threat.is-low > span b { color: #ff8a6a; }
+@keyframes ally-morale-low { 50% { opacity: .55; } }

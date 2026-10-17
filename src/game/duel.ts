@@ -5,10 +5,11 @@ import { GENERAL_SKILLS } from './skills'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
 
 export interface DummyTier { id: string; name: string; label: string; ratio: number; tier: DuelTier }
+// 2026.10.17: 훈련 상대 난이도 10% 하향(내 덱 전력의 77% · 90% · 104%)
 export const DUMMY_TIERS: DummyTier[] = [
-  { id: 'dummy-iron-gate', name: '철벽 관문 수비대', label: '쉬움', ratio: 0.85, tier: 'easy' },
-  { id: 'dummy-jade-banner', name: '청람 진형 부대', label: '보통', ratio: 1, tier: 'normal' },
-  { id: 'dummy-wind-tactician', name: '질풍 책사단', label: '어려움', ratio: 1.15, tier: 'hard' },
+  { id: 'dummy-iron-gate', name: '철벽 관문 수비대', label: '쉬움', ratio: 0.77, tier: 'easy' },
+  { id: 'dummy-jade-banner', name: '청람 진형 부대', label: '보통', ratio: 0.9, tier: 'normal' },
+  { id: 'dummy-wind-tactician', name: '질풍 책사단', label: '어려움', ratio: 1.04, tier: 'hard' },
 ]
 
 const hash = (text: string) => [...text].reduce((sum, character) => (sum * 31 + character.charCodeAt(0)) >>> 0, 7)
@@ -45,7 +46,7 @@ function fitDeck(trio: General[], target: number, stars: number): { deck: Genera
 export interface DummyOpponent { id: string; displayName: string; note: string; power: number; tier: DuelTier; deck: General[] }
 
 /**
- * 내 덱 전력에 맞춘 훈련 상대 3팀(쉬움 85% · 보통 100% · 어려움 115%).
+ * 내 덱 전력에 맞춘 훈련 상대 3팀(쉬움 77% · 보통 90% · 어려움 104%).
  * dayKey가 바뀌면 상대 무장 구성이 바뀐다.
  */
 export function dummyDuelDecks(myDeck: General[], dayKey = ''): DummyOpponent[] {

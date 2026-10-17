@@ -8,7 +8,7 @@ export type ResearchBranch = '부국' | '강병' | '지략' | '제패' | '인재
 
 export const RESEARCH_BRANCHES: Array<{ id: ResearchBranch; prefix: string; hint: string; resource: ResourceKey }> = [
   { id: '부국', prefix: 'econ', hint: '내정 수확·건물·수확 주기', resource: 'grain' },
-  { id: '강병', prefix: 'army', hint: '전투 병력·피해·전열 붕괴', resource: 'iron' },
+  { id: '강병', prefix: 'army', hint: '전투 병력·피해·사기 붕괴', resource: 'iron' },
   { id: '지략', prefix: 'strat', hint: '예고 대응·스킬·전술 명령', resource: 'silver' },
   { id: '제패', prefix: 'realm', hint: '공성·수비대·세력전', resource: 'wood' },
   { id: '인재', prefix: 'talent', hint: '병서·모집·강화·장비', resource: 'silver' },
@@ -37,12 +37,12 @@ const DEFS: Record<ResearchBranch, Def[]> = {
     ['army-3a', 3, 'a', '철기 돌격', '돌격형 스킬 사기 피해 +10%'],
     ['army-3b', 3, 'b', '방패 진형', '아군이 받는 병력 피해 −10%'],
     ['army-4', 4, '', '군량 보급', '전투 시작 전술 게이지 +20'],
-    ['army-5', 5, '', '정예 징집', '전열 붕괴 때 병력 손실 20% → 12%'],
+    ['army-5', 5, '', '정예 징집', '사기 붕괴 때 병력 손실 20% → 12%'],
     ['army-6a', 6, 'a', '패왕의 군세', '3막 적 사기 최대치 −10%'],
-    ['army-6b', 6, 'b', '불패 진형', '전투마다 첫 전열 붕괴 1회를 막아냄'],
+    ['army-6b', 6, 'b', '불패 진형', '전투마다 첫 사기 붕괴 1회를 막아냄'],
   ],
   지략: [
-    ['strat-1', 1, '', '손자병법 주해', '예고 대응에 성공하면 위협도 추가 −4'],
+    ['strat-1', 1, '', '손자병법 주해', '예고 대응에 성공하면 아군 사기 추가 +4'],
     ['strat-2', 2, '', '천문 관측', '적 전술 예고 대응 시간 +0.3초'],
     ['strat-3a', 3, 'a', '팔진 연구', '계략·통솔형 스킬 쿨다운 −10%'],
     ['strat-3b', 3, 'b', '화공 연구', '화계로 깎이는 적 사기 +25%'],

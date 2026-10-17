@@ -21,7 +21,7 @@ describe('유저 대련 매칭', () => {
       const dummies = dummyDuelDecks(mine, '2026-10-14')
       expect(dummies).toHaveLength(3)
       dummies.forEach((dummy, index) => {
-        const target = power * [0.85, 1, 1.15][index]
+        const target = power * [0.77, 0.9, 1.04][index]
         expect(Math.abs(dummy.power - target) / target).toBeLessThan(0.08)
         expect(GENERAL_SKILLS[dummy.deck[1].id].type).toBe('수호')
       })

@@ -290,7 +290,7 @@ export class BattleCoach {
       return
     }
     if (has('warning') && !has('answered') && !pattern && performance.now() - this.answeredAt > 900) {
-      this.open('answered', { target: '.bt-hud', title: '막아 냈습니다', body: '경고를 막으면 연계가 쌓이고 적 사기가 크게 깎입니다. 놓치면 위협도가 오르고, 위협도가 가득 차 전열이 두 번 무너지면 패배합니다.' })
+      this.open('answered', { target: '.bt-hud', title: '막아 냈습니다', body: '경고를 막으면 연계가 쌓이고 적 사기가 크게 깎입니다. 놓치면 아군 사기가 떨어지고, 아군 사기가 0이 되는 사기 붕괴가 두 번 일어나면 패배합니다.' })
       return
     }
     if (!has('pincer') && pattern?.kind === 'pincer') {
@@ -366,9 +366,9 @@ const GUIDE_CARDS: Array<{ title: string; body: string; art: string }> = [
       <path d="M120 52 L70 88" class="ga-arrow"/>`),
   },
   {
-    title: '놓치면 위협도가 오릅니다',
-    body: '경고를 막으면 연계가 쌓여 적 사기가 크게 깎입니다. 놓치면 위협도가 오르고, 가득 차면 전열이 무너집니다. 두 번 무너지면 패배합니다.',
-    art: svg(`<text x="20" y="34" class="ga-t">위협도</text><rect x="20" y="44" width="280" height="14" rx="3" class="ga-track"/><rect x="20" y="44" width="230" height="14" rx="3" class="ga-amber"/>
+    title: '놓치면 아군 사기가 떨어집니다',
+    body: '경고를 막으면 연계가 쌓여 적 사기가 크게 깎입니다. 놓치면 아군 사기가 떨어지고, 0이 되면 사기가 무너집니다. 두 번 무너지면 패배합니다.',
+    art: svg(`<text x="20" y="34" class="ga-t">아군 사기</text><rect x="20" y="44" width="280" height="14" rx="3" class="ga-track"/><rect x="20" y="44" width="50" height="14" rx="3" class="ga-amber"/>
       <g transform="translate(40,84)"><rect width="110" height="44" rx="6" class="ga-box"/><text x="55" y="28" text-anchor="middle" class="ga-n">붕괴 1/2</text></g>
       <g transform="translate(170,84)"><rect width="110" height="44" rx="6" class="ga-hit"/><text x="55" y="28" text-anchor="middle" class="ga-n">연계 +1</text></g>`),
   },
