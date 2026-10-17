@@ -52,6 +52,7 @@ import {
   upgrade,
   upgradeBuilding,
   applyAttendanceReward,
+  claimStarterPack,
   resetGeneralLevel,
   dummyGarrisonLevelForCityLevel,
   claimLocalAttendance,
@@ -1576,6 +1577,14 @@ const ui = new StrategyUI(root, {
     ui.render(state)
     ui.notify(result.message, result.ok ? 'jade' : 'ember')
     if (result.ok) playSfx('coin')
+  },
+  onStarterPack: id => {
+    const result = claimStarterPack(state, id)
+    if (result.ok) { recordPurchase(result.message); arena.setGenerals(battleGenerals()) }
+    ui.render(state)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (result.ok) playSfx(result.general ? 'unlock' : 'coin')
+    if (result.ok) queueAccountSave(true)
   },
   onCashShopPurchase: productId => {
     const result = purchaseResourcePackage(state, productId)

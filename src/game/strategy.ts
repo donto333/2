@@ -2214,12 +2214,7 @@ export function applyAttendanceReward(state: StrategyState, day: number, include
   const missions = state.missions
   let general: General | null = null
   if (reward.general) general = grantGeneral(state, reward.general)
-  if (reward.randomLegend) {
-    const legends = LIBRARY.filter(item => item.grade === 5)
-    const fresh = legends.filter(item => !findGeneral(state, item.id))
-    const pool = fresh.length ? fresh : legends
-    general = grantGeneral(state, pool[Math.floor(Math.random() * pool.length)].id)
-  }
+  if (reward.randomLegend) general = grantRandomLegend(state)
   if (missions) {
     if (reward.freeRecruits) missions.freeRecruits = (missions.freeRecruits ?? 0) + reward.freeRecruits
     if (reward.freeDraws) missions.freeDraws = (missions.freeDraws ?? 0) + reward.freeDraws
@@ -2235,6 +2230,52 @@ export function applyAttendanceReward(state: StrategyState, day: number, include
     state.mythicStones += reward.stones ?? 0
   }
   return { day, label: general && reward.randomLegend ? `천명 무장 ${general.name} 획득` : reward.label, general }
+}
+
+/** 천명(5등급) 무장 1명 무작위(없는 무장 먼저) */
+export function grantRandomLegend(state: StrategyState): General | null {
+  const legends = LIBRARY.filter(item => item.grade === 5)
+  const fresh = legends.filter(item => !findGeneral(state, item.id))
+  const pool = fresh.length ? fresh : legends
+  return grantGeneral(state, pool[Math.floor(Math.random() * pool.length)].id)
+}
+
+// ── 신규유저 패키지(상점 > 패키지): 계정당 1회 ─────────────────────────
+export interface StarterPack { id: string; name: string; description: string; priceKRW: number; randomLegend?: boolean; freeRecruits?: number; freeDraws?: number; resources?: number; manuals?: number }
+export const STARTER_PACKS: StarterPack[] = [
+  { id: 'starter-1', name: '신규유저 패키지 1', description: '천명(5등급) 무장 1명 무작위', priceKRW: 4900, randomLegend: true },
+  { id: 'starter-2', name: '신규유저 패키지 2', description: '무장 뽑기 50회', priceKRW: 9900, freeRecruits: 50 },
+  { id: 'starter-3', name: '신규유저 패키지 3', description: '장비 뽑기 50회', priceKRW: 9900, freeDraws: 50 },
+  { id: 'starter-4', name: '신규유저 패키지 4', description: '식량 · 목재 · 철 · 은전 각 100,000 + 병서 500', priceKRW: 9900, resources: 100000, manuals: 500 },
+]
+/** 정식 출시 뒤 실제 결제가 붙으면 true로 바꾼다(그 전까지 출시 후 구매는 잠김) */
+export const STARTER_PACK_PAYMENT_ENABLED = false
+
+export function starterPackBought(state: StrategyState, id: string): boolean {
+  return Boolean(state.missions?.starterPacks?.includes(id))
+}
+
+/** 신규유저 패키지 받기: 정식 출시 전에는 누구나 무료로 1회, 출시 후에는 결제(연동 전까지 잠김) */
+export function claimStarterPack(state: StrategyState, id: string, launched = isLaunched()): { ok: boolean; message: string; general?: General | null } {
+  const pack = STARTER_PACKS.find(item => item.id === id)
+  if (!pack) return { ok: false, message: '패키지를 찾을 수 없습니다.' }
+  const missions = state.missions
+  if (!missions) return { ok: false, message: '계정 정보를 불러오는 중입니다. 잠시 뒤 다시 시도하십시오.' }
+  if (starterPackBought(state, id)) return { ok: false, message: `${pack.name}는 계정당 한 번만 살 수 있습니다.` }
+  if (launched && !STARTER_PACK_PAYMENT_ENABLED) return { ok: false, message: '결제는 준비 중입니다. 잠시 뒤 다시 시도하십시오.' }
+  missions.starterPacks = [...(missions.starterPacks ?? []), id]
+  let general: General | null = null
+  if (pack.randomLegend) general = grantRandomLegend(state)
+  if (pack.freeRecruits) missions.freeRecruits = (missions.freeRecruits ?? 0) + pack.freeRecruits
+  if (pack.freeDraws) missions.freeDraws = (missions.freeDraws ?? 0) + pack.freeDraws
+  if (pack.resources) {
+    state.resources = { ...state.resources, grain: state.resources.grain + pack.resources, wood: state.resources.wood + pack.resources, iron: state.resources.iron + pack.resources }
+    state.silver += pack.resources
+    state.resources.silver = state.silver
+  }
+  if (pack.manuals) state.manuals += pack.manuals
+  state.lastNotice = `${pack.name} 지급 완료 · ${general ? `천명 무장 ${general.name} 획득` : pack.description}${launched ? '' : ' (정식 출시 전 무료)'}`
+  return { ok: true, message: state.lastNotice, general }
 }
 
 /** 게스트(서버 없음): 이 기기에서 오늘 출석을 처리한다 */

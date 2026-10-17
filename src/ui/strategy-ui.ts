@@ -1,4 +1,4 @@
-import { OFFICIAL_LAUNCH } from '../../server/launch.mjs'
+import { OFFICIAL_LAUNCH, isLaunched } from '../../server/launch.mjs'
 import { SQUAD_LABELS, squadIds, squadOf, squadPower } from '../game/squads'
 import { raidBossDeck, raidBossFor } from '../game/raid'
 import { RAID_REWARDS, raidWeekKey } from '../../server/raid.mjs'
@@ -8,7 +8,7 @@ import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResou
 import { effectsSetting, muteSetting, musicSetting, qualitySetting, setEffectsSetting, setMusicSetting, setMuteSetting, setQualitySetting, setSfxSetting, sfxSetting, type EffectsSetting, type QualitySetting, type SoundLevel } from '../game/settings'
 import { sound } from '../engine/sound'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
-import { LEVEL_RESET_GOLD, levelResetRefund, growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
+import { STARTER_PACKS, starterPackBought, type StarterPack, LEVEL_RESET_GOLD, levelResetRefund, growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, UnitEffectChip } from '../game/arena'
 import { ATTENDANCE_REWARDS, type AttendanceReward } from '../../server/attendance.mjs'
 import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
@@ -313,6 +313,8 @@ export interface StrategyUiCallbacks {
   onStore: () => void
   onShopPurchase: (equipmentId: string) => void
   onCashShopPurchase: (productId: string) => void
+  /** 신규유저 패키지(계정당 1회) */
+  onStarterPack: (id: string) => void
   onHonorShopPurchase: (packageId: string) => void
   onGoldPurchase: (packageId: string) => void
   onAdminAction: (action: string) => void
@@ -391,7 +393,7 @@ export class StrategyUI {
   private equipmentIndex = new Map<string, Equipment>()
   private equipmentSortCache: { key: string; items: Equipment[] } | null = null
   private readonly equipmentRowHeight = 168
-  private shopTab: 'gold' | 'resources' | 'mythic' = 'resources'
+  private shopTab: 'gold' | 'resources' | 'mythic' | 'packages' = 'resources'
   /** 튜토리얼: 10회 모집을 무료로 보여 준다 */
   private freeRecruit = false
   private territorySyncText = '영토 정보 확인 전'
@@ -2160,9 +2162,10 @@ export class StrategyUI {
       return `<button class="shop-buy ${bonus >= 0.4 ? 'is-best' : ''}" data-action="${action}" ${idAttr} data-cost="${item.goldCost}" data-label="${escapeHtml(`${nameOf(item.resource)} +${formatNumber(item.amount)}`)}" ${short > 0 ? 'disabled' : ''}><b>${label}</b><span>+${formatNumber(item.amount)}</span>${bonus >= 0.05 ? `<em>+${Math.round(bonus * 100)}% 이득</em>` : '<em class="is-plain">기본</em>'}${short > 0 ? `<small>금화 ${short}개 부족</small>` : ''}</button>`
     }
     const balances = `<div class="shop-balances shop-balances--strip glass-card"><span>${icon('gold', 'gi--inline')} 금화 <b>${formatNumber(state.gold)}</b></span><span>${icon('honor', 'gi--inline')} 옥패 <b>${formatNumber(state.honor)}</b></span><span>${icon('mythic', 'gi--inline')} 신화 조각 <b>${state.mythicFragments}</b></span><span>낙양 강화석 <b>${state.mythicStones}</b></span></div>`
-    const tabs = `<div class="shop-tabs shop-tabs--row" role="tablist"><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">자원·옥패</button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비</button><button class="shop-tab ${this.shopTab === 'gold' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="gold">금화 충전</button></div>`
+    const tabs = `<div class="shop-tabs shop-tabs--row" role="tablist"><button class="shop-tab ${this.shopTab === 'packages' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="packages">패키지${STARTER_PACKS.some(pack => !starterPackBought(state, pack.id)) ? '<i class="shop-tab__dot"></i>' : ''}</button><button class="shop-tab ${this.shopTab === 'resources' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="resources">자원·옥패</button><button class="shop-tab ${this.shopTab === 'mythic' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="mythic">신화 장비</button><button class="shop-tab ${this.shopTab === 'gold' ? 'is-active' : ''}" data-action="shop-tab" data-shop-tab="gold">금화 충전</button></div>`
     let body = ''
-    if (this.shopTab === 'gold') {
+    if (this.shopTab === 'packages') body = this.starterPackSection(state)
+    else if (this.shopTab === 'gold') {
       if (GOLD_PURCHASE_ENABLED) body = `<div class="shop-grid">${GOLD_PACKAGES.map(goldPackage => `<article class="shop-item shop-item--gold glass-card"><div class="shop-item-icon shop-item-icon--gold">${icon('gold')}</div><div class="shop-item-copy"><span class="pill pill--mythic">금화 충전</span><h2>${escapeHtml(goldPackage.name)}</h2><small>금화 +${goldPackage.gold}개 · 1개당 1,500원</small></div><button class="action-button action-button--primary" data-action="gold-purchase" data-package-id="${goldPackage.id}">₩ ${goldPackage.priceKRW.toLocaleString(locale())} · 충전</button></article>`).join('')}</div>`
       else {
         const gotToday = state.prelaunchGoldDayKey === dayKey()
@@ -2192,8 +2195,27 @@ export class StrategyUI {
       const cards = MYTHIC_SHOP_EQUIPMENT.map(item => { const specialty = equipmentSpecialty(item); return `<article class="shop-item shop-item--${item.set} glass-card"><div class="shop-item-icon"><img class="equipment-image--mythic" src="${equipmentImage(item.type)}" alt="${EQUIPMENT_TYPE_META[item.type].label}" /></div><div class="shop-item-copy"><span class="pill pill--mythic">신화 · ${EQUIPMENT_TYPE_META[item.type].label}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.skillDescription)}</p><small>${escapeHtml(EQUIPMENT_SET_META[item.set].label)} · ${statLabels[item.mainStat]} +${item.baseValue} · ${escapeHtml(item.skillName)}</small>${specialty ? `<strong class="shop-specialty">특기 · ${escapeHtml(specialty.label)} · ${escapeHtml(specialty.description)}</strong>` : ''}${preview(item)}<span class="shop-progress"><i style="width:${progress * 100}%"></i><em>조각 ${Math.min(fragments, MYTHIC_FRAGMENT_COST)}/${MYTHIC_FRAGMENT_COST}</em></span></div><button class="action-button action-button--primary" data-action="shop-purchase" data-equipment-id="${item.id}" data-cost-fragments="${MYTHIC_FRAGMENT_COST}" data-label="${escapeHtml(item.name)}" ${fragments < MYTHIC_FRAGMENT_COST ? 'disabled' : ''}>${fragments < MYTHIC_FRAGMENT_COST ? `조각 ${MYTHIC_FRAGMENT_COST - fragments}개 더 필요` : `조각 ${MYTHIC_FRAGMENT_COST}개로 교환`}</button></article>` }).join('')
       body = `<div class="glass-card shop-mythic-guide"><div class="shop-mythic-guide__bar"><span>신화 조각 <b>${fragments}</b> / ${MYTHIC_FRAGMENT_COST}</span><i><b style="width:${progress * 100}%"></b></i></div><p>유저 대련 승리 = 조각 쉬움 1 · 보통 2 · 어려움 3개 · 하루 5회 · 오늘 남은 대련 <b>${duelsLeft}회</b></p><p class="shop-mythic-guide__stone">신화장비는 낙양 강화석으로만 강화합니다(낙양 점령 1회당 1개 · 보유 ${state.mythicStones}개).</p><button class="action-button action-button--outline" data-action="section" data-section="duel">유저 대련 하러 가기 →</button></div><div class="shop-grid">${cards}</div>${this.purchaseLogCard()}`
     }
-    const description = this.shopTab === 'gold' ? '금화 충전 안내' : this.shopTab === 'resources' ? '금화로 자원과 옥패를 바꿉니다. 지금 모자란 것을 먼저 추천합니다.' : '유저 대련에서 모은 신화 조각으로 신화장비를 교환합니다.'
+    const description = this.shopTab === 'packages' ? '계정마다 한 번만 살 수 있는 신규유저 패키지입니다.' : this.shopTab === 'gold' ? '금화 충전 안내' : this.shopTab === 'resources' ? '금화로 자원과 옥패를 바꿉니다. 지금 모자란 것을 먼저 추천합니다.' : '유저 대련에서 모은 신화 조각으로 신화장비를 교환합니다.'
     return `<section class="page-section page-section--shop"><div class="section-heading section-heading--compact"><div><span class="eyebrow">소통</span><h1>상점</h1><p class="heading-copy">${description}</p></div></div>${balances}${tabs}${body}</section>`
+  }
+
+  /** 상점 > 패키지: 신규유저 패키지 4종(계정당 1회). 정식 출시 전에는 무료 */
+  private starterPackSection(state: StrategyState): string {
+    const launched = isLaunched()
+    const art = (pack: StarterPack) => pack.randomLegend ? `<img class="starter-pack__art is-portrait" src="/assets/ui/recruit-montage.webp" alt=""><i class="starter-pack__mystery">?</i>`
+      : pack.freeRecruits ? `<img class="starter-pack__art" src="/assets/ui/jade-summon.svg" alt=""><i class="starter-pack__count">×${pack.freeRecruits}</i>`
+      : pack.freeDraws ? `<img class="starter-pack__art" src="/assets/equipment/weapon.webp" alt=""><i class="starter-pack__count">×${pack.freeDraws}</i>`
+      : `<span class="starter-pack__trio">${icon('grain')}${icon('wood')}${icon('iron')}${icon('silver')}${icon('manuals')}</span>`
+    const cards = STARTER_PACKS.map((pack, index) => {
+      const bought = starterPackBought(state, pack.id)
+      const price = `₩ ${pack.priceKRW.toLocaleString('ko-KR')}`
+      const button = bought ? '<button class="action-button starter-pack__buy is-done" disabled>구매 완료</button>'
+        : launched ? `<button class="action-button action-button--primary starter-pack__buy" data-action="starter-pack" data-pack-id="${pack.id}" data-label="${escapeHtml(pack.name)}" data-price="${price}">${price} 구매</button>`
+        : `<button class="action-button action-button--primary starter-pack__buy" data-action="starter-pack" data-pack-id="${pack.id}" data-label="${escapeHtml(pack.name)}">무료로 받기</button>`
+      return `<article class="starter-pack glass-card ${bought ? 'is-bought' : ''} ${index === 0 ? 'is-hero' : ''}"><span class="starter-pack__tag">계정당 1회</span><div class="starter-pack__visual">${art(pack)}</div><div class="starter-pack__copy"><h3>${escapeHtml(pack.name)}</h3><p>${escapeHtml(pack.description)}</p><small class="starter-pack__price">${launched ? price : `<s>${price}</s> 정식 출시 전 무료`}</small></div>${button}</article>`
+    }).join('')
+    const note = launched ? '<p class="starter-pack-note">한 계정에서 패키지마다 한 번씩만 살 수 있습니다.</p>' : '<p class="starter-pack-note">정식 출시 전에는 누구나 패키지마다 한 번씩 무료로 받을 수 있습니다. 출시 후에는 표시된 가격으로 판매됩니다.</p>'
+    return `<div class="glass-card starter-pack-head"><span class="eyebrow">신규유저 패키지</span><h2>처음 한 번만 드리는 특별 구성</h2>${note}</div><div class="starter-pack-grid">${cards}</div>`
   }
 
   /** 이 기기에서 최근 구매 10건 */
@@ -2263,6 +2285,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '상점 패키지 · 신규유저 패키지', '상점에 패키지 칸이 생겼습니다. 신규유저 패키지 1(천명 무장 1명 무작위) · 2(무장 뽑기 50회) · 3(장비 뽑기 50회) · 4(식량 · 목재 · 철 · 은전 각 10만 + 병서 500)는 계정당 한 번씩만 살 수 있습니다. 정식 출시 후 가격은 4,900원 · 9,900원 · 9,900원 · 9,900원이며, 출시 전에는 누구나 한 번씩 무료로 받을 수 있습니다.', '완료', 'jade'],
       ['2026.10.17', '신도 자리 바로잡기', '삼국시대 지도에 맞춰 오나라 신도군 자리(건업 남쪽, 회계와 파양 사이)에 1단계 중립 도시 신도를 새로 만들고 건업 · 회계 · 파양과 이었습니다. 성도 옆의 예전 신도는 이름을 광한으로 바꿨습니다(진군로 · 점령 상태는 그대로).', '완료', 'jade'],
       ['2026.10.17', '출석 보상 조정', '출석 체크의 신화장비 조각 보상(21일 · 35일)을 모두 10개로, 33일 낙양 강화석을 1개로 바꿨습니다.', '완료', 'jade'],
       ['2026.10.17', '출석 체크 바로 보기', '화면 왼쪽 위 천하 이름 오른쪽에 출석 메달(받은 날 수 / 37)이 생겨, 언제든 눌러 출석 체크 판을 다시 볼 수 있습니다.', '완료', 'jade'],
@@ -2594,9 +2617,14 @@ export class StrategyUI {
       if (cost >= 20) this.confirmPurchase(`금화 ${cost}개 → ${button.dataset.label ?? ''}`, `구매 후 금화 ${Math.max(0, (this.renderedState?.gold ?? 0) - cost)}개 남음`, buy)
       else buy()
     }
+    else if (action === 'starter-pack') {
+      const id = button.dataset.packId ?? ''
+      const price = button.dataset.price
+      this.confirmPurchase(`${button.dataset.label ?? '패키지'} ${price ? '구매' : '받기'}`, price ? `${price} · 계정당 한 번만 살 수 있습니다` : '정식 출시 전 무료 · 계정당 한 번만 받을 수 있습니다', () => this.callbacks.onStarterPack(id))
+    }
     else if (action === 'gold-purchase') this.callbacks.onGoldPurchase(button.dataset.packageId ?? '')
     else if (action === 'shop-tab') {
-      this.shopTab = button.dataset.shopTab === 'mythic' ? 'mythic' : button.dataset.shopTab === 'resources' ? 'resources' : 'gold'
+      this.shopTab = button.dataset.shopTab === 'mythic' ? 'mythic' : button.dataset.shopTab === 'resources' ? 'resources' : button.dataset.shopTab === 'packages' ? 'packages' : 'gold'
       if (this.renderedState) this.render(this.renderedState)
     }
     else if (action === 'admin-tab') {

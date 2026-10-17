@@ -34,6 +34,8 @@ export interface MissionState {
   attendance?: { count: number; last: string }
   /** 무료 뽑기권(출석 보상): 무장 모집 · 장비 뽑기 */
   freeRecruits?: number; freeDraws?: number
+  /** 산 신규유저 패키지 id(계정당 1회) */
+  starterPacks?: string[]
 }
 
 /** 처음 시작 안내 6단계 */
