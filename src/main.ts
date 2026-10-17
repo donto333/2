@@ -39,7 +39,9 @@ import {
   migrateGeneralGrades, migrateLegacyStarterRoster, normalizeGeneralStats,
   ensurePrelaunchDailyGold,
   dayKey,
-  FACTION_CAPITALS,
+  homeCityId,
+  changeFaction,
+  isWanderer,
   findGeneral,
   recruit,
   selectCity,
@@ -1518,13 +1520,22 @@ const ui = new StrategyUI(root, {
   onFactionSelect: faction => {
     state.faction = faction as Faction
     state.factionConfirmed = true
-    state.selectedCityId = FACTION_CAPITALS[state.faction]
+    state.selectedCityId = homeCityId(state.faction)
     state.section = 'overview'
     persistLocalGame()
     ui.render(state)
     ui.notify(`${state.faction} 진영을 선택했습니다. 본성 ${state.selectedCityId === 'chengdu' ? '성도' : state.selectedCityId === 'ye' ? '업' : '건업'}에서 천하를 시작합니다.`, 'jade')
     if (authView.status === 'authenticated') queueAccountSave()
     void refreshFactionTerritories()
+  },
+  onFactionChange: faction => {
+    const result = changeFaction(state, faction)
+    ui.notify(result.message, result.ok ? 'jade' : 'ember')
+    if (!result.ok) return
+    persistLocalGame()
+    queueAccountSave(true)
+    ui.render(state)
+    void refreshFactionTerritories(true)
   },
   onGuestLogin: () => { void enterGuest() },
   onLocalGuestLogin: () => {
@@ -1669,6 +1680,8 @@ arena = new Arena(canvas, {
       if (result.won) {
         const resolved = resolveConquestBattle(state, siege.cityId, true)
         siege.result = { ...siege.result, damage: resolved.damage, message: resolved.message }
+        // 재야: 약탈이 내정 수확을 대신한다(일일 임무)
+        if (isWanderer(state) && resolved.damage > 0) mission('income')
       }
       state.lastNotice = siege.result.message
       // 공성 결과 뒤에는 시나리오 목록이 아니라 방금 공격한 도시의

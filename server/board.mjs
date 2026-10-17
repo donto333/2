@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import mysql from 'mysql2/promise'
 
-const BOARDS = ['전체', '촉한', '위나라', '오나라']
+const BOARDS = ['전체', '촉한', '위나라', '오나라', '재야']
 let pool
 
 function getPool() {

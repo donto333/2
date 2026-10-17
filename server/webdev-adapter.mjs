@@ -66,7 +66,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
   wood: int("wood").default(8200).notNull(),
   iron: int("iron").default(3900).notNull(),
   influence: int("influence").default(2480).notNull(),
-  faction: mysqlEnum("faction", ["촉한", "위나라", "오나라"]).default("촉한").notNull(),
+  faction: mysqlEnum("faction", ["촉한", "위나라", "오나라", "재야"]).default("촉한").notNull(),
   factionChosen: int("factionChosen").default(0).notNull(),
   factionWarScore: int("factionWarScore").default(0).notNull(),
   luoyangBoxes: int("luoyangBoxes").default(0).notNull(),
@@ -95,7 +95,7 @@ var gameAccountStates = mysqlTable("game_account_states", {
 });
 var factionTerritoryStates = mysqlTable("faction_territory_states", {
   cityId: varchar("cityId", { length: 64 }).primaryKey(),
-  owner: mysqlEnum("owner", ["촉한", "위나라", "오나라", "중립"]).notNull(),
+  owner: mysqlEnum("owner", ["촉한", "위나라", "오나라", "중립", "재야"]).notNull(),
   conquestProgress: int("conquestProgress").default(0).notNull(),
   defense: int("defense").default(10000).notNull(),
   prosperity: int("prosperity").default(50).notNull(),
@@ -108,7 +108,7 @@ var factionTerritoryStates = mysqlTable("faction_territory_states", {
 var cityDamageRankings = mysqlTable("city_damage_rankings", {
   cityId: varchar("cityId", { length: 64 }).notNull(),
   userId: int("userId").notNull(),
-  faction: mysqlEnum("faction", ["촉한", "위나라", "오나라"]).notNull(),
+  faction: mysqlEnum("faction", ["촉한", "위나라", "오나라", "재야"]).notNull(),
   displayName: varchar("displayName", { length: 128 }).notNull(),
   totalDamage: bigint("totalDamage", { mode: "number" }).default(0).notNull(),
   battleCount: int("battleCount").default(0).notNull(),
@@ -146,7 +146,7 @@ var raidWeeklyScores = mysqlTable("raid_weekly_scores", {
 }, table => ({ pk: primaryKey({ columns: [table.weekKey, table.userId] }) }));
 var luoyangWeeklyResults = mysqlTable("luoyang_weekly_results", {
   weekKey: varchar("weekKey", { length: 16 }).primaryKey(),
-  winnerFaction: mysqlEnum("winnerFaction", ["촉한", "위나라", "오나라"]),
+  winnerFaction: mysqlEnum("winnerFaction", ["촉한", "위나라", "오나라", "재야"]),
   settledAt: timestamp("settledAt").defaultNow().notNull()
 });
 
@@ -426,6 +426,20 @@ function serializeGarrisons(garrisons) {
 function parseLastRaid(row) {
   try { return row?.lastRaidData ? JSON.parse(row.lastRaidData) : null; } catch { return null; }
 }
+// ── 재야(중립 진영 유저) 약탈 · 2026.10.17 ──
+const WANDERER_FACTION = "재야";
+/** 재야가 성벽을 무너뜨린 뒤 다시 세워지기까지 */
+const RAZE_REBUILD_MS = 24 * 60 * 60 * 1000;
+/** 성벽이 무너진 시각(lastRaidData JSON 안에 함께 보관) */
+function razedAtOf(row) {
+  const value = Number(parseLastRaid(row)?.razedAt);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+function withRazedAt(row, razedAt) {
+  const data = parseLastRaid(row) ?? {};
+  if (razedAt) data.razedAt = razedAt; else delete data.razedAt;
+  return Object.keys(data).length ? JSON.stringify(data) : null;
+}
 /** 중립 습격대가 이 도시를 칠 때의 전력: 맞닿은 중립 도시 중 가장 높은 레벨 기준 */
 function strongestNeutralNeighborLevel(cityId, byCityId) {
   const levels = (CITY_ADJACENCY[cityId] ?? []).filter(id => (byCityId.get(id)?.owner ?? "중립") === "중립").map(id => CITY_LEVEL_BY_ID[id] ?? 1);
@@ -438,8 +452,9 @@ function applyRaidToRow(target, attackerCityId, attackerLevel, now, { allowCaptu
   const result = resolveNeutralRaid({ raidPower, garrisonPowers: garrisons.list.map(g => Number(g.power)), defeated: garrisons.defeated, defense: Number(target.defense), allowCapture });
   const defender = result.defenderIndex >= 0 ? garrisons.list[result.defenderIndex] : null;
   const lastRaid = { at: now, attackerCityId, attackerLevel, raidPower, attackerWon: result.attackerWon, damage: result.damage, defenderLabel: defender?.label ?? null, captured: result.captured };
+  const keptRazedAt = razedAtOf(target);
   const set = {
-    lastRaidData: JSON.stringify(lastRaid),
+    lastRaidData: JSON.stringify(keptRazedAt ? { ...lastRaid, razedAt: keptRazedAt } : lastRaid),
     version: sql`${factionTerritoryStates.version} + 1`,
     updatedByUserId
   };
@@ -458,6 +473,7 @@ function factionTerritoryView(row, battleLogs = []) {
   return {
     garrisons: { list: garrisons.list.map(({ id, power, averageLevel, label }) => ({ id, power: Number(power), averageLevel: Number(averageLevel) || 1, label: String(label ?? "") })), defeated: garrisons.defeated },
     lastRaid: parseLastRaid(row),
+    razedAt: razedAtOf(row),
     cityId: row.cityId,
     owner: row.owner,
     conquestProgress: Math.max(0, Math.min(100, Number(row.conquestProgress) || 0)),
@@ -478,13 +494,19 @@ function factionTerritoryView(row, battleLogs = []) {
   };
 }
 async function ensureFactionTerritories(db) {
-  const existing = await db.select({ cityId: factionTerritoryStates.cityId, owner: factionTerritoryStates.owner, defense: factionTerritoryStates.defense, conquestProgress: factionTerritoryStates.conquestProgress }).from(factionTerritoryStates);
+  const existing = await db.select({ cityId: factionTerritoryStates.cityId, owner: factionTerritoryStates.owner, defense: factionTerritoryStates.defense, conquestProgress: factionTerritoryStates.conquestProgress, lastRaidData: factionTerritoryStates.lastRaidData }).from(factionTerritoryStates);
   const known = new Set(existing.map(row => row.cityId));
   const missing = FACTION_TERRITORY_SEED.filter(city => !known.has(city.cityId)).map(city => ({ ...city, defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[city.cityId] ?? 1) }));
   if (missing.length) {
     await db.insert(factionTerritoryStates).values(missing).onDuplicateKeyUpdate({ set: { cityId: sql`cityId` } });
   }
   for (const row of existing) {
+    // 재야가 무너뜨린 성벽은 하루 뒤 다시 세워진다
+    const razedAt = razedAtOf(row);
+    if (razedAt && Date.now() - razedAt >= RAZE_REBUILD_MS) {
+      await db.update(factionTerritoryStates).set({ lastRaidData: withRazedAt(row, null), ...(Number(row.defense) <= 0 ? { defense: cityDefenseForLevel(CITY_LEVEL_BY_ID[row.cityId] ?? 1) } : {}) }).where(eq(factionTerritoryStates.cityId, row.cityId));
+      continue;
+    }
     const floor = legacyCityDefenseFloor(row.cityId);
     // 이전 버전이 모든 도시를 약화 하한에서 시작시킨 경우만 원래 최대치로 복구한다.
     // 이미 공성 진전이 있는 도시는 현재 방어도를 그대로 보존한다.
@@ -519,7 +541,7 @@ async function advanceNeutralTerritoryAi(db, now = Date.now()) {
   for (const attacker of rows.filter(row => row.owner === "중립")) {
     const target = (CITY_ADJACENCY[attacker.cityId] ?? [])
       .map(cityId => byCityId.get(cityId))
-      .filter(row => row && row.owner !== "중립" && !PROTECTED_CAPITAL_IDS.has(row.cityId))
+      .filter(row => row && row.owner !== "중립" && !PROTECTED_CAPITAL_IDS.has(row.cityId) && !razedAtOf(row))
       .sort((left, right) => Number(left.defense) - Number(right.defense))[0];
     if (target) attacks.push({ attacker: attacker.cityId, target: target.cityId });
   }
@@ -616,7 +638,27 @@ async function recordFactionTerritoryBattle(userId, input, { operator = false } 
   const account = await db.select({ faction: gameAccountStates.faction }).from(gameAccountStates).where(eq(gameAccountStates.userId, userId)).limit(1);
   const faction = account[0]?.faction ?? "촉한";
   const damage = Math.max(1, Math.min(CITY_DEFENSE_BY_LEVEL[5], Math.trunc(input.damage)));
-  await db.transaction(async tx => {
+  // 재야: 낙양 말고는 점령하지 않고 성벽만 깎는다(0 아래로는 안 감). 0이 되면 무너진 시각을 남겨 그 성 주인의 내정 건물을 초기화하게 한다
+  if (faction === WANDERER_FACTION && input.cityId !== LUOYANG_CITY_ID) {
+    let razed = null;
+    await db.transaction(async tx => {
+      const rows = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1).for("update");
+      const current = rows[0];
+      if (!current || Number(current.defense) <= 0) return;
+      const nextDefense = Math.max(0, Number(current.defense) - damage);
+      const now = Date.now();
+      await tx.update(factionTerritoryStates).set({
+        defense: nextDefense,
+        ...(nextDefense <= 0 ? { lastRaidData: withRazedAt(current, now) } : {}),
+        version: sql`${factionTerritoryStates.version} + 1`,
+        updatedByUserId: userId
+      }).where(eq(factionTerritoryStates.cityId, input.cityId));
+      if (nextDefense <= 0) razed = { owner: current.owner, now };
+    });
+    if (razed) {
+      await db.insert(neutralAiBattleLogs).values({ cityId: input.cityId, occurredAt: new Date(razed.now), attackerName: "재야", attackerKind: "user", defenderName: razed.owner, won: 1, damage, note: "재야 약탈 · 성벽 붕괴 · 내정 건물 초기화(하루 뒤 성벽 재건)" });
+    }
+  } else await db.transaction(async tx => {
     const rows = await tx.select().from(factionTerritoryStates).where(eq(factionTerritoryStates.cityId, input.cityId)).limit(1).for("update");
     const current = rows[0];
     if (!current || current.owner === faction) return;

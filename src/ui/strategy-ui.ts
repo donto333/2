@@ -8,7 +8,7 @@ import { packageBonus, shopNeeds, shopPackages, type ShopPackage, type ShopResou
 import { effectsSetting, muteSetting, musicSetting, qualitySetting, setEffectsSetting, setMusicSetting, setMuteSetting, setQualitySetting, setSfxSetting, sfxSetting, type EffectsSetting, type QualitySetting, type SoundLevel } from '../game/settings'
 import { sound } from '../engine/sound'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
-import { STARTER_PACKS, starterPackBought, type StarterPack, LEVEL_RESET_GOLD, levelResetRefund, growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
+import { STARTER_PACKS, starterPackBought, type StarterPack, LEVEL_RESET_GOLD, levelResetRefund, growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, homeCityId, isWanderer, wandererPlunderLeft, WANDERER_DAILY_PLUNDER, WANDERER_PLUNDER_RATE, FACTION_CHANGE_COOLDOWN_MS, RAZE_REBUILD_MS, cityYield, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
 import type { BattleOpponent, BattleSnapshot, UnitEffectChip } from '../game/arena'
 import { ATTENDANCE_REWARDS, type AttendanceReward } from '../../server/attendance.mjs'
 import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
@@ -104,8 +104,8 @@ function authButtonInner(auth: { status: string; name?: string | null }): string
 }
 
 export interface LuoyangHistory {
-  weeks: Array<{ weekKey: string; winnerFaction: '촉한' | '위나라' | '오나라' | null }>
-  factions: Array<{ faction: '촉한' | '위나라' | '오나라'; damage: number; battles: number }>
+  weeks: Array<{ weekKey: string; winnerFaction: Faction | null }>
+  factions: Array<{ faction: Faction; damage: number; battles: number }>
   top: Array<{ displayName: string; faction: string; totalDamage: number }>
 }
 
@@ -300,6 +300,8 @@ export interface StrategyUiCallbacks {
   onDuelRefresh: () => void
   onDuelStart: (opponentId: string) => void
   onFactionSelect: (faction: Faction) => void
+  /** 진영 변경(30일에 한 번) */
+  onFactionChange: (faction: Faction) => void
   onGuestLogin: () => void
   /** 서버 없이 이 기기에만 저장하는 게스트(서버에 연결할 수 없을 때) */
   onLocalGuestLogin: () => void
@@ -730,7 +732,7 @@ export class StrategyUI {
     if (!history) return '<div class="glass-card luoyang-history"><div class="card-header"><div><span class="eyebrow">낙양전 기록</span><h3>역대 낙양 주인</h3></div></div><p class="luoyang-history__empty">로그인하면 역대 낙양전 결과와 진영별 공헌을 볼 수 있습니다.</p></div>'
     const totals = new Map(history.factions.map(row => [row.faction, row]))
     const max = Math.max(1, ...history.factions.map(row => Number(row.damage) || 0))
-    const factions = (['촉한', '위나라', '오나라'] as const).map(faction => {
+    const factions = (['촉한', '위나라', '오나라', '재야'] as const).map(faction => {
       const row = totals.get(faction)
       const damage = Number(row?.damage) || 0
       const wins = history.weeks.filter(week => week.winnerFaction === faction).length
@@ -1051,8 +1053,9 @@ export class StrategyUI {
       { id: '위나라', name: '위', capital: '업', region: '중원 · 북방', color: '#8da9ff', description: '넓은 중원과 강한 성벽을 바탕으로 천하의 중심을 지휘합니다.' },
       { id: '촉한', name: '촉', capital: '성도', region: '익주 · 서부', color: '#52e0c4', description: '험준한 산악과 정예 군세로 서부의 전선을 지켜냅니다.' },
       { id: '오나라', name: '오', capital: '건업', region: '강동 · 동남', color: '#f6c56d', description: '강과 수운을 장악하고 빠른 기동으로 동남을 넓혀갑니다.' },
+      { id: '재야', name: '재', capital: '', region: '중립 진영 · 천하 유랑', color: '#d8c3a0', description: '본성 없이 어느 도시든 공성해 그 성의 자원을 약탈합니다. 점령 · 내정 · 최종 세력전은 할 수 없고, 낙양만은 세 진영처럼 차지할 수 있습니다.' },
     ]
-    return `<section class="faction-selection"><div class="faction-selection__backdrop"></div><div class="faction-selection__panel"><span class="eyebrow">진영 선택</span><h1>어느 진영으로 천하를 이끌겠습니까?</h1><p class="faction-selection__lead">선택한 진영의 본성과 영토는 아군으로 표시되고,<br>나머지 진영의 도시는 적군 전선으로 구분됩니다.</p><div class="faction-selection__cards">${factions.map(faction => `<button class="faction-choice faction-choice--${faction.id === '위나라' ? 'wei' : faction.id === '촉한' ? 'shu' : 'wu'}" style="--faction-color:${faction.color}" data-action="faction-select" data-faction="${faction.id}"><span class="faction-choice__crest">${faction.name}</span><span class="faction-choice__copy"><strong>${faction.id}</strong><small>${faction.region} · 본성 ${faction.capital}</small><em>${faction.description}</em></span><b>이 진영으로 시작 <i>→</i></b></button>`).join('')}</div><p class="faction-selection__note">진영 선택 후 영토 지도에서 아군·적군·중립 도시를 확인할 수 있습니다. 선택은 계정과 이 기기에 저장됩니다.</p></div></section>`
+    return `<section class="faction-selection"><div class="faction-selection__backdrop"></div><div class="faction-selection__panel"><span class="eyebrow">진영 선택</span><h1>어느 진영으로 천하를 이끌겠습니까?</h1><p class="faction-selection__lead">선택한 진영의 본성과 영토는 아군으로 표시되고,<br>나머지 진영의 도시는 적군 전선으로 구분됩니다.</p><div class="faction-selection__cards">${factions.map(faction => `<button class="faction-choice faction-choice--${faction.id === '위나라' ? 'wei' : faction.id === '촉한' ? 'shu' : faction.id === '재야' ? 'wanderer' : 'wu'}" style="--faction-color:${faction.color}" data-action="faction-select" data-faction="${faction.id}"><span class="faction-choice__crest">${faction.name}</span><span class="faction-choice__copy"><strong>${faction.id}</strong><small>${faction.region}${faction.capital ? ` · 본성 ${faction.capital}` : ' · 본성 없음'}</small><em>${faction.description}</em></span><b>이 진영으로 시작 <i>→</i></b></button>`).join('')}</div><p class="faction-selection__note">진영 선택 후 영토 지도에서 아군·적군·중립 도시를 확인할 수 있습니다. 선택은 계정과 이 기기에 저장되며, 진영은 30일에 한 번 바꿀 수 있습니다.</p></div></section>`
   }
 
   private shell(state: StrategyState): string {
@@ -1541,12 +1544,13 @@ export class StrategyUI {
     const contested = state.cities.filter(city => city.owner !== state.faction).length
     const incomeWait = incomeCooldownRemaining(state)
     const incomeLabel = incomeWait ? `오늘 수확 완료 · ${Math.ceil(incomeWait / 3600000)}시간 후` : '오늘의 내정 수확'
-    return `<section class="page-section page-section--territory${this.citySheetOpen ? ' is-sheet-open' : ''}"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p>${this.operatorNote('공성 · 점령 · 수비병 · 도시 피해 순위가 영토전에 반영되지 않습니다.')}</div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">영토 새로고침 <span>↻</span></button><button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button></div></div><div class="conquest-overview glass-card"><div><span class="eyebrow">공략 전선</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div><div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">삼국 영토</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div>${this.mapViewport(state)}<div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div>${this.mobileCitySelector(state)}</div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
+    const wanderer = isWanderer(state)
+    return `<section class="page-section page-section--territory${this.citySheetOpen ? ' is-sheet-open' : ''}"><div class="section-heading section-heading--compact"><div><span class="eyebrow">육성</span><h1>영토 · 내정</h1><p class="heading-copy">내정을 키운 군세로 전선을 열고, 성벽을 무너뜨려 천하를 점령하십시오.</p>${this.operatorNote('공성 · 점령 · 수비병 · 도시 피해 순위가 영토전에 반영되지 않습니다.')}</div><div class="territory-heading-actions"><button class="action-button action-button--outline" data-action="territory-refresh">영토 새로고침 <span>↻</span></button>${wanderer ? '' : `<button class="action-button action-button--primary" data-action="collect-income">${incomeLabel} <span>✦</span></button>`}</div></div><div class="conquest-overview glass-card">${wanderer ? `<div><span class="eyebrow">재야 · 중립 진영</span><h3>천하 약탈</h3><p>본성 없이 어느 도시든 공성합니다. 이기면 성벽을 깎고 그 성 하루 생산량의 ${Math.round(WANDERER_PLUNDER_RATE * 100)}%를 약탈합니다(하루 ${WANDERER_DAILY_PLUNDER}회, 오늘 ${wandererPlunderLeft(state)}회 남음). 성벽을 0으로 무너뜨리면 그 성의 내정 건물이 초기화되고, 성벽은 ${Math.round(RAZE_REBUILD_MS / 3600000)}시간 뒤 다시 세워집니다. 점령 · 내정 · 최종 세력전은 할 수 없고, 낙양만은 세 진영과 같은 규칙입니다.</p></div>` : `<div><span class="eyebrow">공략 전선</span><h3>영토 점령전</h3><p>출정할 때마다 식량·은전·철을 소모합니다. 공성 진전을 100%까지 쌓으면 ${state.faction}의 전선이 됩니다.</p></div>`}<div class="conquest-overview-stats"><span><b>${owned}</b><small>아군 도시</small></span><span><b>${contested}</b><small>남은 전선</small></span><span><b>${formatNumber(conquestPower(state))}</b><small>출정 전투력</small></span><span><b>${formatNumber(state.factionWarScore)}</b><small>세력전 공헌도</small></span></div></div><div class="territory-layout"><div class="glass-card territory-map"><div class="card-header"><div><span class="eyebrow">삼국 영토</span><h3>천하 영토</h3></div><button class="sync-label sync-label--button" data-action="territory-refresh" data-territory-sync>${this.territorySyncText}</button></div>${this.mapViewport(state)}<div class="map-legend"><span><i class="legend-dot legend-dot--ally"></i>${state.faction} 영토</span><span><i class="legend-dot legend-dot--neutral"></i>중립</span><span><i class="legend-dot legend-dot--enemy"></i>타 세력</span><span><i class="legend-line"></i>연결 전선</span></div>${this.mobileCitySelector(state)}</div>${selected ? this.cityManagementCard(selected, income, state) : ''}</div></section>`
   }
 
   private mapCities(state: StrategyState): MapCity[] {
     const capitals = new Set(Object.values(FACTION_CAPITALS))
-    const own = FACTION_CAPITALS[state.faction]
+    const own = homeCityId(state.faction)
     return state.cities.map(city => {
       const pos = CITY_MAP_POSITIONS[city.id] ?? { x: 50, y: 50 }
       const group = this.cityGroup(city, state)
@@ -1558,13 +1562,14 @@ export class StrategyUI {
   /** 아군 / 전선(아군 도시와 맞닿은 다른 세력·중립 도시) / 적 / 중립 */
   private cityGroup(city: City, state: StrategyState): Exclude<CityFilter, 'all'> {
     if (city.owner === state.faction) return 'ally'
+    if (isWanderer(state)) return city.defense > 0 || city.id === 'luoyang' ? 'front' : city.owner === '중립' ? 'neutral' : 'enemy'
     const touchesAlly = (CITY_ADJACENCY[city.id] ?? []).some(id => state.cities.find(c => c.id === id)?.owner === state.faction)
     if (touchesAlly) return 'front'
     return city.owner === '중립' ? 'neutral' : 'enemy'
   }
 
   private mapViewport(state: StrategyState): string {
-    const home = FACTION_CAPITALS[state.faction]
+    const home = homeCityId(state.faction)
     return `<div class="map-viewport" data-map-viewport data-lod="far"><div class="map-world map-canvas" data-map-world><div class="map-river"></div>${this.frontlineLines(state)}${state.cities.map(city => this.cityMarker(city, state.selectedCityId, state.faction)).join('')}${MAP_REGION_LABELS.map(region => `<span class="map-label map-label--province" style="left:${region.x}%;top:${region.y}%">${region.name}</span>`).join('')}</div><div class="map-controls"><button type="button" data-map-action="zoom-in" data-map-zoom-in aria-label="확대">+</button><button type="button" data-map-action="zoom-out" data-map-zoom-out aria-label="축소">−</button><button type="button" data-map-action="home" data-home="${home}" aria-label="내 영토로">◎</button><button type="button" data-map-action="fullscreen" aria-label="지도 전체 화면">${this.territoryMap.fullscreen ? '✕' : '□'}</button></div><div class="map-hint"><span class="hint-touch">두 손가락으로 확대 · 끌어서 이동 · 눌러서 도시 선택</span><span class="hint-mouse">휠로 확대 · 끌어서 이동 · 눌러서 도시 선택</span></div></div>`
   }
 
@@ -1576,7 +1581,7 @@ export class StrategyUI {
       this.citySheetOpen = false
       return
     }
-    this.territoryMap.attach(viewport, this.mapCities(state), state.selectedCityId, FACTION_CAPITALS[state.faction])
+    this.territoryMap.attach(viewport, this.mapCities(state), state.selectedCityId, homeCityId(state.faction))
     this.applyCityFinder()
   }
 
@@ -1676,9 +1681,9 @@ export class StrategyUI {
     const siege = Math.min(100, city.conquestProgress ?? 0)
     const conquest = canManage ? this.defenseCard(city, state) : this.conquestCard(city, state, siege, eligibility)
     const panelClass = canManage ? 'city-management--owned' : 'city-management--frontline'
-    const capitalBadge = capitalFaction ? `<span class="capital-badge">${capitalFaction} 본성 · 점령 불가</span>` : ''
+    const capitalBadge = capitalFaction ? `<span class="capital-badge">${capitalFaction} 본성 · ${isWanderer(state) ? '약탈 가능' : '점령 불가'}</span>` : ''
     const frontierNote = canManage ? '내정 핵심지 · 방어선 유지' : eligibility.allowed ? `접경 전선 · ${eligibility.reason}` : '원거리 전선 · 진군 경로 차단'
-    return `<div class="glass-card city-management ${panelClass}"><div class="city-sheet-bar"><span class="city-sheet-grip"></span><button class="city-sheet-close" data-action="city-sheet-close" aria-label="도시 정보 닫기">✕</button></div><div class="city-management-head"><div><span class="eyebrow">도시 관리 · ${city.region}</span><h2>${city.name}${city.id === 'luoyang' ? this.luoyangRulesMenu() : ''}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><div class="city-management-status"><span class="city-level">Lv.${city.level}</span>${capitalBadge}</div></div><div class="city-map-context"><span>인접 전선</span><strong>${frontierNote}</strong><small>인접 도시 ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '독립 성 · 연결 전선 없음'}</small></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div><p class="wall-status">성벽 방어도 ${formatNumber(city.defense)} / ${formatNumber(wallCapacity)} · 성벽을 0으로 깨고 수비병을 모두 물리치면 점령할 수 있습니다.</p>${conquest}${city.id === 'luoyang' ? this.luoyangHistoryCard(state) : ''}${this.cityDamageRankingCard(city)}${this.battleLogCard(city)}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">예상 수확</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${icon(key, 'gi--inline')} ${RESOURCE_META[key].label} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">건물</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">병영을 강화하면 성벽이 더 튼튼해지고 방어도 회복 한도가 오릅니다.</p>' : '<p class="management-tip management-tip--warn">성벽을 깨고 수비병을 모두 물리친 뒤, 마지막 세력전에서 이기면 점령합니다.</p>'}</div>`
+    return `<div class="glass-card city-management ${panelClass}"><div class="city-sheet-bar"><span class="city-sheet-grip"></span><button class="city-sheet-close" data-action="city-sheet-close" aria-label="도시 정보 닫기">✕</button></div><div class="city-management-head"><div><span class="eyebrow">도시 관리 · ${city.region}</span><h2>${city.name}${city.id === 'luoyang' ? this.luoyangRulesMenu() : ''}</h2><p>${city.region} · ${city.owner === state.faction ? '아군 직할령' : `${city.owner} 관할`}</p></div><div class="city-management-status"><span class="city-level">Lv.${city.level}</span>${capitalBadge}</div></div><div class="city-map-context"><span>인접 전선</span><strong>${frontierNote}</strong><small>인접 도시 ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '독립 성 · 연결 전선 없음'}</small></div><div class="city-metrics">${metrics.map(([label, value]) => `<div><span>${label}</span><i><b style="width:${Math.min(value, 100)}%"></b></i><em>${value}</em></div>`).join('')}</div><p class="wall-status">성벽 방어도 ${formatNumber(city.defense)} / ${formatNumber(wallCapacity)} · ${isWanderer(state) && city.id !== 'luoyang' ? '재야는 점령하지 않고 성벽을 깎아 약탈합니다.' : '성벽을 0으로 깨고 수비병을 모두 물리치면 점령할 수 있습니다.'}</p>${conquest}${city.id === 'luoyang' ? this.luoyangHistoryCard(state) : ''}${this.cityDamageRankingCard(city)}${this.battleLogCard(city)}<div class="city-yield"><div class="card-header"><div><span class="eyebrow">예상 수확</span><h3>도시 생산량</h3></div><span class="rate-note">${canManage ? '수확 1회 기준' : '점령 후 활성화'}</span></div><div class="yield-grid">${(['grain', 'silver', 'wood', 'iron', 'influence'] as const).map(key => `<span style="--resource-color:${RESOURCE_META[key].color}">${icon(key, 'gi--inline')} ${RESOURCE_META[key].label} +${formatNumber(income[key])}</span>`).join('')}</div></div><div class="building-list"><div class="card-header"><div><span class="eyebrow">건물</span><h3>내정 건물</h3></div><span class="rate-note">${canManage ? '건물마다 생산 특화' : '정찰 정보'}</span></div>${city.buildings.map(building => this.buildingRow(city, building, canManage)).join('')}</div>${canManage ? '<p class="management-tip">병영을 강화하면 성벽이 더 튼튼해지고 방어도 회복 한도가 오릅니다.</p>' : '<p class="management-tip management-tip--warn">성벽을 깨고 수비병을 모두 물리친 뒤, 마지막 세력전에서 이기면 점령합니다.</p>'}</div>`
   }
 
   private cityDamageRankingCard(city: City): string {
@@ -1698,6 +1703,7 @@ export class StrategyUI {
   }
 
   private conquestCard(city: City, state: StrategyState, siege: number, eligibility: ReturnType<typeof conquestEligibility>): string {
+    if (isWanderer(state) && city.id !== 'luoyang') return this.plunderCard(city, state, eligibility)
     const cost = conquestCost(city, state)
     const power = conquestPower(state)
     const costText = `${icon('grain', 'gi--inline')} ${formatNumber(cost.grain ?? 0)} · ${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
@@ -1712,6 +1718,21 @@ export class StrategyUI {
     const actions = eligibility.allowed ? `<div class="territory-actions"><button class="action-button action-button--primary conquest-button" data-action="conquer" data-city="${city.id}">공성 출정 <span>${costText}</span></button><button class="action-button action-button--outline conquest-button" data-action="faction-battle" data-city="${city.id}" ${finalReady ? '' : 'disabled'} title="${escapeHtml(finalWait)}">최종 세력전 <span>옥패 ${formatNumber(honorCost)} · 금화 +${goldReward}</span></button></div>${finalReady ? '' : `<p class="final-war-wait">최종 세력전 조건: ${escapeHtml(finalWait)}</p>`}` : `<div class="frontier-lock"><strong>진군 경로 차단</strong><span>${eligibility.reason}</span><small>국경 전선: ${eligibility.neighborNames.length ? eligibility.neighborNames.join(' · ') : '연결된 아군 도시 없음'}</small></div>`
     return `<div class="conquest-card"><div class="conquest-card-head"><div><span class="eyebrow">진영전 · ${city.owner}</span><h3>성벽 방어도 ${formatNumber(city.defense)} · 점령 진전 ${siege}%</h3></div><strong>${formatNumber(power)} 전투력</strong></div><div class="conquest-progress"><i style="width:${siege}%"></i></div><p>수비병 ${defeated}/${garrisonCount}부대 격파 · 덱 전투력에 따라 성벽 방어도가 감소합니다. 방어도 0·수비병 전멸 후 최종 세력전을 실행하십시오.</p>${actions}</div>`
   }
+  /** 재야: 약탈 공성 카드(점령 · 최종 세력전 없음) */
+  private plunderCard(city: City, state: StrategyState, eligibility: ReturnType<typeof conquestEligibility>): string {
+    const cost = conquestCost(city, state)
+    const costText = `${icon('grain', 'gi--inline')} ${formatNumber(cost.grain ?? 0)} · ${icon('silver', 'gi--inline')} ${formatNumber(cost.silver ?? 0)} · ${icon('iron', 'gi--inline')} ${formatNumber(cost.iron ?? 0)}`
+    const take = cityYield(city, state)
+    const share = (value: number) => formatNumber(Math.round(value * WANDERER_PLUNDER_RATE))
+    const left = wandererPlunderLeft(state)
+    const wall = cityWallCapacity(city)
+    const rebuild = city.razedAt ? Math.max(0, city.razedAt + RAZE_REBUILD_MS - Date.now()) : 0
+    const action = eligibility.allowed
+      ? `<div class="territory-actions"><button class="action-button action-button--primary conquest-button" data-action="conquer" data-city="${city.id}">약탈 공성 <span>${costText}</span></button></div>`
+      : `<div class="frontier-lock"><strong>${city.defense <= 0 ? '성벽 붕괴' : '공성 불가'}</strong><span>${escapeHtml(eligibility.reason)}</span>${rebuild ? `<small>성벽 재건까지 ${Math.ceil(rebuild / 3600000)}시간</small>` : ''}</div>`
+    return `<div class="conquest-card plunder-card"><div class="conquest-card-head"><div><span class="eyebrow">재야 약탈 · ${city.owner}</span><h3>성벽 방어도 ${formatNumber(city.defense)} / ${formatNumber(wall)}</h3></div><strong>${formatNumber(conquestPower(state))} 전투력</strong></div><div class="conquest-progress"><i style="width:${Math.round((1 - city.defense / Math.max(1, wall)) * 100)}%"></i></div><p>이기면 성벽이 덱 전투력만큼 깎이고 약탈합니다 · 식량 +${share(take.grain)} · 은전 +${share(take.silver)} · 목재 +${share(take.wood)} · 철 +${share(take.iron)} · 영향력 +${share(take.influence)} · 오늘 약탈 ${left}/${WANDERER_DAILY_PLUNDER}회 남음</p><p class="final-war-wait">성벽을 0으로 무너뜨리면 이 성의 내정 건물이 모두 초기화됩니다. 점령과 최종 세력전은 할 수 없습니다.</p>${action}</div>`
+  }
+
   private defenseCard(city: City, state: StrategyState): string {
     const power = conquestPower(state)
     const cost = `${icon('grain', 'gi--inline')} ${formatNumber(280 + city.level * 90)} · ${icon('iron', 'gi--inline')} ${formatNumber(100 + city.level * 55)}`
@@ -2077,10 +2098,20 @@ export class StrategyUI {
 
 
   /** 이 기기 설정: 그래픽 품질(새로고침 후) · 전투 효과(바로 적용) */
+  /** 진영 변경(30일에 한 번) */
+  private factionChangeRow(): string {
+    const state = this.renderedState
+    if (!state?.factionConfirmed) return ''
+    const last = state.missions?.factionChangedAt ?? 0
+    const wait = last ? Math.max(0, last + FACTION_CHANGE_COOLDOWN_MS - Date.now()) : 0
+    const options: Array<[Faction, string]> = [['촉한', '촉'], ['위나라', '위'], ['오나라', '오'], ['재야', '재야(중립)']]
+    return `<div class="setting-row"><div><strong>진영 변경</strong><small>지금 진영: ${state.faction}${state.faction === '재야' ? '(중립 진영)' : ''} · 30일에 한 번 바꿀 수 있습니다.${wait ? ` ${Math.ceil(wait / 86400000)}일 뒤 다시 바꿀 수 있습니다.` : ''}</small></div><div class="setting-seg">${options.map(([id, label]) => `<button class="setting-seg__btn ${state.faction === id ? 'is-active' : ''}" data-action="faction-change" data-faction="${id}" ${state.faction === id || wait ? 'disabled' : ''}>${label}</button>`).join('')}</div></div>`
+  }
+
   private deviceSettingsCard(): string {
     const quality = qualitySetting(), effects = effectsSetting()
     const seg = (action: string, current: string, items: Array<[string, string]>) => `<div class="setting-seg">${items.map(([value, label]) => `<button class="setting-seg__btn ${current === value ? 'is-active' : ''}" data-action="${action}" data-value="${value}">${label}</button>`).join('')}</div>`
-    return `<div class="glass-card device-settings"><div class="card-header"><div><span class="eyebrow">이 기기 설정</span><h3>화면 · 소리 · 전투 효과</h3></div></div><div class="setting-row"><div><strong>언어 / Language</strong><small>게임 전체 글자를 한국어 또는 영어로 보여 줍니다. 바꾸면 화면을 다시 불러옵니다.</small></div><div class="setting-seg" data-no-tr><button class="setting-seg__btn ${isEnglish() ? '' : 'is-active'}" data-action="set-lang" data-value="ko">한국어</button><button class="setting-seg__btn ${isEnglish() ? 'is-active' : ''}" data-action="set-lang" data-value="en">English</button></div></div><div class="setting-row"><div><strong>따라하기 안내</strong><small>게임 소개, 메뉴 짚어 주기, 첫 전투 따라하기를 처음부터 다시 봅니다.</small></div><button class="mini-action" data-action="coach-reset">안내 다시 보기</button></div><div class="setting-row"><div><strong>배경음악</strong><small>본영 · 전투 · 대련 · 레이드마다 다른 곡이 흐릅니다. 위쪽 🔊 버튼으로 모든 소리를 한 번에 끌 수 있습니다.</small></div>${seg('setting-music', muteSetting() ? 'off' : musicSetting(), [['off', '끔'], ['low', '작게'], ['mid', '보통'], ['high', '크게']])}</div><div class="setting-row"><div><strong>효과음</strong><small>버튼 · 강화 · 장비 · 전투(공격 · 스킬 · 승패) 소리입니다.</small></div>${seg('setting-sfx', muteSetting() ? 'off' : sfxSetting(), [['off', '끔'], ['low', '작게'], ['mid', '보통'], ['high', '크게']])}</div><div class="setting-row"><div><strong>그래픽 품질</strong><small>낮음은 빛 번짐·그림자를 끄고 병사 수를 줄입니다. 새로고침하면 적용됩니다.</small></div>${seg('setting-quality', quality, [['auto', '자동'], ['high', '높음'], ['low', '낮음']])}</div><div class="setting-row"><div><strong>전투 효과</strong><small>줄임은 불꽃·화살 수와 화면 흔들림을 줄입니다. 바로 적용됩니다. 자동은 화면이 버벅이면 스스로 줄입니다.</small></div>${seg('setting-effects', effects, [['auto', '자동'], ['full', '전체'], ['reduced', '줄임']])}</div>${this.account && !this.account.openId.startsWith('guest_') ? '' : `<div class="setting-row setting-row--danger"><div><strong>게스트 기록 초기화</strong><small>${this.account ? '이 게스트 아이디의 진행(무장 · 재화 · 튜토리얼 · 출석 · 안내 기록)을 서버에서도 모두 지우고 처음부터 다시 시작합니다. 아이디는 그대로 씁니다.' : '이 기기에 저장된 게스트 진행(무장·재화·튜토리얼·안내 기록)을 모두 지우고 접속 화면부터 다시 시작합니다. 회원 계정 기록은 지워지지 않습니다.'}</small></div><button class="mini-action mini-action--danger" data-action="guest-reset">초기화</button></div>`}</div>`
+    return `<div class="glass-card device-settings"><div class="card-header"><div><span class="eyebrow">이 기기 설정</span><h3>화면 · 소리 · 전투 효과</h3></div></div><div class="setting-row"><div><strong>언어 / Language</strong><small>게임 전체 글자를 한국어 또는 영어로 보여 줍니다. 바꾸면 화면을 다시 불러옵니다.</small></div><div class="setting-seg" data-no-tr><button class="setting-seg__btn ${isEnglish() ? '' : 'is-active'}" data-action="set-lang" data-value="ko">한국어</button><button class="setting-seg__btn ${isEnglish() ? 'is-active' : ''}" data-action="set-lang" data-value="en">English</button></div></div><div class="setting-row"><div><strong>따라하기 안내</strong><small>게임 소개, 메뉴 짚어 주기, 첫 전투 따라하기를 처음부터 다시 봅니다.</small></div><button class="mini-action" data-action="coach-reset">안내 다시 보기</button></div><div class="setting-row"><div><strong>배경음악</strong><small>본영 · 전투 · 대련 · 레이드마다 다른 곡이 흐릅니다. 위쪽 🔊 버튼으로 모든 소리를 한 번에 끌 수 있습니다.</small></div>${seg('setting-music', muteSetting() ? 'off' : musicSetting(), [['off', '끔'], ['low', '작게'], ['mid', '보통'], ['high', '크게']])}</div><div class="setting-row"><div><strong>효과음</strong><small>버튼 · 강화 · 장비 · 전투(공격 · 스킬 · 승패) 소리입니다.</small></div>${seg('setting-sfx', muteSetting() ? 'off' : sfxSetting(), [['off', '끔'], ['low', '작게'], ['mid', '보통'], ['high', '크게']])}</div><div class="setting-row"><div><strong>그래픽 품질</strong><small>낮음은 빛 번짐·그림자를 끄고 병사 수를 줄입니다. 새로고침하면 적용됩니다.</small></div>${seg('setting-quality', quality, [['auto', '자동'], ['high', '높음'], ['low', '낮음']])}</div><div class="setting-row"><div><strong>전투 효과</strong><small>줄임은 불꽃·화살 수와 화면 흔들림을 줄입니다. 바로 적용됩니다. 자동은 화면이 버벅이면 스스로 줄입니다.</small></div>${seg('setting-effects', effects, [['auto', '자동'], ['full', '전체'], ['reduced', '줄임']])}</div>${this.factionChangeRow()}${this.account && !this.account.openId.startsWith('guest_') ? '' : `<div class="setting-row setting-row--danger"><div><strong>게스트 기록 초기화</strong><small>${this.account ? '이 게스트 아이디의 진행(무장 · 재화 · 튜토리얼 · 출석 · 안내 기록)을 서버에서도 모두 지우고 처음부터 다시 시작합니다. 아이디는 그대로 씁니다.' : '이 기기에 저장된 게스트 진행(무장·재화·튜토리얼·안내 기록)을 모두 지우고 접속 화면부터 다시 시작합니다. 회원 계정 기록은 지워지지 않습니다.'}</small></div><button class="mini-action mini-action--danger" data-action="guest-reset">초기화</button></div>`}</div>`
   }
 
   private accountSection(): string {
@@ -2137,7 +2168,7 @@ export class StrategyUI {
         const game = account.game
         const chips = [`진영 ${game.faction ?? '—'}${game.factionChosen === false ? '(미선택)' : ''}`, `무장 ${formatNumber(game.generalCount ?? 0)}명`, `최고 Lv.${game.maxLevel ?? 0}`, `시나리오 ${game.scenarioCleared ?? 0}/${SCENARIOS.length}`, `어려움 ${game.hardCleared ?? 0}/${SCENARIOS.length}`]
         const groups = ADMIN_GAME_FIELDS.map(([title, fields]) => `<fieldset class="game-data-group"><legend>${title}</legend>${fields.map(([field, label]) => { const value = Number(game[field as keyof typeof game] ?? 0); return `<label><span>${label}</span><input type="number" min="0" step="1" inputmode="numeric" data-game-field="${field}" data-original="${value}" value="${value}"></label>` }).join('')}</fieldset>`).join('')
-        const faction = `<fieldset class="game-data-group"><legend>진영</legend><label><span>소속</span><select data-game-field="faction" data-original="${game.faction ?? '촉한'}">${(['촉한', '위나라', '오나라'] as const).map(option => `<option value="${option}" ${game.faction === option ? 'selected' : ''}>${option}</option>`).join('')}</select></label></fieldset>`
+        const faction = `<fieldset class="game-data-group"><legend>진영</legend><label><span>소속</span><select data-game-field="faction" data-original="${game.faction ?? '촉한'}">${(['촉한', '위나라', '오나라', '재야'] as const).map(option => `<option value="${option}" ${game.faction === option ? 'selected' : ''}>${option}</option>`).join('')}</select></label></fieldset>`
         return `<article class="game-data-row" data-game-user="${account.id}"><header class="game-data-head"><div class="admin-account-identity"><span class="admin-account-avatar">${escapeHtml((account.name || '장').slice(0, 1))}</span><span><b>${escapeHtml(account.name || '이름 없음')} <small>#${account.id}</small></b><small>${escapeHtml(account.email || account.openId)}</small></span></div>${account.operator ? '<span class="admin-role admin-role--admin" title="랭킹 · 영토전 · 레이드 순위 · 대련 상대에 반영되지 않습니다">운영자 · 순위 제외</span>' : ''}<div class="game-data-chips">${chips.map(chip => `<span>${escapeHtml(chip)}</span>`).join('')}</div></header><div class="game-data-fields">${groups}${faction}</div><footer class="game-data-foot"><small data-game-changed>바꾼 칸만 저장됩니다.</small><button class="ghost-button" data-action="admin-game-reset">되돌리기</button><button class="action-button action-button--primary game-data-save" data-action="admin-game-save" data-account-id="${account.id}">저장</button></footer></article>`
       }).join('')
       body = `<div class="glass-card admin-panel admin-content-panel"><div class="admin-panel-top"><div><span class="eyebrow">계정 진행 상황</span><h3>게임 계정 데이터 편집</h3><p>계정별 재화 · 신화 장비 재료 · 전적 · 내정 자원 · 진영을 고칩니다. 금화 · 신화 조각 · 낙양 강화석(서버 원장)도 적은 값 그대로 저장됩니다.</p></div><button class="ghost-button" data-action="admin-game-refresh">데이터 새로고침 ↻</button></div>${this.adminGameDataError ? `<div class="admin-account-gate"><div class="account-gate-mark">◎</div><h3>관리자 권한이 필요합니다</h3><p>${escapeHtml(this.adminGameDataError)}</p></div>` : `<div class="game-data-legend"><span>저장 방식</span><b>바꾼 칸만 서버에 저장</b><small>그 유저가 접속 중이면 다음 저장 때 게임 화면에도 바로 반영됩니다(10분 안). 운영자 계정은 랭킹 · 영토전 · 레이드 순위 · 대련 상대에서 빠집니다.</small></div><div class="admin-account-toolbar"><label><span>계정 검색</span><input data-admin-game-search value="${escapeHtml(this.adminGameSearch)}" placeholder="이름 · 이메일 · #번호"></label><button class="action-button action-button--outline" data-action="admin-game-search">검색</button><span class="admin-directory-count">${shown.length} / ${this.adminGameAccounts.length}명</span></div><div class="game-data-list">${stateRows || '<div class="admin-empty-row">게임 계정 데이터가 없습니다.</div>'}</div>`}</div>`
@@ -2286,6 +2317,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '네 번째 진영 · 재야(중립 진영)', '진영 선택에 재야(중립 진영)가 생겼습니다. 재야는 본성 없이 수도와 양양을 포함한 어느 도시든 공성할 수 있고, 이기면 성벽을 깎고 그 성 하루 생산량의 25%를 약탈합니다(하루 30회). 성벽을 0으로 무너뜨리면 그 성의 내정 건물이 초기화되고, 성벽은 하루 뒤 다시 세워집니다. 성벽이 0인 동안은 공성할 수 없습니다. 재야는 점령 · 내정 · 최종 세력전을 할 수 없고, 낙양만은 세 진영과 같은 규칙으로 차지할 수 있습니다. 진영은 설정에서 30일에 한 번 바꿀 수 있습니다.', '완료', 'jade'],
       ['2026.10.17', '천하영토 도시 재배치 · 새 도시 7곳', '초반에도 공성할 수 있도록 각 수도 바로 옆 도시는 1단계, 두 걸음은 2단계, 그 너머는 3단계로 바꿨습니다. 장안 · 한중 · 허창 · 수춘 · 강릉 · 양양은 4단계 대도시로, 남쪽 · 서쪽 변방은 2단계로 두었습니다. 새 중립 도시 7곳(촉 쪽 파군 · 파서, 오 쪽 예장 · 임해 · 기춘, 위 쪽 상당 · 하간)이 생겼고, 회계–건안은 임해를 거쳐 이어집니다. 세 진영이 먼저 닿는 땅의 수입이 서로 비슷해졌습니다.', '완료', 'jade'],
       ['2026.10.17', '성도 · 건업 4단계', '촉한 수도 성도와 오나라 수도 건업이 위나라 수도 업과 같은 4단계가 되었습니다(성벽 10만 · 생산량 증가). 성벽이 온전하던 수도는 새 최대치로 채워집니다.', '완료', 'jade'],
       ['2026.10.17', '요충지 4단계 · 한중–장안', '한중 · 허창 · 수춘 · 강릉이 4단계 요충지가 되었습니다(성벽 10만 · 수비대 Lv.50). 공성 진전이 없는 중립 도시는 성벽이 새 최대치로 채워집니다. 한중–장안 진군로가 이어졌습니다.', '완료', 'jade'],
@@ -2603,7 +2635,12 @@ export class StrategyUI {
     else if (action === 'battle-tactic') this.callbacks.onBattleTactic((button.dataset.tactic ?? 'guard') as 'guard' | 'feint' | 'charge')
     else if (action === 'duel-refresh') this.callbacks.onDuelRefresh()
     else if (action === 'duel-start') this.callbacks.onDuelStart(button.dataset.opponentId ?? '')
-    else if (action === 'faction-select' && (button.dataset.faction === '촉한' || button.dataset.faction === '위나라' || button.dataset.faction === '오나라')) this.callbacks.onFactionSelect(button.dataset.faction)
+    else if (action === 'faction-select' && (button.dataset.faction === '촉한' || button.dataset.faction === '위나라' || button.dataset.faction === '오나라' || button.dataset.faction === '재야')) this.callbacks.onFactionSelect(button.dataset.faction)
+    else if (action === 'faction-change') {
+      const next = button.dataset.faction as Faction
+      if (!['촉한', '위나라', '오나라', '재야'].includes(next) || !this.renderedState) return
+      if (window.confirm(tr(`${this.renderedState.faction}에서 ${next}${next === '재야' ? '(중립 진영)' : ''}(으)로 진영을 바꿉니다. 진영은 30일에 한 번만 바꿀 수 있습니다. 계속하시겠습니까?`))) this.callbacks.onFactionChange(next)
+    }
     else if (action === 'guest-login') this.callbacks.onGuestLogin()
     else if (action === 'login') this.callbacks.onLogin()
     else if (action === 'logout') this.callbacks.onLogout()

@@ -2235,3 +2235,8 @@ body .app-shell--battle .brand-attendance { display: none; }
 .starter-pack__buy.is-done { opacity: .7; }
 @media (max-width: 600px) { .starter-pack-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .starter-pack { padding: 14px 8px 10px; } .starter-pack__visual { height: 76px; } .starter-pack__art { width: 58px; height: 58px; } .starter-pack__art.is-portrait, .starter-pack__mystery { width: 68px; height: 68px; } .starter-pack__trio .gi { width: 30px; height: 30px; } .starter-pack__copy h3 { font-size: 14px; } .starter-pack__copy p { font-size: 12px; } }
 .shop-tabs--row{grid-template-columns:repeat(4,minmax(0,1fr)) !important}
+
+/* 진영 선택: 네 진영(재야 추가) */
+@media (min-width: 761px) { html body .faction-selection__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { html body .faction-selection__cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+html body .faction-choice--wanderer { --faction-color: #d8c3a0; }

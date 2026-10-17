@@ -32,6 +32,10 @@ export interface MissionState {
   onboardStep?: number; onboardDone?: boolean
   /** 출석 체크: 받은 날 수 · 마지막으로 받은 날(한국 날짜) */
   attendance?: { count: number; last: string }
+  /** 재야 약탈 횟수(한국 날짜별) */
+  plunder?: { day: string; count: number }
+  /** 마지막으로 진영을 바꾼 시각(30일에 한 번) */
+  factionChangedAt?: number
   /** 무료 뽑기권(출석 보상): 무장 모집 · 장비 뽑기 */
   freeRecruits?: number; freeDraws?: number
   /** 산 신규유저 패키지 id(계정당 1회) */

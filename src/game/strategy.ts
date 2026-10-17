@@ -12,8 +12,13 @@ export type Section = 'overview' | 'recruit' | 'roster' | 'codex' | 'formation' 
 export type Role = '기병' | '궁병' | '책사' | '보병'
 export type Grade = 1 | 2 | 3 | 4 | 5
 export type ResourceKey = 'grain' | 'silver' | 'wood' | 'iron' | 'influence'
-export type CityOwner = '촉한' | '위나라' | '오나라' | '중립'
-export type Faction = Exclude<CityOwner, '중립'>
+export type CityOwner = '촉한' | '위나라' | '오나라' | '중립' | '재야'
+/** 수도를 가진 세 진영 */
+export type CityFaction = '촉한' | '위나라' | '오나라'
+/** 유저 진영: 세 진영 + 재야(중립 진영 · 수도 없이 모든 도시를 약탈한다. 낙양만은 세 진영과 같은 규칙으로 차지할 수 있다, 2026.10.17) */
+export type Faction = CityFaction | '재야'
+export const WANDERER: Faction = '재야'
+export function isWanderer(state: Pick<StrategyState, 'faction'>): boolean { return state.faction === '재야' }
 export type BuildingKind = 'agriculture' | 'commerce' | 'barracks' | 'workshop' | 'academy'
 export type EquipmentType = 'weapon' | 'armor' | 'accessory'
 export type EquipmentGrade = 'normal' | 'rare' | 'unique' | 'legendary' | 'mythic'
@@ -64,6 +69,8 @@ export interface City {
   garrisons?: CityGarrison[]
   defendersDefeated?: number
   battleLogs?: CityBattleLog[]
+  /** 재야의 약탈로 성벽이 무너진 시각(이때 내정 건물이 초기화되고, 하루 뒤 성벽이 다시 세워진다) */
+  razedAt?: number
 }
 
 export interface CityGarrison {
@@ -86,9 +93,20 @@ export interface CityBattleLog {
   note: string
 }
 
-export const FACTION_CAPITALS: Record<Faction, string> = { 촉한: 'chengdu', 위나라: 'ye', 오나라: 'jianye' }
+export const FACTION_CAPITALS: Record<CityFaction, string> = { 촉한: 'chengdu', 위나라: 'ye', 오나라: 'jianye' }
 export const AI_CAPITAL_ID = 'xiangyang'
 export const LUOYANG_ID = 'luoyang'
+/** 진영의 본성(재야는 본성이 없어 지도를 낙양에 맞춘다) */
+export function homeCityId(faction: Faction): string { return faction === '재야' ? LUOYANG_ID : FACTION_CAPITALS[faction] }
+// ── 재야(중립 진영) 규칙 ───────────────────────────────────────
+/** 공성 승리 때 가져가는 몫: 그 도시 하루 생산량(지금 건물 기준)의 25% */
+export const WANDERER_PLUNDER_RATE = 0.25
+/** 하루에 약탈할 수 있는 횟수(한국 날짜) */
+export const WANDERER_DAILY_PLUNDER = 30
+/** 성벽이 무너진 도시는 하루 뒤 다시 세워진다(그동안 재야는 공성할 수 없다) */
+export const RAZE_REBUILD_MS = 24 * 60 * 60 * 1000
+/** 진영 변경은 30일에 한 번 */
+export const FACTION_CHANGE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000
 export const MAX_CITY_GARRISONS = 100
 export const CITY_DEFENSE_BY_LEVEL: Record<Grade, number> = { 1: 10_000, 2: 20_000, 3: 50_000, 4: 100_000, 5: 1_000_000 }
 // 정식 출시 전 테스트 기간에는 최대 방어력의 90%를 약화하고 10%를 최저 방어도로 유지한다.
@@ -139,6 +157,8 @@ export interface FactionTerritorySnapshot {
   garrisons?: { list: Array<{ id: string; power: number; averageLevel: number; label: string }>; defeated: number }
   /** 가장 최근 중립 습격 결과 */
   lastRaid?: { at: number; attackerCityId: string; attackerLevel: number; raidPower: number; attackerWon: boolean; damage: number; defenderLabel: string | null; captured: boolean } | null
+  /** 재야 약탈로 성벽이 무너진 시각(서버) */
+  razedAt?: number | null
 }
 
 export interface ResearchNode {
@@ -525,6 +545,7 @@ export function createDummyCityGarrisons(city: City): CityGarrison[] {
   })
 }
 export function ensureCityGarrisons(state: StrategyState): void {
+  rebuildRazedWalls(state)
   state.cities.forEach(city => {
     if (!Array.isArray(city.garrisons)) city.garrisons = city.owner === '중립' ? createDummyCityGarrisons(city) : []
     // 중립 도시의 인공지능 수비대는 최신 레벨 기준을 따른다(격파 진행은 유지)
@@ -995,6 +1016,12 @@ export function mergeFactionTerritories(state: StrategyState, snapshots: Faction
     city.owner = snapshot.owner
     // 상대에게 점령당하면 내정 건물이 초기화된다
     if (wasAlly && city.owner !== state.faction) resetCityBuildings(city)
+    // 재야가 성벽을 무너뜨리면(새 razedAt) 내정 건물이 초기화된다
+    if (snapshot.razedAt !== undefined) {
+      const razedAt = snapshot.razedAt ?? undefined
+      if (razedAt && razedAt !== city.razedAt) resetCityBuildings(city)
+      city.razedAt = razedAt
+    }
     city.conquestProgress = Math.max(0, Math.min(100, Math.trunc(snapshot.conquestProgress)))
     city.defense = Math.max(0, Math.min(cityDefenseForLevel(city.level), Math.trunc(snapshot.defense)))
     city.prosperity = Math.max(0, Math.min(100, Math.trunc(snapshot.prosperity)))
@@ -1676,6 +1703,12 @@ export function conquestEligibility(state: StrategyState, cityId: string, now = 
   if (!city) return { allowed: false, reason: '해당 도시를 찾을 수 없습니다.', neighborNames: [] }
   const neighborNames = (CITY_ADJACENCY[city.id] ?? []).map(id => findCity(state, id)).filter((neighbor): neighbor is City => Boolean(neighbor)).map(neighbor => neighbor.name)
   if (city.owner === state.faction) return { allowed: false, reason: `이미 ${state.faction}이(가) 지배하는 도시입니다.`, neighborNames }
+  // 재야: 낙양 말고는 어느 도시든 약탈 공성(성벽이 무너진 도시는 다시 세워질 때까지 불가)
+  if (isWanderer(state) && city.id !== LUOYANG_ID) {
+    rebuildRazedWalls(state, now)
+    if (city.defense <= 0) return { allowed: false, reason: `${city.name}은(는) 성벽이 무너져 지금은 공성할 수 없습니다.${city.razedAt ? ` ${Math.ceil(Math.max(0, city.razedAt + RAZE_REBUILD_MS - now) / 3600000)}시간 뒤 다시 세워집니다.` : ''}`, neighborNames }
+    return { allowed: true, reason: '재야 약탈 · 어느 도시든 공성할 수 있습니다(점령은 하지 않습니다).', neighborNames }
+  }
   const capitalFaction = capitalFactionForCity(city.id)
   if (capitalFaction) return { allowed: false, reason: `${city.name}은(는) ${capitalFaction}의 본성이라 점령할 수 없습니다.`, neighborNames }
   if (city.id === AI_CAPITAL_ID) return { allowed: false, reason: '양양은 중립 인공지능 진영의 수도라 점령할 수 없습니다.', neighborNames }
@@ -1699,6 +1732,11 @@ function wallDamageFromPower(power: number): number {
 
 export function cityIncome(city: City, state?: StrategyState): Resources {
   if (city.owner !== (state?.faction ?? '촉한')) return { grain: 0, silver: 0, wood: 0, iron: 0, influence: 0 }
+  return cityYield(city, state)
+}
+
+/** 도시 하루 생산량(주인과 상관없이 단계 · 번영도 · 건물 · 연구 기준) */
+export function cityYield(city: City, state?: StrategyState): Resources {
   const productionMultiplier = CITY_PRODUCTION_MULTIPLIER[city.level as Grade] ?? CITY_PRODUCTION_MULTIPLIER[5]
   const farm = buildingLevel(city, 'agriculture')
   const market = buildingLevel(city, 'commerce')
@@ -1803,6 +1841,7 @@ export function defendCity(state: StrategyState, cityId: string, now = Date.now(
 export function launchFactionBattle(state: StrategyState, cityId: string, now = Date.now()): TerritoryBattleResult {
   const city = findCity(state, cityId)
   if (!city) return { ok: false, won: false, message: '해당 전선을 찾을 수 없습니다.', damage: 0 }
+  if (isWanderer(state) && city.id !== LUOYANG_ID) return { ok: false, won: false, message: '재야(중립 진영)는 최종 세력전을 할 수 없습니다. 낙양만 세 진영과 같은 규칙으로 차지할 수 있습니다.', damage: 0 }
   ensureCityGarrisons(state)
   if (city.owner === state.faction) return { ok: false, won: false, message: '아군 도시에는 세력전 공격을 할 수 없습니다.', damage: 0 }
   const eligibility = conquestEligibility(state, cityId, now)
@@ -1862,6 +1901,14 @@ export function launchConquest(state: StrategyState, cityId: string, now = Date.
   // even a low-power roster can finally break the current garrison.
   const won = advantage >= 0.72 || city.defense <= cityWallCapacity(city) * 0.55
   const damage = Math.round(wallDamageFromPower(power) * (1 + researchMods(state).siegeDamage))
+  if (isWanderer(state) && city.id !== LUOYANG_ID) {
+    // 재야 약탈은 공성 전투(3D)를 이겨야 확정된다(resolveConquestBattle)
+    void won; void damage
+    state.selectedCityId = city.id
+    state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage: 0 }
+    state.lastNotice = `${city.name} 약탈 출정 · 공성 전투에서 이기면 성벽을 깎고 그 성의 자원을 가져옵니다.`
+    return { ok: true, captured: false, message: state.lastNotice, damage: 0 }
+  }
   addCityBattleLog(city, { timestamp: now, attackerName: state.faction, attackerKind: 'user', defenderName: city.owner, won, damage: won ? damage : 0, note: won ? '공성 성공 · 수비병 격파와 점령 진전이 반영되었습니다.' : '공성 실패 · 성벽만 약화되었습니다.' })
   if (!won) {
     state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage: 0 }
@@ -1898,6 +1945,12 @@ export function resolveConquestBattle(state: StrategyState, cityId: string, batt
   const defeated = Math.max(0, Math.min(defenseLine.length, city.defendersDefeated ?? 0))
   const damage = Math.round(wallDamageFromPower(conquestPower(state)) * (1 + researchMods(state).siegeDamage))
   city.defendersDefeated = Math.min(defenseLine.length, defeated + 1)
+  if (isWanderer(state) && city.id !== LUOYANG_ID) {
+    state.lastConquestAt = now
+    state.selectedCityId = city.id
+    state.lastConquest = { cityId: city.id, cityName: city.name, captured: false, damage }
+    return { ok: true, captured: false, message: applyWandererSiege(state, city, damage, now), damage }
+  }
   const breachThreshold = cityBreachThreshold(city)
   city.defense = Math.max(breachThreshold, city.defense - damage)
   city.conquestProgress = Math.min(100, Math.round((city.defendersDefeated / Math.max(defenseLine.length, 1)) * 100))
@@ -1929,6 +1982,7 @@ function spendResources(state: StrategyState, cost: Partial<Record<ResourceKey, 
 }
 
 export function collectIncome(state: StrategyState, now = Date.now()): { ok: boolean; message: string; gain: Resources } {
+  if (isWanderer(state)) return { ok: false, message: '재야(중립 진영)는 내정을 할 수 없습니다. 공성전에서 이겨 그 성의 자원을 약탈하십시오.', gain: { grain: 0, silver: 0, wood: 0, iron: 0, influence: 0 } }
   const incomeWait = incomeCooldownRemaining(state, now)
   if (incomeWait > 0) return { ok: false, message: `금일 내정 수확은 이미 완료했습니다. ${Math.ceil(incomeWait / 3600000)}시간 후 다시 수확할 수 있습니다.`, gain: { grain: 0, silver: 0, wood: 0, iron: 0, influence: 0 } }
   state.lastIncomeCollectedAt = now
@@ -1985,6 +2039,7 @@ export function cityConstruction(city: City): CityBuilding | undefined {
 
 /** 공사 시작(연구처럼 시간이 걸린다). 완공 때 단계가 오르고 효과가 붙는다 */
 export function upgradeBuilding(state: StrategyState, cityId: string, buildingId: string, now = Date.now()): { ok: boolean; message: string } {
+  if (isWanderer(state)) return { ok: false, message: '재야(중립 진영)는 내정을 할 수 없습니다.' }
   settleBuildings(state, now)
   const city = findCity(state, cityId)
   if (!city) return { ok: false, message: '도시를 찾을 수 없습니다.' }
@@ -2043,6 +2098,7 @@ export function cancelBuilding(state: StrategyState, cityId: string): { ok: bool
 
 /** 즉시 완공: 남은 10분마다 금화 1개(연구와 같음) */
 export function rushBuilding(state: StrategyState, cityId: string, now = Date.now()): { ok: boolean; message: string } {
+  if (isWanderer(state)) return { ok: false, message: '재야(중립 진영)는 내정을 할 수 없습니다.' }
   const city = findCity(state, cityId)
   const building = city ? cityConstruction(city) : undefined
   if (!city || !building || building.endsAt === undefined) return { ok: false, message: '진행 중인 공사가 없습니다.' }
@@ -2057,6 +2113,64 @@ export function rushBuilding(state: StrategyState, cityId: string, now = Date.no
 /** 상대에게 점령당한 도시: 내정 건물이 모두 1단계로 돌아가고 공사도 사라진다 */
 export function resetCityBuildings(city: City): void {
   city.buildings = createBuildings(1)
+}
+
+/** 무너진 성벽은 하루 뒤 다시 세워진다 */
+export function rebuildRazedWalls(state: StrategyState, now = Date.now()): void {
+  state.cities.forEach(city => {
+    if (city.razedAt && now - city.razedAt >= RAZE_REBUILD_MS) {
+      if (city.defense <= 0) city.defense = cityDefenseForLevel(city.level)
+      city.razedAt = undefined
+    }
+  })
+}
+
+/** 오늘(한국 날짜) 남은 약탈 횟수 */
+export function wandererPlunderLeft(state: StrategyState, now = Date.now()): number {
+  const record = state.missions?.plunder
+  const today = seoulDay(now)
+  return Math.max(0, WANDERER_DAILY_PLUNDER - (record?.day === today ? record.count : 0))
+}
+
+/** 재야 공성 승리: 성벽을 깎고(0 아래로는 안 감) 그 성의 자원을 약탈한다. 성벽이 0이 되면 내정 건물이 초기화된다 */
+function applyWandererSiege(state: StrategyState, city: City, damage: number, now: number): string {
+  const before = city.defense
+  city.defense = Math.max(0, city.defense - damage)
+  const dealt = before - city.defense
+  const parts: string[] = []
+  const left = wandererPlunderLeft(state, now)
+  if (left > 0) {
+    const yieldPerDay = cityYield(city, state)
+    const take = Object.fromEntries((Object.keys(yieldPerDay) as ResourceKey[]).map(key => [key, Math.round(yieldPerDay[key] * WANDERER_PLUNDER_RATE)])) as unknown as Resources
+    state.silver += take.silver
+    state.resources = { ...state.resources, grain: state.resources.grain + take.grain, wood: state.resources.wood + take.wood, iron: state.resources.iron + take.iron, influence: state.resources.influence + take.influence, silver: state.silver }
+    const today = seoulDay(now)
+    const record = state.missions?.plunder
+    if (state.missions) state.missions.plunder = { day: today, count: (record?.day === today ? record.count : 0) + 1 }
+    parts.push(`약탈 식량 +${formatNumber(take.grain)} · 은전 +${formatNumber(take.silver)} · 목재 +${formatNumber(take.wood)} · 철 +${formatNumber(take.iron)} · 영향력 +${formatNumber(take.influence)}`)
+  } else parts.push(`오늘 약탈 횟수(${WANDERER_DAILY_PLUNDER}회)를 모두 써서 자원은 얻지 못했습니다`)
+  if (city.defense <= 0 && before > 0) {
+    resetCityBuildings(city)
+    city.razedAt = now
+    parts.push('성벽이 무너져 내정 건물이 모두 초기화되었습니다(하루 뒤 성벽 재건)')
+  }
+  addCityBattleLog(city, { timestamp: now, attackerName: '재야', attackerKind: 'user', defenderName: city.owner, won: true, damage: dealt, note: city.defense <= 0 ? '재야 약탈 · 성벽 붕괴 · 내정 초기화' : `재야 약탈 · 성벽 방어도 -${dealt}` })
+  state.lastNotice = `${city.name} 약탈 성공 · 성벽 방어도 -${formatNumber(dealt)}(${formatNumber(city.defense)} 남음) · ${parts.join(' · ')}`
+  return state.lastNotice
+}
+
+/** 진영 변경: 30일에 한 번. 재야로 바꾸거나 재야에서 세 진영으로 돌아올 수 있다 */
+export function changeFaction(state: StrategyState, faction: Faction, now = Date.now()): { ok: boolean; message: string } {
+  if (faction === state.faction) return { ok: false, message: '지금 소속된 진영입니다.' }
+  const last = state.missions?.factionChangedAt ?? 0
+  const wait = last + FACTION_CHANGE_COOLDOWN_MS - now
+  if (last && wait > 0) return { ok: false, message: `진영은 30일에 한 번만 바꿀 수 있습니다. ${Math.ceil(wait / 86400000)}일 뒤 다시 바꿀 수 있습니다.` }
+  const before = state.faction
+  state.faction = faction
+  state.selectedCityId = homeCityId(faction)
+  if (state.missions) state.missions.factionChangedAt = now
+  state.lastNotice = `${before}에서 ${faction}${faction === '재야' ? '(중립 진영)' : ''}(으)로 진영을 바꿨습니다.`
+  return { ok: true, message: state.lastNotice }
 }
 
 export function researchCost(node: ResearchNode): string {

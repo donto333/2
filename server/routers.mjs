@@ -40,7 +40,7 @@ export const gameRouter = router({
     updateGameState: adminProcedure.input(z.object({
       userId: z.number().int().positive(),
       ...Object.fromEntries(['honor', 'silver', 'gold', 'manuals', 'wins', 'battleScore', 'grain', 'wood', 'iron', 'influence', 'mythicFragments', 'mythicStones', 'factionWarScore', 'luoyangBoxes'].map(key => [key, z.number().int().min(0).max(SAVE_INT_MAX).optional()])),
-      faction: z.enum(['촉한', '위나라', '오나라']).optional(),
+      faction: z.enum(['촉한', '위나라', '오나라', '재야']).optional(),
     }).strict()).mutation(async ({ input }) => {
       const { userId, ...values } = input
       return { userId, game: await adminUpdateGameState(userId, values) }
@@ -96,8 +96,8 @@ export const gameRouter = router({
     damageRanking: protectedProcedure.input(z.object({ cityId: z.string().trim().min(1).max(64) }).strict()).query(({ input }) => getCityDamageRankings(input.cityId)),
   }),
   board: router({
-    list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']) })).query(({ ctx, input }) => listBoardPosts(ctx.user, input.board)),
-    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
+    list: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라', '재야']) })).query(({ ctx, input }) => listBoardPosts(ctx.user, input.board)),
+    create: protectedProcedure.input(z.object({ board: z.enum(['전체', '촉한', '위나라', '오나라', '재야']), title: z.string().trim().min(1).max(120), content: z.string().trim().min(1).max(4000), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => createBoardPost(ctx.user, input)),
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive(), password: z.string().min(4).max(64) }).strict()).mutation(({ ctx, input }) => deleteBoardPost(ctx.user, input.id, input.password)),
   }),
   account: router({
@@ -134,7 +134,7 @@ export const gameRouter = router({
       equipmentLoadoutsData: z.string().max(500_000).optional(),
       selectedEquipmentGeneralId: z.string().max(64).optional(),
       selectedCityId: z.string().max(64).nullable().optional(),
-      faction: z.enum(['촉한', '위나라', '오나라']).optional(),
+      faction: z.enum(['촉한', '위나라', '오나라', '재야']).optional(),
       factionChosen: z.boolean().optional(),
       factionWarScore: z.number().int().min(0).max(SAVE_INT_MAX).optional(),
       luoyangBoxes: z.number().int().min(0).max(SAVE_INT_MAX).optional(),

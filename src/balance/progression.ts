@@ -3,7 +3,7 @@
 import { REPEAT_BATTLE_DAILY_LIMIT, REPEAT_BATTLE_HONOR, REPEAT_BATTLE_SILVER } from '../../server/economy.mjs'
 import { DAILY_BONUS, MISSIONS, TUTORIAL_REWARD } from '../game/missions'
 import { SCENARIOS, scenarioEnemyIds, scenarioEnemyLevel, type ScenarioDefinition } from '../game/scenarios'
-import { HONOR_SHOP_PACKAGES, MANUAL_SHOP_PACKAGES, RESOURCE_SHOP_PACKAGES, FACTION_CAPITALS, allGenerals, cityIncome, combatPower, createInitialState, scaleGeneral, upgradeCost, type General } from '../game/strategy'
+import { HONOR_SHOP_PACKAGES, MANUAL_SHOP_PACKAGES, RESOURCE_SHOP_PACKAGES, homeCityId, allGenerals, cityIncome, combatPower, createInitialState, scaleGeneral, upgradeCost, type General } from '../game/strategy'
 import { defaultConfig, emptyGear, runBatch } from './sim'
 
 /** 정체 구간을 넘는 방법 */
@@ -32,7 +32,7 @@ export function dailyFreeIncome(): { silver: number; manuals: number; honor: num
   sum.honor += REPEAT_BATTLE_DAILY_LIMIT * REPEAT_BATTLE_HONOR
   sum.silver += REPEAT_BATTLE_DAILY_LIMIT * REPEAT_BATTLE_SILVER
   const state = createInitialState()
-  const capital = state.cities.find(city => city.id === FACTION_CAPITALS[state.faction])
+  const capital = state.cities.find(city => city.id === homeCityId(state.faction))
   if (capital) sum.silver += cityIncome(capital, state).silver
   return { silver: Math.round(sum.silver), manuals: Math.round(sum.manuals), honor: Math.round(sum.honor) }
 }
