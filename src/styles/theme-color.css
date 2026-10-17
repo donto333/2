@@ -2180,3 +2180,21 @@ html body .bt-bar--ally-morale > i { background: linear-gradient(90deg, #3fb58a,
 html body .bt-hud-row--threat.is-low .bt-bar--ally-morale > i { background: linear-gradient(90deg, #e3542f, #f0a04a); animation: ally-morale-low 1s ease-in-out infinite; }
 html body .bt-hud-row--threat.is-low > span b { color: #ff8a6a; }
 @keyframes ally-morale-low { 50% { opacity: .55; } }
+
+/* 출석 체크: 보상 그림 */
+.attendance-day { position: relative; justify-items: center; text-align: center; }
+.attendance-day > b { justify-self: start; }
+.attendance-day__art { position: relative; display: grid; place-items: center; width: 52px; height: 52px; }
+.attendance-day__art img { width: 44px; height: 44px; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
+.attendance-day__art img.is-portrait { width: 52px; height: 52px; object-fit: cover; object-position: center 18%; border-radius: 10px; border: 2px solid rgba(255, 217, 138, .75); }
+.attendance-day__art img.is-stone { filter: hue-rotate(160deg) saturate(1.4) drop-shadow(0 2px 3px rgba(0, 0, 0, .5)); }
+.attendance-day__trio { display: flex; }
+.attendance-day__trio img { width: 26px; height: 26px; margin: 0 -3px; }
+.attendance-day__count { position: absolute; right: -6px; bottom: -2px; font-style: normal; font-size: 11px; font-weight: 800; color: #fff4dc; background: rgba(120, 40, 20, .9); border: 1px solid rgba(255, 217, 138, .6); border-radius: 999px; padding: 0 5px; }
+.attendance-day__mystery { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-size: 26px; font-weight: 800; color: #ffe3a3; background: rgba(20, 10, 4, .55); border-radius: 10px; text-shadow: 0 0 8px rgba(255, 200, 100, .9); }
+.attendance-grid--week .attendance-day__art { width: 60px; height: 60px; }
+.attendance-grid--week .attendance-day__art img.is-portrait { width: 60px; height: 60px; }
+.attendance-day.is-done .attendance-day__art::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 28px; font-weight: 800; color: #7fe0b0; background: rgba(10, 30, 20, .45); border-radius: 10px; }
+.attendance-day.is-today .attendance-day__art { animation: attendance-today 1.6s ease-in-out infinite; }
+@keyframes attendance-today { 50% { transform: scale(1.08); filter: drop-shadow(0 0 8px rgba(255, 210, 120, .8)); } }
+@media (prefers-reduced-motion: reduce) { .attendance-day.is-today .attendance-day__art { animation: none; } }

@@ -611,11 +611,23 @@ export class StrategyUI {
   enterLocalGuest(): void { this.callbacks.onLocalGuestLogin() }
 
   /** 출석 체크 창: 접속하면 저절로 뜬다(오늘 받은 보상 + 37일 달력) */
+  /** 출석 보상 그림: 무장은 초상, 재화는 재화 그림, 뽑기권은 옥패 · 장비 그림 */
+  private attendanceArt(reward: AttendanceReward): string {
+    const img = (src: string, cls = '') => `<img class="${cls}" src="${src}" alt="" loading="lazy" decoding="async" draggable="false">`
+    if (reward.general) return img(`/assets/generals-realistic-webp/${reward.general}.webp`, 'is-portrait')
+    if (reward.randomLegend) return `${img('/assets/ui/recruit-montage.webp', 'is-portrait')}<i class="attendance-day__mystery">?</i>`
+    if (reward.freeRecruits) return `${img('/assets/ui/jade-summon.svg')}<i class="attendance-day__count">×${reward.freeRecruits}</i>`
+    if (reward.freeDraws) return `${img('/assets/equipment/weapon.webp')}<i class="attendance-day__count">×${reward.freeDraws}</i>`
+    if (reward.resources) return `<span class="attendance-day__trio">${img('/assets/currency/grain.webp')}${img('/assets/currency/wood.webp')}${img('/assets/currency/iron.webp')}</span>`
+    const currency = reward.gold ? 'gold' : reward.silver ? 'silver' : reward.honor ? 'honor' : reward.manuals ? 'manuals' : reward.fragments ? 'mythic' : reward.stones ? 'mythic' : ''
+    return currency ? img(`/assets/currency/${currency}.webp`, reward.stones ? 'is-stone' : '') : ''
+  }
+
   showAttendance(day: number, label: string): void {
     document.querySelector('.attendance-modal')?.remove()
     const layer = document.createElement('div')
     layer.className = 'attendance-modal'
-    const cell = (reward: AttendanceReward) => `<li class="attendance-day ${reward.day < day ? 'is-done' : reward.day === day ? 'is-today' : ''} ${reward.general || reward.randomLegend ? 'is-hero' : ''}"><b>${reward.day}일</b><span>${escapeHtml(reward.label)}</span></li>`
+    const cell = (reward: AttendanceReward) => `<li class="attendance-day ${reward.day < day ? 'is-done' : reward.day === day ? 'is-today' : ''} ${reward.general || reward.randomLegend ? 'is-hero' : ''}"><b>${reward.day}일</b><span class="attendance-day__art">${this.attendanceArt(reward)}</span><span class="attendance-day__label">${escapeHtml(reward.label)}</span></li>`
     layer.innerHTML = `<div class="attendance-modal__panel glass-card" role="dialog" aria-label="출석 체크"><span class="eyebrow">출석 체크 이벤트 · ${day}일째</span><h2>${escapeHtml(label)}</h2><p>접속할 때마다 하루에 한 번 다음 날짜의 보상을 받습니다(한국 시간 자정에 바뀜). 첫 7일 뒤 30일 동안 이어집니다.</p><h3>첫 7일</h3><ol class="attendance-grid attendance-grid--week">${ATTENDANCE_REWARDS.filter(reward => reward.day <= 7).map(cell).join('')}</ol><h3>이어지는 30일</h3><ol class="attendance-grid">${ATTENDANCE_REWARDS.filter(reward => reward.day > 7).map(cell).join('')}</ol><button class="action-button action-button--primary attendance-modal__ok" type="button">받기 완료 <span>→</span></button></div>`
     document.body.appendChild(layer)
     layer.querySelector('.attendance-modal__ok')?.addEventListener('click', () => layer.remove())
@@ -2249,6 +2261,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '출석 체크 그림', '출석 체크 창의 날짜마다 보상 그림이 들어갑니다. 무장은 초상, 재화는 재화 그림, 무료 뽑기는 횟수 표시와 함께 보이고, 받은 날은 ✓, 오늘 받을 칸은 반짝입니다.', '완료', 'jade'],
       ['2026.10.17', '아군 사기 · 대련 훈련 상대', '전투 화면의 위협도를 아군 사기(100에서 시작해 깎이는 막대)로 바꿔 보여 줍니다. 계산은 그대로이며, 0이 되면 사기 붕괴(병력 감소)가 일어나고 두 번이면 패배합니다. 스킬 · 효과 설명도 아군 사기 기준으로 고쳤습니다. 유저 대련의 훈련 상대(더미 덱)는 난이도를 10% 낮췄습니다(내 덱 전력의 77% · 90% · 104%).', '완료', 'jade'],
       ['2026.10.17', '중립 도시 수비 강화 · 무장 관리 편의', '영토 중립 도시 수비대의 평균 레벨이 2배가 되었습니다(도시 단계별 Lv.20~60, 공성 전투의 적도 같은 레벨). 보유 무장에 레벨 초기화 버튼이 생겨 금화 10개로 Lv.1로 되돌리고 레벨에 쓴 은전 · 병서의 80%를 돌려받습니다(성급 · 장비 · 스킬 해금은 유지). 능력치(통솔 · 무력 · 모략 · 속도)를 누르면 설명이, 스킬 상세의 버프 · 디버프를 누르면 효과가 나옵니다. 장비 관리는 무장 선택 → 장비 3칸 → 보유 장비 순으로 간단해졌고, 프리셋 · 세트 능력 · 필터는 접어 두었습니다.', '완료', 'jade'],
       ['2026.10.17', '전투 화면: 스킬 · 효과 표시', '스킬을 쓰면 화면 가운데 띠 대신 그 무장 머리 위에 초상과 스킬 이름이 떠오릅니다(무장이 움직이면 따라감). 버프 · 디버프는 아군 · 적 무장 카드의 이름 옆 아이콘으로 보여 주고, 아이콘에 마우스를 올리면 효과와 남은 시간이 나옵니다. 혼란처럼 한 명에게 걸린 효과는 그 무장에게만 표시됩니다.', '완료', 'jade'],
