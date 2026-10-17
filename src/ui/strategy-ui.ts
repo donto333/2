@@ -9,7 +9,7 @@ import { effectsSetting, muteSetting, musicSetting, qualitySetting, setEffectsSe
 import { sound } from '../engine/sound'
 import { RESEARCH_BRANCHES, canPay, activeResearch, formatDuration, researchStatus, researchSummary, rushCost } from '../game/research'
 import { growthWeights, affordableUpgrades, upgradeCost, templateGeneral, MYTHIC_FRAGMENT_COST, dayKey, CITY_ADJACENCY, FACTION_CAPITALS, EQUIPMENT_GRADE_META, EQUIPMENT_SET_META, EQUIPMENT_TYPE_META, FACTION_WAR_GOLD_REWARD, FACTION_WAR_HONOR_COST, GOLD_PACKAGES, GOLD_PURCHASE_ENABLED, GRADE_META, MYTHIC_EVENT_EQUIPMENT, MYTHIC_SHOP_EQUIPMENT, capitalFactionForCity, cityWallCapacity, conquestEligibility, duelAttemptsRemaining, RESOURCE_META, allGenerals, equipmentInventoryCount, equipmentSetCounts, equipmentSpecialty, skillDetail, type City, type CityBuilding, type Equipment, type EquipmentGrade, type EquipmentType, type Faction, type General, type Role, type ResearchNode, type Section, type StrategyState, buildingCost, buildingDurationMs, cityIncome, combatPower, conquestCost, conquestPower, equipmentBonus, equipmentCost, recruitCost, equipmentValue, formatNumber, incomeCooldownRemaining, researchCost, skillPower, skillRank, skillUnlockLevel, MAX_GENERAL_LEVEL, isMaxLevel } from '../game/strategy'
-import type { BattleOpponent, BattleSnapshot } from '../game/arena'
+import type { BattleOpponent, BattleSnapshot, UnitEffectChip } from '../game/arena'
 import { ATTENDANCE_REWARDS, type AttendanceReward } from '../../server/attendance.mjs'
 import { HARD_LEVEL_BONUS, HARD_RULE_INFO, SCENARIOS, hardClearReward, hardCleared, hardClearedCount, hardScenarioStars, hardUnlocked, scenarioEnemyIds, scenarioEnemyLevel, scenarioEnemyLevelFor, scenarioHardRule, scenarioStars, type ScenarioDifficulty } from '../game/scenarios'
 import { matchup, type BattleResult } from '../game/battle-core'
@@ -331,8 +331,7 @@ export class StrategyUI {
   private raidView: RaidView = { loading: false, info: null, ranking: [], message: '' }
   private duelMyPower = 0
   private latestBattle: BattleSnapshot | null = null
-  private cutInBusyUntil = 0
-  private cutInTimer = 0
+  private unitLocator: ((side: 'player' | 'enemy', lane: number) => { x: number; y: number } | null) | null = null
   private recruitAnimationActive = false
   private auth: AuthView = { status: 'logged_out', name: null }
   private account: AccountView | null = null
@@ -915,8 +914,14 @@ export class StrategyUI {
       button.classList.toggle('is-called', tactic === 'guard' && (pattern?.kind === 'guard' || Boolean(snapshot.enemyWarning)))
     })
     q('[data-bt-guard]')?.classList.toggle('is-on', snapshot.guardActive)
-    const effects = q('[data-battle-effects]')
-    if (effects) effects.innerHTML = this.battleEffectsMarkup([...snapshot.activeEffects, ...snapshot.playerDebuffs])
+    // 버프 · 디버프: 무장 이름 옆 아이콘
+    const fx = (node: HTMLElement | null, chips: UnitEffectChip[] = []) => {
+      if (!node) return
+      const html = this.unitEffectIcons(chips)
+      if (node.dataset.html !== html) { node.innerHTML = html; node.dataset.html = html }
+    }
+    snapshot.units.forEach(unit => fx(q(`[data-bt-unit="${unit.lane}"] [data-bt-unit-fx]`), snapshot.unitEffects.player[unit.lane]))
+    snapshot.opponentDeck.forEach((_, index) => fx(q(`[data-bt-enemy="${index}"] [data-bt-enemy-fx]`), snapshot.unitEffects.enemy[index]))
     snapshot.troopStatus.filter(unit => unit.side === 'enemy').forEach(unit => {
       const card = q(`[data-bt-enemy="${unit.index}"]`)
       if (!card) return
@@ -948,24 +953,39 @@ export class StrategyUI {
     if (startButton) startButton.style.display = snapshot.active ? 'none' : 'inline-flex'
   }
 
-  /** 스킬 컷인: 무장 실사 초상이 사선 띠와 함께 화면을 가로지른다(아군은 왼쪽에서, 적은 오른쪽에서). */
-  showSkillCutIn(info: { side: 'player' | 'enemy'; id: string; name: string; skill: string }): void {
-    if (this.cutInBusyUntil > performance.now() && info.side === 'enemy') return
-    let layer = document.getElementById('skill-cutin')
-    if (!layer) {
-      layer = document.createElement('div')
-      layer.id = 'skill-cutin'
-      layer.setAttribute('aria-live', 'polite')
-      document.body.appendChild(layer)
+  /** 스킬 사용: 그 무장 머리 위에 초상 · 스킬 이름이 솟아올랐다 사라진다(무장이 움직이면 따라간다) */
+  showSkillCutIn(info: { side: 'player' | 'enemy'; lane: number; id: string; name: string; skill: string }): void {
+    const key = `skill-pop-${info.side}-${info.lane}`
+    document.getElementById(key)?.remove()
+    const pop = document.createElement('div')
+    pop.id = key
+    pop.className = `skill-pop skill-pop--${info.side}`
+    pop.setAttribute('aria-live', 'polite')
+    pop.innerHTML = `<div class="skill-pop__card"><span class="skill-pop__face" style="background-image:url('/assets/generals-realistic-webp/${info.id}.webp')"></span><span class="skill-pop__text"><small>${escapeHtml(info.name)}</small><strong>${escapeHtml(info.skill)}</strong></span></div>`
+    document.body.appendChild(pop)
+    const started = performance.now()
+    let last: { x: number; y: number } | null = null
+    const place = () => {
+      if (!pop.isConnected) return
+      const point = this.unitLocator?.(info.side, info.lane) ?? last
+      if (point) {
+        last = point
+        // 화면 가장자리에서 잘리지 않게 안쪽으로
+        const half = Math.min(pop.offsetWidth / 2, window.innerWidth / 2)
+        const x = Math.max(half + 4, Math.min(window.innerWidth - half - 4, point.x))
+        const y = Math.max(pop.offsetHeight + 4, point.y - 6)
+        pop.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`
+        pop.classList.add('is-placed')
+      }
+      if (performance.now() - started < 1700) requestAnimationFrame(place)
+      else pop.remove()
     }
-    const portrait = `/assets/generals-realistic-webp/${info.id}.webp`
-    layer.className = `skill-cutin skill-cutin--${info.side}`
-    layer.innerHTML = `<div class="skill-cutin__band"><i class="skill-cutin__lines"></i><div class="skill-cutin__portrait" style="background-image:url('${portrait}')"></div><div class="skill-cutin__text"><small>${escapeHtml(info.name)}</small><strong>${escapeHtml(info.skill)}</strong></div></div>`
-    void layer.offsetWidth
-    layer.classList.add('is-playing')
-    this.cutInBusyUntil = performance.now() + 1400
-    window.clearTimeout(this.cutInTimer)
-    this.cutInTimer = window.setTimeout(() => layer?.classList.remove('is-playing'), 1500)
+    place()
+  }
+
+  /** 전장 무장의 화면 위치를 알려 주는 함수(전투 화면이 넣어 준다) */
+  setUnitLocator(locate: ((side: 'player' | 'enemy', lane: number) => { x: number; y: number } | null) | null): void {
+    this.unitLocator = locate
   }
 
   showBattleResult(result: BattleResult, notice = '', factors: Array<{ label: string; text: string; tone: 'good' | 'bad' | 'neutral' }> = []): void {
@@ -1717,10 +1737,11 @@ export class StrategyUI {
     return `<div class="ritual-portrait${imageClass}" style="--accent:${gradeColor(general)};${imageStyle}"><span>${general.portrait}</span><i></i></div>`
   }
 
-  private battleEffectsMarkup(effects: BattleSnapshot['activeEffects'] = []): string {
-    return effects.length
-      ? effects.map(effect => `<span class="battle-effect battle-effect--${effect.kind}" title="${effect.description}"><b>${effect.icon}</b><i>${effect.name}</i><small>${effect.remaining.toFixed(1)}초</small></span>`).join('')
-      : '<span class="battle-effects-empty">스킬 효과 대기 중</span>'
+  /** 무장 이름 옆 버프 · 디버프 아이콘(최대 4개, 넘치면 +개수). 남은 시간은 1초 단위로만 바꿔 다시 그리기를 줄인다 */
+  private unitEffectIcons(chips: UnitEffectChip[]): string {
+    const shown = chips.slice(0, 4)
+    const more = chips.length - shown.length
+    return shown.map(chip => `<i class="bt-fx__icon is-${chip.kind}" title="${escapeHtml(`${tr(chip.name)} · ${tr(chip.description)} · ${Math.ceil(chip.remaining)}${tr('초')}`)}" aria-label="${escapeHtml(tr(chip.name))}">${chip.icon}</i>`).join('') + (more > 0 ? `<i class="bt-fx__more">+${more}</i>` : '')
   }
 
   private attributeRows(general: General, scale = 0): string {
@@ -1951,7 +1972,7 @@ export class StrategyUI {
       const live = battle?.units[index]
       const pct = live && live.maxTroops ? live.troops / live.maxTroops * 100 : 100
       const detail = skillDetail(general)
-      return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${gradeColor(general)}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong>${general.name}</strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span><span class="bt-unit-edge" data-bt-unit-edge hidden></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
+      return `<div class="bt-unit ${live?.ready ? 'is-ready' : ''} ${live && !live.alive ? 'is-down' : ''}" data-bt-unit="${index}" style="--accent:${gradeColor(general)}"><button class="bt-unit-main" data-action="move" data-index="${index}" aria-label="${general.name} 기동 · 길게 누르면 스킬">${this.portrait(general, 'bt-portrait')}<span class="bt-unit-lane">${lanes[index] ?? ''}</span><strong class="bt-name-row"><span class="bt-name">${general.name}</span><span class="bt-fx" data-bt-unit-fx></span></strong><small>${general.role} · Lv.${general.level} · ${detail.type}</small><span class="bt-unit-troops"><i data-bt-unit-troops style="width:${pct}%"></i></span><span class="bt-unit-edge" data-bt-unit-edge hidden></span></button><button class="bt-unit-skill" data-action="battle-skill" data-index="${index}" ${live?.ready ? '' : 'disabled'}><b>${escapeHtml(live?.skillName ?? general.skillName)}</b><small data-bt-unit-cd>${general.skillUnlocked ? (active ? '대기' : '스킬') : '스킬 잠김'}</small></button></div>`
     }).join('')
     const modeLabel = battle?.mode === 'scenario' ? (battle.hardRule ? `시나리오 어려움 · ${HARD_RULE_INFO[battle.hardRule].label}` : '시나리오 전투') : battle?.mode === 'siege' ? '공성전' : battle?.mode === 'duel' ? '유저 대련' : battle?.mode === 'raid' ? `주간 레이드${this.raidSquadLabel ? ` · ${this.raidSquadLabel}` : ''}` : '일반 전투'
     const tactic = (id: 'guard' | 'feint' | 'charge', icon: string, label: string, note: string) => `<button class="bt-tactic bt-tactic--${id}" title="${label} · ${note}" data-action="battle-tactic" data-tactic="${id}" ${id === 'guard' ? 'data-bt-guard' : ''} disabled><span>${icon}</span><strong>${label}</strong><small>${note}</small><em>${battle?.tacticCosts[id] ?? { guard: 35, feint: 50, charge: 65 }[id]}</em></button>`
@@ -1960,7 +1981,7 @@ export class StrategyUI {
 <div class="bt-hud glass-card"><div class="bt-hud-row"><span class="bt-phase" data-bt-phase>${battle?.phaseName ?? '1막 · 서전'}</span><b data-bt-morale-text>적 사기 ${battle?.moraleValue ?? 80} / ${battle?.moraleMax ?? 80}</b></div><div class="bt-bar bt-bar--morale"><i data-bt-morale style="width:${battle?.morale ?? 100}%"></i></div><div class="bt-hud-row bt-hud-row--threat"><span>위협도 <b data-bt-threat-text>${battle?.threat ?? 0}</b></span><div class="bt-bar bt-bar--threat"><i data-bt-threat style="width:${battle?.threat ?? 0}%"></i></div><b class="bt-collapse" data-bt-collapse>붕괴 ${battle?.collapses ?? 0}/2</b></div><div class="bt-hud-meta"><span class="bt-mode">${modeLabel}</span>${battle?.mode === 'raid' ? `<span class="bt-raid-damage">누적 피해 <b data-bt-raid>${formatNumber(battle?.raidDamage ?? 0)}</b></span>` : ''}<span data-bt-status>${battle?.status ?? '대기 중'}</span><span class="bt-time" data-bt-time>제한 90초</span><span data-bt-combo>연계 ${battle?.combo ?? 0}</span><span data-bt-pressure>적 압박 ×1.00</span><span data-bt-bond>${escapeHtml(battle?.bond ? `인연 · ${battle.bond}` : '인연 없음')}</span></div></div>
 <div class="bt-enemies glass-card"><span class="bt-enemies-label">상대 무장</span><div class="bt-enemy-row" data-bt-enemies>${this.enemyHudMarkup(battle?.opponentDeck)}</div></div>
 </div>
-<div class="bt-stage"><div class="bt-paused" data-bt-paused hidden><strong>일시 정지</strong><small>전투 시간과 적의 행동이 멈췄습니다.</small><button class="action-button action-button--primary" data-action="battle-pause">▶ 계속하기</button></div><div class="bt-callout" data-bt-callout><span class="eyebrow">적 전술 예고</span><strong data-bt-pattern>${active ? '다음 예고 대기' : '전투 시작 전'}</strong><div class="bt-lanes"><span data-bt-lane="0">↙ 좌</span><span data-bt-lane="1">↑ 중</span><span data-bt-lane="2">↘ 우</span></div><div class="bt-bar bt-bar--window"><i data-bt-window style="width:0%"></i></div></div><div class="bt-enemy-warn" data-bt-enemy-warn hidden></div><div class="bt-feed"><ul class="bt-log" data-bt-log><li>전투 기록이 여기에 표시됩니다.</li></ul><button class="bt-log-toggle" data-action="battle-log">${this.battleLogOpen ? '접기' : '더 보기'}</button><div class="battle-effects" data-battle-effects>${this.battleEffectsMarkup(battle?.activeEffects)}</div></div></div>
+<div class="bt-stage"><div class="bt-paused" data-bt-paused hidden><strong>일시 정지</strong><small>전투 시간과 적의 행동이 멈췄습니다.</small><button class="action-button action-button--primary" data-action="battle-pause">▶ 계속하기</button></div><div class="bt-callout" data-bt-callout><span class="eyebrow">적 전술 예고</span><strong data-bt-pattern>${active ? '다음 예고 대기' : '전투 시작 전'}</strong><div class="bt-lanes"><span data-bt-lane="0">↙ 좌</span><span data-bt-lane="1">↑ 중</span><span data-bt-lane="2">↘ 우</span></div><div class="bt-bar bt-bar--window"><i data-bt-window style="width:0%"></i></div></div><div class="bt-enemy-warn" data-bt-enemy-warn hidden></div><div class="bt-feed"><ul class="bt-log" data-bt-log><li>전투 기록이 여기에 표시됩니다.</li></ul><button class="bt-log-toggle" data-action="battle-log">${this.battleLogOpen ? '접기' : '더 보기'}</button></div></div>
 <div class="bt-controls glass-card"><div class="bt-units">${units}</div><div class="bt-tactic-row"><div class="bt-gauge"><span data-bt-gauge-text>전술 게이지 ${battle?.tacticGauge ?? 0}</span><div class="bt-bar bt-bar--gauge"><i data-bt-gauge style="width:${battle?.tacticGauge ?? 0}%"></i></div></div>${tactic('guard', '▣', '철벽 태세', '위협·적장 스킬 억제')}${tactic('feint', '⌁', '유인책', '연계 +2')}${tactic('charge', '⚔', '전군 돌격', '연계를 사기 피해로')}</div>${active ? '' : '<button class="action-button action-button--primary battle-start" data-action="battle-start">전투 시작 <span>→</span></button>'}</div>
 </section>`
   }
@@ -1974,7 +1995,7 @@ export class StrategyUI {
   /** 상단 HUD의 적 무장 카드(초상·레벨·병력 막대) — Manus 전투 HUD 개선안 */
   private enemyHudMarkup(opponents: BattleOpponent[] = []): string {
     return opponents.length
-      ? opponents.map((opponent, index) => `<div class="bt-enemy" data-bt-enemy="${index}"><div class="general-portrait bt-enemy-portrait has-portrait" style="--portrait:url('/assets/generals-realistic-webp/${opponent.id}.webp')"><span>${escapeHtml(opponent.name.slice(0, 1))}</span></div><div><strong>${escapeHtml(opponent.name)}</strong><small>${opponent.role} · Lv.${opponent.level}</small><span class="bt-enemy-troops"><i style="width:100%"></i></span></div></div>`).join('')
+      ? opponents.map((opponent, index) => `<div class="bt-enemy" data-bt-enemy="${index}"><div class="general-portrait bt-enemy-portrait has-portrait" style="--portrait:url('/assets/generals-realistic-webp/${opponent.id}.webp')"><span>${escapeHtml(opponent.name.slice(0, 1))}</span></div><div><strong class="bt-name-row"><span class="bt-name">${escapeHtml(opponent.name)}</span><span class="bt-fx" data-bt-enemy-fx></span></strong><small>${opponent.role} · Lv.${opponent.level}</small><span class="bt-enemy-troops"><i style="width:100%"></i></span></div></div>`).join('')
       : '<span class="bt-enemies-empty">전투 시작 시 적 무장이 배치됩니다.</span>'
   }
 
@@ -2169,6 +2190,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '전투 화면: 스킬 · 효과 표시', '스킬을 쓰면 화면 가운데 띠 대신 그 무장 머리 위에 초상과 스킬 이름이 떠오릅니다(무장이 움직이면 따라감). 버프 · 디버프는 아군 · 적 무장 카드의 이름 옆 아이콘으로 보여 주고, 아이콘에 마우스를 올리면 효과와 남은 시간이 나옵니다. 혼란처럼 한 명에게 걸린 효과는 그 무장에게만 표시됩니다.', '완료', 'jade'],
       ['2026.10.17', '게스트 계정 초기화', '아이디를 정한 게스트 계정에서 설정의 게스트 기록 초기화가 듣지 않던 문제를 고쳤습니다. 이제 서버에 저장된 진행(무장 · 재화 · 튜토리얼 · 출석)까지 지우고 같은 아이디로 처음부터 시작합니다. 회원 계정에는 이 버튼이 보이지 않습니다.', '완료', 'jade'],
       ['2026.10.17', '혼란: 적과 아군을 가리지 않고', '혼란에 빠진 무장은 공격과 스킬마다 반반 확률로 상대편 또는 같은 편을 노립니다. 혼란 무장만 모은 덱이 지나치게 쉽게 이기던 문제를 줄였습니다.', '완료', 'jade'],
       ['2026.10.17', '출석 창 · 튜토리얼 정리', '처음 들어올 때 튜토리얼 안내에 막혀 출석 창의 받기 완료 버튼이 눌리지 않던 문제를 고쳤습니다. 출석 창은 세력을 고른 뒤에 뜨고, 그동안 튜토리얼은 잠시 기다립니다.', '완료', 'jade'],

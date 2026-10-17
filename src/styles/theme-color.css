@@ -2073,3 +2073,31 @@ html body .conquest-card .final-war-wait{margin-top:10px}
 .attendance-day.is-today{border-color:#f6c56d;background:rgba(246,197,109,.16);box-shadow:0 0 0 1px rgba(246,197,109,.4)}
 .attendance-modal__ok{justify-self:end}
 .free-ticket-note{margin:8px 0 0;color:#f6d58e;font-size:12.5px;text-align:center}
+
+/* 스킬 사용: 무장 머리 위 말풍선(2026.10.17) */
+.skill-pop { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; visibility: hidden; }
+.skill-pop.is-placed { visibility: visible; }
+.skill-pop__card { display: flex; align-items: center; gap: 7px; padding: 4px 12px 4px 4px; border-radius: 999px; background: linear-gradient(90deg, rgba(10, 52, 44, .94), rgba(18, 74, 60, .9)); border: 1px solid rgba(143, 240, 210, .75); box-shadow: 0 6px 18px rgba(0, 0, 0, .45), 0 0 18px rgba(120, 240, 200, .35); white-space: nowrap; max-width: min(46vw, 260px); animation: skill-pop 1.7s cubic-bezier(.2, .8, .2, 1) both; transform-origin: 50% 100%; }
+.skill-pop--enemy .skill-pop__card { background: linear-gradient(90deg, rgba(70, 14, 10, .94), rgba(104, 24, 16, .9)); border-color: rgba(255, 150, 120, .8); box-shadow: 0 6px 18px rgba(0, 0, 0, .45), 0 0 18px rgba(255, 110, 80, .4); }
+.skill-pop__face { flex: none; width: 34px; height: 34px; border-radius: 50%; background: #2a1a10 center 18% / cover no-repeat; border: 2px solid rgba(255, 230, 170, .9); }
+.skill-pop__text { display: grid; min-width: 0; line-height: 1.15; }
+.skill-pop__text small { font-size: 11px; color: #ffe3a3; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.skill-pop__text strong { font-size: 15px; color: #fff8ea; font-weight: 800; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.skill-pop--enemy .skill-pop__text strong { color: #ffd9cc; }
+@keyframes skill-pop { 0% { opacity: 0; transform: translateY(10px) scale(.6); } 12% { opacity: 1; transform: translateY(0) scale(1.08); } 20% { transform: translateY(0) scale(1); } 78% { opacity: 1; transform: translateY(-10px) scale(1); } 100% { opacity: 0; transform: translateY(-22px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .skill-pop__card { animation: cutin-fade 1.7s linear both; } }
+@media (max-width: 600px) { .skill-pop__card { gap: 5px; padding: 3px 9px 3px 3px; } .skill-pop__face { width: 26px; height: 26px; } .skill-pop__text small { font-size: 10px; } .skill-pop__text strong { font-size: 12.5px; } }
+
+/* 버프 · 디버프: 무장 이름 옆 아이콘 */
+html body .bt-name-row { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+html body .bt-name-row .bt-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html body .bt-unit-main .bt-name-row { justify-content: inherit; }
+html body .bt-fx { display: inline-flex; flex: none; gap: 2px; align-items: center; }
+html body .bt-fx:empty { display: none; }
+html body .bt-fx__icon { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; font-style: normal; font-size: 12px; line-height: 1; background: rgba(60, 170, 130, .32); box-shadow: inset 0 0 0 1px rgba(140, 240, 200, .7); animation: bt-fx-in .3s ease-out both; }
+html body .bt-fx__icon.is-debuff { background: rgba(190, 50, 40, .35); box-shadow: inset 0 0 0 1px rgba(255, 140, 120, .75); }
+html body .bt-fx__more { font-style: normal; font-size: 11px; font-weight: 700; color: var(--cream-soft); }
+@keyframes bt-fx-in { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (max-width: 600px) { html body .bt-fx__icon { width: 15px; height: 15px; font-size: 10px; border-radius: 4px; } }
+/* 좁은 아군 카드: 이름은 다 보이게 하고 아이콘은 다음 줄로 */
+html body .bt-unit-main .bt-name-row { flex-wrap: wrap; row-gap: 2px; }

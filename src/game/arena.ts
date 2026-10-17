@@ -99,6 +99,8 @@ export interface BattleSnapshot {
   skillCooldown: number
   activeEffects: ActiveBattleEffect[]
   playerDebuffs: ActiveBattleEffect[]
+  /** 무장별 버프 · 디버프(이름 옆 아이콘). 진영 전체에 걸린 효과는 그 진영 무장 모두에게, 혼란처럼 한 명에게 걸린 효과는 그 무장에게만 */
+  unitEffects: { player: UnitEffectChip[][]; enemy: UnitEffectChip[][] }
   bond: string
   opponentDeck: BattleOpponent[]
   troopStatus: BattleTroopStatus[]
@@ -114,6 +116,15 @@ export interface BattleSnapshot {
   autoSkill: boolean
   log: string[]
   result: BattleResult | null
+}
+
+export interface UnitEffectChip {
+  id: string
+  icon: string
+  name: string
+  kind: 'buff' | 'debuff'
+  remaining: number
+  description: string
 }
 
 export interface BattleOpponent {
@@ -137,6 +148,8 @@ export interface BattleTroopStatus {
 
 export interface SkillCutIn {
   side: 'player' | 'enemy'
+  /** 스킬을 쓴 무장의 자리(그 무장 위에 스킬 이름을 띄운다) */
+  lane: number
   id: string
   name: string
   skill: string
@@ -927,6 +940,34 @@ export class Arena {
     this.drainCore()
   }
 
+  /** 무장별로 걸린 버프 · 디버프 */
+  private unitEffects(): BattleSnapshot['unitEffects'] {
+    const core = this.core
+    if (!core) return { player: [], enemy: [] }
+    const chip = (effect: ActiveBattleEffect): UnitEffectChip => ({ id: effect.id, icon: effect.icon, name: effect.name, kind: effect.kind, remaining: effect.remaining, description: effect.description })
+    const live = (effect: ActiveBattleEffect) => effect.remaining > 0
+    const player = core.players.map(unit => unit.troops <= 0 ? [] : [
+      ...core.buffs.filter(live).filter(effect => (effect.id !== 'archer-focus' || unit.general.role === '궁병') && (effect.id !== 'cavalry-surge' || unit.general.role === '기병')),
+      ...core.playerDebuffs.filter(live).filter(effect => effect.id !== 'p-confuse' || core.isConfused(unit)),
+    ].map(chip))
+    const enemy = core.enemies.map(unit => unit.troops <= 0 ? [] : [
+      ...core.enemyBuffs.filter(live),
+      ...core.debuffs.filter(live).filter(effect => effect.id !== 'confusion' || core.isConfused(unit)),
+    ].map(chip))
+    return { player, enemy }
+  }
+
+  /** 무장 머리 위(이름표 자리)의 화면 좌표(CSS 픽셀). 화면 밖이거나 없으면 null */
+  unitScreenPoint(side: 'player' | 'enemy', lane: number): { x: number; y: number } | null {
+    const unit = this.unitAt(side, lane)
+    if (!unit) return null
+    const point = unit.statusGroup.getWorldPosition(new THREE.Vector3()).project(this.camera)
+    if (point.z > 1 || Math.abs(point.x) > 1.2 || Math.abs(point.y) > 1.2) return null
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return null
+    return { x: rect.left + (point.x + 1) / 2 * rect.width, y: rect.top + (1 - point.y) / 2 * rect.height }
+  }
+
   private unitAt(side: 'player' | 'enemy', lane: number): BattleUnit | undefined {
     return (side === 'player' ? this.playerUnits : this.enemyUnits)[lane]
   }
@@ -978,7 +1019,7 @@ export class Arena {
         const unit = this.unitAt(event.side, event.lane)
         if (!unit) break
         sound.skill(event.type, event.side, this.lanePan(event.lane), this.skillVoice(unit, event.type, event.side))
-        this.callbacks.onSkillCast?.({ side: event.side, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
+        this.callbacks.onSkillCast?.({ side: event.side, lane: event.lane, id: unit.general.id, name: unit.general.name, skill: event.name, portraitPath: unit.general.portraitPath })
         this.playSkill(unit, event.side, event.type, event.name, event.morale, event.target)
         if (event.side === 'enemy') this.enemyWarning = null
         break
@@ -1633,6 +1674,7 @@ export class Arena {
       skillCooldown: units[this.selectedUnit]?.cooldown ?? 0,
       activeEffects: [...(core?.buffs ?? []), ...(core?.debuffs ?? []), ...(core?.enemyBuffs ?? [])].map(effect => ({ ...effect })),
       playerDebuffs: (core?.playerDebuffs ?? []).map(effect => ({ ...effect })),
+      unitEffects: this.unitEffects(),
       bond: core?.bond ? `${core.bond.name} · ${core.bond.desc}` : '',
       opponentDeck: this.enemyDeck.map(enemy => ({ id: enemy.id, name: enemy.name, role: enemy.role, level: enemy.level, grade: enemy.grade, portraitPath: enemy.portraitPath })),
       troopStatus: this.troopStatus(),

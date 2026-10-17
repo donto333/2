@@ -1718,6 +1718,8 @@ arena = new Arena(canvas, {
     queueAccountSave()
   },
 })
+// 스킬 이름은 쓴 무장 머리 위에 띄운다
+ui.setUnitLocator((side, lane) => arena.unitScreenPoint(side, lane))
 // 첫 전투에서 멈칫하지 않도록 본영에 있을 때 무장·병사 모델과 공격 자세를 미리 준비한다
 window.setTimeout(() => preloadStrikeModels(), 2500)
 
