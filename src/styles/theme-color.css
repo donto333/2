@@ -2330,7 +2330,8 @@ body .codex-card .codex-stats > div { grid-template-columns: 38px 1fr 34px; }
 .codex-own-line { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--jade); }
 .codex-own-line b { color: var(--gold); }
 body .codex-card .gcard-skill { margin-top: 8px; }
-/* 도감 카드에서 스킬 상세를 펼치면 한 줄 전체를 쓴다 */
-body .codex-grid .codex-card:has(details.gcard-skill[open]) { grid-column: 1 / -1; }
-body .codex-card:has(details.gcard-skill[open]) .codex-card-heading p { max-width: none; }
+/* 도감 카드에서 스킬 상세를 펼쳐도 카드 크기는 그대로: 상세는 카드 안에서 위아래로 넘겨 본다 */
+body .codex-grid .codex-card { align-self: start; }
+body .codex-card details.gcard-skill[open] > :not(summary) { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+body .codex-card details.gcard-skill[open] { max-height: 300px; overflow: hidden; }
 html body .gcard-skill .skill-fx-chip { max-width: 100%; white-space: nowrap; }
