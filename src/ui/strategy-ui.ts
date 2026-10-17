@@ -2050,7 +2050,10 @@ export class StrategyUI {
         const has = owned.has(id)
         return `<div class="combo-member ${id === anchorId ? 'is-anchor' : ''} ${has ? '' : 'is-unowned'}" style="--accent:${gradeColor(general)}">${this.portrait(general, 'combo-member__portrait')}<div><small>${lanes[lane]}</small><strong>${escapeHtml(general.name)}</strong><span>${general.role} · ${GRADE_META[general.grade].label}</span>${has ? '' : '<em class="combo-edge is-dis">미보유</em>'}</div></div>`
       }).join('')
-      const tags = [combo.bond ? `<span class="combo-tag combo-tag--bond">인연 ‘${escapeHtml(combo.bond.name)}’</span>` : '', ...combo.keys.map(key => `<span class="combo-tag">${escapeHtml(key)}</span>`)].join('')
+      // 인연 · 핵심 스킬 꼬리표: 누르면 설명이 펼쳐진다(인연은 효과 · 필요 인원 · 구성원, 스킬은 효과)
+      const nameOf = (id: string) => catalog.find(item => item.id === id)?.name ?? id
+      const bondTag = combo.bond ? `<details class="combo-tag combo-tag--bond combo-tag--info"><summary>인연 ‘${escapeHtml(combo.bond.name)}’</summary><div class="combo-tag__pop"><b>인연 ‘${escapeHtml(combo.bond.name)}’</b><p>${escapeHtml(combo.bond.desc)}</p><small>${combo.bond.need}명 이상 함께 출전 · ${combo.bond.members.map(id => escapeHtml(nameOf(id))).join(' · ')}</small></div></details>` : ''
+      const tags = [bondTag, ...combo.keyInfo.map(key => `<details class="combo-tag combo-tag--info"><summary>${escapeHtml(key.label)}</summary><div class="combo-tag__pop"><b>${escapeHtml(key.general)} ‘${escapeHtml(key.skill)}’</b><p>${escapeHtml(key.desc)}</p></div></details>`)].join('')
       const isCurrent = combo.ids.join(',') === current
       const action = isCurrent ? '<span class="combo-current">현재 편성</span>' : missing.length ? `<span class="combo-missing">미보유 ${missing.length}명</span>` : `<button class="mini-action mini-action--deploy" data-action="apply-combo" data-squad="${squad}" data-ids="${combo.ids.join(',')}">${squad > 0 ? `${SQUAD_LABELS[squad]}에 ` : ''}이 덱으로 편성</button>`
       return `<li class="combo-row combo-row--${combo.archetype} ${isCurrent ? 'is-current' : ''}"><div class="combo-type"><b>${meta.label}</b><small>${meta.desc}</small></div><div class="combo-members">${members}</div><div class="combo-side"><div class="combo-tags">${tags}</div>${action}</div></li>`
@@ -2430,6 +2433,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '추천 덱 인연 · 스킬 설명', '출전 편성의 추천 덱에서 인연 · 핵심 스킬 꼬리표(예: 육손 ‘이릉 화진’)를 누르면 설명이 말풍선으로 펼쳐집니다. 인연은 효과 · 필요 인원 · 구성원, 스킬은 효과를 보여 줍니다. 다시 누르면 닫힙니다.', '완료', 'jade'],
       ['2026.10.17', '장비 전열 수호형 · 스킬 재구성', '장비가 전열을 맡는 수호형이 되었습니다. 가운데(전열)에 세우면 받는 피해 −40%와 도발이 붙어 적을 끌어당깁니다. 새 스킬 ‘장판교 일갈’: 자신 받는 피해 −30% 5초 + 반격 15% 5초 + 적 공포 4초 + 적 전술 예고 1회 지연. 패시브 ‘만인지적’: 공격받을 때마다 쿨다운 −0.25초(맞으며 버틸수록 일갈을 자주 씀). 능력치는 수호형 성장(방어 · 통솔)으로 다시 계산됩니다.', '완료', 'jade'],
       ['2026.10.17', '도감 무장 카드 크기', '무장 도감에서 무장의 스킬 상세를 펼치면 카드가 한 줄 전체로 크게 늘어나던 것을 고쳤습니다. 이제 카드 크기는 그대로이고, 상세 내용은 카드 안에서 위아래로 넘겨 봅니다.', '완료', 'jade'],
       ['2026.10.17', '도감 스킬 · Lv.60 능력치', '무장 도감에서 미영입 무장도 이름 · 별호 · 스킬 상세 · 인연을 볼 수 있고, 능력치와 전투력은 Lv.60 기준으로 나옵니다. 보유 무장의 능력치 막대도 Lv.60 최고치를 기준으로 그립니다. 조건이 안 된 인연은 "미발동 0/3"처럼 표시됩니다.', '완료', 'jade'],

@@ -124,6 +124,8 @@ export interface ComboAdvice {
   score: number
   /** 이 조합의 핵심 스킬(무장 · 스킬) */
   keys: string[]
+  /** 핵심 스킬 설명(누르면 펼쳐 보는 용도) — keys와 같은 순서 */
+  keyInfo: Array<{ label: string; general: string; skill: string; desc: string }>
 }
 
 function trioScore(trio: Profile[], archetype: Archetype, anchor: Profile = trio[0]): number {
@@ -169,9 +171,9 @@ function trioScore(trio: Profile[], archetype: Archetype, anchor: Profile = trio
 }
 
 /** 조합에서 이 유형을 이끄는 스킬 */
-function keySkills(trio: Profile[], archetype: Archetype): string[] {
+function keySkills(trio: Profile[], archetype: Archetype): Array<{ label: string; general: string; skill: string; desc: string }> {
   const weight = (item: Profile) => archetype === 'sustain' ? item.tank + item.heal : archetype === 'early' ? item.early + item.dmg * 0.3 : archetype === 'debuff' ? item.debuff : archetype === 'utility' ? item.util : trio.reduce((total, other) => total + (other !== item ? pairSynergy(item, other) : 0), 0) + item.dmg * 0.1
-  return [...trio].sort((left, right) => weight(right) - weight(left)).slice(0, 2).filter(item => weight(item) > 0.05).map(item => `${item.general.name} ‘${item.def.active.name}’`)
+  return [...trio].sort((left, right) => weight(right) - weight(left)).slice(0, 2).filter(item => weight(item) > 0.05).map(item => ({ label: `${item.general.name} ‘${item.def.active.name}’`, general: item.general.name, skill: item.def.active.name, desc: item.def.active.desc }))
 }
 
 /**
@@ -196,7 +198,8 @@ export function recommendDecks(anchorId: string, archetypes: Archetype[] = ARCHE
     if (!pick) continue
     used.add(pick.trio.map(item => item.general.id).sort().join())
     const ids = frontLineOrder(pick.trio.map(item => item.general)).map(general => general.id)
-    result.push({ archetype, ids, bond: bondFor(ids), score: pick.score, keys: keySkills(pick.trio, archetype) })
+    const keyInfo = keySkills(pick.trio, archetype)
+    result.push({ archetype, ids, bond: bondFor(ids), score: pick.score, keys: keyInfo.map(key => key.label), keyInfo })
   }
   return result
 }

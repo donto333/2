@@ -2335,3 +2335,15 @@ body .codex-grid .codex-card { align-self: start; }
 body .codex-card details.gcard-skill[open] > :not(summary) { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
 body .codex-card details.gcard-skill[open] { max-height: 300px; overflow: hidden; }
 html body .gcard-skill .skill-fx-chip { max-width: 100%; white-space: nowrap; }
+
+/* 추천 덱: 인연 · 핵심 스킬 꼬리표를 누르면 설명이 말풍선으로 펼쳐진다 */
+body .combo-tag--info { position: relative; padding: 0; }
+body .combo-tag--info > summary { list-style: none; cursor: pointer; padding: 2px 7px; border-radius: 999px; }
+body .combo-tag--info > summary::-webkit-details-marker { display: none; }
+body .combo-tag--info > summary::after { content: ' ⓘ'; opacity: .6; font-size: 11px; }
+body .combo-tag--info[open] > summary { background: rgba(246, 197, 109, .16); color: #fbf3df; }
+body .combo-tag__pop { position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; width: min(260px, 80vw); padding: 9px 11px; border: 1px solid rgba(246, 197, 109, .5); border-radius: 8px; background: linear-gradient(160deg, #3a2416, #22140b); box-shadow: 0 12px 30px rgba(0, 0, 0, .55); white-space: normal; text-align: left; }
+body .combo-tag__pop b { display: block; color: #f6d58f; font-size: 13px; }
+body .combo-tag__pop p { margin: 4px 0 0; color: #efe3c8; font-size: 12.5px; line-height: 1.5; }
+body .combo-tag__pop small { display: block; margin-top: 5px; color: #b7a684; font-size: 11.5px; line-height: 1.4; }
+@media (max-width: 760px) { body .combo-tag__pop { right: auto; left: 0; } }
