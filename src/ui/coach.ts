@@ -397,6 +397,11 @@ const GUIDE_CARDS: Array<{ title: string; body: string; art: string }> = [
       <text x="236" y="62" text-anchor="middle" class="ga-star">★★★</text><text x="236" y="96" text-anchor="middle" class="ga-t">승리 · 병력 · 막기</text>`),
   },
   {
+    title: '덱 유형 상성 (영토전 · 유저 대련)',
+    body: '세 무장의 스킬 구성으로 덱 유형(속공 · 버티기 · 유틸 · 디버프 · 스킬 연계)이 정해지고, 각 유형은 두 유형에 강하고 두 유형에 약합니다. 속공은 버티기 · 유틸에, 버티기는 유틸 · 디버프에, 유틸은 디버프 · 스킬 연계에, 디버프는 스킬 연계 · 속공에, 스킬 연계는 속공 · 버티기에 강합니다. 유리하면 주는 피해와 스킬 사기 피해 +12%, 불리하면 −12%입니다. 유형 특성도 붙습니다: 속공은 첫 18초 피해 +50%, 스킬 연계는 피해 +22%, 유틸은 스킬 쿨다운 −22%, 디버프는 직접 피해 −12%(묶기에 기대는 만큼). 출전 편성에서 내 덱 유형을, 대련 목록에서 상대 덱 유형을 볼 수 있습니다.',
+    art: svg(`<circle cx="90" cy="22" r="20" class="ga-box"/><text x="90" y="26" text-anchor="middle" class="ga-s">속공</text><circle cx="139" cy="58" r="20" class="ga-box"/><text x="139" y="62" text-anchor="middle" class="ga-s">버티기</text><circle cx="121" cy="116" r="20" class="ga-box"/><text x="121" y="120" text-anchor="middle" class="ga-s">유틸</text><circle cx="59" cy="116" r="20" class="ga-box"/><text x="59" y="120" text-anchor="middle" class="ga-s">디버프</text><circle cx="41" cy="58" r="20" class="ga-box"/><text x="41" y="62" text-anchor="middle" class="ga-s">연계</text><path d="M108 35 L121 45" class="ga-arrow"/><path d="M132 79 L128 95" class="ga-arrow"/><path d="M99 116 L81 116" class="ga-arrow"/><path d="M52 95 L48 79" class="ga-arrow"/><path d="M59 45 L72 35" class="ga-arrow"/><path d="M97 43 L114 95" class="ga-arrow"/><path d="M121 71 L77 103" class="ga-arrow"/><path d="M103 103 L59 71" class="ga-arrow"/><path d="M66 95 L83 43" class="ga-arrow"/><path d="M63 58 L117 58" class="ga-arrow"/><text x="236" y="62" text-anchor="middle" class="ga-t">화살표 방향이 유리</text><text x="236" y="92" text-anchor="middle" class="ga-n">유리 +12%</text><text x="236" y="118" text-anchor="middle" class="ga-t">불리 −12%</text>`),
+  },
+  {
     title: '버프 · 아군 강화 효과',
     body: '아군 무장의 스킬이 거는 강화입니다. 걸려 있는 효과는 전투 기록 칸 아래에 아이콘과 남은 시간으로 보이고, 시간이 지나면 사라집니다. 같은 효과가 다시 걸리면 남은 시간이 다시 채워집니다.',
     art: effectList(BUFF_IDS),

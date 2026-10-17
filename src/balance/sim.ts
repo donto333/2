@@ -1,3 +1,4 @@
+import { STYLE_MODES, styleMatch } from '../game/formation-advice'
 // 밸런스 테스트 계산 — 게임과 같은 전투 규칙(battle-core)·스킬(skills)·장비 공식을 그대로 쓴다.
 import { BattleCore, BATTLE_RULES, type BattleMode, type BattleResult } from '../game/battle-core'
 import { allGenerals, combatPower, equipmentBonusFromItems, fullEquipmentSets, makeEquipment, scaleGeneral, skillPower, skillUnlockLevel, templateGeneral, withEquipmentStats, type Equipment, type EquipmentGrade, type EquipmentSet, type EquipmentType, type General } from '../game/strategy'
@@ -116,6 +117,7 @@ function newCore(ally: General[], enemy: General[], settings: SimSettings, rng?:
     mode: settings.mode,
     moraleBonus: settings.mode === 'siege' ? settings.moraleBonus : 0,
     rng,
+    style: STYLE_MODES.has(settings.mode) ? styleMatch(ally.map(general => general.id), enemy.map(general => general.id)) : null,
     autoPilot: settings.accuracy > 0 ? { accuracy: settings.accuracy, reaction: [0.6, 1.4] } : null,
   })
 }

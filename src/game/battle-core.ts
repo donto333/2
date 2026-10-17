@@ -84,6 +84,10 @@ export const BATTLE_RULES = {
   takenCap: 0.4,
   /** 레벨 차 완화: 적이 아군보다 1레벨 높을 때마다 적이 주는 병력 피해를 이만큼 나눠 줄인다(낭떠러지 대신 완만한 곡선) */
   gapDamage: 0.007,
+  /** 덱 유형 상성(영토전 · 유저 대련): 유리한 쪽이 주는 병력 피해와 아군 스킬 사기 피해를 이만큼 키운다(불리하면 그만큼 줄인다) */
+  styleEdge: 0.12,
+  /** 덱 유형 특성(영토전 · 유저 대련, 양쪽 모두): 속공은 초반 몰아치기, 연계는 피해 증가, 유틸은 스킬 쿨다운 감소, 디버프는 직접 피해 감소 */
+  styleTrait: { earlySec: 18, earlyDamage: 0.5, chainDamage: 0.22, utilityCd: 0.22, debuffDamage: -0.12 },
   /** 열세 보상: 적이 높을수록 예고 파훼 사기 피해 증가(1레벨당, 최대 25레벨분) — 잘하면 뒤집을 수 있게 */
   gapBreakBonus: 0.025,
   /** 예고를 파훼하면 그 레인 무장 병력을 이 비율만큼 회복 */
@@ -180,7 +184,11 @@ export interface CoreConfig {
   easy?: boolean
   /** 시나리오 어려움 단계의 특수 규칙 */
   hardRule?: HardRule | null
+  /** 덱 유형 상성: 아군 · 적 덱 유형 이름과 아군 기준 상성(+1 유리 · −1 불리 · 0) */
+  style?: DeckStyleMatch | null
 }
+
+export interface DeckStyleMatch { player: string; enemy: string; edge: number; playerKey?: string; enemyKey?: string }
 
 /** 시나리오 어려움 특수 규칙: iron 적 사기 +20 · swift 제한 시간 60초 · nofire 화상 금지 · fog 대응 시간 −0.5초 */
 export type HardRule = 'iron' | 'swift' | 'nofire' | 'fog'
@@ -267,6 +275,8 @@ export class BattleCore {
   /** 이 전투의 제한 시간(초). 어려움 '속전' 규칙이면 60초 */
   readonly timeLimit: number
   readonly hardRule: HardRule | null
+  /** 덱 유형 상성(영토전 · 유저 대련) */
+  readonly style: DeckStyleMatch | null
   private readonly rng: () => number
   readonly research: BattleResearch
   private collapseSaved = false
@@ -286,6 +296,7 @@ export class BattleCore {
     this.autoPilot = config.autoPilot ?? null
     this.autoSkill = Boolean(config.autoSkill)
     this.hardRule = config.hardRule ?? null
+    this.style = config.style ?? null
     this.moraleBonus = clamp(Math.round(config.moraleBonus ?? 0), 0, 50) + (this.hardRule === 'iron' ? HARD_RULE_EFFECT.ironMorale : 0)
     this.timeLimit = this.hardRule === 'swift' ? HARD_RULE_EFFECT.swiftTime : BATTLE_RULES.timeLimit
     this.research = config.research ?? {}
@@ -307,6 +318,9 @@ export class BattleCore {
       unit.cdMax = skillCooldownFor(this.growth(unit), unit.base) * (this.mode === 'duel' ? BATTLE_RULES.duelSkillCooldown : BATTLE_RULES.enemySkillCooldownMult) * (hasGearSet(unit, 'speed') ? 1 - BATTLE_RULES.galeCooldownCut : 1)
       unit.cd = Math.max(0, unit.cdMax * 0.6 * opener(unit) - (hasGearSet(unit, 'speed') ? BATTLE_RULES.galeOpenerSec : 0))
     })
+    // 덱 유형 특성: 유틸 덱은 스킬 쿨다운이 짧다
+    if (this.style?.playerKey === 'utility') this.players.forEach(unit => { unit.cdMax *= 1 - BATTLE_RULES.styleTrait.utilityCd; unit.cd *= 1 - BATTLE_RULES.styleTrait.utilityCd })
+    if (this.style?.enemyKey === 'utility') this.enemies.forEach(unit => { unit.cdMax *= 1 - BATTLE_RULES.styleTrait.utilityCd; unit.cd *= 1 - BATTLE_RULES.styleTrait.utilityCd })
     this.enemyMaxTotal = Math.max(1, this.enemies.reduce((sum, unit) => sum + unit.maxTroops, 0))
     const enemyLevel = this.enemies.reduce((sum, unit) => sum + unit.general.level, 0) / Math.max(1, this.enemies.length)
     this.moraleScale = Math.min(BATTLE_RULES.moraleScaleCap, 1 + BATTLE_RULES.moralePerEnemyLevel * Math.max(0, enemyLevel - 1)) * (this.easy ? 0.35 : 1) * (this.mode === 'duel' ? BATTLE_RULES.duelMorale : 1)
@@ -317,6 +331,7 @@ export class BattleCore {
     this.gauge = Math.min(100, this.research.startGauge ?? 0)
     if (this.players.some(unit => this.passive(unit) === 'startFear')) this.addEffect('debuff', 'fear', 3)
     this.log(`작전 개시 · 적 ${this.enemies.map(unit => unit.general.name).join(' · ')}${this.bond ? ` · 인연 ‘${this.bond.name}’ ${this.bond.desc}` : ''}`)
+    if (this.style) this.log(`덱 상성 · 아군 ${this.style.player} vs 적 ${this.style.enemy}${this.style.edge > 0 ? ' · 유리(피해 +12%)' : this.style.edge < 0 ? ' · 불리(피해 −12%)' : ' · 상성 없음'}`, this.style.edge > 0 ? 'jade' : this.style.edge < 0 ? 'ember' : undefined)
   }
 
   // ── 준비 ─────────────────────────────────────────
@@ -517,6 +532,17 @@ export class BattleCore {
     return this.laneTarget(units, lane)
   }
 
+  /** 덱 유형 특성으로 이 편이 주는 피해 배율 */
+  private styleTraitDamage(side: CoreUnit['side']): number {
+    const key = side === 'player' ? this.style?.playerKey : this.style?.enemyKey
+    const trait = BATTLE_RULES.styleTrait
+    if (key === 'early' && this.t <= trait.earlySec) return 1 + trait.earlyDamage
+    if (key === 'chain') return 1 + trait.chainDamage
+    // 디버프 덱은 묶기에 기대는 만큼 직접 주는 피해가 조금 낮다
+    if (key === 'debuff') return 1 + trait.debuffDamage
+    return 1
+  }
+
   /** 병력 피해 적용. 호위·불굴·반격·사기 감소까지 처리한다. */
   dealDamage(target: CoreUnit, raw: number, source: string, attacker: CoreUnit | null, opts: { ignoreDr?: boolean } = {}): number {
     if (target.troops <= 0 || raw <= 0) return 0
@@ -530,7 +556,9 @@ export class BattleCore {
     // 전열: 가운데 자리는 받는 피해가 줄어든다(수호형이면 더). 함진영 같은 피해 감소 무시 효과에는 적용되지 않는다
     const front = victim.lane === BATTLE_RULES.frontLane && !opts.ignoreDr ? BATTLE_RULES.frontDr + (this.isFrontTank(victim) ? BATTLE_RULES.frontTankDr : 0) : 0
     const legion = hasGearSet(victim, 'command') ? 1 - BATTLE_RULES.legionGuard : 1
-    const amount = Math.max(1, Math.round(raw * (1 - front) * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken) * legion))
+    // 덱 유형 상성: 유리한 덱이 주는 피해 +12%, 불리한 덱 −12%
+    const edge = this.style && attacker ? (1 + BATTLE_RULES.styleEdge * this.style.edge * (attacker.side === 'player' ? 1 : -1)) * this.styleTraitDamage(attacker.side) : 1
+    const amount = Math.max(1, Math.round(raw * (1 - front) * (1 - (opts.ignoreDr ? 0 : dr)) * (1 + taken) * legion * edge))
     if (this.mode === 'raid' && victim.side === 'enemy') this.raidDamage += amount
     else victim.troops = Math.max(0, victim.troops - amount)
     const edgeValue = attacker ? matchup(attacker.general.role, victim.general.role) : 1
@@ -841,6 +869,7 @@ export class BattleCore {
     if (this.bond?.id === 'five-tigers' && (unit.def.type === '돌격' || unit.def.type === '사격')) mult += 0.1
     if (this.bond?.id === 'lu-bu-army') mult += 0.08
     if (unit.side === 'player') {
+      if (this.style) mult += BATTLE_RULES.styleEdge * this.style.edge + this.styleTraitDamage('player') - 1
       mult += this.bond?.skillMult ?? 0
       if (this.bond?.typeMult?.types.includes(unit.def.type)) mult += this.bond.typeMult.value
     }

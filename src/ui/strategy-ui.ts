@@ -16,7 +16,13 @@ import { matchup, type BattleResult } from '../game/battle-core'
 import { BATTLE_EFFECTS, type BattleEffectId } from '../game/battle-effects'
 import { fxGlyph, fxSeal } from './fx-icons'
 import { BONDS, skillDefFor, type SkillFx } from '../game/skills'
-import { ARCHETYPE_META, recommendDecks, type ComboAdvice } from '../game/formation-advice'
+import { ARCHETYPES, ARCHETYPE_META, STYLE_BEATS, deckStyle, recommendDecks, styleEdge, type Archetype, type ComboAdvice } from '../game/formation-advice'
+
+/** 덱 유형 상성 설명: 강한 두 유형 · 약한 두 유형 */
+function styleCounters(style: Archetype): { strong: string; weak: string } {
+  const label = (key: Archetype) => ARCHETYPE_META[key].label
+  return { strong: STYLE_BEATS[style].map(label).join(', '), weak: ARCHETYPES.filter(key => STYLE_BEATS[key].includes(style)).map(label).join(', ') }
+}
 import { ensureIconSprite, icon, type IconName } from './icons'
 import { playForgeCeremony, playSummonCeremony } from './summon-ceremony'
 
@@ -2029,6 +2035,23 @@ export class StrategyUI {
    * 무장별 추천 덱: 무장을 고르면 그 무장이 들어간 이상적인 조합을 유형마다 하나씩(스킬 연계·버티기·초반 끝내기·디버프·유틸) 보여 준다.
    * 지금 키운 정도는 따지지 않고 스킬 설계와 전열 규칙만 본다. 70명 전체에서 고르므로 없는 무장은 미보유로 표시한다.
    */
+  /** 대련 상대 덱 유형과 내 덱 기준 상성 */
+  private duelStyleBadge(state: StrategyState, opponent: DuelOpponent): string {
+    const theirs = opponent.deck?.length === 3 ? deckStyle(opponent.deck.map(general => general.id)) : null
+    if (!theirs) return ''
+    const mine = state.formation.length >= 3 ? deckStyle(state.formation) : null
+    const edge = styleEdge(mine, theirs)
+    return `<span class="duel-style ${edge > 0 ? 'is-adv' : edge < 0 ? 'is-dis' : ''}">${ARCHETYPE_META[theirs].label} 덱${edge > 0 ? ' · 유리' : edge < 0 ? ' · 불리' : ''}</span>`
+  }
+
+  /** 지금 편성의 덱 유형과 상성(영토전 · 유저 대련) */
+  private styleNote(ids: string[]): string {
+    const style = ids.length >= 3 ? deckStyle(ids) : null
+    if (!style) return `<p class="combo-style-note">덱 유형 상성(영토전 · 유저 대련): 세 명을 모두 편성하면 덱 유형이 정해집니다. 유리한 유형을 만나면 주는 피해 +12%, 불리하면 −12%입니다.</p>`
+    const counters = styleCounters(style)
+    return `<p class="combo-style-note">현재 덱 유형 <b>${ARCHETYPE_META[style].label}</b> · 강함: ${counters.strong} · 약함: ${counters.weak}<small>영토전 · 유저 대련에서 유리한 유형을 만나면 주는 피해 +12%, 불리하면 −12%</small></p>`
+  }
+
   private comboAdvice(state: StrategyState, squad = 0): string {
     const members = squadIds(state, squad)
     const owned = new Set(state.generals.map(general => general.id))
@@ -2057,9 +2080,10 @@ export class StrategyUI {
       const tags = bondTag
       const isCurrent = combo.ids.join(',') === current
       const action = isCurrent ? '<span class="combo-current">현재 편성</span>' : missing.length ? `<span class="combo-missing">미보유 ${missing.length}명</span>` : `<button class="mini-action mini-action--deploy" data-action="apply-combo" data-squad="${squad}" data-ids="${combo.ids.join(',')}">${squad > 0 ? `${SQUAD_LABELS[squad]}에 ` : ''}이 덱으로 편성</button>`
-      return `<li class="combo-row combo-row--${combo.archetype} ${isCurrent ? 'is-current' : ''}"><div class="combo-type"><b>${meta.label}</b><small>${meta.desc}</small></div><div class="combo-members">${members}</div><div class="combo-side"><div class="combo-tags">${tags}</div>${action}</div></li>`
+      const counters = styleCounters(combo.archetype)
+      return `<li class="combo-row combo-row--${combo.archetype} ${isCurrent ? 'is-current' : ''}"><div class="combo-type"><b>${meta.label}</b><small>${meta.desc}</small><small class="combo-style">강함: ${counters.strong} · 약함: ${counters.weak}</small></div><div class="combo-members">${members}</div><div class="combo-side"><div class="combo-tags">${tags}</div>${action}</div></li>`
     }).join('')
-    return `<div class="combo-advice glass-card"><div class="card-header"><div><span class="eyebrow">추천 덱</span><h3>무장별 추천 덱</h3><p class="combo-note">무장을 고르면 그 무장이 들어간 이상적인 조합을 유형마다 하나씩 보여 드립니다. 지금 키운 정도는 따지지 않고 스킬 연계·인연과 전열 규칙만 보며, 가운데(전열)에는 수호형이나 단단한 무장을 세웁니다. 아직 없는 무장도 미보유로 함께 보여 줍니다.</p></div></div><div class="combo-anchor-row" role="group" aria-label="추천 덱을 볼 무장">${chips}</div><div class="combo-anchor-name"><b>${escapeHtml(anchor.name)}</b> 추천 덱</div><ol class="combo-list">${rows}</ol></div>`
+    return `<div class="combo-advice glass-card"><div class="card-header"><div><span class="eyebrow">추천 덱</span><h3>무장별 추천 덱</h3><p class="combo-note">무장을 고르면 그 무장이 들어간 이상적인 조합을 유형마다 하나씩 보여 드립니다. 지금 키운 정도는 따지지 않고 스킬 연계·인연과 전열 규칙만 보며, 가운데(전열)에는 수호형이나 단단한 무장을 세웁니다. 아직 없는 무장도 미보유로 함께 보여 줍니다.</p></div></div><div class="combo-anchor-row" role="group" aria-label="추천 덱을 볼 무장">${chips}</div>${this.styleNote(members)}<div class="combo-anchor-name"><b>${escapeHtml(anchor.name)}</b> 추천 덱</div><ol class="combo-list">${rows}</ol></div>`
   }
 
   private formationEnemies(state: StrategyState): Array<General | undefined> {
@@ -2434,6 +2458,7 @@ export class StrategyUI {
   private updatesSection(): string {
     // 지금까지의 업데이트를 주제별로 요약(새 항목은 맨 위에 더한다)
     const completed = [
+      ['2026.10.17', '덱 유형 상성 (영토전 · 유저 대련)', '영토전(공성)과 유저 대련에 덱 유형 상성이 생겼습니다. 세 무장의 스킬 구성으로 덱 유형(속공 · 버티기 · 유틸 · 디버프 · 스킬 연계)이 정해지고, 각 유형은 두 유형에 강하고 두 유형에 약합니다(속공 → 버티기 · 유틸, 버티기 → 유틸 · 디버프, 유틸 → 디버프 · 스킬 연계, 디버프 → 스킬 연계 · 속공, 스킬 연계 → 속공 · 버티기). 유리하면 주는 피해와 스킬 사기 피해 +12%, 불리하면 −12%입니다. 유형 특성: 속공은 첫 18초 피해 +50%, 스킬 연계는 피해 +22%, 유틸은 스킬 쿨다운 −22%, 디버프는 직접 피해 −12%. 출전 편성에서 내 덱 유형과 강한 · 약한 유형을, 유저 대련 목록에서 상대 덱 유형과 유불리를 볼 수 있습니다. 추천 덱의 ‘초반 끝내기’는 ‘속공’으로 이름을 바꿨고, 추천 덱은 실제로 그 유형으로 판정되는 조합을 고릅니다.', '완료', 'jade'],
       ['2026.10.17', '추천 덱 재조정', '추천 덱이 인연의 실제 효과 크기를 반영합니다(공격 · 피해 감소 · 스킬 위력 · 유형 위력 · 쿨다운). 버티기 덱은 피해 감소 인연을, 속공 덱은 공격 · 스킬 위력 인연을, 유틸 · 디버프 덱은 쿨다운 인연을 더 높게 칩니다. 수호형으로 바뀐 장비 같은 전열 무장이 버티기 덱의 중앙에 들어가고, 다섯 덱이 같은 동료로만 채워지지 않도록 앞 덱에 나온 무장은 조금 덜 고릅니다.', '완료', 'jade'],
       ['2026.10.17', '모든 무장에 인연', '인연이 없던 무장 44명에게도 인연을 만들어, 이제 70명 모두가 하나 이상의 인연을 갖습니다. 새 인연 19가지: 조씨 · 하후씨 일족, 호위무사, 위의 모사, 합비 수비, 번성 공방, 손가의 패업, 강동의 맹장, 강동의 대도독, 강동이교, 촉의 책사, 촉의 신진, 남만 왕가, 서량 군벌, 하북의 패자, 사세삼공, 백마의종, 동탁의 조정, 문희귀한, 한중의 객장(대부분 2명이 함께 출전하면 발동). 효과는 무장 스킬 상세와 추천 덱의 인연 꼬리표에서 볼 수 있습니다. 인연이 여러 개 맞으면 목록에서 먼저 나오는 인연 하나가 적용됩니다.', '완료', 'jade'],
       ['2026.10.17', '추천 덱 인연 · 스킬 설명', '출전 편성의 추천 덱에서 인연 · 핵심 스킬 꼬리표(예: 육손 ‘이릉 화진’)를 누르면 설명이 말풍선으로 펼쳐집니다. 인연은 효과 · 필요 인원 · 구성원, 스킬은 효과를 보여 줍니다. 다시 누르면 닫힙니다.', '완료', 'jade'],
@@ -2543,7 +2568,7 @@ export class StrategyUI {
   private duelSection(state: StrategyState): string {
     const formationReady = state.formation.length >= 3
     const opponents = this.duelOpponents
-    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>${opponents.some(opponent => !opponent.isDummy) ? '내 덱 전력과 비슷한 지휘관이 저장한 출전 덱과 겨룹니다.' : '덱을 저장한 지휘관이 20명이 될 때까지는 내 덱 전력에 맞춘 훈련 상대와 겨룹니다.'}${this.duelMyPower ? ` <b>내 덱 전력 ${formatNumber(this.duelMyPower)}</b>` : ''}</p><div class="duel-daily-limit"><strong>오늘 남은 대련 ${duelAttemptsRemaining(state)}회</strong><span>매일 5회 · 승리 시 신화장비 조각 쉬움 +1 · 보통 +2 · 어려움 +3 (신화장비 1개 = 조각 ${MYTHIC_FRAGMENT_COST}개)</span></div></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.length ? '' : '<div class="rank-empty">상대를 찾는 중입니다…</div>'}${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${ugc(opponent.displayName)}</strong><span>${opponent.isDummy ? `훈련 상대 · ${escapeHtml(opponent.note ?? '')}` : `지휘관 · 전력 ${formatNumber(opponent.power ?? 0)}${this.duelMyPower && opponent.power ? ` (내 덱 대비 ${opponent.power >= this.duelMyPower ? '+' : '−'}${Math.round(Math.abs(opponent.power / this.duelMyPower - 1) * 100)}%)` : ''} · 전적 점수 ${formatNumber(opponent.score)}`}</span></div><span class="duel-reward duel-reward--${opponent.tier ?? 'normal'}">${{ easy: '쉬움', normal: '보통', hard: '어려움' }[opponent.tier ?? 'normal']} · 조각 +${{ easy: 1, normal: 2, hard: 3 }[opponent.tier ?? 'normal']}</span><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
+    return `<section class="page-section page-section--duel"><div class="section-heading section-heading--compact"><div><span class="eyebrow">전투</span><h1>유저 대련</h1><p class="heading-copy">다른 지휘관의 전력을 분석하고, 선택한 상대의 덱과 실시간으로 겨루십시오.</p></div><button class="ghost-button" data-action="duel-refresh">상대 새로고침 ↻</button></div><div class="duel-hero glass-card"><div><span class="pill pill--jade">실시간 대련 · ${formationReady ? '출전 준비 완료' : '편성 필요'}</span><h2>상대 덱을 선택하십시오</h2><p>${opponents.some(opponent => !opponent.isDummy) ? '내 덱 전력과 비슷한 지휘관이 저장한 출전 덱과 겨룹니다.' : '덱을 저장한 지휘관이 20명이 될 때까지는 내 덱 전력에 맞춘 훈련 상대와 겨룹니다.'}${this.duelMyPower ? ` <b>내 덱 전력 ${formatNumber(this.duelMyPower)}</b>` : ''}</p><div class="duel-daily-limit"><strong>오늘 남은 대련 ${duelAttemptsRemaining(state)}회</strong><span>매일 5회 · 승리 시 신화장비 조각 쉬움 +1 · 보통 +2 · 어려움 +3 (신화장비 1개 = 조각 ${MYTHIC_FRAGMENT_COST}개)</span></div></div><div class="duel-hero-mark">⚔</div></div><div class="duel-list">${opponents.length ? '' : '<div class="rank-empty">상대를 찾는 중입니다…</div>'}${opponents.map((opponent, index) => `<article class="duel-opponent glass-card ${opponent.isDummy ? 'is-dummy' : ''}"><div class="duel-rank">${String(index + 1).padStart(2, '0')}</div><div class="duel-avatar">${escapeHtml(opponent.displayName.slice(0, 1))}</div><div class="duel-opponent-copy"><strong>${ugc(opponent.displayName)}</strong><span>${opponent.isDummy ? `훈련 상대 · ${escapeHtml(opponent.note ?? '')}` : `지휘관 · 전력 ${formatNumber(opponent.power ?? 0)}${this.duelMyPower && opponent.power ? ` (내 덱 대비 ${opponent.power >= this.duelMyPower ? '+' : '−'}${Math.round(Math.abs(opponent.power / this.duelMyPower - 1) * 100)}%)` : ''} · 전적 점수 ${formatNumber(opponent.score)}`}</span></div>${this.duelStyleBadge(state, opponent)}<span class="duel-reward duel-reward--${opponent.tier ?? 'normal'}">${{ easy: '쉬움', normal: '보통', hard: '어려움' }[opponent.tier ?? 'normal']} · 조각 +${{ easy: 1, normal: 2, hard: 3 }[opponent.tier ?? 'normal']}</span><button class="action-button action-button--primary" data-action="duel-start" data-opponent-id="${escapeHtml(opponent.id)}">대련 신청 <span>→</span></button></article>`).join('')}</div></section>`
   }
 
   private rankRows(): string {

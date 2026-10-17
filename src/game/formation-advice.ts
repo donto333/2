@@ -12,7 +12,7 @@ export const ARCHETYPES: Archetype[] = ['chain', 'sustain', 'early', 'debuff', '
 export const ARCHETYPE_META: Record<Archetype, { label: string; desc: string }> = {
   chain: { label: '스킬 연계', desc: '앞 무장의 스킬이 다음 스킬을 키운다' },
   sustain: { label: '버티기', desc: '전열 수호형이 맞아 주고 회복으로 오래 버틴다' },
-  early: { label: '초반 끝내기', desc: '전투 시작부터 몰아쳐 빨리 끝낸다' },
+  early: { label: '속공', desc: '전투 시작부터 몰아쳐 빨리 끝낸다' },
   debuff: { label: '디버프', desc: '공포·혼란·침묵·낙인으로 적을 묶는다' },
   utility: { label: '유틸', desc: '전술 게이지·쿨다운·예고 대응을 돕는다' },
 }
@@ -222,7 +222,12 @@ export function recommendDecks(anchorId: string, archetypes: Archetype[] = ARCHE
     // 앞 덱에 이미 나온 동료는 조금 깎는다: 다섯 덱이 같은 짝(예: 동탁 · 여포)으로만 채워지지 않게
     for (const entry of ranked) for (const item of entry.trio) if (item !== anchor) entry.score -= (partners.get(item.general.id) ?? 0) * 0.7
     ranked.sort((left, right) => right.score - left.score)
-    const pick = ranked.find(entry => !used.has(entry.trio.map(item => item.general.id).sort().join()))
+    // 영토전 · 대련에서 이 유형으로 판정되는 조합을 먼저 고른다(상위 60개 안에서)
+    const fresh = (entry: { trio: Profile[] }) => !used.has(entry.trio.map(item => item.general.id).sort().join())
+    // 단, 점수가 크게(1.2 넘게) 처지면 원래 1위를 둔다(예: 유비의 연계 = 도원결의)
+    const top = ranked.find(fresh)
+    const matched = ranked.slice(0, 60).find(entry => fresh(entry) && deckStyle(entry.trio.map(item => item.general.id)) === archetype)
+    const pick = matched && top && matched.score >= top.score - 1.2 ? matched : top
     if (!pick) continue
     used.add(pick.trio.map(item => item.general.id).sort().join())
     for (const item of pick.trio) if (item !== anchor) partners.set(item.general.id, (partners.get(item.general.id) ?? 0) + 1)
@@ -243,3 +248,83 @@ export function applyCombo(state: { generals: General[]; formation: string[]; la
   return { ok: true, message: state.lastNotice }
 }
 
+
+// ── 덱 유형 상성(영토전 · 유저 대련) ──────────────────────────────────────
+// 다섯 유형이 서로 물고 물린다: 각 유형은 두 유형에 강하고 두 유형에 약하다.
+//   속공 → 버티기 · 유틸 (전열이 자리 잡기 전에, 준비가 끝나기 전에 몰아친다)
+//   버티기 → 유틸 · 디버프 (오래 버텨 상대의 묶기 · 보조가 바닥난다)
+//   유틸 → 디버프 · 연계 (정화 · 쿨다운 · 예고 대응으로 묶기와 연쇄를 끊는다)
+//   디버프 → 연계 · 속공 (침묵 · 공포로 연계 고리와 첫 몰아치기를 막는다)
+//   연계 → 속공 · 버티기 (연쇄 위력으로 단단한 전열도 뚫는다)
+export const STYLE_BEATS: Record<Archetype, [Archetype, Archetype]> = {
+  early: ['sustain', 'utility'],
+  sustain: ['utility', 'debuff'],
+  utility: ['debuff', 'chain'],
+  debuff: ['chain', 'early'],
+  chain: ['early', 'sustain'],
+}
+
+/** 내 유형이 상대 유형에 강하면 +1, 약하면 −1, 같거나 무관하면 0 */
+export function styleEdge(mine: Archetype | null, theirs: Archetype | null): number {
+  if (!mine || !theirs || mine === theirs) return 0
+  if (STYLE_BEATS[mine].includes(theirs)) return 1
+  if (STYLE_BEATS[theirs].includes(mine)) return -1
+  return 0
+}
+
+let traitStats: Record<Archetype, { mean: number; sd: number }> | null = null
+function trioTraits(trio: Profile[]): Record<Archetype, number> {
+  const sum = (key: 'tank' | 'heal' | 'debuff' | 'util' | 'early' | 'dmg') => trio.reduce((total, item) => total + item[key], 0)
+  let synergy = 0
+  for (const a of trio) for (const b of trio) if (a !== b) synergy += pairSynergy(a, b)
+  const bondDef = bondFor(trio.map(item => item.general.id))
+  const front = trio.some(item => item.def.type === '수호') ? 0.6 : 0
+  return {
+    chain: synergy + bondValue(bondDef, trio) * 2,
+    sustain: sum('tank') + sum('heal') + front,
+    early: sum('early') + sum('dmg') * 0.25,
+    debuff: sum('debuff'),
+    utility: sum('util'),
+  }
+}
+
+/** 덱 세 명의 유형: 유형별 성향을 무장 전체 평균(무작위 3인)과 견주어 가장 두드러진 것 */
+export function deckStyle(ids: string[]): Archetype | null {
+  const all = profiles()
+  const trio = ids.map(id => all.get(id)).filter((item): item is Profile => Boolean(item))
+  if (trio.length < 3) return null
+  if (!traitStats) {
+    const list = [...all.values()]
+    const samples: Array<Record<Archetype, number>> = []
+    // 고정된 순서로 뽑은 3인 표본(같은 결과가 나오게)
+    for (let i = 0; i < list.length; i += 1) for (let k = 1; k <= 12; k += 1) {
+      const sample = [list[i], list[(i + k * 7) % list.length], list[(i + k * 13 + 3) % list.length]]
+      if (new Set(sample).size === 3) samples.push(trioTraits(sample))
+    }
+    traitStats = Object.fromEntries(ARCHETYPES.map(key => {
+      const mean = samples.reduce((total, item) => total + item[key], 0) / samples.length
+      const sd = Math.sqrt(samples.reduce((total, item) => total + (item[key] - mean) ** 2, 0) / samples.length)
+      return [key, { mean, sd: Math.max(0.1, sd) }]
+    })) as Record<Archetype, { mean: number; sd: number }>
+  }
+  // 평균보다 얼마나 두드러지는가(표준 점수)로 고른다
+  const traits = trioTraits(trio)
+  let best: Archetype = 'early', bestScore = -Infinity
+  for (const key of ARCHETYPES) {
+    // 연계는 드물게 아주 크게 튀므로(인연 · 짝 패시브) 상한을 두고 조금 낮춰 본다
+    const z = (traits[key] - traitStats[key].mean) / traitStats[key].sd
+    const score = key === 'chain' ? Math.min(2.2, z) * 0.75 : Math.min(3, z)
+    if (score > bestScore) { best = key; bestScore = score }
+  }
+  return best
+}
+
+/** 두 덱의 유형과 상성(아군 기준) — 영토전 · 유저 대련 전투에 넘긴다 */
+export function styleMatch(playerIds: string[], enemyIds: string[]): { player: string; enemy: string; edge: number; playerKey: Archetype; enemyKey: Archetype } | null {
+  const mine = deckStyle(playerIds), theirs = deckStyle(enemyIds)
+  if (!mine || !theirs) return null
+  return { player: ARCHETYPE_META[mine].label, enemy: ARCHETYPE_META[theirs].label, edge: styleEdge(mine, theirs), playerKey: mine, enemyKey: theirs }
+}
+
+/** 덱 유형 상성이 적용되는 전투: 영토전(공성) · 유저 대련 */
+export const STYLE_MODES = new Set(['duel', 'siege'])

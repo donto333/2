@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { disposeOwned, markShared } from './gpu-shared'
 import { allGenerals, frontLineOrder, scaleGeneral, type General } from './strategy'
 import { sound, type WeaponSound } from '../engine/sound'
+import { STYLE_MODES, styleMatch } from './formation-advice'
 import { PLAYER_AUTO_PILOT, BattleCore, BATTLE_RULES, matchup, type BattleResearch, phaseName, troopCapacity as coreTroopCapacity, type BattleMode, type BattleResult, type BattleTactic, type CoreEvent, type HardRule } from './battle-core'
 import type { ActiveBattleEffect } from './battle-effects'
 import { GENERAL_SKILLS, type SkillType } from './skills'
@@ -850,7 +851,7 @@ export class Arena {
     const deck = this.configuredEnemyDeck?.length ? this.configuredEnemyDeck.map(general => ({ ...general })) : this.normalEnemyDeck()
     this.enemyDeck = deck
     this.enemyUnits.splice(0).forEach(unit => this.removeUnit(unit))
-    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, hardRule: this.hardRule, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: (options.autoPlay ?? (this.autoPreferred && this.mode !== 'duel' && !this.easyBattle)) ? { ...PLAYER_AUTO_PILOT } : null })
+    this.core = new BattleCore(this.generals, deck, { mode: this.mode, moraleBonus: this.moraleBonus, research: this.research, easy: this.easyBattle, hardRule: this.hardRule, style: STYLE_MODES.has(this.mode) ? styleMatch(this.generals.map(general => general.id), deck.map(general => general.id)) : null, autoSkill: this.mode === 'duel' && this.duelAutoSkill, autoPilot: (options.autoPlay ?? (this.autoPreferred && this.mode !== 'duel' && !this.easyBattle)) ? { ...PLAYER_AUTO_PILOT } : null })
     this.battleActive = true
     this.paused = false
     this.startedAt = performance.now()
